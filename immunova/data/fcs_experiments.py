@@ -1,8 +1,11 @@
 from datetime import datetime
-from data.fcs import FileGroup
+from data.fcs import FileGroup, File
 from data.gating import GatingStrategy
+from flow.readwrite.read_fcs import FCSFile
+from collections import defaultdict
 import mongoengine
 import pandas as pd
+import numpy as np
 import re
 import os
 import xlrd
@@ -184,6 +187,77 @@ class Panel(mongoengine.Document):
         self.mappings = [ChannelMap(channel=c, marker=m) for c, m in x['mappings']]
         return True
 
+    def standardise_names(self, column_mappings: dict) -> dict or None:
+        """
+        Given a dictionary of column mappings, apply standardisation defined by this panel object and return
+        standardised column mappings.
+        :param column_mappings: dictionary corresponding to channel/marker mappings (channel, marker)
+        :return: standardised column mappings
+        """
+
+        def query(x, ref):
+            corrected = list(filter(None.__ne__, [n.query(x) for n in ref]))
+            if len(corrected) == 0:
+                print(f'Unable to normalise {x}; no matching channel in linked panel')
+                return None
+            if len(corrected) > 1:
+                print(f'Unable to normalise {x}; matched multiple channels in linked panel, check'
+                      f' panel for incorrect definitions. Matches found: {corrected}')
+                return None
+            return corrected[0]
+
+        new_column_mappings = dict()
+        for col_name, channel_marker in column_mappings.items():
+            channel, marker = channel_marker
+            # Normalise channel
+            if channel:
+                channel = query(channel, self.channels)
+                if not channel:
+                    return None
+            # Normalise marker
+            if marker:
+                marker = query(marker, self.markers)
+                if not marker:
+                    return None
+            new_column_mappings[col_name] = [channel, marker]
+        return new_column_mappings
+
+    def standardise(self, data: pd.DataFrame) -> pd.DataFrame or None:
+        """
+        Given a dataframe of fcs events, standardise the columns according to the panel definition
+        :param data: pandas dataframe of cell events
+        :return: standardised pandas dataframe with columns ordered according to the panel definition
+        """
+        # Standardise the names
+        column_mappings = {x: [_ if _ != "" else None for _ in x.split('_')] for x in data.columns}
+        column_mappings = self.standardise_names(column_mappings)
+        if not column_mappings:
+            return None
+        # Insert missing marker names using matched channel in panel
+        updated_mappings = defaultdict(list)
+        for col_name, channel_marker in column_mappings.items():
+            channel = channel_marker[0]
+            marker = channel_marker[1]
+            if marker is None:
+                marker = [p.marker for p in self.mappings if p.channel == channel][0]
+            updated_mappings[col_name] = [channel, marker]
+        # Order the columns to match the panel definition
+        ordered_columns = list()
+        for channel_marker_pair in self.mappings:
+            comparisons = {k: (v[0] == channel_marker_pair.channel, v[1] == channel_marker_pair.marker)
+                           for k, v in updated_mappings.items()}
+            comparisons = {k: sum(v) for k, v in comparisons.items() if sum(v) == 2}
+            if not comparisons:
+                print(f'{channel_marker_pair.channel}, {channel_marker_pair.marker} pair not found!')
+                print(f'Column mappings: {updated_mappings.items()}')
+                return None
+            if len(comparisons) > 1:
+                print(f'Multiple instances of {channel_marker_pair.channel}, {channel_marker_pair.marker} pair'
+                      f'found!')
+                return None
+            ordered_columns.append(list(comparisons.keys())[0])
+        return data[ordered_columns]
+
 
 class FCSExperiment(mongoengine.Document):
     """
@@ -208,3 +282,44 @@ class FCSExperiment(mongoengine.Document):
         'db_alias': 'core',
         'collection': 'fcs_experiments'
     }
+
+    def add_new_sample(self, sample_id: str, file_path: str, controls: list,
+                       comp_matrix: np.array or None = None, compensate: bool = True):
+
+        def create_file_entry(path, file_id, control_=False):
+            fcs = FCSFile(path, comp_matrix=comp_matrix)
+            new_file = File()
+            new_file.file_id = file_id
+            if compensate:
+                fcs.compensate()
+            if control_:
+                new_file.file_type = 'control'
+            data = fcs.dataframe
+            data = self.panel.standardise(data)
+            if data is None:
+                print(f'Error: invalid channel/marker mappings for {file_id}, at path {file_path}, aborting.')
+                return None
+            new_file.put(data.values)
+            return new_file
+
+        if FileGroup.objects(primary_id=sample_id):
+            print(f'Error: a file group with id {sample_id} already exists')
+            return None
+
+        print('Generating main file entry...')
+        file_collection = FileGroup()
+        file_collection.primary_id = sample_id
+        primary_file = create_file_entry(file_path, sample_id)
+        if not primary_file:
+            return None
+        file_collection.files.append(primary_file)
+        print('Generating file entries for controls...')
+        for c in controls:
+            control = create_file_entry(c['path'], f"{sample_id}_{c['control_id']}", control_=True)
+            if not control:
+                return None
+            file_collection.files.append(control)
+        file_collection.save()
+        self.fcs_files.append(file_collection)
+        print(f'Successfully created {sample_id} and associated to {self.experiment_id}')
+        return file_collection.id.__str__()

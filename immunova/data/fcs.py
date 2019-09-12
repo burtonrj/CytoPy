@@ -1,6 +1,7 @@
 import mongoengine
 from bson.binary import Binary
 from data.gating import Gate
+from data.patient import Patient
 import pickle
 import numpy as np
 
@@ -144,6 +145,7 @@ class FileGroup(mongoengine.Document):
     notes = mongoengine.StringField(required=False)
     populations = mongoengine.EmbeddedDocumentListField(Population)
     gates = mongoengine.EmbeddedDocumentListField(Gate)
+    patient = mongoengine.ReferenceField(Patient)
     meta = {
         'db_alias': 'core',
         'collection': 'fcs_files'

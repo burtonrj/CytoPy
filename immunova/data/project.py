@@ -25,3 +25,5 @@ class Project(mongoengine.Document):
         'db_alias': 'core',
         'collection': 'projects'
     }
+
+    def add_experiment(self):
