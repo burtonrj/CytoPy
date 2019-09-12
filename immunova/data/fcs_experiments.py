@@ -1,8 +1,11 @@
-import mongoengine
 from datetime import datetime
 from data.fcs import FileGroup
 from data.gating import GatingStrategy
+import mongoengine
+import pandas as pd
 import re
+import os
+import xlrd
 
 
 class ChannelMap(mongoengine.EmbeddedDocument):
@@ -77,6 +80,109 @@ class Panel(mongoengine.Document):
         'db_alias': 'core',
         'collection': 'fcs_panels'
     }
+
+    @staticmethod
+    def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
+        """
+        Check excel template and if valid return pandas dataframes
+        :param path: file path for excel template
+        :return: tuple of pandas dataframes (nomenclature, mappings) or None
+        """
+        # Check sheet names
+        xls = xlrd.open_workbook(path, on_demand=True)
+        if not all([x in ['nomenclature', 'mappings'] for x in xls.sheet_names()]):
+            return None
+        else:
+            nomenclature = pd.read_excel(path, sheet_name='nomenclature')
+            mappings = pd.read_excel(path, sheet_name='mappings')
+        # Check nomenclature column headers
+        if not all([x in ['name', 'regex', 'permutations', 'case'] for x in nomenclature.columns]):
+            print("Nomenclature sheet of excel template must contain the following column headers: "
+                  "'type','default','regex','permutations'")
+            return None
+        # Check mappings column headers
+        if not all([x in ['channel', 'marker'] for x in mappings.columns]):
+            print("Mappings sheet of excel template must contain the following column headers:"
+                  "'channel', 'marker'")
+            return None
+        # Check for duplicate entries
+        if sum(nomenclature['name'].duplicated()) != 0:
+            print('Duplicate entries in nomenclature, please remove duplicates before continuing')
+            return None
+        # Check that all mappings have a corresponding entry in nomenclature
+        for x in ['channel', 'marker']:
+            for name in mappings[x]:
+                if name not in nomenclature.name.values:
+                    print(f'{name} missing from nomenclature, please review template')
+                    return None
+        return nomenclature, mappings
+
+    def create_from_excel(self, path):
+        """
+        Populate panel attributes from an excel template
+        :param path: path of file
+        :return: True is successful else False
+        """
+        if not os.path.isfile(path):
+            print(f'Error: no such file {path}')
+            return False
+        templates = self.check_excel_template(path)
+        if templates is None:
+            print('Error: invalid excel template')
+            return False
+        nomenclature, mappings = templates
+
+        def create_def(n):
+            d = nomenclature[nomenclature['name'] == n].fillna('').to_dict(orient='list')
+            return NormalisedName(standard=d['name'][0],
+                                  regex_str=d['regex'][0],
+                                  case_sensitive=d['case'][0],
+                                  permutations=d['permutations'][0])
+        for name in mappings['channel']:
+            definition = create_def(name)
+            self.channels.append(definition)
+        for name in mappings['marker']:
+            definition = create_def(name)
+            self.markers.append(definition)
+        mappings = mappings.fillna('').to_dict(orient='list')
+        self.mappings = [ChannelMap(channel=c, marker=m)
+                         for c, m in zip(mappings['channel'], mappings['marker'])]
+        return True
+
+    def create_from_dict(self, x: dict):
+        """
+        Populate panel attributes from a python dictionary
+        :param x: dictionary object containing panel definition
+        :return: True if successful else False
+        """
+
+        # Check validity of input dictionary
+        if not all([k in ['channels', 'markers', 'mappings'] for k in x.keys()]):
+            print('Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers')
+            return False
+        for k in ['channels', 'markers']:
+            if not all([k in ['name', 'regex', 'case', 'permutations']]):
+                print(f'Invalid template dictionary; nested dictionaries for {k} must contain keys: name, regex '
+                      f'case, and permutations')
+                return False
+        if type(x['mappings']) != list:
+            print('Invalid template dictionary; mappings must be a list of tuples')
+            return False
+        if not all([type(k) != tuple for k in x['mappings']]):
+            print('Invalid template dictionary; mappings must be a list of tuples')
+            return False
+        self.markers = [NormalisedName(standard=k['name'],
+                                       regex_str=k['regex'],
+                                       case_sensitive=k['case'],
+                                       permutations=k['permutations'])
+                        for k in x['markers']]
+        self.channels = [NormalisedName(standard=k['name'],
+                                        regex_str=k['regex'],
+                                        case_sensitive=k['case'],
+                                        permutations=k['permutations'])
+                         for k in x['channels']]
+        self.mappings = [ChannelMap(channel=c, marker=m) for c, m in x['mappings']]
+        return True
 
 
 class FCSExperiment(mongoengine.Document):
