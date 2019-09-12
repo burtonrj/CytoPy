@@ -3,12 +3,15 @@ from data.fcs import FileGroup, File
 from data.gating import GatingStrategy
 from flow.readwrite.read_fcs import FCSFile
 from collections import defaultdict
+from multiprocessing import Pool, cpu_count
+from functools import partial
 import mongoengine
 import pandas as pd
 import numpy as np
 import re
 import os
 import xlrd
+import json
 
 
 class ChannelMap(mongoengine.EmbeddedDocument):
@@ -282,6 +285,50 @@ class FCSExperiment(mongoengine.Document):
         'db_alias': 'core',
         'collection': 'fcs_experiments'
     }
+
+    @staticmethod
+    def data_from_file(file, data_type, sample_size):
+        if data_type == 'raw':
+            data = file.raw_data(sample=sample_size)
+        if data_type == 'norm':
+            return file.norm_data(sample=sample_size)
+        print('Invalid data_type, must be raw or norm')
+        return None
+
+    def pull_sample_data(self, sample_id: str, sample_size: int or None = None,
+                         data_type='raw', include_controls=True, out_format='dataframe',
+                         return_mappings=True):
+        if out_format not in ['dataframe', 'matrix']:
+            print('Error: format must be either `dataframe` or `matrix`')
+            return None
+        if sample_id not in self.list_samples():
+            print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
+            return None
+        file_grp = FileGroup.objects(primary_id=sample_id)
+        if not file_grp:
+            print(f'Error: invalid sample_id, no file entry for {sample_id}')
+            return None
+        file_grp = file_grp[0]
+        files = file_grp.files
+        mappings = [json.loads(x.to_json()) for x in self.panel.mappings]
+
+        if not include_controls:
+            f = [f for f in files if f.file_type == 'complete'][0]
+            data = self.data_from_file(f, data_type, sample_size)
+            if out_format == 'dataframe':
+                data = self.as_dataframe(data)
+            data = [{'id': f.file_id, 'typ': 'complete', 'data': data}]
+            if return_mappings:
+                return data, mappings
+            return data, None
+
+        pool = Pool(cpu_count())
+        f = partial(self.data_from_file, data_type=data_type, sample_size=sample_size)
+        data = pool.map(f, files)
+
+
+    def list_samples(self):
+        return [f.primary_id for f in self.fcs_files]
 
     def add_new_sample(self, sample_id: str, file_path: str, controls: list,
                        comp_matrix: np.array or None = None, compensate: bool = True):
