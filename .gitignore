@@ -5,3 +5,4 @@ env
 *.ods
 .idea
 temp_data
+.ipynb_checkpoints
