@@ -1,0 +1,7 @@
+env
+*.csv
+*.xlsx
+*.fcs
+*.ods
+.idea
+temp_data
