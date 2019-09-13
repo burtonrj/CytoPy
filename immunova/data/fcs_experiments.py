@@ -123,7 +123,7 @@ class Panel(mongoengine.Document):
                     return None
         return nomenclature, mappings
 
-    def create_from_excel(self, path):
+    def create_from_excel(self, path: str) -> bool:
         """
         Populate panel attributes from an excel template
         :param path: path of file
@@ -155,7 +155,7 @@ class Panel(mongoengine.Document):
                          for c, m in zip(mappings['channel'], mappings['marker'])]
         return True
 
-    def create_from_dict(self, x: dict):
+    def create_from_dict(self, x: dict) -> bool:
         """
         Populate panel attributes from a python dictionary
         :param x: dictionary object containing panel definition
@@ -286,21 +286,67 @@ class FCSExperiment(mongoengine.Document):
         'collection': 'fcs_experiments'
     }
 
-    @staticmethod
-    def data_from_file(file, data_type, sample_size):
+    def __data_from_file(self, file, data_type, sample_size, output_format='matrix') -> None or dict:
+        """
+        Pull data from a given file document
+        :param file: File object
+        :param data_type: data type to retrieve; either 'raw' or 'norm' (normalised)
+        :param sample_size: return a sample of given integer size
+        :param output_format: data format to return; either pandas dataframe or numpy matrix
+        :return: Dictionary output {id: file_id, typ: file_type, data: dataframe/matrix}
+        """
         if data_type == 'raw':
             data = file.raw_data(sample=sample_size)
-        if data_type == 'norm':
-            return file.norm_data(sample=sample_size)
-        print('Invalid data_type, must be raw or norm')
-        return None
+
+        elif data_type == 'norm':
+            data = file.norm_data(sample=sample_size)
+        else:
+            print('Invalid data_type, must be raw or norm')
+            return None
+        if output_format == 'dataframe':
+            data = self.__as_dataframe(data, self.panel)
+        return dict(id=file.file_id, typ=file.file_type, data=data)
+
+    @staticmethod
+    def __as_dataframe(matrix: np.array, panel: Panel, columns_default: str = 'marker'):
+        """
+        Generate a pandas dataframe using a given numpy multi-dim array with specified column defaults
+        :param matrix: numpy matrix to convert to dataframe
+        :param panel: Panel object for formatting conventions
+        :param columns_default: how to name columns; either 'marker' or 'channel' (default = 'marker')
+        :return: Pandas dataframe
+        """
+        columns = []
+        for i, m in enumerate(panel.mappings):
+            if not m[columns_default]:
+                if m['channel']:
+                    columns.append(m['channel'])
+                elif m['marker']:
+                    columns.append(m['marker'])
+                else:
+                    columns.append(f'Unnamed: {i}')
+            else:
+                columns.append(m[columns_default])
+        return pd.DataFrame(matrix, columns=columns, dtype='float32')
 
     def pull_sample_data(self, sample_id: str, sample_size: int or None = None,
-                         data_type='raw', include_controls=True, out_format='dataframe',
-                         return_mappings=True):
-        if out_format not in ['dataframe', 'matrix']:
-            print('Error: format must be either `dataframe` or `matrix`')
-            return None
+                         data_type: str = 'raw', include_controls: bool = True,
+                         output_format: str = 'dataframe',
+                         return_mappings: bool = True) -> None or (list, None) or (list, list):
+        """
+        Given a sample ID, associated to this experiment, fetch the fcs data
+        :param sample_id: ID of sample to fetch data for
+        :param sample_size: if provided with an integer value, a sample of data of given size will be returned
+        (sample drawn from a uniform distribution)
+        :param data_type: type of data to retrieve; either 'raw' or 'norm' normalised
+        :param include_controls: if True (default) then control files associated to sample are included in the result
+        :param output_format: preferred format of output; can either be 'dataframe' for a pandas dataframe, or 'matrix'
+        for a numpy array
+        :param return_mappings: if True (default) panel mappings (channel/marker pairs) returned as list
+        :return: tuple; (list of dictionaries {id: file id, typ: data type, either raw or normalised,
+        data: dataframe/matrix}, list of dictionaries defining channel/marker pairs
+        {channel: channel name, marker: marker name})
+        """
         if sample_id not in self.list_samples():
             print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
             return None
@@ -311,28 +357,46 @@ class FCSExperiment(mongoengine.Document):
         file_grp = file_grp[0]
         files = file_grp.files
         mappings = [json.loads(x.to_json()) for x in self.panel.mappings]
-
-        if not include_controls:
+        # Fetch data
+        if not include_controls:  # Fetch data for primary file only
             f = [f for f in files if f.file_type == 'complete'][0]
-            data = self.data_from_file(f, data_type, sample_size)
-            if out_format == 'dataframe':
-                data = self.as_dataframe(data)
-            data = [{'id': f.file_id, 'typ': 'complete', 'data': data}]
+            complete = self.__data_from_file(f, data_type, sample_size, output_format=output_format)
             if return_mappings:
-                return data, mappings
-            return data, None
-
+                return [complete], mappings
+            return [complete], None
+        # Fetch data for primary file & controls
         pool = Pool(cpu_count())
-        f = partial(self.data_from_file, data_type=data_type, sample_size=sample_size)
+        f = partial(self.__data_from_file, data_type=data_type, sample_size=sample_size, output_format=output_format)
         data = pool.map(f, files)
+        pool.close()
+        pool.join()
+        if return_mappings:
+            return data, mappings
+        return data, None
 
-
-    def list_samples(self):
+    def list_samples(self) -> list:
+        """
+        Generate a list IDs of file groups associated to experiment
+        :return: List of IDs of file groups associated to experiment
+        """
         return [f.primary_id for f in self.fcs_files]
 
     def add_new_sample(self, sample_id: str, file_path: str, controls: list,
-                       comp_matrix: np.array or None = None, compensate: bool = True):
-
+                       comp_matrix: np.array or None = None, compensate: bool = True,
+                       feedback: bool = True) -> None or str:
+        """
+        Add a new sample (FileGroup) to this experiment
+        :param sample_id: primary ID for identification of sample (FileGroup.primary_id)
+        :param file_path: file path of the primary fcs file (e.g. the fcs file that is of primary interest such as the
+        file with complete staining)
+        :param controls: list of file paths for control files e.g. a list of file paths for associated FMO controls
+        :param comp_matrix: (optional) numpy array for spillover matrix for compensation calculation; if not supplied
+        the matrix linked within the fcs file will be used, if not present will present an error
+        :param compensate: boolean value as to whether compensation should be applied before data entry (default=True)
+        :param feedback: boolean value, if True function will provide feedback in the form of print statements
+        (default=True)
+        :return: MongoDB ObjectID string for new FileGroup entry
+        """
         def create_file_entry(path, file_id, control_=False):
             fcs = FCSFile(path, comp_matrix=comp_matrix)
             new_file = File()
@@ -352,15 +416,16 @@ class FCSExperiment(mongoengine.Document):
         if FileGroup.objects(primary_id=sample_id):
             print(f'Error: a file group with id {sample_id} already exists')
             return None
-
-        print('Generating main file entry...')
+        if feedback:
+            print('Generating main file entry...')
         file_collection = FileGroup()
         file_collection.primary_id = sample_id
         primary_file = create_file_entry(file_path, sample_id)
         if not primary_file:
             return None
         file_collection.files.append(primary_file)
-        print('Generating file entries for controls...')
+        if feedback:
+            print('Generating file entries for controls...')
         for c in controls:
             control = create_file_entry(c['path'], f"{sample_id}_{c['control_id']}", control_=True)
             if not control:
@@ -368,5 +433,6 @@ class FCSExperiment(mongoengine.Document):
             file_collection.files.append(control)
         file_collection.save()
         self.fcs_files.append(file_collection)
-        print(f'Successfully created {sample_id} and associated to {self.experiment_id}')
+        if feedback:
+            print(f'Successfully created {sample_id} and associated to {self.experiment_id}')
         return file_collection.id.__str__()
