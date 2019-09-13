@@ -16,7 +16,7 @@ def rect_gate(data: pd.DataFrame, x: str, y: str,
     :param y_min: minimum value for y (y cooordinate for bottom left corner/bottom right corner)
     :param y_max: maximum value for y (y cooordinate for top right corner/top left corner)
     :param bool_gate: If True, return events NOT in gated population (return values outside of gate)
-    :return: Gate output dictionary (see docs for gating conventions)
+    :return: dictionary of gating outputs (see documentation for internal standards)
     """
     output = dict(pos_index=None, warnings=[], error=0, error_msg=None, geom=dict(shape='rect',
                                                                                   x_min=x_min,
