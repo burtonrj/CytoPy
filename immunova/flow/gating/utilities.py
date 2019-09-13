@@ -96,3 +96,42 @@ def apply_transform(data: pd.DataFrame, features_to_transform: list,
         return asinh(data, features_to_transform, prescale)
     print('Error: invalid transform_method, returning untransformed data')
     return data
+
+
+def inside_ellipse(data: np.array, center: tuple,
+                   width: int or float, height: int or float,
+                   angle: int or float) -> object:
+    """
+    Return mask of two dimensional matrix specifying if a data point (row) falls
+    within an ellipse
+    :param data - two dimensional matrix (x,y)
+    :param center - tuple of x,y coordinate corresponding to center of elipse
+    :param width - semi-major axis of eplipse
+    :param height - semi-minor axis of elipse
+    :param angle - angle of ellipse
+    :return numpy array of indices for values inside specified ellipse
+    """
+    cos_angle = np.cos(np.radians(180.-angle))
+    sin_angle = np.sin(np.radians(180.-angle))
+
+    x = data[:, 0]
+    y = data[:, 1]
+
+    xc = x - center[0]
+    yc = y - center[1]
+
+    xct = xc * cos_angle - yc * sin_angle
+    yct = xc * sin_angle + yc * cos_angle
+
+    rad_cc = (xct ** 2 / (width / 2.)**2) + (yct**2 / (height / 2.)**2)
+
+    in_ellipse = []
+
+    for r in rad_cc:
+        if r <= 1.:
+            # point in ellipse
+            in_ellipse.append(True)
+        else:
+            # point not in ellipse
+            in_ellipse.append(False)
+    return in_ellipse
