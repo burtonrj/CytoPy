@@ -2,6 +2,7 @@ import mongoengine
 from bson.binary import Binary
 from data.gating import Gate
 from data.patient import Patient
+from flow.gating.defaults import Geom
 import pickle
 import numpy as np
 
@@ -45,6 +46,15 @@ class Population(mongoengine.EmbeddedDocument):
 
     def load_index(self) -> np.array:
         return pickle.loads(bytes(self.index.read()))
+
+    def to_python(self):
+        population = dict(population_name=self.population_name, prop_of_parent=self.prop_of_parent,
+                          prop_of_total=self.prop_of_total, warnings=self.warnings, parent=self.parent,
+                          children=self.children)
+        population['geom'] = Geom(**{k: v for k, v in self.geom})
+        population['index'] = self.load_index()
+        return population
+
 
 
 class File(mongoengine.EmbeddedDocument):

@@ -25,8 +25,8 @@ class Gate(mongoengine.EmbeddedDocument):
     gate_name = mongoengine.StringField(required=True)
     children = mongoengine.ListField()
     parent = mongoengine.StringField(required=True)
-    x_feature = mongoengine.StringField(required=True)
-    y_feature = mongoengine.StringField(required=False)
+    x = mongoengine.StringField(required=True)
+    y = mongoengine.StringField(required=False)
     func = mongoengine.StringField(required=True)
     func_args = mongoengine.ListField(required=True)
     gate_type = mongoengine.StringField(required=True, choices=['geom', 'cluster'])
@@ -34,6 +34,8 @@ class Gate(mongoengine.EmbeddedDocument):
     meta = {
         'abstract': True
     }
+
+
 
 
 class GatingStrategy(mongoengine.Document):

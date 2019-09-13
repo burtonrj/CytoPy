@@ -135,3 +135,21 @@ def inside_ellipse(data: np.array, center: tuple,
             # point not in ellipse
             in_ellipse.append(False)
     return in_ellipse
+
+
+def rectangular_filter(data: pd.DataFrame, x: str, y: str, definition: dict) -> pd.DataFrame or str:
+    """
+    Given a pandas dataframe of fcs events data and a definition for a rectangular geom,
+    filter the pandas dataframe and return only data contained within the rectangular geometric 2D plane
+    :param data: pandas dataframe of fcs data to filter
+    :param y: name of Y dimension (channel/marker name for column)
+    :param x: name of X dimension (channel/marker name for column)
+    :param definition: dictionary with keys: ['xmin', 'xmax', 'ymin', 'ymax'] each of integer/float value; see
+    static.rect_gate for conventions
+    :return: filtered pandas dataframe
+    """
+    if not all([x in ['xmin', 'xmax', 'ymin', 'ymax'] for x in definition.keys()]):
+        return 'Error: invalid definition; must be dict with keys: xmin, xmax, ymin, ymax'
+    data = data[(data[x] >= definition['xmin']) & (data[x] <= definition['xmax'])]
+    data = data[(data[y] >= definition['ymin']) & (data[y] <= definition['ymax'])]
+    return data
