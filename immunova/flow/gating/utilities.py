@@ -4,8 +4,15 @@ from sklearn.neighbors import KernelDensity
 from flowutils.transforms import logicle, hyperlog, log_transform, asinh
 
 
-def __boolean_gate(data, pos_pop, boolean_gate):
-    if boolean_gate:
+def boolean_gate(data: pd.DataFrame, pos_pop: pd.DataFrame, reverse: bool) -> pd.DataFrame:
+    """
+    If reverse is True, return dataframe containing events NOT in the positive population identified
+    :param data: parent population
+    :param pos_pop: identified (gated/clustered) population
+    :param reverse: If True, return events NOT in pos_pop, else return pos_pop
+    :return: Corrected positive (gated/clustered) population
+    """
+    if reverse:
         return data[~data.index.isin(pos_pop.index)]
     return pos_pop
 

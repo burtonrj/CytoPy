@@ -6,3 +6,6 @@ env
 .idea
 temp_data
 .ipynb_checkpoints
+*.pyc
+*.so
+build
