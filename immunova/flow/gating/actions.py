@@ -282,31 +282,21 @@ class Gating:
         ax = self.__standard_2dhist(ax, data, x, y, xlim, ylim)
         if 'threshold' in geom.keys():
             ax.axvline(geom['threshold'], c='r')
-            fig.show()
-            return fig
         if 'threshold_x' in geom.keys():
             ax.axvline(geom['threshold_x'], c='r')
-            fig.show()
-            return fig
         if 'threshold_y' in geom.keys():
             ax.axhline(geom['threshold_y'], c='r')
-            fig.show()
-            return fig
         if all([x in geom.keys() for x in ['mean', 'width', 'height', 'angle']]):
             ellipse = patches.Ellipse(xy=geom['mean'], width=geom['width'], height=geom['height'],
                                       angle=geom['angle'], fill=False, edgecolor='r')
             ax.add_patch(ellipse)
-            fig.show()
-            return fig
         if all([x in geom.keys() for x in ['x_min', 'x_max', 'y_min', 'y_max']]):
             rect = patches.Rectangle(xy=(geom['x_min'], geom['y_min']),
                                      width=geom['x_max'], height=geom['y_max'],
                                      fill=False, edgecolor='r')
             ax.add_patch(rect)
-            fig.show()
-            return fig
-        print('Error: valid geom parameters not recognised, please check geom object')
-        return None
+        fig.show()
+        return fig
 
     def plot_populations(self, population_name, x, y, xlim=None, ylim=None, show=True):
         fig, ax = plt.subplots(figsize=(5, 5))
