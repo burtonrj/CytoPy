@@ -1,5 +1,4 @@
 from data.gating import Gate, GatingStrategy
-from data.fcs_experiments import FCSExperiment
 from data.fcs import FileGroup, Population
 from data.fcs_experiments import FCSExperiment
 from flow.gating.static import rect_gate
@@ -9,9 +8,8 @@ from flow.gating.mixturemodel import mm_gate, inside_ellipse
 from flow.gating.dbscan import dbscan_gate
 from flow.gating.quantile import quantile_gate
 from flow.gating.utilities import apply_transform
-from flow.gating.defaults import GateOutput, Geom
+from flow.gating.defaults import Geom
 from datetime import datetime
-from data.fcs import FileGroup
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib import patches
@@ -20,7 +18,6 @@ from imblearn.over_sampling import RandomOverSampler
 import numpy as np
 import pandas as pd
 import inspect
-import functools
 
 
 class Gating:

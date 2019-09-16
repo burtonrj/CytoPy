@@ -8,7 +8,7 @@ import math
 
 
 def optimise_scaller(tp_medoid: tuple or np.array, eigen_val: float,
-                    eigen_vec: np.array, data: pd.DataFrame, channels: list):
+                     eigen_vec: np.array, data: pd.DataFrame, channels: list):
     """
     Optimise the scaller value to multiply the eigen vector by determining the scale of the
     confidence ellipse returned by the mixture model gating function - finds the point where
@@ -37,11 +37,13 @@ def optimise_scaller(tp_medoid: tuple or np.array, eigen_val: float,
     return optimal_eigen_val[ddy.argmax()], masks[ddy.argmax()]
 
 
-def create_ellipse(data, model, conf, tp_idx):
+def create_ellipse(data, x, y, model, conf, tp_idx):
     """
     Given a mixture model (scikit-learn object) and a desired confidence interval, generate mask for events
     that fall inside the 'confidence' ellipse and a 'geom' object
     :param data: parent population upon which the gate has been applied
+    :param x:
+    :param y:
     :param model: scikit-learn object defining mixture model
     :param conf: critical value for confidence interval (defines the 'tightness' of resulting elliptical gate)
     :param tp_idx: index of component that corresponds to positive (target) population
@@ -55,17 +57,18 @@ def create_ellipse(data, model, conf, tp_idx):
     u = eigen_vec[0] / linalg.norm(eigen_vec[0])
     angle = 180. * np.arctan(u[1] / u[0]) / np.pi
     mask = inside_ellipse(data.values, tp_medoid, eigen_val[0], eigen_val[1], 180. + angle)
-    geom = Geom(shape='ellipse')
+    geom = Geom(shape='ellipse', x=x, y=y)
     geom.update(dict(mean=tp_medoid, width=eigen_val[0], height=eigen_val[1],
                 angle=180. + angle))
     return mask, geom
 
 
-def mm_gates(data: pd.DataFrame, x: str, y: str, target: tuple = None, k: int = None,
+def mm_gates(data: pd.DataFrame, x: str, y: str, child_name: str, target: tuple = None, k: int = None,
              method: str = 'gmm', bool_gate: bool = False, conf: float = 0.95, rect_filter: dict or None = None,
              **kwargs) -> GateOutput:
     """
 
+    :param child_name:
     :param data: parent population upon which the gate is applied
     :param x: name of the channel/marker for X dimension
     :param y: name of the channel/marker for Y dimension
@@ -102,16 +105,20 @@ def mm_gates(data: pd.DataFrame, x: str, y: str, target: tuple = None, k: int = 
         model = BayesianGaussianMixture(n_components=k, covariance_type=covar, random_state=42, **kwargs).fit(X)
     else:
         output.error = 1
-        output['error_msg'] = 'Invalid method, must be one of: gmm, bayesian'
+        output.error_msg = 'Invalid method, must be one of: gmm, bayesian'
         return output
     # Select optimal component
     if target:
-        tp_medoid = min(model.means_, key=lambda x: math.hypot(x[0] - target[0], x[1] - target[1]))
+        tp_medoid = min(model.means_, key=lambda m: math.hypot(m[0] - target[0], m[1] - target[1]))
         tp_idx = [list(x) for x in model.means_].index(list(tp_medoid))
         if math.ceil(math.hypot(tp_medoid[0] - target[0], tp_medoid[1] - target[1])) >= 3:
-            output['warnings'].append('WARNING: actual population is at least a 3 fold distance from the target. '
-                                      'Is this really the population of interest?')
+            output.warnings.append('WARNING: actual population is at least a 3 fold distance from the target. '
+                                   'Is this really the population of interest?')
     else:
         Y_ = model.predict(X)
         tp_idx = stats.mode(Y_)[0][0]
-        tp_medoid = model.means_[tp_idx]
+    mask, geom = create_ellipse(X, x, y, model, conf, tp_idx)
+    pos_pop = data[mask]
+    pos_pop = boolean_gate(data, pos_pop, bool_gate)
+    output.add_child(name=child_name, idx=pos_pop.index.values, geom=geom)
+    return output
