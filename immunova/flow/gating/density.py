@@ -15,7 +15,7 @@ def density_gate_1d(data: pd.DataFrame, x: str, child_name: str,
     :param data: pandas dataframe containing compensated and transformed flow cytometry data
     :param x: name of column to gate
     :param child_name:
-    :param boolean_gate: if False, the positive population is returned (>= threshold) else the negative population
+    :param bool_gate: if False, the positive population is returned (>= threshold) else the negative population
     :param q: if only 1 peak is found, quantile gating is performed using this argument as the quantile
     :param std: alternative to quantile gating, the number of standard deviations from the mean can be used to
     determine the threshold
