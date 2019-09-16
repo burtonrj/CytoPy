@@ -316,5 +316,48 @@ class Gating:
             dependencies = dependencies + self.find_dependencies(child)
         return dependencies
 
+    def remove_population(self, population_name: str):
+        if population_name not in self.populations.keys():
+            print(f'{population_name} does not exist')
+            return None
+        downstream_populations = self.find_dependencies(population=population_name)
+        removed = []
+        # Remove populations downstream
+        if downstream_populations:
+            for p in downstream_populations:
+                removed.append(self.populations.pop(p))
+        # Updated children in parent
+        parent = self.populations[population_name]['parent']
+        self.populations[parent]['children'] = [x for x in self.populations[parent]['children']
+                                                if x != population_name]
+        removed.append(self.populations.pop(population_name))
+        return removed
+
+    def remove_gate(self, gate_name, propagate=True):
+        if gate_name not in self.gates.keys():
+            print('Error: invalid gate name')
+            return None
+        gate = self.gates[gate_name]
+        if not gate.children or not propagate:
+            self.gates.pop(gate_name)
+            return True
+        # Remove affected gates and downstream populations
+        effected_populations = []
+        for child in gate.children:
+            effected_populations = effected_populations + self.find_dependencies(population=child)
+            self.remove_population(child)
+            effected_populations.append(child)
+        effected_gates = [name for name, gate in self.gates.items() if gate.parent in effected_populations]
+        effected_gates.append(gate_name)
+        for g in effected_gates:
+            self.gates.pop(g)
+        return effected_populations, effected_gates
+
+    def update_geom(self, population_name, updated_geom, bool=False):
+        if population_name not in self.populations.keys():
+            print(f'Population name {population_name} not recognised')
+            return None
+
+
 
 
