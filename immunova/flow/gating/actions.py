@@ -33,6 +33,7 @@ class Gating:
         fg = FileGroup.objects(primary_id=sample_id)[0]
         self.mappings = mappings
         self.id = sample_id
+        self.experiment_id = FCSExperiment.experiment_id
 
         if transformation:
             if not transform_channels:
@@ -170,11 +171,11 @@ class Gating:
         if add_population:
             for name, data in output.child_populations.items():
                 n = len(data['index'])
-                self.populations[name] = Population(population_name=name, index=data['index'],
-                                                    prop_of_parent=n/parent_population.shape[0],
-                                                    prop_of_total=n/self.data.shape[0],
-                                                    parent=gate.parent, children=[],
-                                                    geom=data['geom'])
+                self.populations[name] = dict(population_name=name, index=data['index'],
+                                              prop_of_parent=n/parent_population.shape[0],
+                                              prop_of_total=n/self.data.shape[0],
+                                              parent=gate.parent, children=[],
+                                              geom=data['geom'])
                 self.populations[gate.parent]['children'].append(name)
         if plot_output:
             self.plot_gate(gate.gate_name)
@@ -185,6 +186,24 @@ class Gating:
                 fmo = kwargs['fmo_y']
                 self.plot_gate(gate.gate_name, fmo=fmo, title=fmo_y_name)
         return output
+
+    def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False):
+        gating_results = dict()
+        if apply_all:
+            if len(self.populations.keys()) != 1:
+                print('User has chosen to apply all gates on a file with existing populations, '
+                      'when using the `apply_all` command files should have no existing populations. '
+                      'Remove existing populations from file before continuing. Aborting.')
+                return None
+            gates_to_apply = self.gates
+        else:
+            if any([x not in self.gates.keys() for x in gates]):
+                print(f'Error: some gate names provided appear invalid; valid gates: {self.gates.keys()}')
+                return None
+            gates_to_apply = [name for name, _ in self.gates.items() if name in gates]
+        for gate_name in gates_to_apply:
+            gating_results[gate_name] = self.apply(gate_name, add_population=True, plot_output=plot_outcome)
+        return gating_results
 
     @staticmethod
     def __plot_axis_lims(x, y, xlim=None, ylim=None):
@@ -353,10 +372,135 @@ class Gating:
             self.gates.pop(g)
         return effected_populations, effected_gates
 
-    def update_geom(self, population_name, updated_geom, bool=False):
-        if population_name not in self.populations.keys():
-            print(f'Population name {population_name} not recognised')
+    @staticmethod
+    def __update_population(updated_geom, parent_population, bool_gate):
+        try:
+            new_population = None
+            if updated_geom['shape'] == 'threshold':
+                x = updated_geom['x']
+                new_population = parent_population[parent_population[x] >= updated_geom['threshold']]
+            if updated_geom['shape'] == 'rect':
+                x = updated_geom['x']
+                y = updated_geom['y']
+                new_population = parent_population[(parent_population[x] >= updated_geom['x_min']) &
+                                                   (parent_population[x] < updated_geom['x_max'])]
+                new_population = new_population[(new_population[y] >= updated_geom['y_min']) &
+                                                (new_population[y] < updated_geom['y_max'])]
+            if updated_geom['shape'] == 'ellipse':
+                data = parent_population[[updated_geom['x'], updated_geom['y']]].values
+                new_population = inside_ellipse(data, width=updated_geom['width'],
+                                                height=updated_geom['height'],
+                                                angle=updated_geom['angle'],
+                                                center=updated_geom['mean'])
+                new_population = parent_population[new_population]
+            if new_population is None:
+                print('Error: Geom shape is not recognised, expecting one of: threshold, 2d_threshold, '
+                      'rect, or ellipse')
+                return None
+            if bool_gate:
+                new_population = parent_population[~parent_population.index.isin(new_population.index)]
+            return new_population
+        except KeyError as e:
+            print(f'Error, invalid Geom: {e}')
             return None
+
+    def update_geom(self, population_name, updated_geom, bool_gate=False):
+        if population_name not in self.populations.keys():
+            print(f'Error: population name {population_name} not recognised')
+            return None
+        parent_population = self.get_population_df(self.populations[population_name]['parent'])
+        # Generate new population with new definition
+        new_population = self.__update_population(updated_geom, parent_population, bool_gate)
+        if new_population is None:
+            return None
+        # Calculate downstream effects
+        dependent_pops = self.find_dependencies(population=population_name)
+        dependent_pops.append(population_name)
+        parent_name = self.populations[population_name]['parent']
+        self.remove_population(population_name)
+        n = new_population.shape[0]
+        self.populations[population_name] = dict(population_name=population_name,
+                                                 index=new_population.index.values,
+                                                 children=[], parent=parent_name,
+                                                 prop_of_parent=n/parent_population.shape[0],
+                                                 prop_of_total=n/self.data.shape[0],
+                                                 geom=updated_geom, warnings=['Manual gate'])
+        effected_gates = [name for name, gate in self.gates.items() if gate.parent in dependent_pops]
+        if effected_gates:
+            print(f'Recomputing: {effected_gates}')
+            return self.apply_many(gates=effected_gates)
+        print('No downstream effects, re-gating complete!')
+        return None
+
+    def __population_to_mongo(self, population_name):
+        pop_mongo = Population()
+        pop_dict = self.populations[population_name]
+        for k in pop_dict.keys():
+            if k != 'index':
+                pop_mongo[k] = pop_dict[k]
+            else:
+                pop_mongo.save_index(pop_dict[k])
+        return pop_mongo
+
+    def save(self, overwrite=False):
+        fg = FileGroup.objects(primary_id=self.id)[0]
+        existing_cache = fg.populations
+        existing_gates = fg.gates
+        if existing_cache or existing_gates:
+            if not overwrite:
+                print(f'Population cache for fcs file {self.id} already exists, if you wish to overwrite'
+                      f'this cache then specify overwrite as True')
+                return False
+            fg.populations = []
+            fg.gates = []
+            fg.save()
+        for name in self.populations.keys():
+            FileGroup.objects(primary_id=self.id).update(push__populations=self.__population_to_mongo(name))
+        for _, gate in self.gates.items():
+            FileGroup.objects(primary_id=self.id).update(push__gates=gate)
+        print('Saved successfully!')
+        return True
+
+
+class Template(Gating):
+    def save_new_template(self, template_name, overwrite=True):
+        gating_strategy = GatingStrategy.objects(template_name=template_name)
+        if gating_strategy:
+            if not overwrite:
+                print(f'Template with name {template_name} already exists, set parameter '
+                      f'`overwrite` to True to continue')
+                return False
+            print(f'Overwriting existing gating template {template_name}')
+            gating_strategy = gating_strategy[0]
+            gating_strategy.gates = self.gates
+            gating_strategy.last_edit = datetime.now()
+            gating_strategy.save()
+            exp = FCSExperiment.objects(experiment_id=self.experiment_id)
+            templates = [x for x in exp.gating_templates if x.template_name != gating_strategy.template_name]
+            templates.append(gating_strategy)
+            exp.gating_templates = templates
+            exp.save()
+            return True
+        else:
+            print(f'No existing template named {template_name}, creating new template')
+            gating_strategy = GatingStrategy()
+            gating_strategy.template_name = template_name
+            gating_strategy.creation_date = datetime.now()
+            gating_strategy.last_edit = datetime.now()
+            gating_strategy.gates = self.gates
+            gating_strategy.save()
+            FCSExperiment.objects(experiment_id=self.experiment_id).update(push__gating_templates=gating_strategy)
+            return True
+
+    def load_template(self, template_name):
+        gating_strategy = GatingStrategy.objects(template_name=template_name)
+        if gating_strategy:
+            self.gates = gating_strategy[0].gates
+            return True
+        else:
+            print(f'No template with name {template_name}')
+            return False
+
 
 
 

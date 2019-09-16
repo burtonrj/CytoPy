@@ -279,7 +279,7 @@ class FCSExperiment(mongoengine.Document):
     fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup))
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
-    gating_templates = mongoengine.ListField(mongoengine.ReferenceField(GatingStrategy))
+    gating_templates = mongoengine.ListField(mongoengine.ReferenceField(GatingStrategy, reverse_delete_rule=4))
 
     meta = {
         'db_alias': 'core',
