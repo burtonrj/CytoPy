@@ -103,6 +103,7 @@ class Gating:
         # Resample for class imbalance
         ros = RandomOverSampler(random_state=42)
         X_resampled, y_resampled = ros.fit_resample(X, y)
+        # ToDo use CV grid search to optimise parameters
         knn = KNeighborsClassifier()
         knn.fit(X_resampled, y_resampled)
         fmo_data = self.fmo[fmo]
