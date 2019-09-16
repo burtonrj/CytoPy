@@ -36,8 +36,6 @@ class Gate(mongoengine.EmbeddedDocument):
     }
 
 
-
-
 class GatingStrategy(mongoengine.Document):
     """
     Document representation of a gating template; a gating template is a collection of gating objects

@@ -57,9 +57,9 @@ class Gating:
             for p in fg.populations:
                 self.populations[p.population_name] = p.to_python()
         else:
-            root = Population(population_name='root', prop_of_parent=1.0, prop_of_total=1.0,
-                              warnings=[], parent='NA', children=[], geom=Geom(shape=None, x='FSC-A', y='SSC-A'),
-                              index=self.data.index.values)
+            root = dict(population_name='root', prop_of_parent=1.0, prop_of_total=1.0,
+                        warnings=[], parent='NA', children=[], geom=Geom(shape=None, x='FSC-A', y='SSC-A'),
+                        index=self.data.index.values)
             self.populations['root'] = root
 
     @property
@@ -139,7 +139,7 @@ class Gating:
         self.gates[gate_name] = new_gate
         return True
 
-    def apply(self, gate_name: str, save: bool = False, plot_output: bool = True):
+    def apply(self, gate_name: str, add_population: bool = False, plot_output: bool = True):
         if gate_name not in self.gates.keys():
             print(f'Error: {gate_name} does not exist. You must create this gate first using the create_gate method')
             return None
@@ -154,21 +154,167 @@ class Gating:
                 return None
         func = self.gating_functions[gate.func]
         kwargs = {k: v for k, v in gate.func_args}
+        fmo_x_name, fmo_y_name = None, None
         if 'fmo_x' in kwargs.keys():
-            kwargs['fmo_x'] = self.knn_fmo(gate.parent, kwargs['fmo_x'])
+            fmo_x_name = kwargs['fmo_x']
+            kwargs['fmo_x'] = self.knn_fmo(gate.parent, fmo_x_name)
         if 'fmo_y' in kwargs.keys():
-            kwargs['fmo_y'] = self.knn_fmo(gate.parent, kwargs['fmo_y'])
+            fmo_y_name = kwargs['fmo_y']
+            kwargs['fmo_y'] = self.knn_fmo(gate.parent, fmo_y_name)
 
         parent_population = self.get_population_df(gate.parent)
         output = func(data=parent_population, **kwargs)
         if output.error:
             print(output.error_msg)
             return None
-        if save:
-            # ToDo save population
-            pass
+        if add_population:
+            for name, data in output.child_populations.items():
+                n = len(data['index'])
+                self.populations[name] = Population(population_name=name, index=data['index'],
+                                                    prop_of_parent=n/parent_population.shape[0],
+                                                    prop_of_total=n/self.data.shape[0],
+                                                    parent=gate.parent, children=[],
+                                                    geom=data['geom'])
+                self.populations[gate.parent]['children'].append(name)
         if plot_output:
-            # ToDo call function for plotting
-            pass
+            self.plot_gate(gate.gate_name)
+            if fmo_x_name:
+                fmo = kwargs['fmo_x']
+                self.plot_gate(gate.gate_name, fmo=fmo, title=fmo_x_name)
+            if fmo_y_name:
+                fmo = kwargs['fmo_y']
+                self.plot_gate(gate.gate_name, fmo=fmo, title=fmo_y_name)
         return output
+
+    @staticmethod
+    def __plot_axis_lims(x, y, xlim=None, ylim=None):
+        if not xlim:
+            if any([x.find(c) != -1 for c in ['FSC', 'SSC']]):
+                xlim = (0, 250000)
+            else:
+                xlim = (0, 1)
+        if not ylim:
+            if any([y.find(c) != -1 for c in ['FSC', 'SSC']]):
+                ylim = (0, 250000)
+            else:
+                ylim = (0, 1)
+        return xlim, ylim
+
+    def plot_gate(self, gate_name, title=None, fmo: str or pd.DataFrame or None = None,
+                  xlim=None, ylim=None, show=True):
+        # Check and load gate
+        if gate_name not in self.gates.keys():
+            print(f'Error: invalid gate name, must be one of {self.gates.keys()}')
+            return None
+        gate = self.gates[gate_name]
+
+        # Get axis info
+        x = gate.x_feature
+        if gate.y_feature:
+            y = gate.y_feature
+        else:
+            y = 'FSC-A'
+        xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
+
+        # Cluster plot
+        if gate.gate_type == 'cluster':
+            return self.__cluster_plot(x, y, gate)
+
+        # Geom plot
+        if type(fmo) == str:
+            data = self.knn_fmo(gate.parent, fmo)
+        elif type(fmo) == pd.DataFrame:
+            data = fmo
+            del fmo
+        elif fmo is None:
+            data = self.get_population_df(gate.parent)
+        else:
+            print('Error: invalid input type for fmo, must be either string, pandas dataframe or None')
+            return None
+        plots = []
+        for child in self.populations[gate.parent]['children']:
+            plots.append(self.__geom_plot(x, y, data, self.populations[gate.parent]['geom'],
+                                          xlim, ylim))
+        return plots
+
+    def __cluster_plot(self, x, y, gate):
+        fig, ax = plt.subplots(figsize=(5, 5))
+        colours = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(gate.children))]
+        for child, colour in zip(gate.children, colours):
+            d = self.get_population_df(child).sample(frac=0.25)
+            if child == 'noise':
+                colour = [0, 0, 0, 1]
+            ax.scatter(d[x], d[y], c=colour, s=1, alpha=0.25)
+        fig.show()
+
+    @staticmethod
+    def __standard_2dhist(ax, data, x, y, xlim, ylim):
+        ax.hist2d(data[x], data[y], bins=500, norm=LogNorm())
+        ax.set_xlim(xlim[0], xlim[1])
+        ax.set_ylim(ylim[0], ylim[1])
+        ax.set_ylabel(y)
+        ax.set_xlabel(x)
+        return ax
+
+    def __geom_plot(self, x, y, data, geom, xlim, ylim):
+        fig, ax = plt.subplots(figsize=(5, 5))
+        ax = self.__standard_2dhist(ax, data, x, y, xlim, ylim)
+        if 'threshold' in geom.keys():
+            ax.axvline(geom['threshold'], c='r')
+            fig.show()
+            return fig
+        if 'threshold_x' in geom.keys():
+            ax.axvline(geom['threshold_x'], c='r')
+            fig.show()
+            return fig
+        if 'threshold_y' in geom.keys():
+            ax.axhline(geom['threshold_y'], c='r')
+            fig.show()
+            return fig
+        if all([x in geom.keys() for x in ['mean', 'width', 'height', 'angle']]):
+            ellipse = patches.Ellipse(xy=geom['mean'], width=geom['width'], height=geom['height'],
+                                      angle=geom['angle'], fill=False, edgecolor='r')
+            ax.add_patch(ellipse)
+            fig.show()
+            return fig
+        if all([x in geom.keys() for x in ['x_min', 'x_max', 'y_min', 'y_max']]):
+            rect = patches.Rectangle(xy=(geom['x_min'], geom['y_min']),
+                                     width=geom['x_max'], height=geom['y_max'],
+                                     fill=False, edgecolor='r')
+            ax.add_patch(rect)
+            fig.show()
+            return fig
+        print('Error: valid geom parameters not recognised, please check geom object')
+        return None
+
+    def plot_populations(self, population_name, x, y, xlim=None, ylim=None, show=True):
+        fig, ax = plt.subplots(figsize=(5, 5))
+        if population_name in self.populations.keys():
+            p = self.populations[population_name]
+        else:
+            print(f'Invalid population name, must be one of {self.populations.keys()}')
+            return None
+        xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
+        data = self.get_population_df(p)
+        self.__standard_2dhist(ax, data, x, y, xlim, ylim)
+        if show:
+            fig.show()
+        return fig
+
+    def find_dependencies(self, population: str = None) -> list or None:
+        """
+        For a given population find all dependencies
+        :param population: population name
+        :return: list of Gate objects dependent on given gate/population
+        """
+        if population not in self.populations.keys():
+            print(f'Population {population} does not exist')
+            return []
+        dependencies = self.populations[population]['children']
+        dependencies = [p for p in dependencies if p != population]
+        for child in dependencies:
+            dependencies = dependencies + self.find_dependencies(child)
+        return dependencies
+
+
 

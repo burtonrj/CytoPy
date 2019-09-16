@@ -56,7 +56,6 @@ class Population(mongoengine.EmbeddedDocument):
         return population
 
 
-
 class File(mongoengine.EmbeddedDocument):
     """
     Embedded document -> FileGroup

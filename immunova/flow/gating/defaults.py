@@ -1,5 +1,6 @@
-from functools import partial
-import inspect
+from data.fcs import Population
+from flow.gating.utilities import boolean_gate
+import numpy as np
 
 
 class Geom(dict):
@@ -21,15 +22,18 @@ class Geom(dict):
 
 class GateOutput:
     def __init__(self):
-        self.pos_index = dict()
+        self.child_populations = dict()
         self.warnings = list()
         self.error = False
         self.error_msg = None
-        self.geom = None
 
     def log_error(self, msg):
         self.error = True
         self.error_msg = msg
+
+    def add_child(self, name: str, idx: np.array, geom: Geom or None = None):
+        self.child_populations[name] = dict(index=idx, geom=geom)
+
 
 
 
