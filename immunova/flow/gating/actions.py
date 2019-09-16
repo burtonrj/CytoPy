@@ -167,6 +167,10 @@ class Gating:
             return None
         if add_population:
             for name, data in output.child_populations.items():
+                # Check gate type corresponds to output
+                if gate.gate_type == 'geom' and data['geom'] is None:
+                    print(f'Error: Geom gate returning null value for child population ({name}) geom')
+                    return None
                 n = len(data['index'])
                 self.populations[name] = dict(population_name=name, index=data['index'],
                                               prop_of_parent=n/parent_population.shape[0],
