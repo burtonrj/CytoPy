@@ -1,6 +1,5 @@
 env
 *.csv
-*.xlsx
 *.fcs
 *.ods
 .idea
