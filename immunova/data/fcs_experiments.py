@@ -104,7 +104,7 @@ class Panel(mongoengine.Document):
         # Check nomenclature column headers
         if not all([x in ['name', 'regex', 'permutations', 'case'] for x in nomenclature.columns]):
             print("Nomenclature sheet of excel template must contain the following column headers: "
-                  "'type','default','regex','permutations'")
+                  "'name','regex','case','permutations'")
             return None
         # Check mappings column headers
         if not all([x in ['channel', 'marker'] for x in mappings.columns]):
