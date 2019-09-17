@@ -1,5 +1,5 @@
-from flow.gating.utilities import check_peak, boolean_gate, kde, find_local_minima
-from flow.gating.defaults import GateOutput, Geom
+from immunova.flow.gating.utilities import check_peak, boolean_gate, kde, find_local_minima
+from immunova.flow.gating.defaults import GateOutput, Geom
 from scipy.signal import find_peaks
 from scipy.stats import norm
 import pandas as pd

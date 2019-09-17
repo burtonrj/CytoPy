@@ -1,8 +1,8 @@
 import mongoengine
 from bson.binary import Binary
-from data.gating import Gate
-from data.patient import Patient
-from flow.gating.defaults import Geom
+from immunova.data.gating import Gate
+from immunova.data.patient import Patient
+from immunova.flow.gating.defaults import Geom
 import pickle
 import numpy as np
 

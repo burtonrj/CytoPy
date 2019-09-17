@@ -1,5 +1,5 @@
-from flow.gating.defaults import Geom, GateOutput
-from flow.gating.utilities import density_dependent_downsample
+from immunova.flow.gating.defaults import Geom, GateOutput
+from immunova.flow.gating.utilities import density_dependent_downsample
 import numpy as np
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import KNeighborsClassifier

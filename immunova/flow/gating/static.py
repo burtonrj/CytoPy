@@ -1,5 +1,5 @@
-from flow.gating.utilities import boolean_gate
-from flow.gating.defaults import GateOutput, Geom
+from immunova.flow.gating.utilities import boolean_gate
+from immunova.flow.gating.defaults import GateOutput, Geom
 import pandas as pd
 
 

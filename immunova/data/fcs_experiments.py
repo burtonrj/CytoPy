@@ -1,7 +1,7 @@
 from datetime import datetime
-from data.fcs import FileGroup, File
-from data.gating import GatingStrategy
-from flow.readwrite.read_fcs import FCSFile
+from immunova.data.fcs import FileGroup, File
+from immunova.data.gating import GatingStrategy
+from immunova.flow.readwrite.read_fcs import FCSFile
 from collections import defaultdict
 from multiprocessing import Pool, cpu_count
 from functools import partial

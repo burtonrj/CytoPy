@@ -1,14 +1,14 @@
-from data.gating import Gate, GatingStrategy
-from data.fcs import FileGroup, Population
-from data.fcs_experiments import FCSExperiment
-from flow.gating.static import rect_gate
-from flow.gating.fmo import density_2d_fmo, density_1d_fmo
-from flow.gating.density import density_gate_1d
-from flow.gating.mixturemodel import mm_gate, inside_ellipse
-from flow.gating.dbscan import dbscan_gate
-from flow.gating.quantile import quantile_gate
-from flow.gating.utilities import apply_transform
-from flow.gating.defaults import Geom
+from immunova.data.gating import Gate, GatingStrategy
+from immunova.data.fcs import FileGroup, Population
+from immunova.data.fcs_experiments import FCSExperiment
+from immunova.flow.gating.static import rect_gate
+from immunova.flow.gating.fmo import density_2d_fmo, density_1d_fmo
+from immunova.flow.gating.density import density_gate_1d
+from immunova.flow.gating.mixturemodel import mm_gate, inside_ellipse
+from immunova.flow.gating.dbscan import dbscan_gate
+from immunova.flow.gating.quantile import quantile_gate
+from immunova.flow.gating.utilities import apply_transform
+from immunova.flow.gating.defaults import Geom
 from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm

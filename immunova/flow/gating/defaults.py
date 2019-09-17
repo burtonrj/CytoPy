@@ -1,5 +1,3 @@
-from data.fcs import Population
-from flow.gating.utilities import boolean_gate
 import numpy as np
 
 

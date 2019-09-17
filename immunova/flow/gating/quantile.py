@@ -1,6 +1,5 @@
 import pandas as pd
-from flow.gating.utilities import boolean_gate
-from flow.gating.defaults import GateOutput, Geom
+from immunova.flow.gating.utilities import boolean_gate
 
 
 def quantile_gate(data: pd.DataFrame, child_name: str, x: str,
