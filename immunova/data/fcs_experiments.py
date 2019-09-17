@@ -118,6 +118,8 @@ class Panel(mongoengine.Document):
         # Check that all mappings have a corresponding entry in nomenclature
         for x in ['channel', 'marker']:
             for name in mappings[x]:
+                if pd.isnull(name):
+                    continue
                 if name not in nomenclature.name.values:
                     print(f'{name} missing from nomenclature, please review template')
                     return None
@@ -145,11 +147,13 @@ class Panel(mongoengine.Document):
                                   case_sensitive=d['case'][0],
                                   permutations=d['permutations'][0])
         for name in mappings['channel']:
-            definition = create_def(name)
-            self.channels.append(definition)
+            if not pd.isnull(name):
+                definition = create_def(name)
+                self.channels.append(definition)
         for name in mappings['marker']:
-            definition = create_def(name)
-            self.markers.append(definition)
+            if not pd.isnull(name):
+                definition = create_def(name)
+                self.markers.append(definition)
         mappings = mappings.fillna('').to_dict(orient='list')
         self.mappings = [ChannelMap(channel=c, marker=m)
                          for c, m in zip(mappings['channel'], mappings['marker'])]

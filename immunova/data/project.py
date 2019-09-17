@@ -57,4 +57,5 @@ class Project(mongoengine.Document):
         exp.save()
         self.fcs_experiments.append(exp)
         print(f'Experiment created successfully!')
-        return exp.id.__str__()
+        self.save()
+        return exp
