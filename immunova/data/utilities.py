@@ -24,4 +24,3 @@ def get_fcs_file_paths(fcs_dir, control_names, ctrl_id, ignore_comp=True):
         print('Warning! Multiple non-control (primary) files found in directory. Check before proceeding.')
     file_tree['primary'] = [f'{fcs_dir}/{p}' for p in primary]
     return file_tree
-

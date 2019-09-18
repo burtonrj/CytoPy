@@ -229,7 +229,7 @@ class Panel(mongoengine.Document):
             new_column_mappings[col_name] = [channel, marker]
         return new_column_mappings
 
-    def standardise(self, data: pd.DataFrame) -> pd.DataFrame or None:
+    def standardise(self, data: pd.DataFrame, skip_missing_channels: bool = True) -> pd.DataFrame or None:
         """
         Given a dataframe of fcs events, standardise the columns according to the panel definition
         :param data: pandas dataframe of cell events
@@ -255,7 +255,8 @@ class Panel(mongoengine.Document):
                            for k, v in updated_mappings.items()}
             comparisons = {k: sum(v) for k, v in comparisons.items() if sum(v) == 2}
             if not comparisons:
-                print(f'{channel_marker_pair.channel}, {channel_marker_pair.marker} pair not found!')
+                print(f'WARNING: {channel_marker_pair.channel}, {channel_marker_pair.marker} pair not found!')
+            if not skip_missing_channels:
                 print(f'Column mappings: {updated_mappings.items()}')
                 return None
             if len(comparisons) > 1:

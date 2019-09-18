@@ -1,7 +1,11 @@
+from multiprocessing import Pool, cpu_count
+from tqdm import tqdm
 import flowio
 import dateutil.parser as date_parser
 import numpy as np
 import pandas as pd
+import os
+import json
 
 
 def chunks(l, n):
@@ -11,6 +15,49 @@ def chunks(l, n):
     """
     for i in range(0, len(l), n):
         yield l[i:i + n]
+
+
+def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True) -> list:
+    """
+    Given a directory, return file paths for all fcs files in directory and subdirectories contained within
+    :param fcs_dir:
+    :param exclude_comps:
+    :return: list of fcs file paths
+    """
+    fcs_files = []
+    for root, dirs, files in os.walk(fcs_dir):
+        if exclude_comps:
+            fcs = [f for f in files if f.endswith('.fcs') and f.find('Comp') == -1]
+        else:
+            fcs = [f for f in files if f.endswith('.fcs')]
+        fcs = [f'{root}/{f}' for f in fcs]
+        fcs_files = fcs_files + fcs
+    return fcs_files
+
+
+def fcs_mappings(file_path: str) -> list:
+    """
+    Given a file path, load as an FCSFile object and return the channel/marker mappings
+    :param file_path:
+    :return: list of dictionary objects; each a channel/marker pair
+    """
+    fcs = FCSFile(file_path)
+    return fcs.fluoro_mappings
+
+
+def explore_channel_mappings(fcs_dir: str, exclude_comps: bool = True) -> list:
+    """
+    Given a directory, explore all fcs files and find all permutations of channel/marker mappings
+    :param fcs_dir: root directory to search
+    :param exclude_comps: exclude compentation files (must have 'comp' in filename)
+    :return: list of all unique channel/marker mappings
+    """
+    fcs_files = filter_fcs_files(fcs_dir, exclude_comps)
+    pool = Pool(cpu_count())
+    all_mappings = pool.map(fcs_mappings, fcs_files)
+    all_mappings_json = [json.dumps(x) for x in all_mappings]
+    unique_mappings = set(all_mappings_json)
+    return [json.loads(x) for x in unique_mappings]
 
 
 class FCSFile:
@@ -45,10 +92,10 @@ class FCSFile:
                 path to relevant csv file with 'comp_matrix' argument""")
             self.spill = self.__get_spill_matrix(fcs.text['spill'])
         self.threshold = [{'channel': c, 'threshold': v} for c, v in chunks(fcs.text["threshold"].split(','), 2)]
-        if fcs.text['cst setup status'] == 'SUCCESS':
-            self.cst_pass = True
-        else:
-            self.cst_pass = False
+        self.cst_pass = False
+        if 'cst_setup_status' in fcs.text:
+            if fcs.text['cst setup status'] == 'SUCCESS':
+                self.cst_pass = True
         self.data = fcs.events
         self.event_data = np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count))
 
@@ -68,9 +115,9 @@ class FCSFile:
         fm = [x for k, x in fluoro_dict.items()]
         mappings = []
         for fm_ in fm:
-            channel = fm_['PnN']
+            channel = fm_['PnN'].replace('_', '-')
             if 'PnS' in fm_.keys():
-                marker = fm_['PnS']
+                marker = fm_['PnS'].replace('_', '-')
             else:
                 marker = ''
             mappings.append({'channel': channel, 'marker': marker})
