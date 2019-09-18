@@ -1,5 +1,5 @@
 from multiprocessing import Pool, cpu_count
-from tqdm import tqdm
+from immunova.data.utilities import filter_fcs_files
 import flowio
 import dateutil.parser as date_parser
 import numpy as np
@@ -15,24 +15,6 @@ def chunks(l, n):
     """
     for i in range(0, len(l), n):
         yield l[i:i + n]
-
-
-def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True) -> list:
-    """
-    Given a directory, return file paths for all fcs files in directory and subdirectories contained within
-    :param fcs_dir:
-    :param exclude_comps:
-    :return: list of fcs file paths
-    """
-    fcs_files = []
-    for root, dirs, files in os.walk(fcs_dir):
-        if exclude_comps:
-            fcs = [f for f in files if f.endswith('.fcs') and f.find('Comp') == -1]
-        else:
-            fcs = [f for f in files if f.endswith('.fcs')]
-        fcs = [f'{root}/{f}' for f in fcs]
-        fcs_files = fcs_files + fcs
-    return fcs_files
 
 
 def fcs_mappings(file_path: str) -> list:

@@ -60,9 +60,3 @@ class Project(mongoengine.Document):
         self.save()
         return exp
 
-    def save(self):
-        if not Project.objects(project_id=self.project_id):
-            super(Project, self).save()
-        else:
-            print(f'Error: {self.project_id} already exists!')
-

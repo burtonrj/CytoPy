@@ -205,10 +205,10 @@ class Panel(mongoengine.Document):
         def query(x, ref):
             corrected = list(filter(None.__ne__, [n.query(x) for n in ref]))
             if len(corrected) == 0:
-                print(f'Unable to normalise {x}; no matching channel in linked panel')
+                print(f'Unable to normalise {x}; no match in linked panel')
                 return None
             if len(corrected) > 1:
-                print(f'Unable to normalise {x}; matched multiple channels in linked panel, check'
+                print(f'Unable to normalise {x}; matched multiple in linked panel, check'
                       f' panel for incorrect definitions. Matches found: {corrected}')
                 return None
             return corrected[0]
@@ -254,14 +254,15 @@ class Panel(mongoengine.Document):
             comparisons = {k: (v[0] == channel_marker_pair.channel, v[1] == channel_marker_pair.marker)
                            for k, v in updated_mappings.items()}
             comparisons = {k: sum(v) for k, v in comparisons.items() if sum(v) == 2}
-            if not comparisons:
-                print(f'WARNING: {channel_marker_pair.channel}, {channel_marker_pair.marker} pair not found!')
-            if not skip_missing_channels:
-                print(f'Column mappings: {updated_mappings.items()}')
-                return None
             if len(comparisons) > 1:
                 print(f'Multiple instances of {channel_marker_pair.channel}, {channel_marker_pair.marker} pair'
                       f'found!')
+                return None
+            if not comparisons:
+                print(f'WARNING: {channel_marker_pair.channel}, {channel_marker_pair.marker} pair not found!')
+                continue
+            if not skip_missing_channels:
+                print(f'Column mappings: {updated_mappings.items()}')
                 return None
             ordered_columns.append(list(comparisons.keys())[0])
         return data[ordered_columns]
@@ -408,6 +409,7 @@ class FCSExperiment(mongoengine.Document):
             new_file.file_id = file_id
             if compensate:
                 fcs.compensate()
+                new_file.compensated = True
             if control_:
                 new_file.file_type = 'control'
             data = fcs.dataframe
