@@ -37,6 +37,18 @@ class Project(mongoengine.Document):
         experiments = [e.experiment_id for e in self.fcs_experiments]
         return experiments
 
+    def load_experiment(self, experiment_id: str) -> None or FCSExperiment:
+        """
+        For a given experiment in project, load the experiment object
+        :param experiment_id: experiment to load
+        :return: FCSExperiment object
+        """
+        if experiment_id not in self.list_fcs_experiments():
+            print(f'Error: no experiment {experiment_id} found')
+            return None
+        e = [e for e in self.fcs_experiments if e.experiment_id == experiment_id][0]
+        return e
+
     def add_experiment(self, experiment_id, panel_name):
         """
         Add new experiment to project

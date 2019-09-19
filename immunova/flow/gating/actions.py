@@ -21,7 +21,6 @@ import inspect
 
 
 class Gating:
-
     def __init__(self, experiment: FCSExperiment, sample_id: str, transformation: str or None = "logicle",
                  transform_channels: list or None = None, data_type='raw', sample: int or None = None):
         data, mappings = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample)
@@ -221,7 +220,7 @@ class Gating:
                 ylim = (0, 1)
         return xlim, ylim
 
-    def plot_gate(self, gate_name, title=None, fmo: str or pd.DataFrame or None = None,
+    def plot_gate(self, gate_name, fmo: str or pd.DataFrame or None = None,
                   xlim=None, ylim=None, show=True):
         # Check and load gate
         if gate_name not in self.gates.keys():
@@ -239,7 +238,7 @@ class Gating:
 
         # Cluster plot
         if gate.gate_type == 'cluster':
-            return self.__cluster_plot(x, y, gate)
+            return self.__cluster_plot(x, y, gate, title=gate_name)
 
         # Geom plot
         if type(fmo) == str:
@@ -254,11 +253,11 @@ class Gating:
             return None
         plots = []
         for child in self.populations[gate.parent]['children']:
-            plots.append(self.__geom_plot(x, y, data, self.populations[gate.parent]['geom'],
-                                          xlim, ylim))
+            plots.append(self.__geom_plot(x, y, data, self.populations[child]['geom'],
+                                          xlim, ylim, title=f'{child}_{gate_name}'))
         return plots
 
-    def __cluster_plot(self, x, y, gate):
+    def __cluster_plot(self, x, y, gate, title):
         fig, ax = plt.subplots(figsize=(5, 5))
         colours = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(gate.children))]
         for child, colour in zip(gate.children, colours):
@@ -266,20 +265,22 @@ class Gating:
             if child == 'noise':
                 colour = [0, 0, 0, 1]
             ax.scatter(d[x], d[y], c=colour, s=1, alpha=0.25)
+        ax.set_title(title)
         fig.show()
 
     @staticmethod
-    def __standard_2dhist(ax, data, x, y, xlim, ylim):
+    def __standard_2dhist(ax, data, x, y, xlim, ylim, title):
         ax.hist2d(data[x], data[y], bins=500, norm=LogNorm())
         ax.set_xlim(xlim[0], xlim[1])
         ax.set_ylim(ylim[0], ylim[1])
         ax.set_ylabel(y)
         ax.set_xlabel(x)
+        ax.set_title(title)
         return ax
 
-    def __geom_plot(self, x, y, data, geom, xlim, ylim):
+    def __geom_plot(self, x, y, data, geom, xlim, ylim, title):
         fig, ax = plt.subplots(figsize=(5, 5))
-        ax = self.__standard_2dhist(ax, data, x, y, xlim, ylim)
+        ax = self.__standard_2dhist(ax, data, x, y, xlim, ylim, title)
         if 'threshold' in geom.keys():
             ax.axvline(geom['threshold'], c='r')
         if 'threshold_x' in geom.keys():

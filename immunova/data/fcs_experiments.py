@@ -403,8 +403,6 @@ class FCSExperiment(mongoengine.Document):
             fg[0].delete()
         return True
 
-
-
     def add_new_sample(self, sample_id: str, file_path: str, controls: list,
                        comp_matrix: np.array or None = None, compensate: bool = True,
                        feedback: bool = True) -> None or str:
