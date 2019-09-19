@@ -387,6 +387,24 @@ class FCSExperiment(mongoengine.Document):
         """
         return [f.primary_id for f in self.fcs_files]
 
+    def remove_file(self, sample_id: str, delete=False):
+        """
+        Remove sample (FileGroup) from experiment.
+        :param sample_id: ID of sample to remove
+        :param delete: if True, the FileGroup entry will be deleted from the database
+        :return: True if successful
+        """
+        fg = FileGroup.objects(primary_id=sample_id)
+        if not fg:
+            print(f'Error: {sample_id} does not exist')
+            return False
+        self.fcs_files = [f for f in self.fcs_files if f.primary_id != sample_id]
+        if delete:
+            fg[0].delete()
+        return True
+
+
+
     def add_new_sample(self, sample_id: str, file_path: str, controls: list,
                        comp_matrix: np.array or None = None, compensate: bool = True,
                        feedback: bool = True) -> None or str:
