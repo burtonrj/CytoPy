@@ -281,8 +281,8 @@ class FCSExperiment(mongoengine.Document):
         gating_templates - reference to gating templates associated to this experiment
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
-    panel = mongoengine.ReferenceField(Panel)
-    fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup))
+    panel = mongoengine.ReferenceField(Panel, reverse_delete_rule=4)
+    fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4))
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
     gating_templates = mongoengine.ListField(mongoengine.ReferenceField(GatingStrategy, reverse_delete_rule=4))
@@ -338,7 +338,7 @@ class FCSExperiment(mongoengine.Document):
     def pull_sample_data(self, sample_id: str, sample_size: int or None = None,
                          data_type: str = 'raw', include_controls: bool = True,
                          output_format: str = 'dataframe',
-                         return_mappings: bool = True) -> None or (list, None) or (list, list):
+                         return_mappings: bool = True) -> (None, None) or (list, None) or (list, list):
         """
         Given a sample ID, associated to this experiment, fetch the fcs data
         :param sample_id: ID of sample to fetch data for
@@ -355,11 +355,11 @@ class FCSExperiment(mongoengine.Document):
         """
         if sample_id not in self.list_samples():
             print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
-            return None
+            return None, None
         file_grp = FileGroup.objects(primary_id=sample_id)
         if not file_grp:
             print(f'Error: invalid sample_id, no file entry for {sample_id}')
-            return None
+            return None, None
         file_grp = file_grp[0]
         files = file_grp.files
         mappings = [json.loads(x.to_json()) for x in self.panel.mappings]
@@ -458,4 +458,5 @@ class FCSExperiment(mongoengine.Document):
         self.fcs_files.append(file_collection)
         if feedback:
             print(f'Successfully created {sample_id} and associated to {self.experiment_id}')
+        self.save()
         return file_collection.id.__str__()

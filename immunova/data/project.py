@@ -19,10 +19,10 @@ class Project(mongoengine.Document):
         list_fcs_experiments - generate a list of IDs for fcs experiments associated to this project
     """
     project_id = mongoengine.StringField(required=True, unique=True)
-    patients = mongoengine.ListField(mongoengine.ReferenceField(Patient))
+    patients = mongoengine.ListField(mongoengine.ReferenceField(Patient, reverse_delete_rule=4))
     start_date = mongoengine.DateTimeField(default=datetime.datetime.now)
     owner = mongoengine.StringField(requred=True)
-    fcs_experiments = mongoengine.ListField(mongoengine.ReferenceField(FCSExperiment))
+    fcs_experiments = mongoengine.ListField(mongoengine.ReferenceField(FCSExperiment, reverse_delete_rule=4))
 
     meta = {
         'db_alias': 'core',

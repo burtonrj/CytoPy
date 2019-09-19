@@ -23,41 +23,45 @@ import inspect
 class Gating:
     def __init__(self, experiment: FCSExperiment, sample_id: str, transformation: str or None = "logicle",
                  transform_channels: list or None = None, data_type='raw', sample: int or None = None):
-        data, mappings = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample)
-        primary = [x for x in data if x['typ'] == 'complete'][0]
-        controls = [x for x in data if x['typ'] == 'control']
-        fg = FileGroup.objects(primary_id=sample_id)[0]
-        self.mappings = mappings
-        self.id = sample_id
-        self.experiment_id = FCSExperiment.experiment_id
+        try:
+            data, mappings = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample)
+            assert data
+            primary = [x for x in data if x['typ'] == 'complete'][0]
+            controls = [x for x in data if x['typ'] == 'control']
+            fg = FileGroup.objects(primary_id=sample_id)[0]
+            self.mappings = mappings
+            self.id = sample_id
+            self.experiment_id = FCSExperiment.experiment_id
 
-        if transformation:
-            if not transform_channels:
-                transform_channels = [x for x in primary['data'].columns if
-                                      all([x.find(y) == -1 for y in ['FSC', 'SSC', 'Time']])]
-            self.data = apply_transform(primary['data'].copy(), features_to_transform=transform_channels,
-                                        transform_method=transformation)
-            self.fmo = {x['id']: apply_transform(x['data'], features_to_transform=transform_channels,
-                                                 transform_method=transformation) for x in controls}
-        else:
-            self.data = primary['data']
-            self.fmo = {x['id']: x['data'] for x in controls}
-        del data
+            if transformation:
+                if not transform_channels:
+                    transform_channels = [x for x in primary['data'].columns if
+                                          all([x.find(y) == -1 for y in ['FSC', 'SSC', 'Time']])]
+                self.data = apply_transform(primary['data'].copy(), features_to_transform=transform_channels,
+                                            transform_method=transformation)
+                self.fmo = {x['id']: apply_transform(x['data'], features_to_transform=transform_channels,
+                                                     transform_method=transformation) for x in controls}
+            else:
+                self.data = primary['data']
+                self.fmo = {x['id']: x['data'] for x in controls}
+            del data
 
-        self.gates = dict()
-        if fg.gates:
-            for g in fg.gates:
-                self.gates[g.gate_name] = g
+            self.gates = dict()
+            if fg.gates:
+                for g in fg.gates:
+                    self.gates[g.gate_name] = g
 
-        self.populations = dict()
-        if fg.populations:
-            for p in fg.populations:
-                self.populations[p.population_name] = p.to_python()
-        else:
-            root = dict(population_name='root', prop_of_parent=1.0, prop_of_total=1.0,
-                        warnings=[], parent='NA', children=[], geom=Geom(shape=None, x='FSC-A', y='SSC-A'),
-                        index=self.data.index.values)
-            self.populations['root'] = root
+            self.populations = dict()
+            if fg.populations:
+                for p in fg.populations:
+                    self.populations[p.population_name] = p.to_python()
+            else:
+                root = dict(population_name='root', prop_of_parent=1.0, prop_of_total=1.0,
+                            warnings=[], parent='NA', children=[], geom=Geom(shape=None, x='FSC-A', y='SSC-A'),
+                            index=self.data.index.values)
+                self.populations['root'] = root
+        except AssertionError as e:
+            print('Error: failed to construct Gating object')
 
     @property
     def gating_functions(self):

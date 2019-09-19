@@ -154,7 +154,7 @@ class FileGroup(mongoengine.Document):
     notes = mongoengine.StringField(required=False)
     populations = mongoengine.EmbeddedDocumentListField(Population)
     gates = mongoengine.EmbeddedDocumentListField(Gate)
-    patient = mongoengine.ReferenceField(Patient)
+    patient = mongoengine.ListField(mongoengine.ReferenceField(Patient, reverse_delete_rule=mongoengine.PULL))
     meta = {
         'db_alias': 'core',
         'collection': 'fcs_files'
