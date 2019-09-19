@@ -1,6 +1,7 @@
 from datetime import datetime
 from immunova.data.fcs import FileGroup, File
 from immunova.data.gating import GatingStrategy
+from immunova.data.utilities import data_from_file
 from immunova.flow.readwrite.read_fcs import FCSFile
 from collections import defaultdict
 from multiprocessing import Pool, cpu_count
@@ -292,49 +293,6 @@ class FCSExperiment(mongoengine.Document):
         'collection': 'fcs_experiments'
     }
 
-    def __data_from_file(self, file, data_type, sample_size, output_format='matrix') -> None or dict:
-        """
-        Pull data from a given file document
-        :param file: File object
-        :param data_type: data type to retrieve; either 'raw' or 'norm' (normalised)
-        :param sample_size: return a sample of given integer size
-        :param output_format: data format to return; either pandas dataframe or numpy matrix
-        :return: Dictionary output {id: file_id, typ: file_type, data: dataframe/matrix}
-        """
-        if data_type == 'raw':
-            data = file.raw_data(sample=sample_size)
-
-        elif data_type == 'norm':
-            data = file.norm_data(sample=sample_size)
-        else:
-            print('Invalid data_type, must be raw or norm')
-            return None
-        if output_format == 'dataframe':
-            data = self.__as_dataframe(data, self.panel)
-        return dict(id=file.file_id, typ=file.file_type, data=data)
-
-    @staticmethod
-    def __as_dataframe(matrix: np.array, panel: Panel, columns_default: str = 'marker'):
-        """
-        Generate a pandas dataframe using a given numpy multi-dim array with specified column defaults
-        :param matrix: numpy matrix to convert to dataframe
-        :param panel: Panel object for formatting conventions
-        :param columns_default: how to name columns; either 'marker' or 'channel' (default = 'marker')
-        :return: Pandas dataframe
-        """
-        columns = []
-        for i, m in enumerate(panel.mappings):
-            if not m[columns_default]:
-                if m['channel']:
-                    columns.append(m['channel'])
-                elif m['marker']:
-                    columns.append(m['marker'])
-                else:
-                    columns.append(f'Unnamed: {i}')
-            else:
-                columns.append(m[columns_default])
-        return pd.DataFrame(matrix, columns=columns, dtype='float32')
-
     def pull_sample_data(self, sample_id: str, sample_size: int or None = None,
                          data_type: str = 'raw', include_controls: bool = True,
                          output_format: str = 'dataframe',
@@ -366,13 +324,14 @@ class FCSExperiment(mongoengine.Document):
         # Fetch data
         if not include_controls:  # Fetch data for primary file only
             f = [f for f in files if f.file_type == 'complete'][0]
-            complete = self.__data_from_file(f, data_type, sample_size, output_format=output_format)
+            complete = data_from_file(f, data_type, sample_size, panel=self.panel)
             if return_mappings:
                 return [complete], mappings
             return [complete], None
         # Fetch data for primary file & controls
         pool = Pool(cpu_count())
-        f = partial(self.__data_from_file, data_type=data_type, sample_size=sample_size, output_format=output_format)
+        f = partial(data_from_file, data_type=data_type, sample_size=sample_size,
+                    output_format=output_format, panel=self.panel)
         data = pool.map(f, files)
         pool.close()
         pool.join()
