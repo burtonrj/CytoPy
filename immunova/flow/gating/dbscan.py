@@ -28,17 +28,17 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, cor
     output = GateOutput()
     data = data.copy()
     if sampling_method == 'uniform':
-        s = data[[x, y]].sample(frac=sample)
+        s = data.sample(frac=sample)
     elif sampling_method == 'density':
         try:
-            s = density_dependent_downsample(data[[x, y]], features=[x, y], **density_sampling_params)
+            s = density_dependent_downsample(data, features=[x, y], **density_sampling_params)
         except TypeError or KeyError as e:
             output.error = 1
             output.error_msg = f'Error: invalid params for density dependent downsampling; {e}'
             return output
     else:
         s = data[[x, y]]
-    db = DBSCAN(eps=distance_nn, min_samples=min_pop_size, algorithm='ball_tree', n_jobs=-1).fit(s)
+    db = DBSCAN(eps=distance_nn, min_samples=min_pop_size, algorithm='ball_tree', n_jobs=-1).fit(s[[x, y]])
     db_labels = db.labels_
 
     if core_only:
@@ -55,10 +55,10 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, cor
 
     # Assign remaining events
     knn = KNeighborsClassifier(n_neighbors=nn, weights='distance', n_jobs=-1)
-    knn.fit(data, db_labels)
+    knn.fit(s[[x, y]], db_labels)
 
     if sampling_method:
-        data['labels'] = knn.predict(data)
+        data['labels'] = knn.predict(data[[x, y]])
     else:
         data['labels'] = db_labels
 

@@ -126,10 +126,26 @@ class Gating:
                 return False
         return True
 
-    def create_gate(self, gate_name, children, parent, x, y, func, func_args, gate_type, boolean_gate=False):
+    def create_gate(self, gate_name, children, parent, x, func, func_args, gate_type, y=None, boolean_gate=False):
         if gate_name in self.gates.keys():
             print(f'Error: gate with name {gate_name} already exists.')
             return False
+        if 'x' not in func_args.keys():
+            func_args['x'] = x
+        if y:
+            if 'y' not in func_args.keys():
+                func_args['y'] = y
+        if 'expected_populations' in func_args.keys():
+            try:
+                child_names = [x['id'] for x in func_args['expected_populations']]
+                if not set(children) == set(child_names):
+                    print(f"Error: children does not match func arg expected_populations: "
+                          f"{children} != {func_args['expected_populations']}")
+                    return False
+            except KeyError as e:
+                print('Error: invalid func argument expected_populations')
+        elif 'child_name' not in func_args.keys():
+            func_args['child_name'] = children[0]
         if func not in self.gating_functions:
             print(f'Error: invalid gate function, must be one of {self.gating_functions}')
         if not self.__check_func_args(self.gating_functions[func], **func_args):
@@ -141,7 +157,7 @@ class Gating:
         self.gates[gate_name] = new_gate
         return True
 
-    def apply(self, gate_name: str, add_population: bool = False, plot_output: bool = True):
+    def apply(self, gate_name: str, plot_output: bool = True):
         if gate_name not in self.gates.keys():
             print(f'Error: {gate_name} does not exist. You must create this gate first using the create_gate method')
             return None
@@ -169,27 +185,26 @@ class Gating:
         if output.error:
             print(output.error_msg)
             return None
-        if add_population:
-            for name, data in output.child_populations.items():
-                # Check gate type corresponds to output
-                if gate.gate_type == 'geom' and data['geom'] is None:
-                    print(f'Error: Geom gate returning null value for child population ({name}) geom')
-                    return None
-                n = len(data['index'])
-                self.populations[name] = dict(population_name=name, index=data['index'],
-                                              prop_of_parent=n/parent_population.shape[0],
-                                              prop_of_total=n/self.data.shape[0],
-                                              parent=gate.parent, children=[],
-                                              geom=data['geom'])
-                self.populations[gate.parent]['children'].append(name)
+        for name, data in output.child_populations.items():
+            # Check gate type corresponds to output
+            if gate.gate_type == 'geom' and data['geom'] is None:
+                print(f'Error: Geom gate returning null value for child population ({name}) geom')
+                return None
+            n = len(data['index'])
+            self.populations[name] = dict(population_name=name, index=data['index'],
+                                          prop_of_parent=n/parent_population.shape[0],
+                                          prop_of_total=n/self.data.shape[0],
+                                          parent=gate.parent, children=[],
+                                          geom=data['geom'])
+            self.populations[gate.parent]['children'].append(name)
         if plot_output:
             self.plot_gate(gate.gate_name)
             if fmo_x_name:
                 fmo = kwargs['fmo_x']
-                self.plot_gate(gate.gate_name, fmo=fmo, title=fmo_x_name)
+                self.plot_gate(gate.gate_name, fmo=fmo)
             if fmo_y_name:
                 fmo = kwargs['fmo_y']
-                self.plot_gate(gate.gate_name, fmo=fmo, title=fmo_y_name)
+                self.plot_gate(gate.gate_name, fmo=fmo)
         return output
 
     def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False):
@@ -233,9 +248,9 @@ class Gating:
         gate = self.gates[gate_name]
 
         # Get axis info
-        x = gate.x_feature
-        if gate.y_feature:
-            y = gate.y_feature
+        x = gate.x
+        if gate.y:
+            y = gate.y
         else:
             y = 'FSC-A'
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
@@ -306,12 +321,12 @@ class Gating:
     def plot_population(self, population_name, x, y, xlim=None, ylim=None, show=True):
         fig, ax = plt.subplots(figsize=(5, 5))
         if population_name in self.populations.keys():
-            data = self.get_population_df(p)
+            data = self.get_population_df(population_name)
         else:
             print(f'Invalid population name, must be one of {self.populations.keys()}')
             return None
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
-        self.__standard_2dhist(ax, data, x, y, xlim, ylim)
+        self.__standard_2dhist(ax, data, x, y, xlim, ylim, title=population_name)
         if show:
             fig.show()
         return fig

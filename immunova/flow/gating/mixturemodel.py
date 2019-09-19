@@ -63,9 +63,10 @@ def create_ellipse(data, x, y, model, conf, tp_idx):
     return mask, geom
 
 
-def mm_gate(data: pd.DataFrame, x: str, y: str, child_name: str, target: tuple = None, k: int = None,
-             method: str = 'gmm', bool_gate: bool = False, conf: float = 0.95, rect_filter: dict or None = None,
-             **kwargs) -> GateOutput:
+def mm_gate(data: pd.DataFrame, x: str, y: str, child_name: str,
+            target: tuple = None, k: int = None, method: str = 'gmm',
+            bool_gate: bool = False, conf: float = 0.95, rect_filter: dict or None = None,
+            covar='full') -> GateOutput:
     """
 
     :param child_name:
@@ -80,14 +81,10 @@ def mm_gate(data: pd.DataFrame, x: str, y: str, child_name: str, target: tuple =
     :param conf: critical value for confidence interval (defines the 'tightness' of resulting elliptical gate)
     :param rect_filter: rectangular filter applied prior to mixture model gate; dictionary following conventions of
     static.rect_gate
-    :param kwargs: additional keyword arguments for mixture model functions (see scikit-learn)
+    :param covar: String describing the type of covariance parameters to use (see scikit-learn documentation)
     :return: Output object
     """
     output = GateOutput()
-    if 'covar' not in kwargs.keys():
-        covar = 'full'
-    else:
-        covar = kwargs.pop('covar')
     X = data[[x, y]]
 
     # Filter if necessary
@@ -98,11 +95,11 @@ def mm_gate(data: pd.DataFrame, x: str, y: str, child_name: str, target: tuple =
     if method == 'gmm':
         if not k:
             k = 2
-        model = GaussianMixture(n_components=k, covariance_type=covar, random_state=42, **kwargs).fit(X)
+        model = GaussianMixture(n_components=k, covariance_type=covar, random_state=42).fit(X)
     elif method == 'bayesian':
         if not k:
             k = 5
-        model = BayesianGaussianMixture(n_components=k, covariance_type=covar, random_state=42, **kwargs).fit(X)
+        model = BayesianGaussianMixture(n_components=k, covariance_type=covar, random_state=42).fit(X)
     else:
         output.error = 1
         output.error_msg = 'Invalid method, must be one of: gmm, bayesian'

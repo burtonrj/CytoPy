@@ -57,7 +57,7 @@ def density_gate_1d(data: pd.DataFrame, x: str, child_name: str,
                 if len(peaks[:highest_peak+1]) > 1:
                     peaks = peaks[:highest_peak+1]
         threshold = find_local_minima(probs, xx, peaks)
-        geom = Geom(shape='threshold', x=x, y=y, threshold=threshold, method='Local minima; two highest peaks')
+        geom = Geom(shape='threshold', x=x, y=None, threshold=threshold, method='Local minima; two highest peaks')
         pos_pop = data[data[x] >= threshold]
         pos_pop = boolean_gate(data, pos_pop, bool_gate)
         output.add_child(name=child_name, idx=pos_pop.index.values, geom=geom)
