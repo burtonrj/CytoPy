@@ -1,4 +1,3 @@
-from immunova.data.fcs_experiments import Panel
 import pandas as pd
 import numpy as np
 import os
@@ -81,7 +80,7 @@ def data_from_file(file, data_type, sample_size, output_format='dataframe',
     return dict(id=file.file_id, typ=file.file_type, data=data)
 
 
-def as_dataframe(matrix: np.array, panel: Panel, columns_default: str = 'marker'):
+def as_dataframe(matrix: np.array, panel, columns_default: str = 'marker'):
     """
     Generate a pandas dataframe using a given numpy multi-dim array with specified column defaults
     :param matrix: numpy matrix to convert to dataframe

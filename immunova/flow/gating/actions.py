@@ -303,15 +303,14 @@ class Gating:
         fig.show()
         return fig
 
-    def plot_populations(self, population_name, x, y, xlim=None, ylim=None, show=True):
+    def plot_population(self, population_name, x, y, xlim=None, ylim=None, show=True):
         fig, ax = plt.subplots(figsize=(5, 5))
         if population_name in self.populations.keys():
-            p = self.populations[population_name]
+            data = self.get_population_df(p)
         else:
             print(f'Invalid population name, must be one of {self.populations.keys()}')
             return None
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
-        data = self.get_population_df(p)
         self.__standard_2dhist(ax, data, x, y, xlim, ylim)
         if show:
             fig.show()
