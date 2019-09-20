@@ -1,4 +1,4 @@
-from immunova.flow.gating.defaults import Geom, GateOutput
+from immunova.flow.gating.defaults import GateOutput
 from immunova.flow.gating.utilities import density_dependent_downsample
 import numpy as np
 from sklearn.cluster import DBSCAN
@@ -61,17 +61,15 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, cor
         data['labels'] = knn.predict(data[[x, y]])
     else:
         data['labels'] = db_labels
-
+    # Predict what cluster the mediod of expected populations falls into
     populations = collections.defaultdict(list)
     for p in expected_populations:
         label = knn.predict(np.reshape(p['target'], (1, -1)))
         populations[label[0]].append(p['id'])
-
+    # Check for duplicate assignment of expected population or assignment to noise
     for l, p_id in populations.items():
         if len(p_id) > 1:
-            output.error_msg = f'Populations f{p_id} assigned to the same cluster {l}'
-            output.error = 1
-            return output
+            output.warnings.append(f'Populations f{p_id} assigned to the same clusters {l}')
         if l == -1:
             output.warnings.append(f'Population {p_id} assigned to noise (i.e. population not found)')
     populations[-1] = ['noise']
@@ -81,7 +79,7 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, cor
             return populations[x][0]
         return 'noise'
     data['labels'] = data['labels'].apply(rename_label)
-
-    for p in populations.keys():
+    expected_population_keys = [p['id'] for p in expected_populations]
+    for p in expected_population_keys:
         output.add_child(name=p, idx=data[data['labels'] == p].index.values, geom=None)
     return output
