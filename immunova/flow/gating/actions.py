@@ -297,7 +297,7 @@ class Gating:
         fig, ax = plt.subplots(figsize=(5, 5))
         colours = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(gate.children))]
         for child, colour in zip(gate.children, colours):
-            d = self.get_population_df(child).sample(frac=0.25)
+            d = self.get_population_df(child).sample(frac=0.5)
             if child == 'noise':
                 colour = [0, 0, 0, 1]
             ax.scatter(d[x], d[y], c=colour, s=1, alpha=0.25)
@@ -528,8 +528,3 @@ class Template(Gating):
         else:
             print(f'No template with name {template_name}')
             return False
-
-
-
-
-

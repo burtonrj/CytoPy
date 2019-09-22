@@ -20,6 +20,7 @@ def density_1d_fmo(data: pd.DataFrame, fmo: pd.DataFrame, child_name: str,
     :param kde_frac:
     :param q:
     :param peak_t:
+    :param fmo_z:
     :return:
     """
     output = GateOutput()
@@ -28,10 +29,10 @@ def density_1d_fmo(data: pd.DataFrame, fmo: pd.DataFrame, child_name: str,
     density = {}
 
     def kde_and_peaks(d, k):
-        probs, xx = kde(d, x, kde_bw=kde_bw, kernel='gaussian', frac=kde_frac)
+        probs, xx_ = kde(d, x, kde_bw=kde_bw, kernel='gaussian', frac=kde_frac)
         peaks = find_peaks(probs)[0]
         peaks = check_peak(peaks, probs, peak_t)
-        density[k] = dict(probs=probs, xx=xx, peaks=peaks)
+        density[k] = dict(probs=probs, xx=xx_, peaks=peaks)
 
     kde_and_peaks(data, 'whole')
     if fmo.shape[0] > 0:
@@ -112,6 +113,63 @@ def density_1d_fmo(data: pd.DataFrame, fmo: pd.DataFrame, child_name: str,
             output.error_msg = 'No peaks found. Is this dataset empty?'
             return output
 
+
+def density_2d_fmo(data, fmo_x, fmo_y, x, y, child_populations: dict,
+                   kde_bw=0.05, q=0.99, peak_t=0.01):
+    """
+    FMO guided density based gating for two dimensional data
+    :param data:
+    :param fmo_x:
+    :param fmo_y:
+    :param x:
+    :param y:
+    :param child_populations:
+    :param kde_bw:
+    :param q:
+    :param peak_t:
+    :return:
+    """
+    output = GateOutput()
+    geom = Geom(shape='2d_threshold', x=x, y=y, threshold_x=None, threshold_y=None, method=None)
+    fmo_result_x = density_1d_fmo(data, fmo_x, child_name=f'{x}_fmo', x=x, kde_bw=kde_bw, q=q, peak_t=peak_t)
+    fmo_result_y = density_1d_fmo(data, fmo_y, child_name=f'{y}_fmo', x=y, kde_bw=kde_bw, q=q, peak_t=peak_t)
+    # Check for errors
+    for x in [fmo_result_x, fmo_result_y]:
+        if x.error == 1:
+            output.error = 1
+            output.error_msg = x.error_msg
+            return output
+
+    # Update warnings
+    output.warnings = fmo_result_x.warnings + fmo_result_y.warnings
+    geom['threshold_x'] = fmo_result_x.child_populations[f'{x}_fmo']['geom']['threshold']
+    geom['threshold_y'] = fmo_result_y.child_populations[f'{y}_fmo']['geom']['threshold']
+    geom['method'] = fmo_result_x.child_populations[f'{x}_fmo']['geom']['method'] + ' ' + \
+                     fmo_result_y.child_populations[f'{y}_fmo']['geom']['method']
+
+    # Name populations
+    x_fmo_idx = fmo_result_x.child_populations[f'{x}_fmo']['index']
+    y_fmo_idx = fmo_result_y.child_populations[f'{y}_fmo']['index']
+    for name, definition in child_populations.items():
+        if definition == '++':
+            pos_idx = np.intersect1d(x_fmo_idx, y_fmo_idx)
+            output.add_child(name=name, idx=pos_idx, geom=geom)
+        elif definition == '--':
+            x_idx = data[~data.index.isin(x_fmo_idx)]
+            y_idx = data[~data.index.isin(y_fmo_idx)]
+            pos_idx = np.intersect1d(x_idx, y_idx)
+        elif definition == '+-':
+            y_idx = data[~data.index.isin(y_fmo_idx)]
+            pos_idx = np.intersect1d(x_fmo_idx, y_idx)
+        elif definition == '-+':
+            x_idx = data[~data.index.isin(x_fmo_idx)]
+            pos_idx = np.intersect1d(x_idx, y_fmo_idx)
+        else:
+            output.error = 1
+            output.error_msg = f'Error: invalid child population definition for {name}, must be one of: ++, +-, -+, --'
+            return output
+        output.add_child(name=name, idx=pos_idx, geom=geom)
+    return output
 
 def density_2d_fmo(data, fmo_x, fmo_y, x, y, child_populations: dict,
                    kde_bw=0.05, q=0.99, peak_t=0.01):

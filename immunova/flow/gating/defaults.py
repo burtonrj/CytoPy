@@ -29,7 +29,13 @@ class GateOutput:
         self.error = True
         self.error_msg = msg
 
-    def add_child(self, name: str, idx: np.array, geom: Geom or None = None):
+    def add_child(self, name: str, idx: np.array, geom: Geom or None = None, merge_options='merge'):
+        if name in self.child_populations.keys():
+            if merge_options == 'overwrite':
+                self.child_populations.pop(name)
+            else:
+                self.child_populations['name']['index'] = np.concatenate(self.child_populations['name']['index'], idx)
+                return None
         self.child_populations[name] = dict(index=idx, geom=geom)
 
 

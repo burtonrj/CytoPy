@@ -31,6 +31,8 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, cor
         s = data.sample(frac=sample)
     elif sampling_method == 'density':
         try:
+            if not density_sampling_params:
+                density_sampling_params = dict()
             s = density_dependent_downsample(data, features=[x, y], **density_sampling_params)
         except TypeError or KeyError as e:
             output.error = 1
