@@ -8,7 +8,7 @@ import numpy as np
 
 def density_1d_fmo(data: pd.DataFrame, fmo: pd.DataFrame, child_name: str,
                    x: str, bool_gate=False, kde_bw=0.01,
-                   kde_frac=0.5, q=0.99, peak_t=0.01):
+                   kde_frac=0.5, q=0.99, peak_t=0.01, fmo_z=2):
     """
     FMO guided density gating
     :param data:
@@ -26,48 +26,91 @@ def density_1d_fmo(data: pd.DataFrame, fmo: pd.DataFrame, child_name: str,
     geom = Geom(shape='threshold', x=x, y=None, threshold=None, method=None)
     # KDE Smoothing and peak detection
     density = {}
-    for d, p in zip([data, fmo], ["whole", "fmo"]):
+
+    def kde_and_peaks(d, k):
         probs, xx = kde(d, x, kde_bw=kde_bw, kernel='gaussian', frac=kde_frac)
         peaks = find_peaks(probs)[0]
         peaks = check_peak(peaks, probs, peak_t)
-        density[p] = dict(probs=probs, xx=xx, peaks=peaks)
-    # Find the FMO threshold
-    if density['fmo']['peaks'].shape[0] == 1:
-        fmo_threshold = fmo[x].quantile(q)
-    elif density['fmo']['peaks'].shape[0] > 1:
-        # Find local minima
-        fmo_threshold = find_local_minima(**density['fmo'])
-    else:
-        output.error = 1
-        output.error_msg = 'No peaks found'
-        return output
+        density[k] = dict(probs=probs, xx=xx, peaks=peaks)
 
-    if density['whole']['peaks'].shape[0] == 1:
-        # Use the FMO as a definitive cutoff
-        geom['threshold'] = fmo_threshold
-        geom['method'] = 'FMO threshold'
-        pos_pop = data[data[x] >= fmo_threshold]
-        pos_pop = boolean_gate(data, pos_pop, bool_gate)
-    if density['whole']['peaks'].shape[0] > 1:
-        # Find the region the region of minimum density between two highest peaks
-        whole_threshold = find_local_minima(**density['whole'])
-        # If FMO threshold z-score >3 flag to user
-        p = norm.cdf(x=fmo_threshold, loc=whole_threshold, scale=0.1)
-        z_score = norm.ppf(p)
-        if abs(z_score) >= 2:
-            output.warnings.append("""FMO threshold z-score >2 (see documentation); the threshold
-            as determined by the FMO is a significant distance from the region of minimum density between the
-            two highest peaks see in the whole pane. Manual review of gating is advised.""")
-        geom['threshold'] = whole_threshold
-        geom['method'] = 'Local minima'
-        pos_pop = data[data[x] >= whole_threshold]
-        pos_pop = boolean_gate(data, pos_pop, bool_gate)
+    kde_and_peaks(data, 'whole')
+    if fmo.shape[0] > 0:
+        kde_and_peaks(fmo, 'fmo')
+
+    if 'fmo' in density.keys():
+        # Find the FMO threshold
+        if density['fmo']['peaks'].shape[0] == 1:
+            fmo_threshold = fmo[x].quantile(q)
+        elif density['fmo']['peaks'].shape[0] > 1:
+            # Find local minima
+            fmo_threshold = find_local_minima(**density['fmo'])
+        else:
+            output.error = 1
+            output.error_msg = 'No peaks found'
+            return output
+
+        if density['whole']['peaks'].shape[0] == 1:
+            # Use the FMO as a definitive cutoff
+            geom['threshold'] = fmo_threshold
+            geom['method'] = 'FMO threshold'
+            pos_pop = data[data[x] >= fmo_threshold]
+            pos_pop = boolean_gate(data, pos_pop, bool_gate)
+            geom['threshold'] = fmo_threshold
+            geom['method'] = 'FMO threshold (absolute)'
+            output.add_child(name=child_name, idx=pos_pop.index.values, geom=geom)
+            return output
+
+        if density['whole']['peaks'].shape[0] > 1:
+            # Find the region of minimum density between two highest peaks
+            whole_threshold = find_local_minima(**density['whole'])
+            # If FMO threshold z-score >3 flag to user
+            p = norm.cdf(x=fmo_threshold, loc=whole_threshold, scale=0.1)
+            z_score = norm.ppf(p)
+            if abs(z_score) >= fmo_z:
+                output.warnings.append("""FMO threshold z-score >2 (see documentation); the threshold
+                as determined by the FMO is a significant distance from the region of minimum density between the
+                two highest peaks see in the whole pane. Manual review of gating is advised.""")
+                geom['threshold'] = whole_threshold
+                geom['method'] = 'Local minima from primary data'
+                pos_pop = data[data[x] >= whole_threshold]
+            else:
+                # Take the median value for the interval between the fmo and local minima
+                xx = density['whole']['xx']
+                if fmo_threshold > whole_threshold:
+                    ot = np.median(xx[np.where(np.logical_and(xx > whole_threshold, xx < fmo_threshold))[0]])
+                else:
+                    ot = np.median(xx[np.where(np.logical_and(xx > fmo_threshold, xx < whole_threshold))[0]])
+                geom['threshold'] = ot
+                geom['method'] = 'Local minima; fmo guided'
+                pos_pop = data[data[x] >= ot]
+            pos_pop = boolean_gate(data, pos_pop, bool_gate)
+            output.add_child(name=child_name, idx=pos_pop.index.values, geom=geom)
+            return output
+        else:
+            output.error = 1
+            output.error_msg = 'No peaks found. Is this dataset empty?'
+            return output
     else:
-        output.error = 1
-        output.error_msg = 'No peaks found. Is this dataset empty?'
-        return output
-    output.add_child(name=child_name, idx=pos_pop.index.values, geom=geom)
-    return output
+        # No FMO data, calculate using primary data and add warning
+        output.warnings.append(f'No FMO data provided for {x}, density gating calculated from primary data')
+        if density['whole']['peaks'].shape[0] == 1:
+            pos_pop = data[data[x] >= data[x].quantile(q)]
+            pos_pop = boolean_gate(data, pos_pop, bool_gate)
+            output.add_child(name=child_name, idx=pos_pop.index.values, geom=geom)
+            return output
+        if density['whole']['peaks'].shape[0] > 1:
+            # Find the region of minimum density between two highest peaks
+            whole_threshold = find_local_minima(**density['whole'])
+            geom['threshold'] = whole_threshold
+            geom['method'] = 'Local minima from primary data'
+            pos_pop = data[data[x] >= whole_threshold]
+            pos_pop = boolean_gate(data, pos_pop, bool_gate)
+            output.add_child(name=child_name, idx=pos_pop.index.values, geom=geom)
+            return output
+        else:
+            output.error = 1
+            output.error_msg = 'No peaks found. Is this dataset empty?'
+            return output
 
 
 def density_2d_fmo(data, fmo_x, fmo_y, x, y, child_populations: dict,

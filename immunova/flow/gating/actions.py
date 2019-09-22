@@ -8,7 +8,7 @@ from immunova.flow.gating.mixturemodel import mm_gate, inside_ellipse
 from immunova.flow.gating.dbscan import dbscan_gate
 from immunova.flow.gating.quantile import quantile_gate
 from immunova.flow.gating.utilities import apply_transform
-from immunova.flow.gating.defaults import Geom
+from immunova.flow.gating.defaults import Geom, GateOutput
 from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -60,7 +60,7 @@ class Gating:
                             warnings=[], parent='NA', children=[], geom=Geom(shape=None, x='FSC-A', y='SSC-A'),
                             index=self.data.index.values)
                 self.populations['root'] = root
-        except AssertionError as e:
+        except AssertionError:
             print('Error: failed to construct Gating object')
 
     @property
@@ -142,12 +142,13 @@ class Gating:
                     print(f"Error: children does not match func arg expected_populations: "
                           f"{children} != {func_args['expected_populations']}")
                     return False
-            except KeyError as e:
+            except KeyError:
                 print('Error: invalid func argument expected_populations')
         elif 'child_name' not in func_args.keys():
             func_args['child_name'] = children[0]
         if func not in self.gating_functions:
             print(f'Error: invalid gate function, must be one of {self.gating_functions}')
+            return False
         if not self.__check_func_args(self.gating_functions[func], **func_args):
             return False
         func_args = [(k, v) for k, v in func_args.items()]
@@ -170,18 +171,34 @@ class Gating:
                 print(f'Error: population {c} already exists, if you wish to overwrite this population please remove'
                       f' it with the remove_population method and then try again')
                 return None
-        func = self.gating_functions[gate.func]
-        kwargs = {k: v for k, v in gate.func_args}
-        fmo_x_name, fmo_y_name = None, None
-        if 'fmo_x' in kwargs.keys():
-            fmo_x_name = kwargs['fmo_x']
-            kwargs['fmo_x'] = self.knn_fmo(gate.parent, fmo_x_name)
-        if 'fmo_y' in kwargs.keys():
-            fmo_y_name = kwargs['fmo_y']
-            kwargs['fmo_y'] = self.knn_fmo(gate.parent, fmo_y_name)
 
+        kwargs = {k: v for k, v in gate.func_args}
+        if any([x in ['fmo_x', 'fmo_y'] for x in kwargs.keys()]):
+            return self.__apply_fmo_gate(gate, kwargs, plot=plot_output)
+        else:
+            func = self.gating_functions[gate.func]
+            parent_population = self.get_population_df(gate.parent)
+            output = func(data=parent_population, **kwargs)
+            return self.__process_gate_output(output, plot=plot_output, parent=parent_population,
+                                              gate=gate, kwargs=kwargs)
+
+    def __apply_fmo_gate(self, gate, kwargs, plot):
+        names = dict(fmo_x=None, fmo_y=None)
+        for fmo_k in ['fmo_x', 'fmo_y']:
+            if fmo_k in kwargs.keys():
+                names[fmo_k] = kwargs[fmo_k]
+                if kwargs[fmo_k] in self.fmo.keys():
+                    kwargs[fmo_k] = self.knn_fmo(gate.parent, kwargs[fmo_k])
+                else:
+                    kwargs[fmo_k] = pd.DataFrame()
+        func = self.gating_functions[gate.func]
         parent_population = self.get_population_df(gate.parent)
-        output = func(data=parent_population, **kwargs)
+        output = func(parent_population, **kwargs)
+        return self.__process_gate_output(output, plot=plot, parent=parent_population, gate=gate, kwargs=kwargs)
+
+    def __process_gate_output(self, output: GateOutput, gate: Gate, parent: pd.DataFrame,
+                              plot: bool, kwargs: dict, fmo_x_name: None or str = None,
+                              fmo_y_name: None or str = None):
         if output.error:
             print(output.error_msg)
             return None
@@ -192,12 +209,12 @@ class Gating:
                 return None
             n = len(data['index'])
             self.populations[name] = dict(population_name=name, index=data['index'],
-                                          prop_of_parent=n/parent_population.shape[0],
+                                          prop_of_parent=n/parent.shape[0],
                                           prop_of_total=n/self.data.shape[0],
                                           parent=gate.parent, children=[],
                                           geom=data['geom'])
             self.populations[gate.parent]['children'].append(name)
-        if plot_output:
+        if plot:
             self.plot_gate(gate.gate_name)
             if fmo_x_name:
                 fmo = kwargs['fmo_x']
@@ -222,7 +239,7 @@ class Gating:
                 return None
             gates_to_apply = [name for name, _ in self.gates.items() if name in gates]
         for gate_name in gates_to_apply:
-            gating_results[gate_name] = self.apply(gate_name, add_population=True, plot_output=plot_outcome)
+            gating_results[gate_name] = self.apply(gate_name, plot_output=plot_outcome)
         return gating_results
 
     @staticmethod
