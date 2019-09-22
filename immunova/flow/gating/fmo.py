@@ -212,14 +212,14 @@ def density_2d_fmo(data, fmo_x, fmo_y, x, y, child_populations: dict,
             pos_idx = np.intersect1d(x_fmo_idx, y_fmo_idx)
             output.add_child(name=name, idx=pos_idx, geom=geom)
         elif definition == '--':
-            x_idx = data[~data.index.isin(x_fmo_idx)]
-            y_idx = data[~data.index.isin(y_fmo_idx)]
+            x_idx = data[~data.index.isin(x_fmo_idx)].index.values
+            y_idx = data[~data.index.isin(y_fmo_idx)].index.values
             pos_idx = np.intersect1d(x_idx, y_idx)
         elif definition == '+-':
-            y_idx = data[~data.index.isin(y_fmo_idx)]
+            y_idx = data[~data.index.isin(y_fmo_idx)].index.values
             pos_idx = np.intersect1d(x_fmo_idx, y_idx)
         elif definition == '-+':
-            x_idx = data[~data.index.isin(x_fmo_idx)]
+            x_idx = data[~data.index.isin(x_fmo_idx)].index.values
             pos_idx = np.intersect1d(x_idx, y_fmo_idx)
         else:
             output.error = 1

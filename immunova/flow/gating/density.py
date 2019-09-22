@@ -66,9 +66,10 @@ def density_gate_1d(data: pd.DataFrame, x: str, child_name: str,
     output.error_msg = 'No peaks found!'
     return output
 
+
 def density_gate_2d(data, x, y, child_populations: dict, kde_bw=0.05, q=0.99, peak_t=0.01):
         """
-        FMO guided density based gating for two dimensional data
+        2-dimensional density gating
         :param data:
         :param fmo_x:
         :param fmo_y:
@@ -82,42 +83,42 @@ def density_gate_2d(data, x, y, child_populations: dict, kde_bw=0.05, q=0.99, pe
         """
         output = GateOutput()
         geom = Geom(shape='2d_threshold', x=x, y=y, threshold_x=None, threshold_y=None, method=None)
-        fmo_result_x = density_1d_fmo(data, fmo_x, child_name=f'{x}_fmo', x=x, kde_bw=kde_bw, q=q, peak_t=peak_t)
-        fmo_result_y = density_1d_fmo(data, fmo_y, child_name=f'{y}_fmo', x=y, kde_bw=kde_bw, q=q, peak_t=peak_t)
+        result_x = density_gate_1d(data, child_name=x, x=x, kde_bw=kde_bw, q=q, peak_threshold=peak_t)
+        result_y = density_gate_1d(data, child_name=y, x=y, kde_bw=kde_bw, q=q, peak_threshold=peak_t)
         # Check for errors
-        for x in [fmo_result_x, fmo_result_y]:
+        for x in [result_x, result_y]:
             if x.error == 1:
                 output.error = 1
                 output.error_msg = x.error_msg
                 return output
 
         # Update warnings
-        output.warnings = fmo_result_x.warnings + fmo_result_y.warnings
-        geom['threshold_x'] = fmo_result_x.child_populations[f'{x}_fmo']['geom']['threshold']
-        geom['threshold_y'] = fmo_result_y.child_populations[f'{y}_fmo']['geom']['threshold']
-        geom['method'] = fmo_result_x.child_populations[f'{x}_fmo']['geom']['method'] + ' ' + \
-                         fmo_result_y.child_populations[f'{y}_fmo']['geom']['method']
+        output.warnings = result_x.warnings + result_y.warnings
+        geom['threshold_x'] = result_x.child_populations[x]['geom']['threshold']
+        geom['threshold_y'] = result_y.child_populations[y]['geom']['threshold']
+        geom['method'] = result_x.child_populations[x]['geom']['method'] + ' ' + \
+                         result_y.child_populations[y]['geom']['method']
 
         # Name populations
-        x_fmo_idx = fmo_result_x.child_populations[f'{x}_fmo']['index']
-        y_fmo_idx = fmo_result_y.child_populations[f'{y}_fmo']['index']
+        x_idx = result_x.child_populations[x]['index']
+        y_idx = result_y.child_populations[y]['index']
         for name, definition in child_populations.items():
             if definition == '++':
-                pos_idx = np.intersect1d(x_fmo_idx, y_fmo_idx)
+                pos_idx = np.intersect1d(x_idx, y_idx)
                 output.add_child(name=name, idx=pos_idx, geom=geom)
             elif definition == '--':
-                x_idx = data[~data.index.isin(x_fmo_idx)]
-                y_idx = data[~data.index.isin(y_fmo_idx)]
+                x_idx = data[~data.index.isin(x_idx)].index.values
+                y_idx = data[~data.index.isin(y_idx)].index.values
                 pos_idx = np.intersect1d(x_idx, y_idx)
             elif definition == '+-':
-                y_idx = data[~data.index.isin(y_fmo_idx)]
-                pos_idx = np.intersect1d(x_fmo_idx, y_idx)
+                y_idx = data[~data.index.isin(y_idx)].index.values
+                pos_idx = np.intersect1d(x_idx, y_idx)
             elif definition == '-+':
-                x_idx = data[~data.index.isin(x_fmo_idx)]
-                pos_idx = np.intersect1d(x_idx, y_fmo_idx)
+                x_idx = data[~data.index.isin(x_idx)].index.values
+                pos_idx = np.intersect1d(x_idx, y_idx)
             else:
                 output.error = 1
                 output.error_msg = f'Error: invalid child population definition for {name}, must be one of: ++, +-, -+, --'
                 return output
-            output.add_child(name=name, idx=pos_idx, geom=geom)
+            output.add_child(name=name, idx=pos_idx, geom=geom, merge_options='merge')
         return output
