@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib import patches
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import GridSearchCV
 from imblearn.over_sampling import RandomOverSampler
 import numpy as np
 import pandas as pd
@@ -31,7 +32,7 @@ class Gating:
             fg = FileGroup.objects(primary_id=sample_id)[0]
             self.mappings = mappings
             self.id = sample_id
-            self.experiment_id = FCSExperiment.experiment_id
+            self.experiment_id = experiment.experiment_id
 
             if transformation:
                 if not transform_channels:
@@ -95,24 +96,24 @@ class Gating:
         parent = self.populations[population_to_excerpt]['parent']
         xf = self.populations[population_to_excerpt]['geom'].x
         yf = self.populations[population_to_excerpt]['geom'].y
-        parent_data = self.get_population_df(parent)
+        parent_data = self.get_population_df(parent).copy()
         parent_data['pos'] = 0
         # Label data
         true_labels = self.get_population_df(population_to_excerpt).index.values
         for i in true_labels:
             parent_data.set_value(i, 'pos', 1)
-        X = parent_data[[xf, yf]]
+        features = [xf, yf]
+        X = parent_data[features]
         y = parent_data['pos']
         # Resample for class imbalance
         ros = RandomOverSampler(random_state=42)
         X_resampled, y_resampled = ros.fit_resample(X, y)
-        # ToDo use CV grid search to optimise parameters
         knn = KNeighborsClassifier()
         knn.fit(X_resampled, y_resampled)
         fmo_data = self.fmo[fmo]
-        x = knn.predict(fmo_data[[xf, yf]])
+        x = knn.predict(fmo_data[features])
         fmo_data['pos'] = x
-        return fmo_data[fmo_data['pos'] == 1]
+        return fmo_data[fmo_data['pos'] == 1].sample(X.shape[0])
 
     @staticmethod
     def __check_func_args(func, **kwargs):
@@ -173,7 +174,7 @@ class Gating:
                 return None
 
         kwargs = {k: v for k, v in gate.func_args}
-        if any([x in ['fmo_x', 'fmo_y'] for x in kwargs.keys()]):
+        if any([x.find('fmo') != -1 for x in kwargs.keys()]):
             return self.__apply_fmo_gate(gate, kwargs, plot=plot_output)
         else:
             func = self.gating_functions[gate.func]
@@ -193,7 +194,14 @@ class Gating:
                     kwargs[fmo_k] = pd.DataFrame()
         func = self.gating_functions[gate.func]
         parent_population = self.get_population_df(gate.parent)
-        output = func(parent_population, **kwargs)
+        if parent_population.shape[0] > 0:
+            output = func(parent_population, **kwargs)
+        else:
+            # If parent is empty create empty children
+            output = GateOutput()
+            output.warnings.append('No events in parent population!')
+            for c in gate.children:
+                output.add_child(name=c, idx=np.array([]), geom=None)
         return self.__process_gate_output(output, plot=plot, parent=parent_population, gate=gate, kwargs=kwargs)
 
     def __process_gate_output(self, output: GateOutput, gate: Gate, parent: pd.DataFrame,
@@ -215,13 +223,9 @@ class Gating:
                                           geom=data['geom'])
             self.populations[gate.parent]['children'].append(name)
         if plot:
+            if any([x.find('fmo') != -1 for x in kwargs.keys()]):
+                self.plot_fmogate(gate.gate_name)
             self.plot_gate(gate.gate_name)
-            if fmo_x_name:
-                fmo = kwargs['fmo_x']
-                self.plot_gate(gate.gate_name, fmo=fmo)
-            if fmo_y_name:
-                fmo = kwargs['fmo_y']
-                self.plot_gate(gate.gate_name, fmo=fmo)
         return output
 
     def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False):
@@ -242,6 +246,39 @@ class Gating:
             gating_results[gate_name] = self.apply(gate_name, plot_output=plot_outcome)
         return gating_results
 
+    def plot_fmogate(self, gate_name, xlim=None, ylim=None):
+        gate = self.gates[gate_name]
+        data = dict(primary=self.get_population_df(gate.parent))
+        kwargs = {k: v for k, v in gate.func_args}
+
+        def get_fmo_data(fk):
+            if fk in kwargs.keys():
+                return self.knn_fmo(gate.parent, kwargs[fk])
+            return None
+
+        for x in ['fmo_x', 'fmo_y']:
+            d = get_fmo_data(x)
+            if d is not None:
+                data[x] = d
+
+        n = len(data.keys())
+        fig, axes = plt.subplots(ncols=n)
+        # Get axis info
+        x = gate.x
+        if gate.y:
+            y = gate.y
+        else:
+            y = 'FSC-A'
+        xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
+        if n > 1:
+            for ax, (name, d) in zip(axes, data.items()):
+                self.__geom_plot(ax=ax, x=x, y=y, data=d, geom=self.populations[gate.children[0]]['geom'],
+                                 xlim=xlim, ylim=ylim, title=gate.gate_name)
+        else:
+            self.__geom_plot(ax=axes, x=x, y=y, data=d, geom=self.populations[gate.children[0]]['geom'],
+                             xlim=xlim, ylim=ylim, title=gate.gate_name)
+        return fig, axes
+
     @staticmethod
     def __plot_axis_lims(x, y, xlim=None, ylim=None):
         if not xlim:
@@ -256,8 +293,7 @@ class Gating:
                 ylim = (0, 1)
         return xlim, ylim
 
-    def plot_gate(self, gate_name, fmo: str or pd.DataFrame or None = None,
-                  xlim=None, ylim=None, show=True):
+    def plot_gate(self, gate_name, xlim=None, ylim=None):
         # Check and load gate
         if gate_name not in self.gates.keys():
             print(f'Error: invalid gate name, must be one of {self.gates.keys()}')
@@ -275,23 +311,17 @@ class Gating:
         # Cluster plot
         if gate.gate_type == 'cluster':
             return self.__cluster_plot(x, y, gate, title=gate_name)
-
-        # Geom plot
-        if type(fmo) == str:
-            data = self.knn_fmo(gate.parent, fmo)
-        elif type(fmo) == pd.DataFrame:
-            data = fmo
-            del fmo
-        elif fmo is None:
-            data = self.get_population_df(gate.parent)
+        data = self.get_population_df(gate.parent)
+        fig, axes = plt.subplots(ncols=len(self.populations[gate.parent]['children']))
+        children = self.populations[gate.parent]['children']
+        if len(children) > 1:
+            for ax, child in zip(axes, children):
+                self.__geom_plot(ax=ax, x=x, y=y, data=data, geom=self.populations[child]['geom'],
+                                 xlim=xlim, ylim=ylim, title=gate.gate_name)
         else:
-            print('Error: invalid input type for fmo, must be either string, pandas dataframe or None')
-            return None
-        plots = []
-        for child in self.populations[gate.parent]['children']:
-            plots.append(self.__geom_plot(x, y, data, self.populations[child]['geom'],
-                                          xlim, ylim, title=f'{child}_{gate_name}'))
-        return plots
+            self.__geom_plot(ax=axes, x=x, y=y, data=data, geom=self.populations[children[0]]['geom'],
+                             xlim=xlim, ylim=ylim, title=gate.gate_name)
+        return fig, axes
 
     def __cluster_plot(self, x, y, gate, title):
         fig, ax = plt.subplots(figsize=(5, 5))
@@ -299,14 +329,26 @@ class Gating:
         for child, colour in zip(gate.children, colours):
             d = self.get_population_df(child).sample(frac=0.5)
             if child == 'noise':
-                colour = [0, 0, 0, 1]
-            ax.scatter(d[x], d[y], c=colour, s=1, alpha=0.25)
+                colour = [[0, 0, 0, 1] for x in d[x].values]
+            else:
+                colour = [colour for x in d[x].values]
+            ax.scatter(d[x], d[y], c=colour, s=3, alpha=0.25)
         ax.set_title(title)
         fig.show()
 
+    def __standard_2dhist(self, ax, data, x, y, xlim, ylim, title):
+        if data.shape[0] <= 100:
+            bins = 50
+        elif data.shape[0] > 1000:
+            bins = 500
+        else:
+            bins = int(data.shape[0]*0.5)
+        ax.hist2d(data[x], data[y], bins=bins, norm=LogNorm())
+        ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
+        return ax
+
     @staticmethod
-    def __standard_2dhist(ax, data, x, y, xlim, ylim, title):
-        ax.hist2d(data[x], data[y], bins=500, norm=LogNorm())
+    def __plot_asthetics(ax, x, y, xlim, ylim, title):
         ax.set_xlim(xlim[0], xlim[1])
         ax.set_ylim(ylim[0], ylim[1])
         ax.set_ylabel(y)
@@ -314,9 +356,13 @@ class Gating:
         ax.set_title(title)
         return ax
 
-    def __geom_plot(self, x, y, data, geom, xlim, ylim, title):
-        fig, ax = plt.subplots(figsize=(5, 5))
-        ax = self.__standard_2dhist(ax, data, x, y, xlim, ylim, title)
+    def __geom_plot(self, ax, x, y, data, geom, xlim, ylim, title):
+        if data.shape[0] > 1000:
+            ax = self.__standard_2dhist(ax, data, x, y, xlim, ylim, title)
+            ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
+        else:
+            ax.scatter(x=data[x], y=data[y], s=3)
+            ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
         if 'threshold' in geom.keys():
             ax.axvline(geom['threshold'], c='r')
         if 'threshold_x' in geom.keys():
@@ -332,8 +378,7 @@ class Gating:
                                      width=geom['x_max'], height=geom['y_max'],
                                      fill=False, edgecolor='r')
             ax.add_patch(rect)
-        fig.show()
-        return fig
+        return ax
 
     def plot_population(self, population_name, x, y, xlim=None, ylim=None, show=True):
         fig, ax = plt.subplots(figsize=(5, 5))
@@ -343,7 +388,11 @@ class Gating:
             print(f'Invalid population name, must be one of {self.populations.keys()}')
             return None
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
-        self.__standard_2dhist(ax, data, x, y, xlim, ylim, title=population_name)
+        if data.shape[0] < 500:
+            ax.scatter(x=data[x], y=data[y], s=3)
+            ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title=population_name)
+        else:
+            self.__standard_2dhist(ax, data, x, y, xlim, ylim, title=population_name)
         if show:
             fig.show()
         return fig
@@ -500,7 +549,7 @@ class Template(Gating):
                 return False
             print(f'Overwriting existing gating template {template_name}')
             gating_strategy = gating_strategy[0]
-            gating_strategy.gates = self.gates
+            gating_strategy.gates = list(self.gates.values())
             gating_strategy.last_edit = datetime.now()
             gating_strategy.save()
             exp = FCSExperiment.objects(experiment_id=self.experiment_id)
@@ -515,9 +564,11 @@ class Template(Gating):
             gating_strategy.template_name = template_name
             gating_strategy.creation_date = datetime.now()
             gating_strategy.last_edit = datetime.now()
-            gating_strategy.gates = self.gates
+            gating_strategy.gates = list(self.gates.values())
             gating_strategy.save()
-            FCSExperiment.objects(experiment_id=self.experiment_id).update(push__gating_templates=gating_strategy)
+            exp = FCSExperiment.objects(experiment_id=self.experiment_id).get()
+            exp.gating_templates.append(gating_strategy)
+            exp.save()
             return True
 
     def load_template(self, template_name):
