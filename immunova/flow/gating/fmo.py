@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 
 
-def density_1d_fmo(data: pd.DataFrame, fmo: pd.DataFrame, child_name: str,
+def density_1d_fmo(data: pd.DataFrame, fmo_x: pd.DataFrame, child_name: str,
                    x: str, bool_gate=False, kde_bw=0.01,
                    kde_frac=0.5, q=0.99, peak_t=0.01, fmo_z=2):
     """
@@ -35,13 +35,13 @@ def density_1d_fmo(data: pd.DataFrame, fmo: pd.DataFrame, child_name: str,
         density[k] = dict(probs=probs, xx=xx_, peaks=peaks)
 
     kde_and_peaks(data, 'whole')
-    if fmo.shape[0] > 0:
-        kde_and_peaks(fmo, 'fmo')
+    if fmo_x.shape[0] > 0:
+        kde_and_peaks(fmo_x, 'fmo')
 
     if 'fmo' in density.keys():
         # Find the FMO threshold
         if density['fmo']['peaks'].shape[0] == 1:
-            fmo_threshold = fmo[x].quantile(q)
+            fmo_threshold = fmo_x[x].quantile(q)
         elif density['fmo']['peaks'].shape[0] > 1:
             # Find local minima
             fmo_threshold = find_local_minima(**density['fmo'])

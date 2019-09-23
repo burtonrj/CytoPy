@@ -1,4 +1,4 @@
-from immunova.flow.gating.defaults import GateOutput
+from immunova.flow.gating.defaults import GateOutput, Geom
 from immunova.flow.gating.utilities import density_dependent_downsample
 import numpy as np
 from sklearn.cluster import DBSCAN
@@ -83,5 +83,6 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, cor
     data['labels'] = data['labels'].apply(rename_label)
     expected_population_keys = [p['id'] for p in expected_populations]
     for p in expected_population_keys:
-        output.add_child(name=p, idx=data[data['labels'] == p].index.values, geom=None)
+        g = Geom(shape='cluster', x=x, y=y)
+        output.add_child(name=p, idx=data[data['labels'] == p].index.values, geom=g)
     return output

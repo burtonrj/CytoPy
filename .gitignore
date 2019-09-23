@@ -7,4 +7,5 @@ temp_data
 .ipynb_checkpoints
 *.pyc
 *.so
+*.pickle
 build
