@@ -6,7 +6,7 @@ from sklearn.neighbors import KNeighborsClassifier
 import collections
 
 
-def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, core_only, sample: float = 0.2,
+def dbscan_gate(data, x, y, min_pop_size, distance_nn, child_populations, core_only, sample: float = 0.2,
                 sampling_method='uniform', density_sampling_params=None, nn=10):
     """
     Cluster based gating using the DBSCAN algorithm
@@ -27,6 +27,10 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, cor
     """
     output = GateOutput()
     data = data.copy()
+    if data.shape[0] == 0:
+        output.warnings.append('No events in parent population!')
+        for c in child_populations:
+            output.add_child(name=c['id'], idx=[], geom=Geom(shape='cluster', x=x, y=y))
     if sampling_method == 'uniform':
         s = data.sample(frac=sample)
     elif sampling_method == 'density':
@@ -51,8 +55,8 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, cor
     if len(set(db_labels)) == 1:
         output.warnings.append('Failed to identify any distinct populations')
 
-    if len(set([x for x in db_labels if x != -1])) != len(expected_populations):
-        output.warnings.append(f'Expected {len(expected_populations)} populations, '
+    if len(set([x for x in db_labels if x != -1])) != len(child_populations):
+        output.warnings.append(f'Expected {len(child_populations)} populations, '
                                f'identified {len(np.where(db_labels != -1)[0])}')
 
     # Assign remaining events
@@ -65,7 +69,7 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, cor
         data['labels'] = db_labels
     # Predict what cluster the mediod of expected populations falls into
     populations = collections.defaultdict(list)
-    for p in expected_populations:
+    for p in child_populations:
         label = knn.predict(np.reshape(p['target'], (1, -1)))
         populations[label[0]].append(p['id'])
     # Check for duplicate assignment of expected population or assignment to noise
@@ -81,7 +85,7 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, expected_populations, cor
             return populations[x][0]
         return 'noise'
     data['labels'] = data['labels'].apply(rename_label)
-    expected_population_keys = [p['id'] for p in expected_populations]
+    expected_population_keys = [p['id'] for p in child_populations]
     for p in expected_population_keys:
         g = Geom(shape='cluster', x=x, y=y)
         output.add_child(name=p, idx=data[data['labels'] == p].index.values, geom=g)

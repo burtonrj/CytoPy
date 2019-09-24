@@ -63,13 +63,14 @@ def create_ellipse(data, x, y, model, conf, tp_idx):
     return mask, geom
 
 
-def mm_gate(data: pd.DataFrame, x: str, y: str, child_name: str,
+def mm_gate(gate_name: str, data: pd.DataFrame, x: str, y: str, include_neg: bool = False,
             target: tuple = None, k: int = None, method: str = 'gmm',
             bool_gate: bool = False, conf: float = 0.95, rect_filter: dict or None = None,
             covar='full') -> GateOutput:
     """
 
-    :param child_name:
+    :param gate_name:
+    :param include_neg:
     :param data: parent population upon which the gate is applied
     :param x: name of the channel/marker for X dimension
     :param y: name of the channel/marker for Y dimension
@@ -116,6 +117,8 @@ def mm_gate(data: pd.DataFrame, x: str, y: str, child_name: str,
         tp_idx = stats.mode(Y_)[0][0]
     mask, geom = create_ellipse(X, x, y, model, conf, tp_idx)
     pos_pop = data[mask]
-    pos_pop = boolean_gate(data, pos_pop, bool_gate)
-    output.add_child(name=child_name, idx=pos_pop.index.values, geom=geom)
+    output.add_child(name=f'{gate_name}+', idx=pos_pop.index.values, geom=geom)
+    if include_neg:
+        neg_pop = data[~data.index.isin(pos_pop.index.values)]
+        output.add_child(name=f'{gate_name}-', idx=neg_pop.index.values, geom=geom)
     return output
