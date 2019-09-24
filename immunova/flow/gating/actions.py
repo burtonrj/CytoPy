@@ -130,37 +130,20 @@ class Gating:
         if gate_name in self.gates.keys():
             print(f'Error: gate with name {gate_name} already exists.')
             return False
+        if not validate_child_populations(child_populations, gate_type):
+            print('Error: invalid child_populations definition')
+            return False
         func_args['x'] = x
         if y:
             func_args['y'] = y
         if func not in self.gating_functions:
             print(f'Error: invalid gate function, must be one of {self.gating_functions}')
             return False
-        children = []
-        if gate_type == 'cluster':
-            if 'child_populations' not in func_args.keys():
-                print('Error: clustering gates must specify their child populations explicitly as a list of '
-                      'dictionary objects where each dictionary is the expected population with the at least one '
-                      'key named `id` specifying the population name')
-            children = [x['id'] for x in func_args['child_populations']]
-        elif gate_type == 'threshold':
-            if y:
-                for s in ['++', '--', '+-', '+-']:
-                    children.append(f'{x}{s[0]}{y}{s[1]}')
-            else:
-                for s in ['+', '-']:
-                    children.append(f'{x}{s}')
-        else:
-            children.append(f'{gate_name}+')
-            if 'include_neg' in func_args.keys():
-                if func_args['include_neg']:
-                    children.append(f'{gate_name}-')
-            func_args['gate_name'] = gate_name
-
+        func_args['child_populations'] = child_populations
         if not self.__check_func_args(self.gating_functions[func], **func_args):
             return False
         func_args = [(k, v) for k, v in func_args.items()]
-        new_gate = Gate(gate_name=gate_name, children=children, parent=parent,
+        new_gate = Gate(gate_name=gate_name, children=list(child_populations.keys()), parent=parent,
                         x=x, y=y, func=func, func_args=func_args, gate_type=gate_type)
         self.gates[gate_name] = new_gate
         return True
@@ -186,8 +169,9 @@ class Gating:
             func = self.gating_functions[gate.func]
             parent_population = self.get_population_df(gate.parent)
             output = func(data=parent_population, **kwargs)
-            return self.__process_gate_output(output, plot=plot_output, parent=parent_population,
-                                              gate=gate, kwargs=kwargs)
+            self.__process_gate_output(output, parent=parent_population, gate=gate)
+            if plot_output:
+                self.plot_gate(gate.gate_name)
 
     def __apply_fmo_gate(self, gate, kwargs, plot):
         names = dict(fmo_x=None, fmo_y=None)
@@ -208,10 +192,11 @@ class Gating:
             output.warnings.append('No events in parent population!')
             for c in gate.children:
                 output.add_child(name=c, idx=np.array([]), geom=None)
-        return self.__process_gate_output(output, plot=plot, parent=parent_population, gate=gate, kwargs=kwargs)
+        self.__process_gate_output(output, parent=parent_population, gate=gate)
+        if plot:
+            self.plot_fmogate(gate_name=gate.gate_name)
 
-    def __process_gate_output(self, output: GateOutput, gate: Gate, parent: pd.DataFrame,
-                              plot: bool, kwargs: dict):
+    def __process_gate_output(self, output: GateOutput, gate: Gate, parent: pd.DataFrame):
         if output.error:
             print(output.error_msg)
             return None
@@ -227,10 +212,6 @@ class Gating:
                                           parent=gate.parent, children=[],
                                           geom=data['geom'])
             self.populations[gate.parent]['children'].append(name)
-        if plot:
-            if any([x.find('fmo') != -1 for x in kwargs.keys()]):
-                self.plot_fmogate(gate.gate_name)
-            self.plot_gate(gate.gate_name)
         return output
 
     def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False):
@@ -317,16 +298,11 @@ class Gating:
         if gate.gate_type == 'cluster':
             return self.__cluster_plot(x, y, gate, title=gate_name)
         data = self.get_population_df(gate.parent)
-        fig, axes = plt.subplots(ncols=len(self.populations[gate.parent]['children']))
-        children = self.populations[gate.parent]['children']
-        if len(children) > 1:
-            for ax, child in zip(axes, children):
-                self.__geom_plot(ax=ax, x=x, y=y, data=data, geom=self.populations[child]['geom'],
+        fig, ax = plt.subplots()
+        child = self.populations[gate.parent]['children'][0]
+        self.__geom_plot(ax=ax, x=x, y=y, data=data, geom=self.populations[child]['geom'],
                                  xlim=xlim, ylim=ylim, title=gate.gate_name)
-        else:
-            self.__geom_plot(ax=axes, x=x, y=y, data=data, geom=self.populations[children[0]]['geom'],
-                             xlim=xlim, ylim=ylim, title=gate.gate_name)
-        return fig, axes
+        return fig, ax
 
     def __cluster_plot(self, x, y, gate, title):
         fig, ax = plt.subplots(figsize=(5, 5))

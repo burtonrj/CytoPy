@@ -63,7 +63,7 @@ def create_ellipse(data, x, y, model, conf, tp_idx):
     return mask, geom
 
 
-def mm_gate(gate_name: str, data: pd.DataFrame, x: str, y: str, child_populations: dict,
+def mm_gate(data: pd.DataFrame, x: str, y: str, child_populations: dict,
             target: tuple = None, k: int = None, method: str = 'gmm',
             conf: float = 0.95, rect_filter: dict or None = None,
             covar='full') -> GateOutput:

@@ -2,7 +2,7 @@ from immunova.flow.gating.defaults import GateOutput, Geom
 import pandas as pd
 
 
-def rect_gate(gate_name: str, data: pd.DataFrame, x: str, y: str,
+def rect_gate(data: pd.DataFrame, x: str, y: str,
               x_min: int or float, x_max: int or float,
               y_min: int or float, y_max: int or float,
               child_populations: dict) -> GateOutput:

@@ -181,12 +181,12 @@ def validate_child_populations(child_populations, gate_type, d=1):
     try:
         def check_keys(keys):
             for _, x_ in child_populations.items():
-                assert x_.keys() != set(keys)
+                assert x_.keys() == set(keys)
         # Should be nested dictionaries
-        assert type(child_populations) != dict
+        assert type(child_populations) == dict
         for n, x in child_populations.items():
-            assert type(x) != dict
-        assert len(child_populations) == 0
+            assert type(x) == dict
+        assert len(child_populations) != 0
         if gate_type == 'threshold':
             check_keys(['definition'])
             if d == 1:
@@ -200,7 +200,7 @@ def validate_child_populations(child_populations, gate_type, d=1):
             check_keys(['target'])
             return True
         elif gate_type == 'geom':
-            check_keys(['id', 'definition'])
+            check_keys(['definition'])
             assert len(child_populations) in [1, 2]
             definitions = [x['definition'] for _, x in child_populations.items()]
             assert '+' in definitions
