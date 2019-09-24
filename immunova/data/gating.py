@@ -19,8 +19,6 @@ class Gate(mongoengine.EmbeddedDocument):
         func_args - list of key value pairs (tuple; (key, value)) forming the kwargs for func
         gate_type - either 'geom' or 'cluster'; does this gate produce geometric object that defines the gate, or
         does this gate 'cluster' the parent population into child populations
-        boolean_gate - if True, the resulting child population is the negative of the geom (the child population
-        is derived from events falling outside of the geom); defaults to False if gate_type == 'cluster'
     """
     gate_name = mongoengine.StringField(required=True)
     children = mongoengine.ListField()

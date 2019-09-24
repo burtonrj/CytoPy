@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import linalg, stats
 from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
-from immunova.flow.gating.utilities import boolean_gate, inside_ellipse, rectangular_filter
+from immunova.flow.gating.utilities import inside_ellipse, rectangular_filter
 from immunova.flow.gating.defaults import GateOutput, Geom
 import pandas as pd
 import math
@@ -63,9 +63,9 @@ def create_ellipse(data, x, y, model, conf, tp_idx):
     return mask, geom
 
 
-def mm_gate(gate_name: str, data: pd.DataFrame, x: str, y: str, include_neg: bool = False,
+def mm_gate(gate_name: str, data: pd.DataFrame, x: str, y: str, child_populations: dict,
             target: tuple = None, k: int = None, method: str = 'gmm',
-            bool_gate: bool = False, conf: float = 0.95, rect_filter: dict or None = None,
+            conf: float = 0.95, rect_filter: dict or None = None,
             covar='full') -> GateOutput:
     """
 
@@ -117,8 +117,10 @@ def mm_gate(gate_name: str, data: pd.DataFrame, x: str, y: str, include_neg: boo
         tp_idx = stats.mode(Y_)[0][0]
     mask, geom = create_ellipse(X, x, y, model, conf, tp_idx)
     pos_pop = data[mask]
-    output.add_child(name=f'{gate_name}+', idx=pos_pop.index.values, geom=geom)
-    if include_neg:
+    name = [name for name, x in child_populations.items() if x['definition'] == '+'][0]
+    output.add_child(name=name, idx=pos_pop.index.values, geom=geom)
+    name = [name for name, x in child_populations.items() if x['definition'] == '-']
+    if name:
         neg_pop = data[~data.index.isin(pos_pop.index.values)]
-        output.add_child(name=f'{gate_name}-', idx=neg_pop.index.values, geom=geom)
+        output.add_child(name=name[0], idx=neg_pop.index.values, geom=geom)
     return output

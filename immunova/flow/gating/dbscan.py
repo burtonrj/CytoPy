@@ -15,8 +15,7 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, child_populations, core_o
     :param y:
     :param min_pop_size: minimum population size for a population cluster
     :param distance_nn: nearest neighbour distance (smaller value will create tighter clusters)
-    :param expected_populations: list of dictionaries defining expected populations. Expected key value pairs are;
-    id - name of the population, and target - medoid of the expected population
+    :param child_populations:
     :param core_only: if True, only core samples in density clusters will be included
     :param sample: sample size to perform clustering on (due to computational complexity, N > 50000 is not
     recommended)
@@ -29,8 +28,8 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, child_populations, core_o
     data = data.copy()
     if data.shape[0] == 0:
         output.warnings.append('No events in parent population!')
-        for c in child_populations:
-            output.add_child(name=c['id'], idx=[], geom=Geom(shape='cluster', x=x, y=y))
+        for c, _ in child_populations.items:
+            output.add_child(name=c, idx=[], geom=Geom(shape='cluster', x=x, y=y))
     if sampling_method == 'uniform':
         s = data.sample(frac=sample)
     elif sampling_method == 'density':
@@ -69,9 +68,10 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, child_populations, core_o
         data['labels'] = db_labels
     # Predict what cluster the mediod of expected populations falls into
     populations = collections.defaultdict(list)
-    for p in child_populations:
-        label = knn.predict(np.reshape(p['target'], (1, -1)))
-        populations[label[0]].append(p['id'])
+    for name, c in child_populations.items():
+        target = c['target']
+        label = knn.predict(np.reshape(target, (1, -1)))
+        populations[label[0]].append(name)
     # Check for duplicate assignment of expected population or assignment to noise
     for l, p_id in populations.items():
         if len(p_id) > 1:
@@ -85,8 +85,7 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, child_populations, core_o
             return populations[x][0]
         return 'noise'
     data['labels'] = data['labels'].apply(rename_label)
-    expected_population_keys = [p['id'] for p in child_populations]
-    for p in expected_population_keys:
+    for p in list(child_populations.keys()):
         g = Geom(shape='cluster', x=x, y=y)
         output.add_child(name=p, idx=data[data['labels'] == p].index.values, geom=g)
     return output

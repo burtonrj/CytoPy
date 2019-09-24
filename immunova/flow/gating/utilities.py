@@ -175,3 +175,37 @@ def density_dependent_downsample(df, features, sample_frac=0.1, alpha=5,
     prob_f = partial(prob_downsample, td=td, od=od)
     prob = list(map(lambda x: prob_f(x), ld))
     return df.sample(frac=sample_frac, weights=prob)
+
+
+def validate_child_populations(child_populations, gate_type, d=1):
+    try:
+        def check_keys(keys):
+            for _, x_ in child_populations.items():
+                assert x_.keys() != set(keys)
+        # Should be nested dictionaries
+        assert type(child_populations) != dict
+        for n, x in child_populations.items():
+            assert type(x) != dict
+        assert len(child_populations) == 0
+        if gate_type == 'threshold':
+            check_keys(['definition'])
+            if d == 1:
+                assert len(child_populations) == 2
+                assert all([x['definition'] in ['-', '+'] for _, x in child_populations.items()])
+            else:
+                assert len(child_populations) == 4
+                assert all([x['definition'] in ['++', '--', '-+', '-+'] for _, x in child_populations.items()])
+            return True
+        elif gate_type == 'cluster':
+            check_keys(['target'])
+            return True
+        elif gate_type == 'geom':
+            check_keys(['id', 'definition'])
+            assert len(child_populations) in [1, 2]
+            definitions = [x['definition'] for _, x in child_populations.items()]
+            assert '+' in definitions
+            return True
+        print('Invalid gate type, expected one of: cluster, geom, threshold')
+        return False
+    except AssertionError:
+        return False

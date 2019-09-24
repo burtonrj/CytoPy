@@ -7,14 +7,13 @@ from immunova.flow.gating.density import density_gate_1d
 from immunova.flow.gating.mixturemodel import mm_gate, inside_ellipse
 from immunova.flow.gating.dbscan import dbscan_gate
 from immunova.flow.gating.quantile import quantile_gate
-from immunova.flow.gating.utilities import apply_transform
+from immunova.flow.gating.utilities import apply_transform, validate_child_populations
 from immunova.flow.gating.defaults import Geom, GateOutput
 from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib import patches
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import GridSearchCV
 from imblearn.over_sampling import RandomOverSampler
 import numpy as np
 import pandas as pd
@@ -127,35 +126,42 @@ class Gating:
                 return False
         return True
 
-    def create_gate(self, gate_name, children, parent, x, func, func_args, gate_type, y=None, boolean_gate=False):
+    def create_gate(self, gate_name, parent, x, func, func_args, gate_type, child_populations: dict, y=None):
         if gate_name in self.gates.keys():
             print(f'Error: gate with name {gate_name} already exists.')
             return False
-        if 'x' not in func_args.keys():
-            func_args['x'] = x
+        func_args['x'] = x
         if y:
-            if 'y' not in func_args.keys():
-                func_args['y'] = y
-        if 'expected_populations' in func_args.keys():
-            try:
-                child_names = [x['id'] for x in func_args['expected_populations']]
-                if not set(children) == set(child_names):
-                    print(f"Error: children does not match func arg expected_populations: "
-                          f"{children} != {func_args['expected_populations']}")
-                    return False
-            except KeyError:
-                print('Error: invalid func argument expected_populations')
-        elif 'child_name' not in func_args.keys():
-            func_args['child_name'] = children[0]
+            func_args['y'] = y
         if func not in self.gating_functions:
             print(f'Error: invalid gate function, must be one of {self.gating_functions}')
             return False
+        children = []
+        if gate_type == 'cluster':
+            if 'child_populations' not in func_args.keys():
+                print('Error: clustering gates must specify their child populations explicitly as a list of '
+                      'dictionary objects where each dictionary is the expected population with the at least one '
+                      'key named `id` specifying the population name')
+            children = [x['id'] for x in func_args['child_populations']]
+        elif gate_type == 'threshold':
+            if y:
+                for s in ['++', '--', '+-', '+-']:
+                    children.append(f'{x}{s[0]}{y}{s[1]}')
+            else:
+                for s in ['+', '-']:
+                    children.append(f'{x}{s}')
+        else:
+            children.append(f'{gate_name}+')
+            if 'include_neg' in func_args.keys():
+                if func_args['include_neg']:
+                    children.append(f'{gate_name}-')
+            func_args['gate_name'] = gate_name
+
         if not self.__check_func_args(self.gating_functions[func], **func_args):
             return False
         func_args = [(k, v) for k, v in func_args.items()]
         new_gate = Gate(gate_name=gate_name, children=children, parent=parent,
-                        x=x, y=y, func=func, func_args=func_args, gate_type=gate_type,
-                        boolean_gate=boolean_gate)
+                        x=x, y=y, func=func, func_args=func_args, gate_type=gate_type)
         self.gates[gate_name] = new_gate
         return True
 
@@ -174,7 +180,7 @@ class Gating:
                 return None
 
         kwargs = {k: v for k, v in gate.func_args}
-        if any([x.find('fmo') != -1 for x in kwargs.keys()]):
+        if any([x in ['fmo_x', 'fmo_y'] for x in kwargs.keys()]):
             return self.__apply_fmo_gate(gate, kwargs, plot=plot_output)
         else:
             func = self.gating_functions[gate.func]
@@ -205,14 +211,13 @@ class Gating:
         return self.__process_gate_output(output, plot=plot, parent=parent_population, gate=gate, kwargs=kwargs)
 
     def __process_gate_output(self, output: GateOutput, gate: Gate, parent: pd.DataFrame,
-                              plot: bool, kwargs: dict, fmo_x_name: None or str = None,
-                              fmo_y_name: None or str = None):
+                              plot: bool, kwargs: dict):
         if output.error:
             print(output.error_msg)
             return None
         for name, data in output.child_populations.items():
             # Check gate type corresponds to output
-            if gate.gate_type == 'geom' and data['geom'] is None:
+            if gate.gate_type in ['geom', 'threshold'] and data['geom'] is None:
                 print(f'Error: Geom gate returning null value for child population ({name}) geom')
                 return None
             n = len(data['index'])
