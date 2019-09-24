@@ -3,10 +3,10 @@ from immunova.flow.gating.defaults import GateOutput, Geom
 import pandas as pd
 
 
-def rect_gate(data: pd.DataFrame, x: str, y: str, child_name: str,
+def rect_gate(gate_name: str, data: pd.DataFrame, x: str, y: str,
               x_min: int or float, x_max: int or float,
               y_min: int or float, y_max: int or float,
-              bool_gate: bool = False) -> GateOutput:
+              include_neg: bool = False) -> GateOutput:
     """
     Static rectangular gate
     :param data: parent population upon which the gate is applied
@@ -23,6 +23,8 @@ def rect_gate(data: pd.DataFrame, x: str, y: str, child_name: str,
     output = GateOutput()
     geom = Geom(shape='rect', x=x, y=y, x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max)
     pos_pop = data[(data[x] >= x_min) & (data[x] <= x_max)]
-    pos_pop = boolean_gate(data, pos_pop[(pos_pop[y] >= y_min) & (pos_pop[y] <= y_max)], bool_gate)
-    output.add_child(name=child_name, idx=pos_pop.index.values, geom=geom)
+    output.add_child(name=f'{gate_name}+', idx=pos_pop.index.values, geom=geom)
+    if include_neg:
+        neg_pop = data[~data.index.isin(pos_pop.index.values)]
+        output.add_child(name=f'{gate_name}-', idx=neg_pop.index.values, geom=geom)
     return output
