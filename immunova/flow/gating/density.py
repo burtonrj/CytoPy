@@ -1,19 +1,17 @@
-from immunova.flow.gating.utilities import boolean_gate, kde, check_peak, find_local_minima
+from immunova.flow.gating.utilities import kde, check_peak, find_local_minima
 from immunova.flow.gating.defaults import GateOutput, Geom
-from immunova.flow.gating.quantile import quantile_gate
 from scipy.signal import find_peaks
 import pandas as pd
 import numpy as np
 
 
-def density_gate_1d(data: pd.DataFrame, x: str, keep_neg=False, q=0.95,
+def density_gate_1d(data: pd.DataFrame, x: str, child_populations: dict, q=0.95,
                     std=None, kde_bw=0.01, kde_sample_frac=0.25,
                     peak_threshold=None, ignore_double_pos=False) -> GateOutput:
     """
     1-Dimensional gating using density based methods
     :param data: pandas dataframe containing compensated and transformed flow cytometry data
     :param x: name of column to gate
-    :param keep_neg: if False, the positive population is returned (>= threshold) else the negative population
     :param q: if only 1 peak is found, quantile gating is performed using this argument as the quantile
     :param std: alternative to quantile gating, the number of standard deviations from the mean can be used to
     determine the threshold
@@ -27,6 +25,10 @@ def density_gate_1d(data: pd.DataFrame, x: str, keep_neg=False, q=0.95,
     the highest peak will be ignored in the local minima calculation
     :return: dictionary of gating outputs (see documentation for internal standards)
     """
+    def add_pop(pop, definition):
+        name = [name for name, x_ in child_populations.items() if x_['definition'] == definition][0]
+        output.add_child(name=name, idx=pop.index.values, geom=geom)
+
     output = GateOutput()
     # Smooth the data with a kde
     probs, xx = kde(data, x, kde_bw, frac=kde_sample_frac)
@@ -50,9 +52,9 @@ def density_gate_1d(data: pd.DataFrame, x: str, keep_neg=False, q=0.95,
             output.error_msg = 'No quantile or standard deviation provided, unable to perform gating'
             return output
         geom = Geom(shape='threshold', x=x, y=None, method=f'>= {std} Standard Devs', threshold=threshold)
-        output.add_child(name=f'{x}+', idx=pos_pop.index.values, geom=geom)
         neg_pop = data[~data.index.isin(pos_pop.index.values)]
-        output.add_child(name=f'{x}-', idx=neg_pop.index.values, geom=geom)
+        add_pop(pos_pop, '+')
+        add_pop(neg_pop, '-')
         return output
     if len(peaks) > 1:
         if ignore_double_pos:
@@ -64,16 +66,16 @@ def density_gate_1d(data: pd.DataFrame, x: str, keep_neg=False, q=0.95,
         threshold = find_local_minima(probs, xx, peaks)
         geom = Geom(shape='threshold', x=x, y=None, threshold=threshold, method='Local minima; two highest peaks')
         pos_pop = data[data[x] >= threshold]
-        output.add_child(name=f'{x}+', idx=pos_pop.index.values, geom=geom)
-        neg_pop = data[~data.index.isin(pos_pop.index.values)]
-        output.add_child(name=f'{x}-', idx=neg_pop.index.values, geom=geom)
+        neg_pop = data[data[x] < threshold]
+        add_pop(pos_pop, '+')
+        add_pop(neg_pop, '-')
         return output
     output.error = 1
     output.error_msg = 'No peaks found!'
     return output
 
 
-def density_gate_2d(data, x, y, kde_bw=0.05, q=0.99, peak_t=0.01):
+def density_gate_2d(data, x, y, child_populations, kde_bw=0.05, q=0.99, peak_t=0.01):
         """
         2-dimensional density gating
         :param data:
@@ -89,8 +91,9 @@ def density_gate_2d(data, x, y, kde_bw=0.05, q=0.99, peak_t=0.01):
         """
         output = GateOutput()
         geom = Geom(shape='2d_threshold', x=x, y=y, threshold_x=None, threshold_y=None, method=None)
-        result_x = density_gate_1d(data, x=x, kde_bw=kde_bw, q=q, peak_threshold=peak_t, keep_neg=True)
-        result_y = density_gate_1d(data, x=y, kde_bw=kde_bw, q=q, peak_threshold=peak_t, keep_neg=True)
+        tc = {'neg': {'definition': '-'}, 'pos': {'definition': '+'}}
+        result_x = density_gate_1d(data, x=x, kde_bw=kde_bw, q=q, peak_threshold=peak_t, child_populations=tc)
+        result_y = density_gate_1d(data, x=y, kde_bw=kde_bw, q=q, peak_threshold=peak_t, child_populations=tc)
         # Check for errors
         for o in [result_x, result_y]:
             if o.error == 1:
@@ -100,21 +103,22 @@ def density_gate_2d(data, x, y, kde_bw=0.05, q=0.99, peak_t=0.01):
 
         # Update warnings
         output.warnings = result_x.warnings + result_y.warnings
-        geom['threshold_x'] = result_x.child_populations[f'{x}+']['geom']['threshold']
-        geom['threshold_y'] = result_y.child_populations[f'{y}+']['geom']['threshold']
-        geom['method'] = result_x.child_populations[f'{x}+']['geom']['method'] + ' ' + \
-                         result_y.child_populations[f'{y}+']['geom']['method']
-        return multidem_density_output(x, y, result_x, result_y, output, geom)
+        geom['threshold_x'] = result_x.child_populations['pos']['geom']['threshold']
+        geom['threshold_y'] = result_y.child_populations['pos']['geom']['threshold']
+        geom['method'] = result_x.child_populations['pos']['geom']['method'] + ' ' + \
+                         result_y.child_populations['pos']['geom']['method']
+        return multidem_density_output(child_populations, result_x, result_y, output, geom)
 
 
-def multidem_density_output(x: str, y: str, result_x: GateOutput,
-                            result_y: GateOutput, output: GateOutput, geom: Geom):
+def multidem_density_output(child_populations, result_x, result_y, output, geom):
     # Name populations
-    x_idx_pos = result_x.child_populations[f'{x}+']['index']
-    y_idx_pos = result_y.child_populations[f'{y}+']['index']
-    x_idx_neg = result_x.child_populations[f'{x}-']['index']
-    y_idx_neg = result_y.child_populations[f'{y}-']['index']
-    for definition in ['++', '--', '+-', '-+']:
+    x_idx_pos = result_x.child_populations['pos']['index']
+    y_idx_pos = result_y.child_populations['pos']['index']
+    x_idx_neg = result_x.child_populations['neg']['index']
+    y_idx_neg = result_y.child_populations['neg']['index']
+
+    for name, d in child_populations.items():
+        definition = d['definition']
         idx = []
         if definition == '++':
             idx = np.intersect1d(x_idx_pos, y_idx_pos)
@@ -124,5 +128,5 @@ def multidem_density_output(x: str, y: str, result_x: GateOutput,
             idx = np.intersect1d(x_idx_pos, y_idx_neg)
         elif definition == '-+':
             idx = np.intersect1d(x_idx_neg, y_idx_pos)
-        output.add_child(name=f'{x}{definition[0]}{y}{definition[1]}', idx=idx, geom=geom)
+        output.add_child(name=name, idx=idx, geom=geom, merge_options='merge')
     return output

@@ -1,4 +1,3 @@
-from immunova.flow.gating.utilities import boolean_gate
 from immunova.flow.gating.defaults import GateOutput, Geom
 import pandas as pd
 
@@ -6,7 +5,7 @@ import pandas as pd
 def rect_gate(gate_name: str, data: pd.DataFrame, x: str, y: str,
               x_min: int or float, x_max: int or float,
               y_min: int or float, y_max: int or float,
-              include_neg: bool = False) -> GateOutput:
+              child_populations: dict) -> GateOutput:
     """
     Static rectangular gate
     :param data: parent population upon which the gate is applied
@@ -23,8 +22,10 @@ def rect_gate(gate_name: str, data: pd.DataFrame, x: str, y: str,
     output = GateOutput()
     geom = Geom(shape='rect', x=x, y=y, x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max)
     pos_pop = data[(data[x] >= x_min) & (data[x] <= x_max)]
-    output.add_child(name=f'{gate_name}+', idx=pos_pop.index.values, geom=geom)
-    if include_neg:
+    name = [name for name, x in child_populations.items() if x['definition'] == '+'][0]
+    output.add_child(name=name, idx=pos_pop.index.values, geom=geom)
+    name = [name for name, x in child_populations.items() if x['definition'] == '-']
+    if name:
         neg_pop = data[~data.index.isin(pos_pop.index.values)]
-        output.add_child(name=f'{gate_name}-', idx=neg_pop.index.values, geom=geom)
+        output.add_child(name=name[0], idx=neg_pop.index.values, geom=geom)
     return output

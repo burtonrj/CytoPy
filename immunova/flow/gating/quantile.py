@@ -1,10 +1,9 @@
 import pandas as pd
-from immunova.flow.gating.utilities import boolean_gate
 from immunova.flow.gating.defaults import GateOutput, Geom
 
 
 def quantile_gate(data: pd.DataFrame, x: str,
-                  q: float or list, y=None) -> GateOutput:
+                  q: float or list, child_populations: dict, y=None) -> GateOutput:
     """
     Quantile gate
     :param data: parent population upon which the gate is applied
@@ -13,6 +12,9 @@ def quantile_gate(data: pd.DataFrame, x: str,
     :param y: y-axis dimension (string value for corresponding column) default = None
     :return: dictionary of gating outputs (see documentation for internal standards)
     """
+    def add_pop(pop, definition):
+        name = [name for name, x_ in child_populations.items() if x_['definition'] == definition][0]
+        output.add_child(name=name, idx=pop.index.values, geom=geom)
     output = GateOutput()
     pos_pop = pd.DataFrame()
     qt = None
@@ -34,7 +36,7 @@ def quantile_gate(data: pd.DataFrame, x: str,
         output.warnings.append('No events in gate')
 
     geom = Geom(shape='threshold', x=x, y=None, threshold=qt, method='quantile')
-    output.add_child(name=f'{x}+', idx=pos_pop.index.values, geom=geom)
     neg_pop = data[~data.index.isin(pos_pop.index.values)]
-    output.add_child(name=f'{x}-', idx=neg_pop.index.values, geom=geom)
+    add_pop(pos_pop, '+')
+    add_pop(neg_pop, '-')
     return output
