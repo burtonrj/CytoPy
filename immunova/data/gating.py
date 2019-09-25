@@ -27,7 +27,7 @@ class Gate(mongoengine.EmbeddedDocument):
     y = mongoengine.StringField(required=False)
     func = mongoengine.StringField(required=True)
     func_args = mongoengine.ListField(required=True)
-    gate_type = mongoengine.StringField(required=True, choices=['geom', 'cluster'])
+    gate_type = mongoengine.StringField(required=True, choices=['geom', 'cluster', 'threshold'])
     boolean_gate = mongoengine.BooleanField(default=False)
     meta = {
         'abstract': True

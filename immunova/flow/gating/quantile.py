@@ -14,7 +14,7 @@ def quantile_gate(data: pd.DataFrame, x: str,
     """
     def add_pop(pop, definition):
         name = [name for name, x_ in child_populations.items() if x_['definition'] == definition][0]
-        output.add_child(name=name, idx=pop.index.values, geom=geom)
+        output.add_child(name=name, idx=pop.index.values, geom=geom.as_dict())
     output = GateOutput()
     pos_pop = pd.DataFrame()
     qt = None

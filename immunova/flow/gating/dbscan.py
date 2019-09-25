@@ -87,5 +87,5 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, child_populations, core_o
     data['labels'] = data['labels'].apply(rename_label)
     for p in list(child_populations.keys()):
         g = Geom(shape='cluster', x=x, y=y)
-        output.add_child(name=p, idx=data[data['labels'] == p].index.values, geom=g)
+        output.add_child(name=p, idx=data[data['labels'] == p].index.values, geom=g.as_dict())
     return output
