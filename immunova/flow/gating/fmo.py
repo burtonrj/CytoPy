@@ -24,7 +24,7 @@ def density_1d_fmo(data: pd.DataFrame, fmo_x: pd.DataFrame, child_populations: d
     """
     def add_pop(pop, definition):
         name = [name for name, x_ in child_populations.items() if x_['definition'] == definition][0]
-        output.add_child(name=name, idx=pop.index.values, geom=geom)
+        output.add_child(name=name, idx=pop.index.values, geom=geom.as_dict())
 
     output = GateOutput()
     geom = Geom(shape='threshold', x=x, y=None, threshold=None, method=None)

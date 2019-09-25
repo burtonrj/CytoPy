@@ -27,7 +27,7 @@ def density_gate_1d(data: pd.DataFrame, x: str, child_populations: dict, q=0.95,
     """
     def add_pop(pop, definition):
         name = [name for name, x_ in child_populations.items() if x_['definition'] == definition][0]
-        output.add_child(name=name, idx=pop.index.values, geom=geom)
+        output.add_child(name=name, idx=pop.index.values, geom=geom.as_dict())
 
     output = GateOutput()
     # Smooth the data with a kde
@@ -46,7 +46,6 @@ def density_gate_1d(data: pd.DataFrame, x: str, child_populations: dict, q=0.95,
             s = data[x].std()
             threshold = u+(s*std)
             pos_pop = data[data[x] >= threshold]
-            pos_pop = data[~data.index.isin(pos_pop.index)]
         else:
             output.error = 1
             output.error_msg = 'No quantile or standard deviation provided, unable to perform gating'
@@ -128,5 +127,5 @@ def multidem_density_output(child_populations, result_x, result_y, output, geom)
             idx = np.intersect1d(x_idx_pos, y_idx_neg)
         elif definition == '-+':
             idx = np.intersect1d(x_idx_neg, y_idx_pos)
-        output.add_child(name=name, idx=idx, geom=geom, merge_options='merge')
+        output.add_child(name=name, idx=idx, geom=geom.as_dict(), merge_options='merge')
     return output

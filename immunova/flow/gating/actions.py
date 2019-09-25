@@ -79,7 +79,7 @@ class Gating:
             print(f'Population {population_name} not recognised')
             return None
         idx = self.populations[population_name]['index']
-        return self.data[self.data.index.isin(idx)]
+        return self.data.loc[idx]
 
     def knn_fmo(self, population_to_excerpt, fmo):
         """
@@ -192,7 +192,9 @@ class Gating:
             output.warnings.append('No events in parent population!')
             for c in gate.children:
                 output.add_child(name=c, idx=np.array([]), geom=None)
-        self.__process_gate_output(output, parent=parent_population, gate=gate)
+        output = self.__process_gate_output(output, parent=parent_population, gate=gate)
+        if not output:
+            return
         if plot:
             self.plot_fmogate(gate_name=gate.gate_name)
 
@@ -432,6 +434,7 @@ class Gating:
 
     @staticmethod
     def __update_population(updated_geom, parent_population, bool_gate):
+        # TODO NEEDS UPDATING
         try:
             new_population = None
             if updated_geom['shape'] == 'threshold':
@@ -493,9 +496,11 @@ class Gating:
     def __population_to_mongo(self, population_name):
         pop_mongo = Population()
         pop_dict = self.populations[population_name]
-        for k in pop_dict.keys():
+        for k, v in pop_dict.items():
             if k != 'index':
-                pop_mongo[k] = pop_dict[k]
+                pop_mongo[k] = v
+            if k == 'geom':
+                pop_mongo[k] = [(k, v) for k, v in v.items()]
             else:
                 pop_mongo.save_index(pop_dict[k])
         return pop_mongo

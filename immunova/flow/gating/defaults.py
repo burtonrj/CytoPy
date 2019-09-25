@@ -10,12 +10,9 @@ class Geom(dict):
         for k, v in kwargs.items():
             self[k] = v
 
-    def to_mongo(self):
-        output = [(k, v) for k, v in self.items()]
-        output.append(('shape', self.shape))
-        output.append(('x', self.x))
-        output.append(('y', self.y))
-        return output
+    def as_dict(self):
+        self.update({'shape': self.shape, 'x': self.x, 'y': self.y})
+        return self
 
 
 class GateOutput:

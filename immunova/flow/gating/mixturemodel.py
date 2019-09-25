@@ -118,9 +118,9 @@ def mm_gate(data: pd.DataFrame, x: str, y: str, child_populations: dict,
     mask, geom = create_ellipse(X, x, y, model, conf, tp_idx)
     pos_pop = data[mask]
     name = [name for name, x in child_populations.items() if x['definition'] == '+'][0]
-    output.add_child(name=name, idx=pos_pop.index.values, geom=geom)
+    output.add_child(name=name, idx=pos_pop.index.values, geom=geom.as_dict())
     name = [name for name, x in child_populations.items() if x['definition'] == '-']
     if name:
         neg_pop = data[~data.index.isin(pos_pop.index.values)]
-        output.add_child(name=name[0], idx=neg_pop.index.values, geom=geom)
+        output.add_child(name=name[0], idx=neg_pop.index.values, geom=geom.as_dict())
     return output
