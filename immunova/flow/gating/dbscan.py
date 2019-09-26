@@ -28,9 +28,13 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, child_populations, core_o
     data = data.copy()
     if data.shape[0] == 0:
         output.warnings.append('No events in parent population!')
-        for c, _ in child_populations.items:
+        for c, _ in child_populations.items():
             output.add_child(name=c, idx=[], geom=Geom(shape='cluster', x=x, y=y))
-    if sampling_method == 'uniform':
+            return output
+    if data.shape[0] < 40000:
+        sampling_method = None
+        s = data[[x, y]]
+    elif sampling_method == 'uniform':
         s = data.sample(frac=sample)
     elif sampling_method == 'density':
         try:
@@ -56,7 +60,7 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, child_populations, core_o
 
     if len(set([x for x in db_labels if x != -1])) != len(child_populations):
         output.warnings.append(f'Expected {len(child_populations)} populations, '
-                               f'identified {len(np.where(db_labels != -1)[0])}')
+                               f'identified {len(set([x for x in db_labels if x != -1]))}; {set(db_labels)}')
 
     # Assign remaining events
     knn = KNeighborsClassifier(n_neighbors=nn, weights='distance', n_jobs=-1)
@@ -73,19 +77,23 @@ def dbscan_gate(data, x, y, min_pop_size, distance_nn, child_populations, core_o
         label = knn.predict(np.reshape(target, (1, -1)))
         populations[label[0]].append(name)
     # Check for duplicate assignment of expected population or assignment to noise
-    for l, p_id in populations.items():
+    g = Geom(shape='cluster', x=x, y=y)
+    for label, p_id in populations.items():
         if len(p_id) > 1:
-            output.warnings.append(f'Populations f{p_id} assigned to the same clusters {l}')
-        if l == -1:
+            weights = [child_populations[x]['weight'] for x in p_id]
+            m = max(weights)
+            i = [i for i, w in enumerate(weights) if w == m]
+            if len(i) > 1:
+                output.error = 1
+                output.error_msg = f'Populations {[p_id[_] for _ in i]} assigned to the ' \
+                                   f'same cluster and are of equal weighting'
+                return output
+            priority = p_id[i[0]]
+            output.warnings.append(f'Populations f{p_id} assigned to the same cluster {label}; '
+                                   f'prioritising {priority} on weighting.')
+            output.add_child(name=priority, idx=data[data['labels'] == label].index.values, geom=g.as_dict())
+        elif label == -1:
             output.warnings.append(f'Population {p_id} assigned to noise (i.e. population not found)')
-    populations[-1] = ['noise']
-
-    def rename_label(x):
-        if x in populations.keys():
-            return populations[x][0]
-        return 'noise'
-    data['labels'] = data['labels'].apply(rename_label)
-    for p in list(child_populations.keys()):
-        g = Geom(shape='cluster', x=x, y=y)
-        output.add_child(name=p, idx=data[data['labels'] == p].index.values, geom=g.as_dict())
+        else:
+            output.add_child(name=p_id[0], idx=data[data['labels'] == label].index.values, geom=g.as_dict())
     return output

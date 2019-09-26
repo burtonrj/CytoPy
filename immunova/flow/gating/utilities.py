@@ -197,7 +197,7 @@ def validate_child_populations(child_populations, gate_type, d=1):
                 assert all([x['definition'] in ['++', '--', '-+', '-+'] for _, x in child_populations.items()])
             return True
         elif gate_type == 'cluster':
-            check_keys(['target'])
+            check_keys(['target', 'weight'])
             return True
         elif gate_type == 'geom':
             check_keys(['definition'])

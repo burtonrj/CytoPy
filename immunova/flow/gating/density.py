@@ -50,7 +50,7 @@ def density_gate_1d(data: pd.DataFrame, x: str, child_populations: dict, q=0.95,
             output.error = 1
             output.error_msg = 'No quantile or standard deviation provided, unable to perform gating'
             return output
-        geom = Geom(shape='threshold', x=x, y=None, method=f'>= {std} Standard Devs', threshold=threshold)
+        geom = Geom(shape='threshold', x=x, y=None, method=f'>= {std} Standard Devs', threshold=np.float64(threshold))
         neg_pop = data[~data.index.isin(pos_pop.index.values)]
         add_pop(pos_pop, '+')
         add_pop(neg_pop, '-')
@@ -63,7 +63,7 @@ def density_gate_1d(data: pd.DataFrame, x: str, child_populations: dict, q=0.95,
                 if len(peaks[:highest_peak+1]) > 1:
                     peaks = peaks[:highest_peak+1]
         threshold = find_local_minima(probs, xx, peaks)
-        geom = Geom(shape='threshold', x=x, y=None, threshold=threshold, method='Local minima; two highest peaks')
+        geom = Geom(shape='threshold', x=x, y=None, threshold=np.float64(threshold), method='Local minima; two highest peaks')
         pos_pop = data[data[x] >= threshold]
         neg_pop = data[data[x] < threshold]
         add_pop(pos_pop, '+')
