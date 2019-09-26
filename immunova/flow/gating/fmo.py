@@ -55,10 +55,8 @@ def density_1d_fmo(data: pd.DataFrame, fmo_x: pd.DataFrame, child_populations: d
 
         if density['whole']['peaks'].shape[0] == 1:
             # Use the FMO as a definitive cutoff
-            geom['threshold'] = fmo_threshold
-            geom['method'] = 'FMO threshold'
+            geom['threshold'] = np.float64(fmo_threshold)
             pos_pop = data[data[x] >= fmo_threshold]
-            geom['threshold'] = fmo_threshold
             geom['method'] = 'FMO threshold (absolute)'
             neg_pop = data[~data.index.isin(pos_pop.index.values)]
             add_pop(pos_pop, '+')
@@ -75,7 +73,7 @@ def density_1d_fmo(data: pd.DataFrame, fmo_x: pd.DataFrame, child_populations: d
                 output.warnings.append("""FMO threshold z-score >2 (see documentation); the threshold
                 as determined by the FMO is a significant distance from the region of minimum density between the
                 two highest peaks see in the whole pane. Manual review of gating is advised.""")
-                geom['threshold'] = whole_threshold
+                geom['threshold'] = np.float64(whole_threshold)
                 geom['method'] = 'Local minima from primary data'
                 pos_pop = data[data[x] >= whole_threshold]
             else:
@@ -85,7 +83,7 @@ def density_1d_fmo(data: pd.DataFrame, fmo_x: pd.DataFrame, child_populations: d
                     ot = np.median(xx[np.where(np.logical_and(xx > whole_threshold, xx < fmo_threshold))[0]])
                 else:
                     ot = np.median(xx[np.where(np.logical_and(xx > fmo_threshold, xx < whole_threshold))[0]])
-                geom['threshold'] = ot
+                geom['threshold'] = np.float64(ot)
                 geom['method'] = 'Local minima; fmo guided'
                 pos_pop = data[data[x] >= ot]
             neg_pop = data[~data.index.isin(pos_pop.index.values)]
@@ -102,13 +100,15 @@ def density_1d_fmo(data: pd.DataFrame, fmo_x: pd.DataFrame, child_populations: d
         if density['whole']['peaks'].shape[0] == 1:
             pos_pop = data[data[x] >= data[x].quantile(q)]
             neg_pop = data[~data.index.isin(pos_pop.index.values)]
+            geom['threshold'] = np.float64(q)
+            geom['method'] = 'Quatile gate from primary data'
             add_pop(pos_pop, '+')
             add_pop(neg_pop, '-')
             return output
         if density['whole']['peaks'].shape[0] > 1:
             # Find the region of minimum density between two highest peaks
             whole_threshold = find_local_minima(**density['whole'])
-            geom['threshold'] = whole_threshold
+            geom['threshold'] = np.float64(whole_threshold)
             geom['method'] = 'Local minima from primary data'
             pos_pop = data[data[x] >= whole_threshold]
             neg_pop = data[~data.index.isin(pos_pop.index.values)]

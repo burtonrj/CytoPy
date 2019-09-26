@@ -18,6 +18,7 @@ from imblearn.over_sampling import RandomOverSampler
 import numpy as np
 import pandas as pd
 import inspect
+from itertools import cycle
 
 
 class Gating:
@@ -169,9 +170,12 @@ class Gating:
             func = self.gating_functions[gate.func]
             parent_population = self.get_population_df(gate.parent)
             output = func(data=parent_population, **kwargs)
-            self.__process_gate_output(output, parent=parent_population, gate=gate)
-            if plot_output:
-                self.plot_gate(gate.gate_name)
+            output = self.__process_gate_output(output, parent=parent_population, gate=gate)
+            if output:
+                if plot_output:
+                    self.plot_gate(gate.gate_name)
+                return output
+            return None
 
     def __apply_fmo_gate(self, gate, kwargs, plot):
         names = dict(fmo_x=None, fmo_y=None)
@@ -196,7 +200,7 @@ class Gating:
         if not output:
             return
         if plot:
-            self.plot_fmogate(gate_name=gate.gate_name)
+            self.plot_gate(gate_name=gate.gate_name)
 
     def __process_gate_output(self, output: GateOutput, gate: Gate, parent: pd.DataFrame):
         if output.error:
@@ -208,15 +212,21 @@ class Gating:
                 print(f'Error: Geom gate returning null value for child population ({name}) geom')
                 return None
             n = len(data['index'])
+            if n == 0:
+                prop_of_total = 0
+                prop_of_parent = 0
+            else:
+                prop_of_parent = n / parent.shape[0]
+                prop_of_total = n / self.data.shape[0]
             self.populations[name] = dict(population_name=name, index=data['index'],
-                                          prop_of_parent=n/parent.shape[0],
-                                          prop_of_total=n/self.data.shape[0],
+                                          prop_of_parent=prop_of_parent,
+                                          prop_of_total=prop_of_total,
                                           parent=gate.parent, children=[],
-                                          geom=data['geom'])
+                                          geom=data['geom'], warnings=output.warnings)
             self.populations[gate.parent]['children'].append(name)
         return output
 
-    def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False):
+    def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False, feedback=True):
         gating_results = dict()
         if apply_all:
             if len(self.populations.keys()) != 1:
@@ -224,17 +234,21 @@ class Gating:
                       'when using the `apply_all` command files should have no existing populations. '
                       'Remove existing populations from file before continuing. Aborting.')
                 return None
-            gates_to_apply = self.gates
+            gates_to_apply = self.gates.keys()
         else:
             if any([x not in self.gates.keys() for x in gates]):
                 print(f'Error: some gate names provided appear invalid; valid gates: {self.gates.keys()}')
                 return None
             gates_to_apply = [name for name, _ in self.gates.items() if name in gates]
         for gate_name in gates_to_apply:
+            if feedback:
+                print(f'Applying {gate_name}...')
             gating_results[gate_name] = self.apply(gate_name, plot_output=plot_outcome)
+        if feedback:
+            print('Complete!')
         return gating_results
 
-    def plot_fmogate(self, gate_name, xlim=None, ylim=None):
+    def plot_gate(self, gate_name, xlim=None, ylim=None):
         gate = self.gates[gate_name]
         data = dict(primary=self.get_population_df(gate.parent))
         kwargs = {k: v for k, v in gate.func_args}
@@ -250,7 +264,6 @@ class Gating:
                 data[x] = d
 
         n = len(data.keys())
-        fig, axes = plt.subplots(ncols=n)
         # Get axis info
         x = gate.x
         if gate.y:
@@ -258,12 +271,15 @@ class Gating:
         else:
             y = 'FSC-A'
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
+        if gate.gate_type == 'cluster':
+            return self.__cluster_plot(x, y, gate, title=gate.gate_name)
+        fig, axes = plt.subplots(ncols=n)
         if n > 1:
             for ax, (name, d) in zip(axes, data.items()):
                 self.__geom_plot(ax=ax, x=x, y=y, data=d, geom=self.populations[gate.children[0]]['geom'],
-                                 xlim=xlim, ylim=ylim, title=gate.gate_name)
+                                 xlim=xlim, ylim=ylim, title=f'{gate.gate_name}_{name}')
         else:
-            self.__geom_plot(ax=axes, x=x, y=y, data=d, geom=self.populations[gate.children[0]]['geom'],
+            self.__geom_plot(ax=axes, x=x, y=y, data=data['primary'], geom=self.populations[gate.children[0]]['geom'],
                              xlim=xlim, ylim=ylim, title=gate.gate_name)
         return fig, axes
 
@@ -281,41 +297,16 @@ class Gating:
                 ylim = (0, 1)
         return xlim, ylim
 
-    def plot_gate(self, gate_name, xlim=None, ylim=None):
-        # Check and load gate
-        if gate_name not in self.gates.keys():
-            print(f'Error: invalid gate name, must be one of {self.gates.keys()}')
-            return None
-        gate = self.gates[gate_name]
-
-        # Get axis info
-        x = gate.x
-        if gate.y:
-            y = gate.y
-        else:
-            y = 'FSC-A'
-        xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
-
-        # Cluster plot
-        if gate.gate_type == 'cluster':
-            return self.__cluster_plot(x, y, gate, title=gate_name)
-        data = self.get_population_df(gate.parent)
-        fig, ax = plt.subplots()
-        child = self.populations[gate.parent]['children'][0]
-        self.__geom_plot(ax=ax, x=x, y=y, data=data, geom=self.populations[child]['geom'],
-                                 xlim=xlim, ylim=ylim, title=gate.gate_name)
-        return fig, ax
-
     def __cluster_plot(self, x, y, gate, title):
         fig, ax = plt.subplots(figsize=(5, 5))
-        colours = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(gate.children))]
+        colours = cycle(['black', 'green', 'blue', 'red', 'magenta', 'cyan'])
         for child, colour in zip(gate.children, colours):
-            d = self.get_population_df(child).sample(frac=0.5)
-            if child == 'noise':
-                colour = [[0, 0, 0, 1] for x in d[x].values]
+            d = self.get_population_df(child)
+            if d is not None:
+                d.sample(frac=0.5)
             else:
-                colour = [colour for x in d[x].values]
-            ax.scatter(d[x], d[y], c=colour, s=3, alpha=0.25)
+                continue
+            ax.scatter(d[x], d[y], c=colour, s=3, alpha=0.4)
         ax.set_title(title)
         fig.show()
 
@@ -493,14 +484,14 @@ class Gating:
         print('No downstream effects, re-gating complete!')
         return None
 
-    def __population_to_mongo(self, population_name):
+    def population_to_mongo(self, population_name):
         pop_mongo = Population()
         pop_dict = self.populations[population_name]
         for k, v in pop_dict.items():
-            if k != 'index':
-                pop_mongo[k] = v
             if k == 'geom':
                 pop_mongo[k] = [(k, v) for k, v in v.items()]
+            elif k != 'index':
+                pop_mongo[k] = v
             else:
                 pop_mongo.save_index(pop_dict[k])
         return pop_mongo
@@ -518,7 +509,7 @@ class Gating:
             fg.gates = []
             fg.save()
         for name in self.populations.keys():
-            FileGroup.objects(primary_id=self.id).update(push__populations=self.__population_to_mongo(name))
+            FileGroup.objects(primary_id=self.id).update(push__populations=self.population_to_mongo(name))
         for _, gate in self.gates.items():
             FileGroup.objects(primary_id=self.id).update(push__gates=gate)
         print('Saved successfully!')
@@ -560,7 +551,7 @@ class Template(Gating):
     def load_template(self, template_name):
         gating_strategy = GatingStrategy.objects(template_name=template_name)
         if gating_strategy:
-            self.gates = gating_strategy[0].gates
+            self.gates = {gate.gate_name: gate for gate in gating_strategy[0].gates}
             return True
         else:
             print(f'No template with name {template_name}')
