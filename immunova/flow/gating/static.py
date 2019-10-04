@@ -22,6 +22,7 @@ def rect_gate(data: pd.DataFrame, x: str, y: str,
     output = GateOutput()
     geom = Geom(shape='rect', x=x, y=y, x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max)
     pos_pop = data[(data[x] >= x_min) & (data[x] <= x_max)]
+    pos_pop = data[(data[y] >= y_min) & (data[y] <= y_max)]
     name = [name for name, x in child_populations.items() if x['definition'] == '+'][0]
     output.add_child(name=name, idx=pos_pop.index.values, geom=geom.as_dict())
     name = [name for name, x in child_populations.items() if x['definition'] == '-']

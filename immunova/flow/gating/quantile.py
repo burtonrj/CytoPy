@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from immunova.flow.gating.defaults import GateOutput, Geom
 
 
@@ -35,7 +36,7 @@ def quantile_gate(data: pd.DataFrame, x: str,
     if len(pos_pop) == 0 or len(pos_pop) == data.shape[0]:
         output.warnings.append('No events in gate')
 
-    geom = Geom(shape='threshold', x=x, y=None, threshold=qt, method='quantile')
+    geom = Geom(shape='threshold', x=x, y=None, threshold=np.float64(qt), method='quantile')
     neg_pop = data[~data.index.isin(pos_pop.index.values)]
     add_pop(pos_pop, '+')
     add_pop(neg_pop, '-')
