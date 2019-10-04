@@ -1,13 +1,22 @@
 import mongoengine
+from immunova.data.fcs import FileGroup
 
 
 class Drug(mongoengine.EmbeddedDocument):
+    """
+    Embedded document -> Patient
+    Document representation of drug administration. Single document instance represents one event.
+    """
     name = mongoengine.StringField(required=True)
     init_date = mongoengine.DateTimeField(required=False)
     end_date = mongoengine.DateTimeField(required=False)
 
 
 class Bug(mongoengine.EmbeddedDocument):
+    """
+    Embedded document -> Patient
+    Document representation of isolated pathogen. Single document instance represents one pathogen.
+    """
     gram_status = mongoengine.StringField(required=False)
     org_name = mongoengine.StringField(required=False)
     id_method = mongoengine.StringField(required=False)
@@ -18,6 +27,10 @@ class Bug(mongoengine.EmbeddedDocument):
 
 
 class Biology(mongoengine.EmbeddedDocument):
+    """
+    Embedded document -> Patient
+    Document representation of biological test (blood pathology). Single document instance represents one test.
+    """
     test_date = mongoengine.DateTimeField()
     test = mongoengine.StringField()
     result = mongoengine.FloatField()
@@ -27,21 +40,38 @@ class Biology(mongoengine.EmbeddedDocument):
 
 
 class Sample(mongoengine.EmbeddedDocument):
+    """
+    Embedded document -> Patient
+    Document representation of sample. Patient can have multiple samples associated to it. Contains reference list
+    to corresponding fcs files
+    """
     sample_id = mongoengine.StringField(required=True)
     collection_datetime = mongoengine.DateTimeField(required=True)
     processing_datetime = mongoengine.DateTimeField(required=True)
     flags = mongoengine.StringField(required=False)
-    fcs_files = mongoengine.ListField()
+    fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.PULL))
 
 
 class Patient(mongoengine.Document):
+    """
+    Document based representation of patient meta-data
+    """
     patient_id = mongoengine.StringField(required=True, unique=True)
     age = mongoengine.IntField(required=False)
     gender = mongoengine.IntField(required=False)
     date_first_symptoms = mongoengine.DateTimeField(required=False)
+
+    # Embeddings
+    drug_data = mongoengine.EmbeddedDocumentListField(Drug)
+    infection_data = mongoengine.EmbeddedDocumentListField(Bug)
+    patient_biology = mongoengine.EmbeddedDocumentListField(Biology)
+    samples = mongoengine.EmbeddedDocumentListField(Sample)
+
+    # Admission
     admission_date_hosp = mongoengine.DateTimeField(required=False)
     admission_date_icu = mongoengine.DateTimeField(required=False)
-    drug_data = mongoengine.EmbeddedDocumentListField(Drug)
+
+    # Commodities
     comorbidity_notes = mongoengine.StringField(required=False)
     obesity = mongoengine.BooleanField(required=False)
     hypotension = mongoengine.BooleanField(required=False)
@@ -51,39 +81,50 @@ class Patient(mongoengine.Document):
     neurological_disorder = mongoengine.BooleanField(required=False)
     trauma = mongoengine.BooleanField(required=False)
     group_classification = mongoengine.StringField(required=False)
-    infection_source = mongoengine.StringField(require=False)
-    infection_community_acquired = mongoengine.BooleanField(required=False)
-    infection_notes = mongoengine.StringField(required=False)
-    infection_data = mongoengine.EmbeddedDocumentListField(Bug)
-    sofa = mongoengine.FloatField(required=False)
-    apache_2 = mongoengine.FloatField(required=False)
-    icnarc = mongoengine.FloatField(required=False)
-    mechanical_vent_days = mongoengine.FloatField(required=False)
-    vaso_days = mongoengine.FloatField(required=False)
-    dialysis_data = mongoengine.FloatField(required=False)
-    patient_biology = mongoengine.EmbeddedDocumentListField(Biology)
-    notes = mongoengine.StringField(required=False)
     chronic_kidney_disease = mongoengine.BooleanField(required=False)
     chronic_resp_disease = mongoengine.BooleanField(required=False)
     chronic_liver_disease = mongoengine.BooleanField(required=False)
     chronic_cardio_disease = mongoengine.BooleanField(required=False)
     malignancy = mongoengine.BooleanField(required=False)
     other_comorbidity = mongoengine.ListField(required=False)
+
+    # Infection
+    infection_source = mongoengine.StringField(require=False)
+    infection_community_acquired = mongoengine.BooleanField(required=False)
+    infection_notes = mongoengine.StringField(required=False)
+
+    # Scores
+    sofa = mongoengine.FloatField(required=False)
+    apache_2 = mongoengine.FloatField(required=False)
+    icnarc = mongoengine.FloatField(required=False)
+
+    # Mechanical interventions
+    mechanical_ventilation = mongoengine.BooleanField(required=False)
+    mechanical_vent_days = mongoengine.FloatField(required=False)
+    vaso_days = mongoengine.FloatField(required=False)
+    dialysis_data = mongoengine.FloatField(required=False)
+
+    # Notes
+    notes = mongoengine.StringField(required=False)
+
+    # Resp
     resp_inefficiency = mongoengine.BooleanField(required=False)
     oxygen_requirement = mongoengine.BooleanField(required=False)
-    mechanical_ventilation = mongoengine.BooleanField(required=False)
     ards_criteria = mongoengine.StringField(required=False)
+
+    # Other
     hemodynamic_impairment = mongoengine.BooleanField(required=False)
     vasopressor_drugs = mongoengine.BooleanField(required=False)
     renal_impairment = mongoengine.BooleanField(required=False)
     extra_renal_therapy = mongoengine.BooleanField(required=False)
     disseminated_iv_coag = mongoengine.BooleanField(required=False)
+
+    # Outcome
     death_within_90days = mongoengine.BooleanField(required=False)
     death_date = mongoengine.DateTimeField(required=False)
     discharge_date_icu = mongoengine.DateTimeField(required=False)
     discharge_date_hosp = mongoengine.DateTimeField(required=False)
     outcome_category = mongoengine.StringField(required=False)
-    samples = mongoengine.EmbeddedDocumentField(Sample)
 
     meta = {
         'db_alias': 'core',
