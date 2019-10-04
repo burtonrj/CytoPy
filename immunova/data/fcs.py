@@ -51,7 +51,10 @@ class Population(mongoengine.EmbeddedDocument):
         population = dict(population_name=self.population_name, prop_of_parent=self.prop_of_parent,
                           prop_of_total=self.prop_of_total, warnings=self.warnings, parent=self.parent,
                           children=self.children)
-        population['geom'] = Geom(**{k: v for k, v in self.geom})
+        if self.population_name == 'root':
+            population['geom'] = Geom(shape='NA', x='FSC-A', y='SSC-A')
+        else:
+            population['geom'] = Geom(**{k: v for k, v in self.geom})
         population['index'] = self.load_index()
         return population
 

@@ -349,7 +349,8 @@ class Gating:
             ax.add_patch(ellipse)
         if all([x in geom.keys() for x in ['x_min', 'x_max', 'y_min', 'y_max']]):
             rect = patches.Rectangle(xy=(geom['x_min'], geom['y_min']),
-                                     width=geom['x_max'], height=geom['y_max'],
+                                     width=((geom['x_max']) - (geom['x_min'])),
+                                     height=(geom['y_max'] - geom['y_min']),
                                      fill=False, edgecolor='r')
             ax.add_patch(rect)
         return ax
@@ -395,7 +396,8 @@ class Gating:
         # Remove populations downstream
         if downstream_populations:
             for p in downstream_populations:
-                removed.append(self.populations.pop(p))
+                if p in self.populations.keys():
+                    removed.append(self.populations.pop(p))
         # Updated children in parent
         parent = self.populations[population_name]['parent']
         self.populations[parent]['children'] = [x for x in self.populations[parent]['children']
