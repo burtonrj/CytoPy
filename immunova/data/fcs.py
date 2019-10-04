@@ -152,7 +152,7 @@ class FileGroup(mongoengine.Document):
         populations - populations derived from this file group
         gates - gate objectes that have been applied to this file group
     """
-    primary_id = mongoengine.StringField(required=True, unique=True)
+    primary_id = mongoengine.StringField(required=True)
     files = mongoengine.EmbeddedDocumentListField(File)
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
