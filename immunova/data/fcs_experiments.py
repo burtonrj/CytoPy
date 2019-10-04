@@ -77,6 +77,14 @@ class Panel(mongoengine.Document):
         channels - list of channels; see NormalisedName
         mappings - list of channel/marker mappings; see ChannelMap
         initiation_date - date of creation
+    Methods:
+        check_excel_template - Given the file path of an excel template, check validity
+        create_from_excel - Given the file path of an excel template, populate panel using template
+        create_from_dict - Given a python dictionary object, populate panel using dictionary as template
+        standardise_names - Given a dictionary of column mappings, apply standardisation defined by this panel object
+        and return standardised column mappings.
+        standardise - Given a dataframe of fcs events, standardise the columns according to the panel definition
+
     """
     panel_name = mongoengine.StringField(required=True, unique=True)
     markers = mongoengine.EmbeddedDocumentListField(NormalisedName)
@@ -280,6 +288,12 @@ class FCSExperiment(mongoengine.Document):
         flags - warnings associated to experiment
         notes - additional free text comments
         gating_templates - reference to gating templates associated to this experiment
+    Methods:
+        pull_sample_data - Given a sample ID, associated to this experiment, fetch the fcs data
+        list_samples - Generate a list IDs of file groups associated to experiment
+        remove_sample - Remove sample (FileGroup) from experiment.
+        add_new_sample - Add a new sample (FileGroup) to this experiment
+
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
     panel = mongoengine.ReferenceField(Panel, reverse_delete_rule=4)
@@ -346,7 +360,7 @@ class FCSExperiment(mongoengine.Document):
         """
         return [f.primary_id for f in self.fcs_files]
 
-    def remove_file(self, sample_id: str, delete=False):
+    def remove_sample(self, sample_id: str, delete=False):
         """
         Remove sample (FileGroup) from experiment.
         :param sample_id: ID of sample to remove
@@ -395,7 +409,7 @@ class FCSExperiment(mongoengine.Document):
             new_file.put(data.values)
             return new_file
 
-        if FileGroup.objects(primary_id=sample_id):
+        if sample_id in self.list_samples():
             print(f'Error: a file group with id {sample_id} already exists')
             return None
         if feedback:
