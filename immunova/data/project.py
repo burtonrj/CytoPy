@@ -16,6 +16,7 @@ class Project(mongoengine.Document):
         fcs_experiments - reference field for associated fcs files
     Methods:
         add_experiment - create new experiment and associate to project
+        load_experiment - For a given experiment in project, return the experiment object
         list_fcs_experiments - generate a list of IDs for fcs experiments associated to this project
     """
     project_id = mongoengine.StringField(required=True, unique=True)
