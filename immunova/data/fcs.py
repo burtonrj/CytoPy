@@ -24,8 +24,9 @@ class Population(mongoengine.EmbeddedDocument):
         geom - list of key value pairs (tuples; (key, value)) for defining geom of population e.g.
         the defintion for an ellipse that 'captures' the population
     Methods:
-        save_index - given a new numpy array of index values, serialise and save the data
+        save_index - given a new numpy array of index values, serialise and commit data to database
         load_index - retrieve the index values for the given population
+        to_python - generate a python dictionary object for this population
     """
     population_name = mongoengine.StringField()
     index = mongoengine.FileField(db_alias='core', collection_name='population_indexes')
@@ -91,7 +92,7 @@ class File(mongoengine.EmbeddedDocument):
         """
         data = pickle.loads(self.data.read())
         if sample:
-            return self.sample(data, sample)
+            return self.__sample(data, sample)
         return data
 
     def norm_data(self, sample: int or None = None):
@@ -102,11 +103,11 @@ class File(mongoengine.EmbeddedDocument):
         """
         data = pickle.loads(self.norm.read())
         if sample:
-            return self.sample(data, sample)
+            return self.__sample(data, sample)
         return data
 
     @staticmethod
-    def sample(data, n):
+    def __sample(data, n):
         if n < data.shape[0]:
             idx = np.random.randint(data.shape[0], size=n)
             return data[idx, :]
