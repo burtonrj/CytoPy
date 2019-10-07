@@ -4,9 +4,8 @@ from immunova.data.gating import Gate
 from immunova.data.patient import Patient
 from immunova.data.fcs_experiments import ChannelMap
 from immunova.flow.gating.defaults import Geom
-import numpy as np
-import pandas as pd
 import pickle
+import numpy as np
 
 
 class Population(mongoengine.EmbeddedDocument):
@@ -142,6 +141,7 @@ class File(mongoengine.EmbeddedDocument):
                 self.norm.write(Binary(pickle.dumps(data, protocol=2)))
                 self.norm.close()
 
+<<<<<<< HEAD
     def data_from_file(self, data_type: str, sample_size: int or None, output_format: str = 'dataframe',
                        columns_default: str = 'marker') -> None or dict:
         """
@@ -179,6 +179,8 @@ class File(mongoengine.EmbeddedDocument):
             mappings = [m.channel for m in self.channel_mappings]
         return pd.DataFrame(matrix, columns=mappings, dtype='float32')
 
+=======
+>>>>>>> parent of d9c11e9... Refactor File fetch; moved data_from_file and as_dataframe to File class; mappings retrieved from File object not Panel
 
 class FileGroup(mongoengine.Document):
     """
