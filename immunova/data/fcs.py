@@ -4,8 +4,9 @@ from immunova.data.gating import Gate
 from immunova.data.patient import Patient
 from immunova.data.fcs_experiments import ChannelMap
 from immunova.flow.gating.defaults import Geom
-import pickle
 import numpy as np
+import pandas as pd
+import pickle
 
 
 class Population(mongoengine.EmbeddedDocument):
@@ -140,6 +141,43 @@ class File(mongoengine.EmbeddedDocument):
                 self.norm.new_file()
                 self.norm.write(Binary(pickle.dumps(data, protocol=2)))
                 self.norm.close()
+
+    def data_from_file(self, data_type: str, sample_size: int, output_format: str = 'dataframe',
+                       columns_default: str = 'marker') -> None or dict:
+        """
+        Pull data from a file document
+        :param data_type: data type to retrieve; either 'raw' or 'norm' (normalised)
+        :param sample_size: return a sample of given integer size
+        :param output_format: preferred format of output; can either be 'dataframe' for a pandas dataframe, or 'matrix'
+        for a numpy array
+        :param columns_default: how to name columns if output_format='dataframe';
+        either 'marker' or 'channel' (default = 'marker')
+        :return: Dictionary output {id: file_id, typ: file_type, data: dataframe/matrix}
+        """
+        if data_type == 'raw':
+            data = self.raw_data(sample=sample_size)
+
+        elif data_type == 'norm':
+            data = self.norm_data(sample=sample_size)
+        else:
+            print('Invalid data_type, must be raw or norm')
+            return None
+        if output_format == 'dataframe':
+            data = self.__as_dataframe(data, columns_default=columns_default)
+        return dict(id=self.file_id, typ=self.file_type, data=data)
+
+    def __as_dataframe(self, matrix: np.array, columns_default: str = 'marker'):
+        """
+        Generate a pandas dataframe using a given numpy multi-dim array with specified column defaults
+        :param matrix: numpy matrix to convert to dataframe
+        :param columns_default: how to name columns; either 'marker' or 'channel' (default = 'marker')
+        :return: Pandas dataframe
+        """
+        if columns_default == 'marker':
+            mappings = [m.marker if not None else m.channel for m in self.channel_mappings]
+        else:
+            mappings = [m.channel for m in self.channel_mappings]
+        return pd.DataFrame(matrix, columns=mappings, dtype='float32')
 
 
 class FileGroup(mongoengine.Document):
