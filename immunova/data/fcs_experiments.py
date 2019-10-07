@@ -36,6 +36,7 @@ class ChannelMap(mongoengine.EmbeddedDocument):
             return True
         return False
 
+<<<<<<< HEAD
     def to_python(self) -> dict:
         """
         Convert object to python dictionary
@@ -43,6 +44,8 @@ class ChannelMap(mongoengine.EmbeddedDocument):
         """
         return {'channel': self.channel, 'marker': self.marker}
 
+=======
+>>>>>>> parent of d9c11e9... Refactor File fetch; moved data_from_file and as_dataframe to File class; mappings retrieved from File object not Panel
 
 class NormalisedName(mongoengine.EmbeddedDocument):
     """
@@ -372,9 +375,19 @@ class FCSExperiment(mongoengine.Document):
         """
         if sample_id not in self.list_samples():
             print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
+<<<<<<< HEAD
             return None
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
+=======
+            return None, None
+        file_grp = FileGroup.objects(primary_id=sample_id)
+        if not file_grp:
+            print(f'Error: invalid sample_id, no file entry for {sample_id}')
+            return None, None
+        file_grp = file_grp[0]
+>>>>>>> parent of d9c11e9... Refactor File fetch; moved data_from_file and as_dataframe to File class; mappings retrieved from File object not Panel
         files = file_grp.files
+        mappings = [json.loads(x.to_json()) for x in self.panel.mappings]
         # Fetch data
         if not include_controls:  # Fetch data for primary file only
             f = [f for f in files if f.file_type == 'complete'][0]
