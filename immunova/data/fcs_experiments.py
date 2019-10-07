@@ -3,7 +3,7 @@ from immunova.data.fcs import FileGroup, File
 from immunova.data.gating import GatingStrategy
 from immunova.data.utilities import data_from_file
 from immunova.flow.readwrite.read_fcs import FCSFile
-from collections import defaultdict
+from collections import defaultdict, Counter
 from multiprocessing import Pool, cpu_count
 from functools import partial
 import mongoengine
@@ -24,6 +24,17 @@ class ChannelMap(mongoengine.EmbeddedDocument):
     """
     channel = mongoengine.StringField()
     marker = mongoengine.StringField()
+
+    def check_matched_pair(self, channel: str, marker: str) -> bool:
+        """
+        Check a channel/marker pair for resemblance
+        :param channel: channel to check
+        :param marker: marker to check
+        :return: True if equal, else False
+        """
+        if self.channel == channel and self.marker == marker:
+            return True
+        return False
 
 
 class NormalisedName(mongoengine.EmbeddedDocument):
@@ -203,78 +214,106 @@ class Panel(mongoengine.Document):
         self.mappings = [ChannelMap(channel=c, marker=m) for c, m in x['mappings']]
         return True
 
-    def standardise_names(self, column_mappings: dict) -> dict or None:
+    @staticmethod
+    def __query(x: str or None, ref: list, e: bool) -> str or None and bool:
+        """
+        Internal static method for querying a channel/marker against a reference list
+        :param x: channel/marker to query
+        :param ref: list of ChannelMap objects for reference search
+        :param e: error state
+        :return: Standardised name and error state
+        """
+        corrected = list(filter(None.__ne__, [n.query(x) for n in ref]))
+        if len(corrected) == 0:
+            print(f'Unable to normalise {x}; no match in linked panel')
+            e = True
+            return x, e
+        if len(corrected) > 1:
+            print(f'Unable to normalise {x}; matched multiple in linked panel, check'
+                  f' panel for incorrect definitions. Matches found: {corrected}')
+            e = True
+            return x, e
+        return corrected[0], e
+
+    def __check_duplicate_pairing(self, channel: str, marker: str or None) -> bool:
+        """
+        Internal method. Given a channel and marker check that a valid pairing exists for this panel.
+        :param channel: channel for checking
+        :param marker: marker for checking
+        :return: True if pairing exists, else False
+        """
+        if not any([n.check_matched_pair(channel=channel, marker=marker) for n in self.mappings]):
+            return True
+        return False
+
+    @staticmethod
+    def __check_duplication(x: list) -> bool:
+        """
+        Internal method. Given a list check for duplicates. Duplicates are printed.
+        :param x:
+        :return: True if duplicates are found, else False
+        """
+        duplicates = [item for item, count in Counter(x).items() if count > 1]
+        if duplicates:
+            print(f'Duplicate channel/markers identified: {duplicates}')
+            return True
+        return False
+
+    def standardise_names(self, column_mappings: list) -> list or None and bool:
         """
         Given a dictionary of column mappings, apply standardisation defined by this panel object and return
         standardised column mappings.
         :param column_mappings: dictionary corresponding to channel/marker mappings (channel, marker)
-        :return: standardised column mappings
+        :return: standardised column mappings and error state
         """
-
-        def query(x, ref):
-            corrected = list(filter(None.__ne__, [n.query(x) for n in ref]))
-            if len(corrected) == 0:
-                print(f'Unable to normalise {x}; no match in linked panel')
-                return None
-            if len(corrected) > 1:
-                print(f'Unable to normalise {x}; matched multiple in linked panel, check'
-                      f' panel for incorrect definitions. Matches found: {corrected}')
-                return None
-            return corrected[0]
-
-        new_column_mappings = dict()
-        for col_name, channel_marker in column_mappings.items():
-            channel, marker = channel_marker
+        err = False
+        new_column_mappings = list()
+        for channel, marker in column_mappings:
             # Normalise channel
             if channel:
-                channel = query(channel, self.channels)
-                if not channel:
-                    return None
+                channel, err = self.__query(channel, self.channels, err)
             # Normalise marker
             if marker:
-                marker = query(marker, self.markers)
-                if not marker:
-                    return None
-            new_column_mappings[col_name] = [channel, marker]
-        return new_column_mappings
+                marker, err = self.__query(marker, self.markers, err)
+            # Check channel/marker pairing is correct
+            if not self.__check_duplicate_pairing(channel, marker):
+                print(f'The channel/marker pairing {channel}/{marker} does not correspond to any defined in panel')
+                err = True
+            new_column_mappings.append((channel, marker))
+        # Check for duplicate channels/markers
+        channels = [c for c, _ in column_mappings]
+        if self.__check_duplication(channels):
+            err = True
+        if self.__check_duplication([m for _, m in column_mappings]):
+            err = True
+        # Check for missing channels
+        for x in self.channels:
+            if x not in channels:
+                print(f'Missing channel {x}')
+                err = True
+        return new_column_mappings, err
 
-    def standardise(self, data: pd.DataFrame, skip_missing_channels: bool = True) -> pd.DataFrame or None:
+    def standardise(self, data: pd.DataFrame, catch_standardisation_errors: bool = False) -> pd.DataFrame or None:
         """
         Given a dataframe of fcs events, standardise the columns according to the panel definition
+        :param catch_standardisation_errors: if True, any error in standardisation will cause function to return Null
         :param data: pandas dataframe of cell events
         :return: standardised pandas dataframe with columns ordered according to the panel definition
         """
         # Standardise the names
-        column_mappings = {x: [_ if _ != "" else None for _ in x.split('_')] for x in data.columns}
-        column_mappings = self.standardise_names(column_mappings)
-        if not column_mappings:
+        # channel_marker -> channel_marker: [channel, marker]
+        column_mappings = [[_ if _ != "" else None for _ in x.split('_')] for x in data.columns]
+        column_mappings, err = self.standardise_names(column_mappings)
+        if err and catch_standardisation_errors:
             return None
+
         # Insert missing marker names using matched channel in panel
-        updated_mappings = defaultdict(list)
-        for col_name, channel_marker in column_mappings.items():
-            channel = channel_marker[0]
-            marker = channel_marker[1]
+        updated_mappings = list()
+        for channel, marker in column_mappings:
             if marker is None:
                 marker = [p.marker for p in self.mappings if p.channel == channel][0]
-            updated_mappings[col_name] = [channel, marker]
-        # Order the columns to match the panel definition
-        ordered_columns = list()
-        for channel_marker_pair in self.mappings:
-            comparisons = {k: (v[0] == channel_marker_pair.channel, v[1] == channel_marker_pair.marker)
-                           for k, v in updated_mappings.items()}
-            comparisons = {k: sum(v) for k, v in comparisons.items() if sum(v) == 2}
-            if len(comparisons) > 1:
-                print(f'Multiple instances of {channel_marker_pair.channel}, {channel_marker_pair.marker} pair'
-                      f'found!')
-                return None
-            if not comparisons:
-                print(f'WARNING: {channel_marker_pair.channel}, {channel_marker_pair.marker} pair not found!')
-                continue
-            if not skip_missing_channels:
-                print(f'Column mappings: {updated_mappings.items()}')
-                return None
-            ordered_columns.append(list(comparisons.keys())[0])
-        return data[ordered_columns]
+            updated_mappings.append((channel, marker))
+        return column_mappings
 
 
 class FCSExperiment(mongoengine.Document):
@@ -360,7 +399,7 @@ class FCSExperiment(mongoengine.Document):
         """
         return [f.primary_id for f in self.fcs_files]
 
-    def remove_sample(self, sample_id: str, delete=False):
+    def remove_sample(self, sample_id: str, delete=False) -> bool:
         """
         Remove sample (FileGroup) from experiment.
         :param sample_id: ID of sample to remove
@@ -376,9 +415,41 @@ class FCSExperiment(mongoengine.Document):
             fg[0].delete()
         return True
 
+    def __create_file_entry(self, path: str, file_id: str, comp_matrix: np.array,
+                            compensate: bool, catch_standardisation_errors: bool,
+                            control: bool = False) -> File or None:
+        """
+        Internal method. Create a new File object.
+        :param path: file path of the primary fcs file (e.g. the fcs file that is of primary interest such as the
+        file with complete staining)
+        :param file_id: identifier for file
+        :param comp_matrix: compensation matrix (if Null, linked matrix expected)
+        :param compensate: if True, compensation will be applied else False
+        :param catch_standardisation_errors: If True, standardisation errors will result in no File generation
+        and function will return Null
+        :param control: if True, File will be created as file type 'control'
+        :return: File Object
+        """
+        fcs = FCSFile(path, comp_matrix=comp_matrix)
+        new_file = File()
+        new_file.file_id = file_id
+        if compensate:
+            fcs.compensate()
+            new_file.compensated = True
+        if control:
+            new_file.file_type = 'control'
+        data = fcs.dataframe
+        column_mappings = self.panel.standardise(data, catch_standardisation_errors)
+        if column_mappings is None:
+            print(f'Error: invalid channel/marker mappings for {file_id}, at path {path}, aborting.')
+            return None
+        new_file.put(data.values)
+        new_file.channel_mappings = [ChannelMap(channel=c, marker=m) for c, m in column_mappings]
+        return new_file
+
     def add_new_sample(self, sample_id: str, file_path: str, controls: list,
                        comp_matrix: np.array or None = None, compensate: bool = True,
-                       feedback: bool = True) -> None or str:
+                       feedback: bool = True, catch_standardisation_errors: bool = False) -> None or str:
         """
         Add a new sample (FileGroup) to this experiment
         :param sample_id: primary ID for identification of sample (FileGroup.primary_id)
@@ -390,25 +461,9 @@ class FCSExperiment(mongoengine.Document):
         :param compensate: boolean value as to whether compensation should be applied before data entry (default=True)
         :param feedback: boolean value, if True function will provide feedback in the form of print statements
         (default=True)
+        :param catch_standardisation_errors: if True, standardisation errors will cause process to abort
         :return: MongoDB ObjectID string for new FileGroup entry
         """
-        def create_file_entry(path, file_id, control_=False):
-            fcs = FCSFile(path, comp_matrix=comp_matrix)
-            new_file = File()
-            new_file.file_id = file_id
-            if compensate:
-                fcs.compensate()
-                new_file.compensated = True
-            if control_:
-                new_file.file_type = 'control'
-            data = fcs.dataframe
-            data = self.panel.standardise(data)
-            if data is None:
-                print(f'Error: invalid channel/marker mappings for {file_id}, at path {file_path}, aborting.')
-                return None
-            new_file.put(data.values)
-            return new_file
-
         if sample_id in self.list_samples():
             print(f'Error: a file group with id {sample_id} already exists')
             return None
@@ -416,14 +471,18 @@ class FCSExperiment(mongoengine.Document):
             print('Generating main file entry...')
         file_collection = FileGroup()
         file_collection.primary_id = sample_id
-        primary_file = create_file_entry(file_path, sample_id)
+        primary_file = self.__create_file_entry(file_path, sample_id, comp_matrix=comp_matrix, compensate=compensate,
+                                                catch_standardisation_errors=catch_standardisation_errors)
         if not primary_file:
             return None
         file_collection.files.append(primary_file)
         if feedback:
             print('Generating file entries for controls...')
         for c in controls:
-            control = create_file_entry(c['path'], f"{sample_id}_{c['control_id']}", control_=True)
+            control = self.__create_file_entry(c['path'], f"{sample_id}_{c['control_id']}",
+                                               comp_matrix=comp_matrix, compensate=compensate,
+                                               catch_standardisation_errors=catch_standardisation_errors,
+                                               control=True)
             if not control:
                 return None
             file_collection.files.append(control)
