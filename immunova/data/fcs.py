@@ -142,7 +142,7 @@ class File(mongoengine.EmbeddedDocument):
                 self.norm.write(Binary(pickle.dumps(data, protocol=2)))
                 self.norm.close()
 
-    def data_from_file(self, data_type: str, sample_size: int, output_format: str = 'dataframe',
+    def data_from_file(self, data_type: str, sample_size: int or None, output_format: str = 'dataframe',
                        columns_default: str = 'marker') -> None or dict:
         """
         Pull data from a file document
