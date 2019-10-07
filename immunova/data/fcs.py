@@ -2,6 +2,7 @@ import mongoengine
 from bson.binary import Binary
 from immunova.data.gating import Gate
 from immunova.data.patient import Patient
+from immunova.data.fcs_experiments import ChannelMap
 from immunova.flow.gating.defaults import Geom
 import pickle
 import numpy as np
@@ -71,6 +72,7 @@ class File(mongoengine.EmbeddedDocument):
         data: numpy array of fcs events data
         norm: numpy array of normalised fcs events data
         compensated: boolean value, if True then data have been compensated
+        channel_mappings: list of standarised channel/marker mappings (corresponds to column names of underlying data)
 
     Methods:
         raw_data - loads raw data returning a numpy array
@@ -83,6 +85,7 @@ class File(mongoengine.EmbeddedDocument):
     data = mongoengine.FileField(db_alias='core', collection_name='fcs_file_data')
     norm = mongoengine.FileField(db_alias='core', collection_name='fcs_file_norm')
     compensated = mongoengine.BooleanField(default=False)
+    channel_mappings = mongoengine.ListField(ChannelMap)
 
     def raw_data(self, sample: int or None = None):
         """
