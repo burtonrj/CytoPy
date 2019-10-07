@@ -44,7 +44,6 @@ class ChannelMap(mongoengine.EmbeddedDocument):
         return {'channel': self.channel, 'marker': self.marker}
 
 
-
 class NormalisedName(mongoengine.EmbeddedDocument):
     """
     Embedded document -> Panel
@@ -356,8 +355,7 @@ class FCSExperiment(mongoengine.Document):
 
     def pull_sample_data(self, sample_id: str, sample_size: int or None = None,
                          data_type: str = 'raw', include_controls: bool = True,
-                         output_format: str = 'dataframe',
-                         return_mappings: bool = True) -> (None, None) or (list, None) or (list, list):
+                         output_format: str = 'dataframe', columns_default: str = 'marker') -> None or list:
         """
         Given a sample ID, associated to this experiment, fetch the fcs data
         :param sample_id: ID of sample to fetch data for
@@ -367,23 +365,22 @@ class FCSExperiment(mongoengine.Document):
         :param include_controls: if True (default) then control files associated to sample are included in the result
         :param output_format: preferred format of output; can either be 'dataframe' for a pandas dataframe, or 'matrix'
         for a numpy array
-        :param return_mappings: if True (default) panel mappings (channel/marker pairs) returned as list
-        :return: tuple; (list of dictionaries {id: file id, typ: data type, either raw or normalised,
-        data: dataframe/matrix}, list of dictionaries defining channel/marker pairs
-        {channel: channel name, marker: marker name})
+        :param columns_default: naming convention for returned dataframes; must be either 'marker' or 'channel'
+        (default = marker)
+        :return: list of dictionaries {id: file id, typ: data type, either raw or normalised,
+        data: dataframe/matrix}
         """
         if sample_id not in self.list_samples():
             print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
-            return None, None
+            return None
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
         files = file_grp.files
         # Fetch data
         if not include_controls:  # Fetch data for primary file only
             f = [f for f in files if f.file_type == 'complete'][0]
-            complete = data_from_file(f, data_type, sample_size, panel=self.panel)
-            if return_mappings:
-                return [complete], mappings
-            return [complete], None
+            complete = f.data_from_file(data_type=data_type, sample_size=sample_size, output_format=output_format,
+                                        columns_default=columns_default)
+            return [complete]
         # Fetch data for primary file & controls
         pool = Pool(cpu_count())
         f = partial(data_from_file, data_type=data_type, sample_size=sample_size,
