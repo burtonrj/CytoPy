@@ -1,9 +1,7 @@
 import numpy as np
 import pandas as pd
-from sklearn.neighbors import KernelDensity, KDTree
+from sklearn.neighbors import KernelDensity
 from flowutils.transforms import logicle, hyperlog, log_transform, asinh
-from immunova.flow.gating.defaults import GateOutput
-from functools import partial
 
 
 def check_peak(peaks: np.array, probs: np.array, t=0.01) -> np.array:
@@ -144,37 +142,6 @@ def rectangular_filter(data: pd.DataFrame, x: str, y: str, definition: dict) -> 
     return data
 
 
-def density_dependent_downsample(df, features, sample_frac=0.1, alpha=5,
-                                 mmd_sample_n=2000, outlier_dens=1, target_dens=5):
-    """
-    Perform density dependent down-sampling to remove risk of under-sampling rare populations
-    :param df:
-    :param features:
-    :param sample_frac:
-    :param alpha:
-    :param mmd_sample_n:
-    :param outlier_dens:
-    :param target_dens:
-    :return:
-    """
-    def prob_downsample(local_d, target_d, outlier_d):
-        if local_d <= outlier_d:
-            return 0
-        if outlier_d < local_d <= target_d:
-            return 1
-        if local_d > target_d:
-            return target_d / local_d
-    df = df.copy()
-    mmd_sample = df.sample(mmd_sample_n)
-    tree = KDTree(mmd_sample[features], metric='manhattan')
-    dist, _ = tree.query(mmd_sample[features], k=2)
-    dist = [x[1] for x in dist]
-    dist_threshold = dist * alpha
-    ld = tree.query_radius(df[features], r=dist_threshold)
-    od = np.percentile(ld, q=outlier_dens)
-    td = np.percentile(ld, q=target_dens)
-    prob_f = partial(prob_downsample, td=td, od=od)
-    prob = list(map(lambda x: prob_f(x), ld))
-    return df.sample(frac=sample_frac, weights=prob)
+
 
 
