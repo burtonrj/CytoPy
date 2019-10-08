@@ -44,18 +44,17 @@ def find_local_minima(probs: np.array, xx: np.array, peaks: np.array) -> float:
 
 
 def kde(data: pd.DataFrame, x: str,
-        kde_bw: float, kernel='gaussian', frac=0.25) -> np.array:
+        kde_bw: float, kernel: str='gaussian') -> np.array:
     """
     Generate a kernel density estimation using the scikit-learn implementation
     :param data: data for smoothing
     :param x: column name for density estimation
     :param kde_bw: bandwidth
     :param kernel: kernel to use for estimation (see scikit-learn documentation)
-    :param frac: sample size as a fraction of total dataset to perform density estimation on
     :return: probability densities for array of 1000 x-axis values between min and max of data
     """
     density = KernelDensity(bandwidth=kde_bw, kernel=kernel)
-    d = data[x].sample(frac=frac).values
+    d = data[x].values
     density.fit(d[:, None])
     x_d = np.linspace(min(d), max(d), 1000)
     logprob = density.score_samples(x_d[:, None])
