@@ -3,7 +3,7 @@ from immunova.data.fcs import FileGroup, File
 from immunova.data.gating import GatingStrategy
 from immunova.data.utilities import data_from_file
 from immunova.flow.readwrite.read_fcs import FCSFile
-from collections import defaultdict, Counter
+from collections import Counter
 from multiprocessing import Pool, cpu_count
 from functools import partial
 import mongoengine
@@ -36,16 +36,12 @@ class ChannelMap(mongoengine.EmbeddedDocument):
             return True
         return False
 
-<<<<<<< HEAD
     def to_python(self) -> dict:
         """
         Convert object to python dictionary
         :return: Dictionary object
         """
         return {'channel': self.channel, 'marker': self.marker}
-
-=======
->>>>>>> parent of d9c11e9... Refactor File fetch; moved data_from_file and as_dataframe to File class; mappings retrieved from File object not Panel
 
 class NormalisedName(mongoengine.EmbeddedDocument):
     """
@@ -355,6 +351,39 @@ class FCSExperiment(mongoengine.Document):
         'db_alias': 'core',
         'collection': 'fcs_experiments'
     }
+    
+    def pull_sample(self, sample_id: str) -> FileGroup or None:
+        """
+        Given a sample ID, return the corresponding FileGroup object
+        :param sample_id: sample ID for search
+        :return: FileGroup object; if sample does not belong to experiment, returns Null
+        """
+        if sample_id not in self.list_samples():
+            print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
+            return None
+        file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
+        return file_grp
+        
+    def list_samples(self) -> list:
+        """
+        Generate a list IDs of file groups associated to experiment
+        :return: List of IDs of file groups associated to experiment
+        """
+        return [f.primary_id for f in self.fcs_files]
+    
+    def pull_sample_mappings(self, sample_id):
+        """
+        Given a sample ID, return a dictionary of channel/marker mappings for all associated fcs files
+        :param sample_id: sample ID for search 
+        :return: dictionary of channel/marker mappings for each associated fcs file
+        """
+        file_grp = self.pull_sample(sample_id)
+        if not file_grp:
+            return None
+        mappings = dict()
+        for f in file_grp.files:
+            mappings[f.file_id] = [m.to_python() for m in f.channel_mappings]
+        return mappings
 
     def pull_sample_data(self, sample_id: str, sample_size: int or None = None,
                          data_type: str = 'raw', include_controls: bool = True,
@@ -373,21 +402,10 @@ class FCSExperiment(mongoengine.Document):
         :return: list of dictionaries {id: file id, typ: data type, either raw or normalised,
         data: dataframe/matrix}
         """
-        if sample_id not in self.list_samples():
-            print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
-<<<<<<< HEAD
-            return None
-        file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
-=======
-            return None, None
-        file_grp = FileGroup.objects(primary_id=sample_id)
+        file_grp = self.pull_sample(sample_id)
         if not file_grp:
-            print(f'Error: invalid sample_id, no file entry for {sample_id}')
-            return None, None
-        file_grp = file_grp[0]
->>>>>>> parent of d9c11e9... Refactor File fetch; moved data_from_file and as_dataframe to File class; mappings retrieved from File object not Panel
+            return None
         files = file_grp.files
-        mappings = [json.loads(x.to_json()) for x in self.panel.mappings]
         # Fetch data
         if not include_controls:  # Fetch data for primary file only
             f = [f for f in files if f.file_type == 'complete'][0]
@@ -396,21 +414,12 @@ class FCSExperiment(mongoengine.Document):
             return [complete]
         # Fetch data for primary file & controls
         pool = Pool(cpu_count())
-        f = partial(data_from_file, data_type=data_type, sample_size=sample_size,
-                    output_format=output_format, panel=self.panel)
+        f = partial(data_from_file, data_type=data_type, sample_size=sample_size, output_format=output_format,
+                    columns_default=columns_default)
         data = pool.map(f, files)
         pool.close()
         pool.join()
-        if return_mappings:
-            return data, mappings
-        return data, None
-
-    def list_samples(self) -> list:
-        """
-        Generate a list IDs of file groups associated to experiment
-        :return: List of IDs of file groups associated to experiment
-        """
-        return [f.primary_id for f in self.fcs_files]
+        return data
 
     def remove_sample(self, sample_id: str, delete=False) -> bool:
         """
