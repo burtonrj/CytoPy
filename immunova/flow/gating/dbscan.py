@@ -10,6 +10,9 @@ import hdbscan
 
 
 class DensityBasedClustering(Gate):
+    """
+    Class for Density based spatial clustering for applications with noise. Implements both DBSCAN and HDBSCAN
+    """
     def __init__(self, data: pd.DataFrame, x: str, y: str, child_populations: ChildPopulationCollection,
                  min_pop_size: int, nn: int, frac: float or None = 0.2, downsample_method: str = 'uniform',
                  density_downsample_kwargs: dict or None = None):
@@ -95,6 +98,12 @@ class DensityBasedClustering(Gate):
         return self.__assign_clusters(population_predictions)
 
     def hdbscan(self, inclusion_threshold: float or None = None):
+        """
+        Perform gating with hdbscan algorithm
+        :param inclusion_threshold: float value for minimum probability threshold for data inclusion; data below this
+        threshold will be classed as noise (Optional)
+        :return: Updated child populations with events indexing complete
+        """
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
             return self.child_populations
