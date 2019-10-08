@@ -24,13 +24,27 @@ class Gate:
         :param y: name of Y dimension (optional)
         :param child_populations: ChildPopulationCollection (see docs)
         """
-        self.data = data
+        self.data = data.copy()
         self.x = x
         self.y = y
         self.child_populations = child_populations
         self.error = False
         self.error_msg = None
         self.warnings = list()
+        self.empty_parent = self.__empty_parent()
+
+    def __empty_parent(self):
+        """
+        Test if input data (parent population) is empty. If the population is empty the child population data will
+        be finalised and any gating actions terminated.
+        :return: True if empty, else False.
+        """
+        if self.data.shape[0] == 0:
+            self.warnings.append('No events in parent population!')
+            for name in self.child_populations.populations.keys():
+                self.child_populations.populations[name].update_geom(shape='cluster', x=self.x, y=self.y)
+            return True
+        return False
 
     def unifrom_downsample(self, frac: float):
         """
