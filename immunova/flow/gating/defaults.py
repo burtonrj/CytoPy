@@ -1,94 +1,170 @@
 import numpy as np
 
 
-class Geom(dict):
-    def __init__(self, shape: str or None, x: str, y: str or None, **kwargs):
-        super().__init__()
-        self.shape = shape
-        self.x = x
-        self.y = y
-        for k, v in kwargs.items():
-            self[k] = v
+class ChildPopulationCollection:
+    """
+    Collection of child populations. This is the standard input handed to the Gate object prior to gating. It defines
+    the expected output of the operation.
 
-    def as_dict(self):
-        self.update({'shape': self.shape, 'x': self.x, 'y': self.y})
-        return self
-
-
-class GateOutput:
-    def __init__(self):
-        self.child_populations = dict()
-        self.warnings = list()
-        self.error = False
-        self.error_msg = None
-
-    def log_error(self, msg):
-        self.error = True
-        self.error_msg = msg
-
-    def add_child(self, name: str, idx: np.array, geom: Geom or None = None, merge_options='merge'):
-        if name in self.child_populations.keys():
-            if merge_options == 'overwrite':
-                self.child_populations.pop(name)
-            else:
-                self.child_populations['name']['index'] = np.concatenate(self.child_populations['name']['index'], idx)
-                return None
-        self.child_populations[name] = dict(index=idx, geom=geom)
-
-#class ChildPopulationCollection:
-#    def __init__(self):
-
-class ChildPopulation:
-    def __init__(self, name: str, gate_type, **kwargs):
+    Attributes:
+        - gate_type: the gate type of the intended gate to generate this child population. Must be one of:
+            'threshold', 'cluster', 'geom'.
+        - populations: dictionary of populations belonging to collection
+    Methods:
+        - add_population: add a population to the collection
+        - remove_population: remove a population from the collection
+    """
+    def __init__(self, gate_type):
         """
-        Constructor for ChildPopulation
-        :param name: name of the population
+        Constructor for child population collection
         :param gate_type: the gate type of the intended gate to generate this child population. Must be one of:
-        'threshold', 'cluster', 'geom'.
-        :param kwargs: arguments for population definition. Will differ depending on gate type:
-        threshold:
-            - definition: one of ['+', '-','++', '--', '-+', '-+']. Defines how the population is identified in respect
-            to the gate's resulting threshold(s)
-        cluster:
-            - target: 2d coordinate of expected population medoid
-            - weight: integer value for populations ranked priority (used in case of merged populations)
-        geom:
-            - definition: one of ['+', '-']. Defines how the population is identified in respect
-            to the gate's resulting geom
-        """
-        self.name = name
-        self.gate_type = gate_type
-        self.__validate_input(gate_type, **kwargs)
-
-    def __validate_input(self, gate_type, **kwargs) -> None:
-        """
-        Internal method. Called on init to validate input for child population defintion. If valid, kwargs will
-        population the properties attribute of this child population. If invalid an AssertationError will be generated.
-        :param gate_type: the gate type of the intended gate to generate this child population. Must be one of:
-        'threshold', 'cluster', 'geom'.
-        :param kwargs: arguments for population definition
-        :return: None
+            'threshold', 'cluster', 'geom'.
         """
         try:
-            def check_keys(keys):
-                for _, x_ in kwargs.items():
-                    assert x_.keys() == set(keys)
-            if gate_type == 'threshold':
-                check_keys(['definition'])
-                assert kwargs['definition'] in ['++', '--', '-+', '-+', '-', '+']
-            if gate_type == 'cluster':
-                check_keys(['target', 'weight'])
-                assert len(kwargs['target']) == 2
-                assert len(kwargs['weight']) == 1
-                assert all([isinstance(x, int) or isinstance(x, float) for x in kwargs['target']])
-                assert all([isinstance(x, int) or isinstance(x, float) for x in kwargs['weight']])
-            if gate_type == 'geom':
-                check_keys(['definition'])
-                assert kwargs['definition'] in ['-', '+']
-            self.properties = {k: v for k, v in kwargs}
+            assert gate_type in ['threshold', 'cluster', 'geom']
+            self.gate_type = gate_type
         except AssertionError:
-            print(f'Invalid input for child population construction for gate type {gate_type}')
+            print('Invalid gate type, must be one of: threshold, cluster, geom')
+        self.populations = dict()
 
+    class ChildPopulation:
+        def __init__(self, gate_type, **kwargs):
+            """
+            Constructor for ChildPopulation
+            :param name: name of the population
+            :param gate_type: the gate type of the intended gate to generate this child population. Must be one of:
+            'threshold', 'cluster', 'geom'.
+            :param kwargs: arguments for population definition. Will differ depending on gate type:
+            threshold:
+                - definition: one of ['+', '-','++', '--', '-+', '-+']. Defines how the population is identified in respect
+                to the gate's resulting threshold(s)
+            cluster:
+                - target: 2d coordinate of expected population medoid
+                - weight: integer value for populations ranked priority (used in case of merged populations)
+            geom:
+                - definition: one of ['+', '-']. Defines how the population is identified in respect
+                to the gate's resulting geom
+            """
+            self.gate_type = gate_type
+            self.__validate_input(gate_type, **kwargs)
+            self.index = np.array([])
+            self.geom = None
 
+        def update_index(self, idx: np.array, merge_options: str = 'merge') -> None:
+            """
+            Update the index values of this population
+            :param idx: index values corresponding to events data
+            :param merge_options: how to handle existing data; either overwrite or merge
+            :return: None
+            """
+            if merge_options == 'overwrite':
+                self.index = idx
+            elif merge_options == 'merge':
+                self.index = np.concatenate(self.index, idx)
+            else:
+                print('Invalid input for merge_options, must be one of: merge, overwrite')
 
+        def update_geom(self, x: str, shape: str or None = None, y: str or None = None, **kwargs):
+            """
+            Update geom associated to this child population instance
+            :param shape: type of shape generated, current valid inputs are: ellipse, rect, threshold, 2d_threshold
+            :param x: name of X dimension
+            :param y: name of Y dimension (optional)
+            :param kwargs: other parameters that describe this geometric object
+            :return: None
+            """
+            self.geom = self.Geom(shape, x, y, **kwargs)
+
+        def __validate_input(self, gate_type, **kwargs) -> None:
+            """
+            Internal method. Called on init to validate input for child population defintion. If valid, kwargs will
+            population the properties attribute of this child population. If invalid an AssertationError will be generated.
+            :param gate_type: the gate type of the intended gate to generate this child population. Must be one of:
+            'threshold', 'cluster', 'geom'.
+            :param kwargs: arguments for population definition
+            :return: None
+            """
+            try:
+                def check_keys(keys):
+                    for _, x_ in kwargs.items():
+                        assert x_.keys() == set(keys)
+                if gate_type == 'threshold':
+                    check_keys(['definition'])
+                    assert kwargs['definition'] in ['++', '--', '-+', '-+', '-', '+']
+                if gate_type == 'cluster':
+                    check_keys(['target', 'weight'])
+                    assert len(kwargs['target']) == 2
+                    assert len(kwargs['weight']) == 1
+                    assert all([isinstance(x, int) or isinstance(x, float) for x in kwargs['target']])
+                    assert all([isinstance(x, int) or isinstance(x, float) for x in kwargs['weight']])
+                if gate_type == 'geom':
+                    check_keys(['definition'])
+                    assert kwargs['definition'] in ['-', '+']
+                self.properties = {k: v for k, v in kwargs}
+            except AssertionError:
+                print(f'Invalid input for child population construction for gate type {gate_type}')
+
+        class Geom(dict):
+            """
+            Default definition for geometric object defining a population
+            """
+            def __init__(self, shape: str or None, x: str, y: str or None, **kwargs):
+                """
+                Constructor class for geometric object
+                :param shape: type of shape generated, current valid inputs are: ellipse, rect, threshold, 2d_threshold,
+                or None
+                :param x: name of X dimension
+                :param y: name of Y dimension (optional)
+                :param kwargs: other parameters that describe this geometric object
+                """
+                super().__init__()
+                try:
+                    assert shape in ['ellipse', 'rect', 'threshold', '2d_threshold', None]
+                    self.shape = shape
+                except AssertionError:
+                    print('Invalid shape, must be one of: ellipse, rect, threshold, 2d_threshold')
+                self.x = x
+                self.y = y
+                for k, v in kwargs.items():
+                    self[k] = v
+
+            def as_dict(self) -> dict:
+                """
+                Convert object to base class dictionary
+                :return: dictionary of geometric object properties
+                """
+                self.update({'shape': self.shape, 'x': self.x, 'y': self.y})
+                return self
+
+    def add_population(self, name: str, **kwargs) -> None:
+        """
+        Add a new population to this collection
+        :param name: name of the population
+        :param kwargs: arguments for population definition. Will differ depending on gate type:
+            threshold:
+                - definition: one of ['+', '-','++', '--', '-+', '-+']. Defines how the population is identified in respect
+                to the gate's resulting threshold(s)
+            cluster:
+                - target: 2d coordinate of expected population medoid
+                - weight: integer value for populations ranked priority (used in case of merged populations)
+            geom:
+                - definition: one of ['+', '-']. Defines how the population is identified in respect
+                to the gate's resulting geom
+        :return: None
+        """
+        if name in self.populations.keys():
+            print(f'Error: a population with name {name} has already been associated to this '
+                  f'ChildPopulationCollection')
+            return None
+        self.populations[name] = self.ChildPopulation(name=name, gate_type=self.gate_type, **kwargs)
+
+    def remove_population(self, name: str) -> None:
+        """
+        Remove population from collection
+        :param name: name of population to remove
+        :return: None
+        """
+        if name not in self.populations.keys():
+            print(f'Error: population {name} does not exist')
+        self.populations.pop(name)
 
