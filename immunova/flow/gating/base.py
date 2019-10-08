@@ -5,6 +5,10 @@ import pandas as pd
 import numpy as np
 
 
+class GateError(Exception):
+    pass
+
+
 class Gate:
     """
     Base class for gate definition.
@@ -28,8 +32,6 @@ class Gate:
         self.x = x
         self.y = y
         self.child_populations = child_populations
-        self.error = False
-        self.error_msg = None
         self.warnings = list()
         self.empty_parent = self.__empty_parent()
 

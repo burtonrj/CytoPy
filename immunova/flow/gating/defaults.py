@@ -21,7 +21,7 @@ class ChildPopulationCollection:
             'threshold', 'cluster', 'geom'.
         """
         try:
-            assert gate_type in ['threshold', 'cluster', 'geom']
+            assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom']
             self.gate_type = gate_type
         except AssertionError:
             print('Invalid gate type, must be one of: threshold, cluster, geom')
@@ -88,18 +88,21 @@ class ChildPopulationCollection:
                 def check_keys(keys):
                     for _, x_ in kwargs.items():
                         assert x_.keys() == set(keys)
-                if gate_type == 'threshold':
+                if gate_type == 'threshold_1d' or gate_type == 'geom':
                     check_keys(['definition'])
-                    assert kwargs['definition'] in ['++', '--', '-+', '-+', '-', '+']
+                    assert kwargs['definition'] in ['-', '+']
+                if gate_type == 'threshold_2d':
+                    check_keys(['definition'])
+                    if type(kwargs['definition']) == list:
+                        assert all([x in ['++', '--', '-+', '-+'] for x in kwargs['definition']])
+                    else:
+                        assert kwargs['definition'] in ['++', '--', '-+', '-+']
                 if gate_type == 'cluster':
                     check_keys(['target', 'weight'])
                     assert len(kwargs['target']) == 2
                     assert len(kwargs['weight']) == 1
                     assert all([isinstance(x, int) or isinstance(x, float) for x in kwargs['target']])
                     assert all([isinstance(x, int) or isinstance(x, float) for x in kwargs['weight']])
-                if gate_type == 'geom':
-                    check_keys(['definition'])
-                    assert kwargs['definition'] in ['-', '+']
                 self.properties = {k: v for k, v in kwargs}
             except AssertionError:
                 print(f'Invalid input for child population construction for gate type {gate_type}')
@@ -156,6 +159,19 @@ class ChildPopulationCollection:
             print(f'Error: a population with name {name} has already been associated to this '
                   f'ChildPopulationCollection')
             return None
+        if self.gate_type == 'threshold_1d' or self.gate_type == 'threshold_2d':
+            try:
+                current_definitions = list()
+                for _, d in self.populations.items():
+                    if type(d.properties['definition']) == list:
+                        current_definitions = current_definitions + d.properties['definition']
+                    else:
+                        current_definitions.append(d.properties['definition'])
+                if any([kwargs['definition'] == x for x in current_definitions]):
+                    print(f"Error: definition {kwargs['definition']} has already been assigned to a population "
+                          f"in this collection")
+            except KeyError:
+                print(f'Invalid input for child population construction for gate type {self.gate_type}')
         self.populations[name] = self.ChildPopulation(name=name, gate_type=self.gate_type, **kwargs)
 
     def remove_population(self, name: str) -> None:
@@ -167,4 +183,14 @@ class ChildPopulationCollection:
         if name not in self.populations.keys():
             print(f'Error: population {name} does not exist')
         self.populations.pop(name)
+
+    def fetch_by_definition(self, definition):
+        for name, d in self.populations.items():
+            if type(d.properties['definition']) == list:
+                if definition in d.properties['definition']:
+                    return name
+            else:
+                if definition == d.properties['definition']:
+                    return name
+        return None
 

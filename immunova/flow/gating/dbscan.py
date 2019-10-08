@@ -32,7 +32,7 @@ class DensityBasedClustering(Gate):
         :param density_downsample_kwargs: arguments to pass to density dependent down-sampling function (if method
         is 'uniform' leave value as None)
         """
-        super(DensityBasedClustering, self).__init__(data=data, x=x, y=y, child_populations=child_populations)
+        super().__init__(data=data, x=x, y=y, child_populations=child_populations)
         self.sample = None
         self.nn = nn
         self.min_pop_size = min_pop_size
@@ -67,9 +67,9 @@ class DensityBasedClustering(Gate):
 
         # Cluster!
         model = DBSCAN(eps=distance_nn,
-                        min_samples=self.min_pop_size,
-                        algorithm='ball_tree',
-                        n_jobs=-1)
+                       min_samples=self.min_pop_size,
+                       algorithm='ball_tree',
+                       n_jobs=-1)
         if self.sample is not None:
             model.fit(self.sample[[self.x, self.y]])
         else:
