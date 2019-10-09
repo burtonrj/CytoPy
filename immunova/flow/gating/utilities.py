@@ -1,7 +1,8 @@
-import numpy as np
-import pandas as pd
-from sklearn.neighbors import KernelDensity
+from immunova.flow.gating.base import GateError
 from flowutils.transforms import logicle, hyperlog, log_transform, asinh
+from sklearn.neighbors import KernelDensity
+import pandas as pd
+import numpy as np
 
 
 def check_peak(peaks: np.array, probs: np.array, t=0.01) -> np.array:
@@ -135,7 +136,7 @@ def rectangular_filter(data: pd.DataFrame, x: str, y: str, definition: dict) -> 
     :return: filtered pandas dataframe
     """
     if not all([x in ['xmin', 'xmax', 'ymin', 'ymax'] for x in definition.keys()]):
-        return 'Error: invalid definition; must be dict with keys: xmin, xmax, ymin, ymax'
+        raise GateError('Invalid definition for rectangular filter; must be dict with keys: xmin, xmax, ymin, ymax')
     data = data[(data[x] >= definition['xmin']) & (data[x] <= definition['xmax'])]
     data = data[(data[y] >= definition['ymin']) & (data[y] <= definition['ymax'])]
     return data

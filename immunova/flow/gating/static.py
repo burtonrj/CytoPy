@@ -1,5 +1,6 @@
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.base import Gate, GateError
+from immunova.flow.gating.utilities import rectangular_filter
 import pandas as pd
 
 
@@ -27,8 +28,10 @@ class Static(Gate):
         :param y_max: top y coordinate
         :return: Updated child populations
         """
-        pos_pop = self.data[(self.data[self.x] >= x_min) & (self.data[self.x] <= x_max)]
-        pos_pop = pos_pop[(pos_pop[self.y] >= y_min) & (pos_pop[self.y] <= y_max)]
+        if self.y is None:
+            raise GateError('For a rectangular filter gate a value for `y` must be given')
+        pos_pop = rectangular_filter(self.data, self.x, self.y,
+                                     {'xmin': x_min, 'xmax': x_max, 'ymin': y_min, 'ymax': y_max})
         neg_pop = self.data[~self.data.index.isin(pos_pop.index.values)]
         neg = self.child_populations.fetch_by_definition('-')
         pos = self.child_populations.fetch_by_definition('+')
