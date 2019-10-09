@@ -9,6 +9,7 @@ from immunova.flow.gating.fmo import FMOGate
 from immunova.flow.gating.density import DensityThreshold
 from immunova.flow.gating.dbscan import DensityBasedClustering
 from immunova.flow.gating.quantile import Quantile
+from immunova.flow.gating.mixturemodel import MixtureModel
 from immunova.flow.gating.utilities import inside_ellipse
 from immunova.flow.gating.defaults import ChildPopulationCollection
 # Housekeeping
@@ -50,17 +51,16 @@ class Gating:
                     self.populations[p.population_name] = p.to_python()
             else:
                 root = dict(population_name='root', prop_of_parent=1.0, prop_of_total=1.0,
-                            warnings=[], parent='NA', children=[], geom=Geom(shape=None, x='FSC-A', y='SSC-A'),
+                            warnings=[], parent='NA', children=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'),
                             index=self.data.index.values)
                 self.populations['root'] = root
         except AssertionError:
             print('Error: failed to construct Gating object')
 
     @property
-    def gating_functions(self):
-        available_functions = [rect_gate, density_gate_1d, density_1d_fmo, density_2d_fmo,
-                               mm_gate, dbscan_gate, quantile_gate]
-        return {x.__name__: x for x in available_functions}
+    def gating_classes(self):
+        available_classes = [Static, FMOGate, DensityBasedClustering, DensityThreshold, Quantile, MixtureModel]
+        return {x.__name__: x for x in available_classes}
 
     def get_population_df(self, population_name: str) -> pd.DataFrame or None:
         """
@@ -74,74 +74,52 @@ class Gating:
         idx = self.populations[population_name]['index']
         return self.data.loc[idx]
 
-    def knn_fmo(self, population_to_excerpt, fmo):
-        """
-        Using the gated population in the whole panel, create a nearest neighbours model
-        to predict the labels of FMO data
-        :param population_to_excerpt:
-        :param fmo:
-        :return:
-        """
-        # Get Data
-        if f'{self.id}_{fmo}' != fmo:
-            fmo = f'{self.id}_{fmo}'
-        parent = self.populations[population_to_excerpt]['parent']
-        xf = self.populations[population_to_excerpt]['geom'].x
-        yf = self.populations[population_to_excerpt]['geom'].y
-        parent_data = self.get_population_df(parent).copy()
-        parent_data['pos'] = 0
-        # Label data
-        true_labels = self.get_population_df(population_to_excerpt).index.values
-        for i in true_labels:
-            parent_data.set_value(i, 'pos', 1)
-        features = [xf, yf]
-        X = parent_data[features]
-        y = parent_data['pos']
-        # Resample for class imbalance
-        ros = RandomOverSampler(random_state=42)
-        X_resampled, y_resampled = ros.fit_resample(X, y)
-        knn = KNeighborsClassifier()
-        knn.fit(X_resampled, y_resampled)
-        fmo_data = self.fmo[fmo]
-        x = knn.predict(fmo_data[features])
-        fmo_data['pos'] = x
-        return fmo_data[fmo_data['pos'] == 1].sample(X.shape[0])
+    # ToDO knn_fmo
+    def knn_fmo(self):
+        pass
 
     @staticmethod
-    def __check_func_args(func, **kwargs):
-        expected_args = [k for k, v in inspect.signature(func).parameters.items()
-                         if v.default is inspect.Parameter.empty]
-        for arg in expected_args:
-            if arg == 'data':
-                continue
-            if arg not in kwargs.keys():
-                print(f'Error: missing required argument {arg} for gating function {func.__name__}')
-                return False
-        return True
+    def __check_class_args(klass, method, **kwargs):
+        try:
+            klass_args = [k for k, v in inspect.signature(klass).parameters.items()
+                          if v.default is inspect.Parameter.empty]
+            for arg in klass_args:
+                if arg in ['data']:
+                    continue
+                if arg not in kwargs.keys():
+                    print(f'Error: missing required class constructor argument {arg} '
+                          f'for gating class {klass.__name__}')
+                    return False
+            method_args = [k for k, v in inspect.signature(getattr(klass, method)).parameters.items()
+                           if v.default is inspect.Parameter.empty]
+            for arg in method_args:
+                if arg not in kwargs.keys():
+                    print(f'Error: missing required method argument {arg} for method '
+                          f'{method} belonging to {klass.__name__}')
+                    return False
+            return True
+        except AttributeError:
+            print(f'Error: {method} is not a valid method for class {klass.__name__}')
+            return False
 
-    def create_gate(self, gate_name, parent, x, func, func_args, gate_type, child_populations: dict, y=None):
+    def create_gate(self, gate_name: str, parent: str, class_: str, method: str, kwargs: dict,
+                    child_populations: ChildPopulationCollection):
         if gate_name in self.gates.keys():
             print(f'Error: gate with name {gate_name} already exists.')
             return False
-        if not validate_child_populations(child_populations, gate_type):
-            print('Error: invalid child_populations definition')
+        if class_ not in self.gating_classes:
+            print(f'Error: invalid gate class, must be one of {self.gating_classes}')
             return False
-        func_args['x'] = x
-        if y:
-            func_args['y'] = y
-        if func not in self.gating_functions:
-            print(f'Error: invalid gate function, must be one of {self.gating_functions}')
+        kwargs['child_populations'] = child_populations
+        if not self.__check_class_args(self.gating_classes[class_], method, **kwargs):
             return False
-        func_args['child_populations'] = child_populations
-        if not self.__check_func_args(self.gating_functions[func], **func_args):
-            return False
-        func_args = [(k, v) for k, v in func_args.items()]
-        new_gate = Gate(gate_name=gate_name, children=list(child_populations.keys()), parent=parent,
-                        x=x, y=y, func=func, func_args=func_args, gate_type=gate_type)
+        kwargs = [(k, v) for k, v in kwargs.items()]
+        new_gate = Gate(gate_name=gate_name, children=list(child_populations.populations.keys()), parent=parent,
+                        method=method, kwargs=kwargs, class_=class_)
         self.gates[gate_name] = new_gate
         return True
 
-    def apply(self, gate_name: str, plot_output: bool = True):
+    def __apply_checks(self, gate_name):
         if gate_name not in self.gates.keys():
             print(f'Error: {gate_name} does not exist. You must create this gate first using the create_gate method')
             return None
@@ -154,50 +132,34 @@ class Gating:
                 print(f'Error: population {c} already exists, if you wish to overwrite this population please remove'
                       f' it with the remove_population method and then try again')
                 return None
+        return gate
 
-        kwargs = {k: v for k, v in gate.func_args}
-        if any([x in ['fmo_x', 'fmo_y'] for x in kwargs.keys()]):
-            return self.__apply_fmo_gate(gate, kwargs, plot=plot_output)
-        else:
-            func = self.gating_functions[gate.func]
-            parent_population = self.get_population_df(gate.parent)
-            output = func(data=parent_population, **kwargs)
-            output = self.__process_gate_output(output, parent=parent_population, gate=gate)
-            if output:
-                if plot_output:
-                    self.plot_gate(gate.gate_name)
-                return output
-            return None
-
-    def __apply_fmo_gate(self, gate, kwargs, plot):
-        names = dict(fmo_x=None, fmo_y=None)
-        for fmo_k in ['fmo_x', 'fmo_y']:
-            if fmo_k in kwargs.keys():
-                names[fmo_k] = kwargs[fmo_k]
-                if kwargs[fmo_k] in self.fmo.keys():
-                    kwargs[fmo_k] = self.knn_fmo(gate.parent, kwargs[fmo_k])
-                else:
-                    kwargs[fmo_k] = pd.DataFrame()
-        func = self.gating_functions[gate.func]
+    def __construct_class_and_gate(self, gate, kwargs):
+        klass = self.gating_classes[gate.class_]
         parent_population = self.get_population_df(gate.parent)
-        if parent_population.shape[0] > 0:
-            output = func(parent_population, **kwargs)
-        else:
-            # If parent is empty create empty children
-            output = GateOutput()
-            output.warnings.append('No events in parent population!')
-            for c in gate.children:
-                output.add_child(name=c, idx=np.array([]), geom=None)
-        output = self.__process_gate_output(output, parent=parent_population, gate=gate)
-        if not output:
-            return
-        if plot:
-            self.plot_gate(gate_name=gate.gate_name)
+        constructor_args = {k: v for k, v in kwargs if k in inspect.signature(klass).parameters.keys()}
+        method_args = {k: v for k, v in kwargs if k in inspect.signature(getattr(klass, gate.method)).parameters.keys()}
+        analyst = klass(data=parent_population, **constructor_args)
+        output = getattr(analyst, gate.method)(**method_args)
+        return self.__update_populations(output, parent=parent_population, gate=gate)
 
-    def __process_gate_output(self, output: GateOutput, gate: Gate, parent: pd.DataFrame):
-        if output.error:
-            print(output.error_msg)
+    def apply(self, gate_name: str, plot_output: bool = True):
+        gate = self.__apply_checks(gate_name)
+        if gate is None:
             return None
+        kwargs = {k: v for k, v in gate.kwargs}
+        if not any([x in ['fmo_x', 'fmo_y'] for x in kwargs.keys()]):
+            print('FMO gating requires that you specify an FMO')
+            return None
+        if 'fmo_x' in kwargs.keys():
+            kwargs['fmo_x'] = self.knn_fmo(kwargs['fmo_x'], gate.parent)
+        if 'fmo_y' in kwargs.keys():
+            kwargs['fmo_y'] = self.knn_fmo(kwargs['fmo_y'], gate.parent)
+        output = self.__construct_class_and_gate(gate, kwargs)
+        # ToDo call plotting class
+
+    def __update_populations(self, output: ChildPopulationCollection, gate: Gate, parent: pd.DataFrame):
+
         for name, data in output.child_populations.items():
             # Check gate type corresponds to output
             if gate.gate_type in ['geom', 'threshold'] and data['geom'] is None:

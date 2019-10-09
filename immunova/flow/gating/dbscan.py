@@ -42,7 +42,7 @@ class DensityBasedClustering(Gate):
     def knn_model(self):
         return KNeighborsClassifier(n_neighbors=self.nn, weights='distance', n_jobs=-1)
 
-    def dbscan(self, distance_nn: int, core_only: bool = False,):
+    def dbscan(self, distance_nn: int, core_only: bool = False):
         """
         Perform gating with dbscan algorithm
         :param distance_nn: nearest neighbour distance (smaller value will create tighter clusters)
