@@ -1,50 +1,42 @@
+# Dependencies
+# Immunova.data
 from immunova.data.gating import Gate, GatingStrategy
 from immunova.data.fcs import FileGroup, Population
 from immunova.data.fcs_experiments import FCSExperiment
-from immunova.flow.gating.static import rect_gate
-from immunova.flow.gating.fmo import density_2d_fmo, density_1d_fmo
-from immunova.flow.gating.density import density_gate_1d
-from immunova.flow.gating.mixturemodel import mm_gate, inside_ellipse
-from immunova.flow.gating.dbscan import dbscan_gate
-from immunova.flow.gating.quantile import quantile_gate
-from immunova.flow.gating.utilities import apply_transform, validate_child_populations
-from immunova.flow.gating.defaults import Geom, GateOutput
+# Immunova.flow
+from immunova.flow.gating.static import Static
+from immunova.flow.gating.fmo import FMOGate
+from immunova.flow.gating.density import DensityThreshold
+from immunova.flow.gating.dbscan import DensityBasedClustering
+from immunova.flow.gating.quantile import Quantile
+from immunova.flow.gating.utilities import inside_ellipse
+from immunova.flow.gating.defaults import ChildPopulationCollection
+# Housekeeping
 from datetime import datetime
+from itertools import cycle
+import inspect
+# Matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib import patches
+# Scipy
 from sklearn.neighbors import KNeighborsClassifier
 from imblearn.over_sampling import RandomOverSampler
-import numpy as np
 import pandas as pd
-import inspect
-from itertools import cycle
+import numpy as np
 
 
 class Gating:
     def __init__(self, experiment: FCSExperiment, sample_id: str, transformation: str or None = "logicle",
                  transform_channels: list or None = None, data_type='raw', sample: int or None = None):
         try:
-            data, mappings = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample)
-            assert data
-            primary = [x for x in data if x['typ'] == 'complete'][0]
-            controls = [x for x in data if x['typ'] == 'control']
+            data = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample)
+            assert data is not None
+            self.data = primary = [x for x in data if x['typ'] == 'complete'][0]
+            self.fmo = controls = [x for x in data if x['typ'] == 'control']
             fg = FileGroup.objects(primary_id=sample_id)[0]
-            self.mappings = mappings
             self.id = sample_id
             self.experiment_id = experiment.experiment_id
-
-            if transformation:
-                if not transform_channels:
-                    transform_channels = [x for x in primary['data'].columns if
-                                          all([x.find(y) == -1 for y in ['FSC', 'SSC', 'Time']])]
-                self.data = apply_transform(primary['data'].copy(), features_to_transform=transform_channels,
-                                            transform_method=transformation)
-                self.fmo = {x['id']: apply_transform(x['data'], features_to_transform=transform_channels,
-                                                     transform_method=transformation) for x in controls}
-            else:
-                self.data = primary['data']
-                self.fmo = {x['id']: x['data'] for x in controls}
             del data
 
             self.gates = dict()

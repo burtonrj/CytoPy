@@ -43,6 +43,7 @@ class ChannelMap(mongoengine.EmbeddedDocument):
         """
         return {'channel': self.channel, 'marker': self.marker}
 
+
 class NormalisedName(mongoengine.EmbeddedDocument):
     """
     Embedded document -> Panel
