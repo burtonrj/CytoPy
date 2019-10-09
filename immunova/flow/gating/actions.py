@@ -1,9 +1,10 @@
 # Dependencies
 # Immunova.data
-from immunova.data.gating import Gate, GatingStrategy
+from immunova.data.gating import Gate as DataGate, GatingStrategy
 from immunova.data.fcs import FileGroup, Population
 from immunova.data.fcs_experiments import FCSExperiment
 # Immunova.flow
+from immunova.flow.gating.base import Gate
 from immunova.flow.gating.static import Static
 from immunova.flow.gating.fmo import FMOGate
 from immunova.flow.gating.density import DensityThreshold
@@ -12,7 +13,8 @@ from immunova.flow.gating.quantile import Quantile
 from immunova.flow.gating.mixturemodel import MixtureModel
 from immunova.flow.gating.utilities import inside_ellipse
 from immunova.flow.gating.defaults import ChildPopulationCollection
-# Housekeeping
+# Housekeeping and other tools
+from anytree import Node, RenderTree
 from datetime import datetime
 from itertools import cycle
 import inspect
@@ -28,13 +30,13 @@ import numpy as np
 
 
 class Gating:
-    def __init__(self, experiment: FCSExperiment, sample_id: str, transformation: str or None = "logicle",
-                 transform_channels: list or None = None, data_type='raw', sample: int or None = None):
+    def __init__(self, experiment: FCSExperiment, sample_id: str,
+                 data_type='raw', sample: int or None = None):
         try:
             data = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample)
             assert data is not None
-            self.data = primary = [x for x in data if x['typ'] == 'complete'][0]
-            self.fmo = controls = [x for x in data if x['typ'] == 'control']
+            self.data = [x for x in data if x['typ'] == 'complete'][0]
+            self.fmo = [x for x in data if x['typ'] == 'control']
             fg = FileGroup.objects(primary_id=sample_id)[0]
             self.id = sample_id
             self.experiment_id = experiment.experiment_id
@@ -54,6 +56,9 @@ class Gating:
                             warnings=[], parent='NA', children=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'),
                             index=self.data.index.values)
                 self.populations['root'] = root
+
+            self.population_tree = list()
+            for name in
         except AssertionError:
             print('Error: failed to construct Gating object')
 
@@ -114,8 +119,8 @@ class Gating:
         if not self.__check_class_args(self.gating_classes[class_], method, **kwargs):
             return False
         kwargs = [(k, v) for k, v in kwargs.items()]
-        new_gate = Gate(gate_name=gate_name, children=list(child_populations.populations.keys()), parent=parent,
-                        method=method, kwargs=kwargs, class_=class_)
+        new_gate = DataGate(gate_name=gate_name, children=list(child_populations.populations.keys()), parent=parent,
+                            method=method, kwargs=kwargs, class_=class_)
         self.gates[gate_name] = new_gate
         return True
 
@@ -123,61 +128,60 @@ class Gating:
         if gate_name not in self.gates.keys():
             print(f'Error: {gate_name} does not exist. You must create this gate first using the create_gate method')
             return None
-        gate = self.gates[gate_name]
-        if gate.parent not in self.populations.keys():
+        gatedoc = self.gates[gate_name]
+        if gatedoc.parent not in self.populations.keys():
             print('Invalid parent; does not exist in current Gating object')
             return None
-        for c in gate.children:
+        for c in gatedoc.children:
             if c in self.populations.keys():
                 print(f'Error: population {c} already exists, if you wish to overwrite this population please remove'
                       f' it with the remove_population method and then try again')
                 return None
-        return gate
+        return gatedoc
 
-    def __construct_class_and_gate(self, gate, kwargs):
-        klass = self.gating_classes[gate.class_]
-        parent_population = self.get_population_df(gate.parent)
+    def __construct_class_and_gate(self, gatedoc, kwargs):
+        klass = self.gating_classes[gatedoc.class_]
+        parent_population = self.get_population_df(gatedoc.parent)
         constructor_args = {k: v for k, v in kwargs if k in inspect.signature(klass).parameters.keys()}
-        method_args = {k: v for k, v in kwargs if k in inspect.signature(getattr(klass, gate.method)).parameters.keys()}
+        method_args = {k: v for k, v in kwargs if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
         analyst = klass(data=parent_population, **constructor_args)
-        output = getattr(analyst, gate.method)(**method_args)
-        return self.__update_populations(output, parent=parent_population, gate=gate)
+        output = getattr(analyst, gatedoc.method)(**method_args)
+        return self.__update_populations(output, parent=parent_population, warnings=analyst.warnings)
 
     def apply(self, gate_name: str, plot_output: bool = True):
-        gate = self.__apply_checks(gate_name)
-        if gate is None:
+        gatedoc = self.__apply_checks(gate_name)
+        if gatedoc is None:
             return None
-        kwargs = {k: v for k, v in gate.kwargs}
+        kwargs = {k: v for k, v in gatedoc.kwargs}
         if not any([x in ['fmo_x', 'fmo_y'] for x in kwargs.keys()]):
             print('FMO gating requires that you specify an FMO')
             return None
         if 'fmo_x' in kwargs.keys():
-            kwargs['fmo_x'] = self.knn_fmo(kwargs['fmo_x'], gate.parent)
+            kwargs['fmo_x'] = self.knn_fmo(kwargs['fmo_x'], gatedoc.parent)
         if 'fmo_y' in kwargs.keys():
-            kwargs['fmo_y'] = self.knn_fmo(kwargs['fmo_y'], gate.parent)
-        output = self.__construct_class_and_gate(gate, kwargs)
+            kwargs['fmo_y'] = self.knn_fmo(kwargs['fmo_y'], gatedoc.parent)
+        output = self.__construct_class_and_gate(gatedoc, kwargs)
         # ToDo call plotting class
 
-    def __update_populations(self, output: ChildPopulationCollection, gate: Gate, parent: pd.DataFrame):
+    def __update_populations(self, output: ChildPopulationCollection, parent: pd.DataFrame, warnings: list):
 
-        for name, data in output.child_populations.items():
-            # Check gate type corresponds to output
-            if gate.gate_type in ['geom', 'threshold'] and data['geom'] is None:
-                print(f'Error: Geom gate returning null value for child population ({name}) geom')
-                return None
-            n = len(data['index'])
+        for name, population in output.populations.items():
+            n = len(population.index)
             if n == 0:
                 prop_of_total = 0
                 prop_of_parent = 0
             else:
                 prop_of_parent = n / parent.shape[0]
                 prop_of_total = n / self.data.shape[0]
-            self.populations[name] = dict(population_name=name, index=data['index'],
+            geom = None
+            if population.geom is not None:
+                geom = population.geom.as_dict()
+            self.populations[name] = dict(population_name=name, index=population.index,
                                           prop_of_parent=prop_of_parent,
                                           prop_of_total=prop_of_total,
-                                          parent=gate.parent, children=[],
-                                          geom=data['geom'], warnings=output.warnings)
-            self.populations[gate.parent]['children'].append(name)
+                                          geom=geom, warnings=warnings)
+
+            # ToDo Update Tree
         return output
 
     def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False, feedback=True):
