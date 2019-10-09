@@ -21,7 +21,7 @@ class ChildPopulationCollection:
             'threshold', 'cluster', 'geom'.
         """
         try:
-            assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom']
+            assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom', None]
             self.gate_type = gate_type
         except AssertionError:
             print('Invalid gate type, must be one of: threshold, cluster, geom')

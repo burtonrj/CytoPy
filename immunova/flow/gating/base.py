@@ -1,4 +1,5 @@
 from immunova.flow.gating.defaults import ChildPopulationCollection
+from immunova.flow.gating.utilities import apply_transform
 from sklearn.neighbors import KDTree
 from functools import partial
 import pandas as pd
@@ -22,7 +23,7 @@ class Gate:
     """
     def __init__(self, data: pd.DataFrame, x: str, y: str or None, child_populations: ChildPopulationCollection,
                  frac: float or None = None, downsample_method: str = 'uniform',
-                 density_downsample_kwargs: dict or None = None):
+                 density_downsample_kwargs: dict or None = None, transformation: str or None = 'logicle'):
         """
         Constructor for Gate definition
         :param data: pandas dataframe of fcs data for gating
@@ -33,6 +34,11 @@ class Gate:
         self.data = data.copy()
         self.x = x
         self.y = y
+        if transformation is not None:
+            data[self.x] = apply_transform(self.data, features_to_transform=[self.x], transform_method=transformation)
+            if self.y is not None:
+                data[self.y] = apply_transform(self.data, features_to_transform=[self.y],
+                                               transform_method=transformation)
         self.child_populations = child_populations
         self.warnings = list()
         self.empty_parent = self.__empty_parent()
@@ -77,7 +83,7 @@ class Gate:
         if self.data.shape[0] == 0:
             self.warnings.append('No events in parent population!')
             for name in self.child_populations.populations.keys():
-                self.child_populations.populations[name].update_geom(shape='cluster', x=self.x, y=self.y)
+                self.child_populations.populations[name].update_geom(shape=None, x=self.x, y=self.y)
             return True
         return False
 
