@@ -48,7 +48,7 @@ class Gate:
             return True
         return False
 
-    def unifrom_downsample(self, frac: float):
+    def uniform_downsample(self, frac: float):
         """
         Sample associated events data
         :param frac: fraction of dataset to return as a sample

@@ -38,7 +38,7 @@ class DensityBasedClustering(Gate):
         self.min_pop_size = min_pop_size
         if frac:
             if downsample_method == 'uniform':
-                self.sample = self.unifrom_downsample(frac)
+                self.sample = self.uniform_downsample(frac)
             elif downsample_method == 'density':
                 try:
                     assert density_downsample_kwargs
