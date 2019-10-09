@@ -1,43 +1,48 @@
+from immunova.flow.gating.defaults import ChildPopulationCollection
+from immunova.flow.gating.base import Gate, GateError
 import pandas as pd
-import numpy as np
-from immunova.flow.gating.defaults import GateOutput, Geom
 
 
-def quantile_gate(data: pd.DataFrame, x: str,
-                  q: float or list, child_populations: dict, y=None) -> GateOutput:
-    """
-    Quantile gate
-    :param data: parent population upon which the gate is applied
-    :param x: x-axis dimension (string value for corresponding column)
-    :param q: quantile to draw threshold
-    :param y: y-axis dimension (string value for corresponding column) default = None
-    :return: dictionary of gating outputs (see documentation for internal standards)
-    """
-    def add_pop(pop, definition):
-        name = [name for name, x_ in child_populations.items() if x_['definition'] == definition][0]
-        output.add_child(name=name, idx=pop.index.values, geom=geom.as_dict())
-    output = GateOutput()
-    pos_pop = pd.DataFrame()
-    qt = None
-    if q > 1.0:
-        q = q/100.0
-    if not y:
-        qt = data[x].quantile(q, interpolation='nearest')
-        pos_pop = data[data[x] >= qt]
-    if y:
-        if type(q) != list:
-            output.error = 1
-            output.error_msg = 'If 2d gate, q must be of type length e.g. [0.95, 0.95]'
-            return output
-        qt1 = data[x].quantile(q[0], interpolation='nearest')
-        qt2 = data[y].quantile(q[1], interpolation='nearest')
-        pos_pop = data[(data[x] >= qt1) & (data[y] >= qt2)]
-        qt = (qt1, qt2)
-    if len(pos_pop) == 0 or len(pos_pop) == data.shape[0]:
-        output.warnings.append('No events in gate')
+class Quantile(Gate):
+    def __init__(self, data: pd.DataFrame, x: str, child_populations: ChildPopulationCollection,
+                 q: float = 0.95, y: str or None = None):
+        """
+        Perform either 1D or 2D quantile gating
+        :param data: pandas dataframe of fcs data for gating
+        :param x: name of X dimension
+        :param y: name of Y dimension (optional)
+        :param child_populations: ChildPopulationCollection (see docs)
+        :param q: quantile for calculating threshold (float value between 0 and 1)
+        """
+        super().__init__(data=data, x=x, y=y, child_populations=child_populations,
+                         frac=None, downsample_method='uniform',
+                         density_downsample_kwargs=None)
+        self.y = y
+        self.q = q
 
-    geom = Geom(shape='threshold', x=x, y=None, threshold=np.float64(qt), method='quantile')
-    neg_pop = data[~data.index.isin(pos_pop.index.values)]
-    add_pop(pos_pop, '+')
-    add_pop(neg_pop, '-')
-    return output
+    def gate_1d(self):
+        """
+        Perform quantile gating in 1 dimensional space
+        :return: Updated child populations
+        """
+        # If parent is empty just return the child populations with empty index array
+        if self.empty_parent:
+            return self.child_populations
+        threshold = self.data[self.x].quantile(self.q, interpolation='nearest')
+        self.__child_update_1d(threshold, 'Quantile', 'overwrite')
+        return self.child_populations
+
+    def gate_2d(self):
+        """
+        Perform quantile gating in 2 dimensional space
+        :return: Updated child populations
+        """
+        # If parent is empty just return the child populations with empty index array
+        if self.empty_parent:
+            return self.child_populations
+        if self.y is None:
+            raise GateError('Value for `y` cannot be None if performing 2D gating')
+        x_threshold = self.data[self.x].quantile(self.q, interpolation='nearest')
+        y_threshold = self.data[self.y].quantile(self.q, interpolation='nearest')
+        self.__child_update_2d(x_threshold, y_threshold, method='Quantile')
+        return self.child_populations
