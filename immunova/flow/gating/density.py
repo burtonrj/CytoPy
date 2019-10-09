@@ -102,29 +102,6 @@ class DensityThreshold(Gate):
         peaks = self.__find_peaks(probs)
         return self.__evaluate_peaks(data, peaks, probs, xx)
 
-    def __child_update_1d(self, threshold: float, method: str, merge_options: str) -> None:
-        """
-        Internal method. Given a threshold and method generated from 1 dimensional threshold gating, update the objects child
-        population collection.
-        :param threshold: threshold value for gate
-        :param method: method used for generating threshold
-        :param merge_options: must have value of 'overwrite' or 'merge'. Overwrite: existing index values in child
-        populations will be overwritten by the results of the gating algorithm. Merge: index values generated from
-        the gating algorithm will be merged with index values currently associated to child populations
-        :return: None
-        """
-        neg = self.child_populations.fetch_by_definition('-')
-        pos = self.child_populations.fetch_by_definition('+')
-        if neg is None or pos is None:
-            GateError('Invalid ChildPopulationCollection; must contain definitions for - and + populations')
-        pos_pop = self.data[self.data[self.x] > threshold]
-        neg_pop = self.data[self.data[self.x] < threshold]
-        for x in [pos, neg]:
-            self.child_populations.populations[x].update_geom(shape='threshold_1d', x=self.x, y=self.y,
-                                                              method=method)
-        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options=merge_options)
-        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options=merge_options)
-
     def gate_1d(self, merge_options: str = 'overwrite') -> ChildPopulationCollection:
         """
         Perform density based threshold gating in 1 dimensional space
@@ -145,41 +122,6 @@ class DensityThreshold(Gate):
         # Update child populations
         self.__child_update_1d(threshold, method, merge_options)
         return self.child_populations
-
-    def __child_update_2d(self, x_threshold: float, y_threshold: float, method: str) -> None:
-        """
-        Internal method. Given thresholds and method generated from 2 dimensional threshold gating,
-        update the objects child population collection.
-        :param x_threshold: threshold value for gate in x-dimension
-        :param y_threshold: threshold value for gate in y-dimension
-        :param method: method used for generating threshold
-        :return: None
-        """
-        xp_idx = self.data[self.data[self.x] > x_threshold].index.values
-        yp_idx = self.data[self.data[self.y] > y_threshold].index.values
-        xn_idx = self.data[self.data[self.x] < x_threshold].index.values
-        yn_idx = self.data[self.data[self.y] < y_threshold].index.values
-
-        negneg = self.child_populations.fetch_by_definition('--')
-        pospos = self.child_populations.fetch_by_definition('++')
-        posneg = self.child_populations.fetch_by_definition('+-')
-        negpos = self.child_populations.fetch_by_definition('-+')
-
-        if any([x is None for x in [negneg, negpos, posneg, pospos]]):
-            GateError('Invalid ChildPopulationCollection; must contain definitions for --, -+, +-, and ++ populations')
-
-        pos_idx = np.intersect1d(xn_idx, yn_idx)
-        self.child_populations.populations[negneg].update_index(idx=pos_idx, merge_options='merge')
-        pos_idx = np.intersect1d(xp_idx, yp_idx)
-        self.child_populations.populations[pospos].update_index(idx=pos_idx, merge_options='merge')
-        pos_idx = np.intersect1d(xn_idx, yp_idx)
-        self.child_populations.populations[negpos].update_index(idx=pos_idx, merge_options='merge')
-        pos_idx = np.intersect1d(xp_idx, yn_idx)
-        self.child_populations.populations[posneg].update_index(idx=pos_idx, merge_options='merge')
-
-        for x in [negneg, negpos, posneg, pospos]:
-            self.child_populations.populations[x].update_geom(shape='threshold_2d', x=self.x,
-                                                              y=self.y, method=method)
 
     def gate_2d(self) -> ChildPopulationCollection:
         """
