@@ -57,8 +57,10 @@ class Gating:
                 self.populations['root'] = root
 
             self.population_tree = dict()
-            for node in fg.population_tree:
-                self.population_tree[node.name] = Node()
+            self.population_tree['root'] = Node('root', parent=None)
+            if fg.population_tree:
+                for node in fg.population_tree:
+                    self.population_tree[node.name] = Node(node.name, parent=self.population_tree[node.parent])
         except AssertionError:
             print('Error: failed to construct Gating object')
 
@@ -146,7 +148,8 @@ class Gating:
         method_args = {k: v for k, v in kwargs if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
         analyst = klass(data=parent_population, **constructor_args)
         output = getattr(analyst, gatedoc.method)(**method_args)
-        return self.__update_populations(output, parent=parent_population, warnings=analyst.warnings)
+        return self.__update_populations(output, parent_df=parent_population,
+                                         warnings=analyst.warnings, parent_name=gatedoc.parent)
 
     def apply(self, gate_name: str, plot_output: bool = True):
         gatedoc = self.__apply_checks(gate_name)
@@ -163,7 +166,8 @@ class Gating:
         output = self.__construct_class_and_gate(gatedoc, kwargs)
         # ToDo call plotting class
 
-    def __update_populations(self, output: ChildPopulationCollection, parent: pd.DataFrame, warnings: list):
+    def __update_populations(self, output: ChildPopulationCollection, parent_df: pd.DataFrame, warnings: list,
+                             parent_name: str):
 
         for name, population in output.populations.items():
             n = len(population.index)
@@ -171,7 +175,7 @@ class Gating:
                 prop_of_total = 0
                 prop_of_parent = 0
             else:
-                prop_of_parent = n / parent.shape[0]
+                prop_of_parent = n / parent_df.shape[0]
                 prop_of_total = n / self.data.shape[0]
             geom = None
             if population.geom is not None:
@@ -181,7 +185,7 @@ class Gating:
                                           prop_of_total=prop_of_total,
                                           geom=geom, warnings=warnings)
 
-            # ToDo Update Tree
+            self.population_tree[name] = Node(name, parent=parent_name)
         return output
 
     def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False, feedback=True):
