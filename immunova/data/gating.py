@@ -23,15 +23,16 @@ class Gate(mongoengine.EmbeddedDocument):
     gate_name = mongoengine.StringField(required=True)
     children = mongoengine.ListField()
     parent = mongoengine.StringField(required=True)
-    x = mongoengine.StringField(required=True)
-    y = mongoengine.StringField(required=False)
-    func = mongoengine.StringField(required=True)
-    func_args = mongoengine.ListField(required=True)
-    gate_type = mongoengine.StringField(required=True, choices=['geom', 'cluster', 'threshold'])
-    boolean_gate = mongoengine.BooleanField(default=False)
+    class_ = mongoengine.StringField(required=True)
+    method = mongoengine.StringField(required=True)
+    kwargs = mongoengine.ListField(required=True)
     meta = {
         'abstract': True
     }
+
+    def to_python(self):
+        return dict(gate_name=self.gate_name, children=self.children,
+                    class_=self.class_, method=self.method, kwargs=self.kwargs)
 
 
 class GatingStrategy(mongoengine.Document):

@@ -1,5 +1,5 @@
 from immunova.flow.gating.defaults import ChildPopulationCollection
-from immunova.flow.gating.utilities import apply_transform
+from immunova.flow.gating.transforms import apply_transform
 from sklearn.neighbors import KDTree
 from functools import partial
 import pandas as pd
@@ -21,7 +21,7 @@ class Gate:
         - child populations: ChildPopulationCollection (see docs)
         - output: GateOutput object for standard gating output
     """
-    def __init__(self, data: pd.DataFrame, x: str, y: str or None, child_populations: ChildPopulationCollection,
+    def __init__(self, data: pd.DataFrame, x: str, child_populations: ChildPopulationCollection, y: str or None = None,
                  frac: float or None = None, downsample_method: str = 'uniform',
                  density_downsample_kwargs: dict or None = None, transformation: str or None = 'logicle'):
         """

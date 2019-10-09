@@ -1,4 +1,3 @@
-from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.data.fcs_experiments import ChannelMap
 from immunova.data.gating import Gate
 from immunova.data.patient import Patient
@@ -7,7 +6,6 @@ import pandas as pd
 import numpy as np
 import mongoengine
 import pickle
-
 
 
 class Population(mongoengine.EmbeddedDocument):
@@ -51,17 +49,10 @@ class Population(mongoengine.EmbeddedDocument):
 
     def to_python(self):
         geom = {k: v for k, v in self.geom}
-
         population = dict(population_name=self.population_name, prop_of_parent=self.prop_of_parent,
-                          prop_of_total=self.prop_of_total, warnings=self.warnings)
-        if self.population_name == 'root':
-            population['geom'] = Geom(shape='NA', x='FSC-A', y='SSC-A')
-        else:
-            population['geom'] = Geom(**{k: v for k, v in self.geom})
+                          prop_of_total=self.prop_of_total, warnings=self.warnings, geom=geom)
         population['index'] = self.load_index()
         return population
-
-    def
 
 
 class File(mongoengine.EmbeddedDocument):
@@ -181,9 +172,11 @@ class File(mongoengine.EmbeddedDocument):
             mappings = [m.channel for m in self.channel_mappings]
         return pd.DataFrame(matrix, columns=mappings, dtype='float32')
 
+
 class PopNode(mongoengine.EmbeddedDocument):
     name = mongoengine.StringField()
     parent = mongoengine.StringField()
+
 
 class FileGroup(mongoengine.Document):
     """
@@ -204,7 +197,7 @@ class FileGroup(mongoengine.Document):
     notes = mongoengine.StringField(required=False)
     populations = mongoengine.EmbeddedDocumentListField(Population)
     gates = mongoengine.EmbeddedDocumentListField(Gate)
-    gate_tree = mongoengine.EmbeddedDocumentListField(PopNode)
+    population_tree = mongoengine.EmbeddedDocumentListField(PopNode)
     patient = mongoengine.ReferenceField(Patient, reverse_delete_rule=mongoengine.PULL)
     meta = {
         'db_alias': 'core',
