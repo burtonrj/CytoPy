@@ -53,12 +53,12 @@ class Gating:
                     self.populations[p.population_name] = p.to_python()
             else:
                 root = dict(population_name='root', prop_of_parent=1.0, prop_of_total=1.0,
-                            warnings=[], parent='NA', children=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'),
-                            index=self.data.index.values)
+                            warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values)
                 self.populations['root'] = root
 
-            self.population_tree = list()
-            for name in
+            self.population_tree = dict()
+            for node in fg.population_tree:
+                self.population_tree[node.name] = Node()
         except AssertionError:
             print('Error: failed to construct Gating object')
 
