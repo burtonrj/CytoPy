@@ -6,25 +6,30 @@ import pandas as pd
 
 class FMOGate(DensityThreshold):
     def __init__(self, data: pd.DataFrame, x: str, child_populations: ChildPopulationCollection,
-                 fmo_x: pd.DataFrame, fmo_y: pd.DataFrame, y: str or None = None,
+                 fmo_x: pd.DataFrame, fmo_y: pd.DataFrame or None = None, y: str or None = None,
                  kde_bw: float = 0.01, frac: float or None = 0.5, q: float = 0.95,
                  std: float or None = None, z_score_threshold: float = 2,
                  downsample_method: str = 'uniform', density_downsample_kwargs: dict or None = None):
         """
-
-        :param data:
-        :param x:
-        :param child_populations:
-        :param fmo_x:
-        :param fmo_y:
-        :param y:
-        :param kde_bw:
-        :param frac:
-        :param q:
-        :param std:
-        :param z_score_threshold:
-        :param downsample_method:
-        :param density_downsample_kwargs:
+        FMO guided density threshold gating
+        :param data: pandas dataframe of fcs data for gating
+        :param x: name of X dimension
+        :param y: name of Y dimension (optional)
+        :param child_populations: ChildPopulationCollection (see flow.gating.defaults.ChildPopulationCollection)
+        :param fmo_x: pandas dataframe of fcs data for x-dimensional FMO
+        :param fmo_y: pandas dataframe of fcs data for y-dimensional FMO (optional)
+        :param kde_bw: bandwidth for kde calculation
+        :param frac: fraction of dataset to sample for kde calculation (optional)
+        :param q: quantile to use for gating if single population found
+        :param std: standard deviation to use for gating if single population found (threshold calculated as population
+        mean + population standard deviation * std)
+        :param z_score_threshold: when multiple populations are identified in the whole panel sample the FMO gate
+        is used a guide for gating. A normal distribution is fitted to the data, with the mean set as the threshold
+        calculated on the whole panel sample and an std of 1. Using this distribution a z-score is calculated for the
+        FMO threshold. If the z score exceeds z_score_threshold a warning is logged and the fmo is ignored.
+        :param downsample_method: method used for down-sampling data (ignored if frac is None)
+        :param density_downsample_kwargs: keyword arguments passed to density_dependent_downsampling
+        (see flow.gating.base.density_dependent_downsampling) ignored if downsample_method != 'density' or frac is None.
         """
         super().__init__(data=data, x=x, y=y, child_populations=child_populations, kde_bw=kde_bw,
                          frac=frac, q=q, std=std, downsample_method=downsample_method,
