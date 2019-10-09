@@ -1,32 +1,42 @@
-from immunova.flow.gating.defaults import GateOutput, Geom
+from immunova.flow.gating.defaults import ChildPopulationCollection
+from immunova.flow.gating.base import Gate, GateError
 import pandas as pd
 
 
-def rect_gate(data: pd.DataFrame, x: str, y: str,
-              x_min: int or float, x_max: int or float,
-              y_min: int or float, y_max: int or float,
-              child_populations: dict) -> GateOutput:
-    """
-    Static rectangular gate
-    :param data: parent population upon which the gate is applied
-    :param x: name of the channel/marker for X dimension
-    :param y: name of the channel/marker for Y dimension
-    :param child_name:
-    :param x_min: minimum value for x (x cooordinate for bottom left corner/top left corner)
-    :param x_max: maximum value for x (x cooordinate for bottom right corner/top right corner)
-    :param y_min: minimum value for y (y cooordinate for bottom left corner/bottom right corner)
-    :param y_max: maximum value for y (y cooordinate for top right corner/top left corner)
-    :param bool_gate: If True, return events NOT in gated population (return values outside of gate)
-    :return: dictionary of gating outputs (see documentation for internal standards)
-    """
-    output = GateOutput()
-    geom = Geom(shape='rect', x=x, y=y, x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max)
-    pos_pop = data[(data[x] >= x_min) & (data[x] <= x_max)]
-    pos_pop = data[(data[y] >= y_min) & (data[y] <= y_max)]
-    name = [name for name, x in child_populations.items() if x['definition'] == '+'][0]
-    output.add_child(name=name, idx=pos_pop.index.values, geom=geom.as_dict())
-    name = [name for name, x in child_populations.items() if x['definition'] == '-']
-    if name:
-        neg_pop = data[~data.index.isin(pos_pop.index.values)]
-        output.add_child(name=name[0], idx=neg_pop.index.values, geom=geom.as_dict())
-    return output
+class Static(Gate):
+    def __init__(self, data: pd.DataFrame, x: str, child_populations: ChildPopulationCollection,
+                 y: str or None = None):
+        """
+        Gating with static geometric objects
+        :param data: pandas dataframe of fcs data for gating
+        :param x: name of X dimension
+        :param y: name of Y dimension (optional)
+        :param child_populations: ChildPopulationCollection (see flow.gating.defaults.ChildPopulationCollection)
+        """
+        super().__init__(data=data, x=x, y=y, child_populations=child_populations,
+                         frac=None, downsample_method='uniform',
+                         density_downsample_kwargs=None)
+        self.y = y
+
+    def rect_gate(self, x_min: int or float, x_max: int or float, y_min: int or float, y_max: int or float):
+        """
+        Gate with a static rectangular gate
+        :param x_min: left x coordinate
+        :param x_max: right x coordinate
+        :param y_min: bottom y coordinate
+        :param y_max: top y coordinate
+        :return: Updated child populations
+        """
+        pos_pop = self.data[(self.data[self.x] >= x_min) & (self.data[self.x] <= x_max)]
+        pos_pop = pos_pop[(pos_pop[self.y] >= y_min) & (pos_pop[self.y] <= y_max)]
+        neg_pop = self.data[~self.data.index.isin(pos_pop.index.values)]
+        neg = self.child_populations.fetch_by_definition('-')
+        pos = self.child_populations.fetch_by_definition('+')
+        for x in [pos, neg]:
+            self.child_populations.populations[x].update_geom(shape='mixture model', x=self.x, y=self.y,
+                                                              x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max)
+        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options='overwrite')
+        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
+        return self.child_populations
+
+

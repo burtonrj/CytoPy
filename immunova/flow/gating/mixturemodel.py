@@ -19,7 +19,7 @@ class MixtureModel(Gate):
         :param data: pandas dataframe of fcs data for gating
         :param x: name of X dimension
         :param y: name of Y dimension (optional)
-        :param child_populations: ChildPopulationCollection (see docs)
+        :param child_populations: ChildPopulationCollection (see flow.gating.defaults.ChildPopulationCollection)
         :param frac: fraction of dataset to sample for kde calculation (optional)
         :param downsample_method: method used for down-sampling data (ignored if frac is None)
         :param density_downsample_kwargs: keyword arguments passed to density_dependent_downsampling
