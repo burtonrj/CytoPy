@@ -20,7 +20,9 @@ class Gate:
         - child populations: ChildPopulationCollection (see docs)
         - output: GateOutput object for standard gating output
     """
-    def __init__(self, data: pd.DataFrame, x: str, y: str or None, child_populations: ChildPopulationCollection):
+    def __init__(self, data: pd.DataFrame, x: str, y: str or None, child_populations: ChildPopulationCollection,
+                 frac: float or None = None, downsample_method: str = 'uniform',
+                 density_downsample_kwargs: dict or None = None):
         """
         Constructor for Gate definition
         :param data: pandas dataframe of fcs data for gating
@@ -34,6 +36,37 @@ class Gate:
         self.child_populations = child_populations
         self.warnings = list()
         self.empty_parent = self.__empty_parent()
+        self.frac = frac
+        self.downsample_method = downsample_method
+        self.density_downsample_kwargs = density_downsample_kwargs
+
+    def sampling(self, data, threshold):
+        """
+        For a given dataset perform down-sampling
+        :param data: pandas dataframe of events data to downsample
+        :param threshold: threshold below which sampling is not necessary
+        :return: down-sampled data
+        """
+        if self.frac is None:
+            return None
+        if data.shape[0] < threshold:
+            return None
+        if self.downsample_method == 'uniform':
+            return data.sample(frac=self.frac)
+        elif self.downsample_method == 'density':
+            try:
+                assert self.density_downsample_kwargs
+                assert type(self.density_downsample_kwargs) == dict
+                features = [self.x]
+                if self.y is not None:
+                    features.append(self.y)
+                return self.density_dependent_downsample(frac=self.frac, features=features,
+                                                         **self.density_downsample_kwargs)
+            except AssertionError:
+                print('If apply density dependent down-sampling then a dictionary of keyword arguments is required'
+                      ' as input for density_downsample_kwargs')
+        else:
+            GateError('Invalid input, downsample_method must be either `uniform` or `density`')
 
     def __empty_parent(self):
         """

@@ -32,23 +32,11 @@ class DensityBasedClustering(Gate):
         :param density_downsample_kwargs: arguments to pass to density dependent down-sampling function (if method
         is 'uniform' leave value as None)
         """
-        super().__init__(data=data, x=x, y=y, child_populations=child_populations)
-        self.sample = None
+        super().__init__(data=data, x=x, y=y, child_populations=child_populations, frac=frac,
+                         downsample_method=downsample_method, density_downsample_kwargs=density_downsample_kwargs)
+        self.sample = self.sampling(self.data, 40000)
         self.nn = nn
         self.min_pop_size = min_pop_size
-        if frac:
-            if downsample_method == 'uniform':
-                self.sample = self.uniform_downsample(frac)
-            elif downsample_method == 'density':
-                try:
-                    assert density_downsample_kwargs
-                    assert type(density_downsample_kwargs) == dict
-                    features = [self.x, self.y]
-                    self.sample = self.density_dependent_downsample(frac=frac, features=features,
-                                                                    **density_downsample_kwargs)
-                except AssertionError:
-                    print('If apply density dependent down-sampling then a dictionary of keyword arguments is required'
-                          ' as input for density_downsample_kwargs')
 
     @property
     def knn_model(self):
