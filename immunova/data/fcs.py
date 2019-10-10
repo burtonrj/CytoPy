@@ -2,6 +2,7 @@ from immunova.data.fcs_experiments import ChannelMap
 from immunova.data.gating import Gate
 from immunova.data.patient import Patient
 from bson.binary import Binary
+from anytree import Node
 import pandas as pd
 import numpy as np
 import mongoengine
@@ -31,6 +32,7 @@ class Population(mongoengine.EmbeddedDocument):
     """
     population_name = mongoengine.StringField()
     index = mongoengine.FileField(db_alias='core', collection_name='population_indexes')
+    parent = mongoengine.StringField()
     prop_of_parent = mongoengine.FloatField()
     prop_of_total = mongoengine.FloatField()
     warnings = mongoengine.ListField()
@@ -49,9 +51,9 @@ class Population(mongoengine.EmbeddedDocument):
 
     def to_python(self):
         geom = {k: v for k, v in self.geom}
-        population = dict(population_name=self.population_name, prop_of_parent=self.prop_of_parent,
-                          prop_of_total=self.prop_of_total, warnings=self.warnings, geom=geom)
-        population['index'] = self.load_index()
+        population = Node(name=self.population_name, prop_of_parent=self.prop_of_parent,
+                          prop_of_total=self.prop_of_total, warnings=self.warnings, geom=geom,
+                          parent=self.parent, index=self.load_index())
         return population
 
 
@@ -173,11 +175,6 @@ class File(mongoengine.EmbeddedDocument):
         return pd.DataFrame(matrix, columns=mappings, dtype='float32')
 
 
-class PopNode(mongoengine.EmbeddedDocument):
-    name = mongoengine.StringField()
-    parent = mongoengine.StringField()
-
-
 class FileGroup(mongoengine.Document):
     """
     Document representation of a file group; a selection of related fcs files (e.g. a sample and it's associated
@@ -197,7 +194,6 @@ class FileGroup(mongoengine.Document):
     notes = mongoengine.StringField(required=False)
     populations = mongoengine.EmbeddedDocumentListField(Population)
     gates = mongoengine.EmbeddedDocumentListField(Gate)
-    population_tree = mongoengine.EmbeddedDocumentListField(PopNode)
     patient = mongoengine.ReferenceField(Patient, reverse_delete_rule=mongoengine.PULL)
     meta = {
         'db_alias': 'core',
