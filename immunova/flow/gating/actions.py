@@ -13,8 +13,10 @@ from immunova.flow.gating.quantile import Quantile
 from immunova.flow.gating.mixturemodel import MixtureModel
 from immunova.flow.gating.utilities import inside_ellipse
 from immunova.flow.gating.defaults import ChildPopulationCollection
+from immunova.flow.plotting.static_plots import Plot
 # Housekeeping and other tools
-from anytree import Node, RenderTree
+from anytree import Node
+from anytree.search import findall
 from datetime import datetime
 from itertools import cycle
 import inspect
@@ -30,18 +32,29 @@ import numpy as np
 
 
 class Gating:
+    """
+    Central class for performing gating on an FCS FileGroup of a single sample
+    """
     def __init__(self, experiment: FCSExperiment, sample_id: str,
                  data_type='raw', sample: int or None = None):
+        """
+        Constructor for Gating
+        :param experiment: FCSExperiment currently being processed
+        :param sample_id: Identifier of sample of interest
+        :param data_type: type of data to load for gating (either 'raw' or 'norm'). Default = 'raw'.
+        :param sample: if an integer value is supplied then data will be sampled to this size. Optional (default = None)
+        """
         try:
             data = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample)
             assert data is not None
             self.data = [x for x in data if x['typ'] == 'complete'][0]
             self.fmo = [x for x in data if x['typ'] == 'control']
-            fg = FileGroup.objects(primary_id=sample_id)[0]
             self.id = sample_id
-            self.experiment_id = experiment.experiment_id
+            self.experiment = experiment
             del data
 
+            fg = experiment.pull_sample(sample_id)
+            self.filegroup = fg
             self.gates = dict()
             if fg.gates:
                 for g in fg.gates:
@@ -50,22 +63,21 @@ class Gating:
             self.populations = dict()
             if fg.populations:
                 for p in fg.populations:
-                    self.populations[p.population_name] = p.to_python()
+                    self.populations[p.population_name] = p.to_node()
             else:
-                root = dict(population_name='root', prop_of_parent=1.0, prop_of_total=1.0,
-                            warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values)
+                root = Node(name='root', prop_of_parent=1.0, prop_of_total=1.0,
+                            warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values,
+                            parent=None)
                 self.populations['root'] = root
-
-            self.population_tree = dict()
-            self.population_tree['root'] = Node('root', parent=None)
-            if fg.population_tree:
-                for node in fg.population_tree:
-                    self.population_tree[node.name] = Node(node.name, parent=self.population_tree[node.parent])
         except AssertionError:
             print('Error: failed to construct Gating object')
 
     @property
-    def gating_classes(self):
+    def gating_classes(self) -> dict:
+        """
+        Available gating classes
+        :return: Class look-up dictionary
+        """
         available_classes = [Static, FMOGate, DensityBasedClustering, DensityThreshold, Quantile, MixtureModel]
         return {x.__name__: x for x in available_classes}
 
@@ -78,7 +90,7 @@ class Gating:
         if population_name not in self.populations.keys():
             print(f'Population {population_name} not recognised')
             return None
-        idx = self.populations[population_name]['index']
+        idx = self.populations[population_name].index
         return self.data.loc[idx]
 
     # ToDO knn_fmo
@@ -86,7 +98,14 @@ class Gating:
         pass
 
     @staticmethod
-    def __check_class_args(klass, method, **kwargs):
+    def __check_class_args(klass: Gate, method: str, **kwargs) -> bool:
+        """
+        Check parameters meet class requirements
+        :param klass: Valid gating class
+        :param method: Name of class method to be called
+        :param kwargs: Keyword arguments supplied by user
+        :return: True if valid, else False
+        """
         try:
             klass_args = [k for k, v in inspect.signature(klass).parameters.items()
                           if v.default is inspect.Parameter.empty]
@@ -110,7 +129,17 @@ class Gating:
             return False
 
     def create_gate(self, gate_name: str, parent: str, class_: str, method: str, kwargs: dict,
-                    child_populations: ChildPopulationCollection):
+                    child_populations: ChildPopulationCollection) -> bool:
+        """
+        Create a gate
+        :param gate_name: Name of the gate
+        :param parent: Name of parent population gate is applied to
+        :param class_: Name of a valid gating class
+        :param method: Name of the class method to invoke upon gating
+        :param kwargs: Keyword arguments (include constructor arguments and method arguments)
+        :param child_populations: A valid ChildPopulationCollection object describing the resulting populations
+        :return: True if successful, else False
+        """
         if gate_name in self.gates.keys():
             print(f'Error: gate with name {gate_name} already exists.')
             return False
@@ -126,7 +155,12 @@ class Gating:
         self.gates[gate_name] = new_gate
         return True
 
-    def __apply_checks(self, gate_name):
+    def __apply_checks(self, gate_name: str) -> DataGate or None:
+        """
+        Default checks applied whenever a gate is applied
+        :param gate_name: Name of gate to apply
+        :return: Gate document (None if checks fail)
+        """
         if gate_name not in self.gates.keys():
             print(f'Error: {gate_name} does not exist. You must create this gate first using the create_gate method')
             return None
@@ -141,17 +175,29 @@ class Gating:
                 return None
         return gatedoc
 
-    def __construct_class_and_gate(self, gatedoc, kwargs):
+    def __construct_class_and_gate(self, gatedoc: DataGate, kwargs: dict):
+        """
+        Construct a gating class object and apply the intended method for gating
+        :param gatedoc: Gate document generated with `create_gate`
+        :param kwargs: keyword arguments for constructor and method
+        :return: None
+        """
         klass = self.gating_classes[gatedoc.class_]
         parent_population = self.get_population_df(gatedoc.parent)
         constructor_args = {k: v for k, v in kwargs if k in inspect.signature(klass).parameters.keys()}
         method_args = {k: v for k, v in kwargs if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
         analyst = klass(data=parent_population, **constructor_args)
         output = getattr(analyst, gatedoc.method)(**method_args)
-        return self.__update_populations(output, parent_df=parent_population,
-                                         warnings=analyst.warnings, parent_name=gatedoc.parent)
+        self.__update_populations(output, parent_df=parent_population,
+                                  warnings=analyst.warnings, parent_name=gatedoc.parent)
 
-    def apply(self, gate_name: str, plot_output: bool = True):
+    def apply(self, gate_name: str, plot_output: bool = True) -> None:
+        """
+        Apply a gate to events data (must be generated with `create_gate` first)
+        :param gate_name: Name of the gate to apply
+        :param plot_output: If True, resulting gates will be printed to screen
+        :return: None
+        """
         gatedoc = self.__apply_checks(gate_name)
         if gatedoc is None:
             return None
@@ -163,12 +209,20 @@ class Gating:
             kwargs['fmo_x'] = self.knn_fmo(kwargs['fmo_x'], gatedoc.parent)
         if 'fmo_y' in kwargs.keys():
             kwargs['fmo_y'] = self.knn_fmo(kwargs['fmo_y'], gatedoc.parent)
-        output = self.__construct_class_and_gate(gatedoc, kwargs)
-        # ToDo call plotting class
+        self.__construct_class_and_gate(gatedoc, kwargs)
+        if plot_output:
+            Plot(self).plot_gate(gate_name=gate_name)
 
     def __update_populations(self, output: ChildPopulationCollection, parent_df: pd.DataFrame, warnings: list,
                              parent_name: str):
-
+        """
+        Given some ChildPopulationCollection object generated from a gate, update saved populations
+        :param output: ChildPopulationCollection object generated from a gate
+        :param parent_df: pandas dataframe of events data from parent population
+        :param warnings: list of warnings generated from gate
+        :param parent_name: name of the parent population
+        :return:
+        """
         for name, population in output.populations.items():
             n = len(population.index)
             if n == 0:
@@ -180,16 +234,24 @@ class Gating:
             geom = None
             if population.geom is not None:
                 geom = population.geom.as_dict()
-            self.populations[name] = dict(population_name=name, index=population.index,
+            self.populations[name] = Node(name=name, population_name=name, index=population.index,
                                           prop_of_parent=prop_of_parent,
                                           prop_of_total=prop_of_total,
-                                          geom=geom, warnings=warnings)
-
-            self.population_tree[name] = Node(name, parent=parent_name)
+                                          geom=geom, warnings=warnings, parent=parent_name)
         return output
 
     def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False, feedback=True):
-        gating_results = dict()
+        """
+        Apply multiple existing gates sequentially
+        :param gates: Name of gates to apply (NOTE: Gates must be provided in sequential order!)
+        :param apply_all: If True, gates is ignored and all current gates will be applied
+        (population tree must be empty)
+        :param plot_outcome: If True, resulting gates will be printed to screen
+        :param feedback: If True, feedback will be printed to stdout
+        :return: None
+        """
+        if gates is None:
+            gates = list()
         if apply_all:
             if len(self.populations.keys()) != 1:
                 print('User has chosen to apply all gates on a file with existing populations, '
@@ -205,169 +267,46 @@ class Gating:
         for gate_name in gates_to_apply:
             if feedback:
                 print(f'Applying {gate_name}...')
-            gating_results[gate_name] = self.apply(gate_name, plot_output=plot_outcome)
+            self.apply(gate_name, plot_output=plot_outcome)
         if feedback:
             print('Complete!')
-        return gating_results
-
-    def plot_gate(self, gate_name, xlim=None, ylim=None):
-        gate = self.gates[gate_name]
-        data = dict(primary=self.get_population_df(gate.parent))
-        kwargs = {k: v for k, v in gate.func_args}
-
-        def get_fmo_data(fk):
-            if fk in kwargs.keys():
-                return self.knn_fmo(gate.parent, kwargs[fk])
-            return None
-
-        for x in ['fmo_x', 'fmo_y']:
-            d = get_fmo_data(x)
-            if d is not None:
-                data[x] = d
-
-        n = len(data.keys())
-        # Get axis info
-        x = gate.x
-        if gate.y:
-            y = gate.y
-        else:
-            y = 'FSC-A'
-        xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
-        if gate.gate_type == 'cluster':
-            return self.__cluster_plot(x, y, gate, title=gate.gate_name)
-        fig, axes = plt.subplots(ncols=n)
-        if n > 1:
-            for ax, (name, d) in zip(axes, data.items()):
-                self.__geom_plot(ax=ax, x=x, y=y, data=d, geom=self.populations[gate.children[0]]['geom'],
-                                 xlim=xlim, ylim=ylim, title=f'{gate.gate_name}_{name}')
-        else:
-            self.__geom_plot(ax=axes, x=x, y=y, data=data['primary'], geom=self.populations[gate.children[0]]['geom'],
-                             xlim=xlim, ylim=ylim, title=gate.gate_name)
-        return fig, axes
-
-    @staticmethod
-    def __plot_axis_lims(x, y, xlim=None, ylim=None):
-        if not xlim:
-            if any([x.find(c) != -1 for c in ['FSC', 'SSC']]):
-                xlim = (0, 250000)
-            else:
-                xlim = (0, 1)
-        if not ylim:
-            if any([y.find(c) != -1 for c in ['FSC', 'SSC']]):
-                ylim = (0, 250000)
-            else:
-                ylim = (0, 1)
-        return xlim, ylim
-
-    def __cluster_plot(self, x, y, gate, title):
-        fig, ax = plt.subplots(figsize=(5, 5))
-        colours = cycle(['black', 'green', 'blue', 'red', 'magenta', 'cyan'])
-        for child, colour in zip(gate.children, colours):
-            d = self.get_population_df(child)
-            if d is not None:
-                d.sample(frac=0.5)
-            else:
-                continue
-            ax.scatter(d[x], d[y], c=colour, s=3, alpha=0.4)
-        ax.set_title(title)
-        fig.show()
-
-    def __standard_2dhist(self, ax, data, x, y, xlim, ylim, title):
-        if data.shape[0] <= 100:
-            bins = 50
-        elif data.shape[0] > 1000:
-            bins = 500
-        else:
-            bins = int(data.shape[0]*0.5)
-        ax.hist2d(data[x], data[y], bins=bins, norm=LogNorm())
-        ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
-        return ax
-
-    @staticmethod
-    def __plot_asthetics(ax, x, y, xlim, ylim, title):
-        ax.set_xlim(xlim[0], xlim[1])
-        ax.set_ylim(ylim[0], ylim[1])
-        ax.set_ylabel(y)
-        ax.set_xlabel(x)
-        ax.set_title(title)
-        return ax
-
-    def __geom_plot(self, ax, x, y, data, geom, xlim, ylim, title):
-        if data.shape[0] > 1000:
-            ax = self.__standard_2dhist(ax, data, x, y, xlim, ylim, title)
-            ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
-        else:
-            ax.scatter(x=data[x], y=data[y], s=3)
-            ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
-        if 'threshold' in geom.keys():
-            ax.axvline(geom['threshold'], c='r')
-        if 'threshold_x' in geom.keys():
-            ax.axvline(geom['threshold_x'], c='r')
-        if 'threshold_y' in geom.keys():
-            ax.axhline(geom['threshold_y'], c='r')
-        if all([x in geom.keys() for x in ['mean', 'width', 'height', 'angle']]):
-            ellipse = patches.Ellipse(xy=geom['mean'], width=geom['width'], height=geom['height'],
-                                      angle=geom['angle'], fill=False, edgecolor='r')
-            ax.add_patch(ellipse)
-        if all([x in geom.keys() for x in ['x_min', 'x_max', 'y_min', 'y_max']]):
-            rect = patches.Rectangle(xy=(geom['x_min'], geom['y_min']),
-                                     width=((geom['x_max']) - (geom['x_min'])),
-                                     height=(geom['y_max'] - geom['y_min']),
-                                     fill=False, edgecolor='r')
-            ax.add_patch(rect)
-        return ax
-
-    def plot_population(self, population_name, x, y, xlim=None, ylim=None, show=True):
-        fig, ax = plt.subplots(figsize=(5, 5))
-        if population_name in self.populations.keys():
-            data = self.get_population_df(population_name)
-        else:
-            print(f'Invalid population name, must be one of {self.populations.keys()}')
-            return None
-        xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
-        if data.shape[0] < 500:
-            ax.scatter(x=data[x], y=data[y], s=3)
-            ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title=population_name)
-        else:
-            self.__standard_2dhist(ax, data, x, y, xlim, ylim, title=population_name)
-        if show:
-            fig.show()
-        return fig
 
     def find_dependencies(self, population: str = None) -> list or None:
         """
         For a given population find all dependencies
         :param population: population name
-        :return: list of Gate objects dependent on given gate/population
+        :return: List of populations dependent on given population
         """
         if population not in self.populations.keys():
             print(f'Population {population} does not exist')
-            return []
-        dependencies = self.populations[population]['children']
-        dependencies = [p for p in dependencies if p != population]
-        for child in dependencies:
-            dependencies = dependencies + self.find_dependencies(child)
+            return None
+        root = self.populations['root']
+        node = self.populations[population]
+        dependent_paths = findall(root, filter_=lambda n: node in root.path)
+        dependencies = [name for name, node in self.populations.items() if node in dependent_paths]
         return dependencies
 
-    def remove_population(self, population_name: str):
+    def remove_population(self, population_name: str) -> None:
+        """
+        Remove a population
+        :param population_name: name of population to remove
+        :return: None
+        """
         if population_name not in self.populations.keys():
             print(f'{population_name} does not exist')
             return None
         downstream_populations = self.find_dependencies(population=population_name)
-        removed = []
-        # Remove populations downstream
-        if downstream_populations:
-            for p in downstream_populations:
-                if p in self.populations.keys():
-                    removed.append(self.populations.pop(p))
-        # Updated children in parent
-        parent = self.populations[population_name]['parent']
-        self.populations[parent]['children'] = [x for x in self.populations[parent]['children']
-                                                if x != population_name]
-        removed.append(self.populations.pop(population_name))
-        return removed
+        self.populations[population_name].parent = None
+        for x in downstream_populations:
+            self.populations.pop(x)
 
-    def remove_gate(self, gate_name, propagate=True):
+    def remove_gate(self, gate_name: str, propagate: bool = True) -> list and list or None:
+        """
+        Remove gate
+        :param gate_name: name of gate to remove
+        :param propagate: If True, downstream gates and effected populations will also be removed
+        :return: list of removed gates, list of removed populations
+        """
         if gate_name not in self.gates.keys():
             print('Error: invalid gate name')
             return None
@@ -385,83 +324,32 @@ class Gating:
         effected_gates.append(gate_name)
         for g in effected_gates:
             self.gates.pop(g)
-        return effected_populations, effected_gates
+        return effected_gates, effected_populations
 
-    @staticmethod
-    def __update_population(updated_geom, parent_population, bool_gate):
-        # TODO NEEDS UPDATING
-        try:
-            new_population = None
-            if updated_geom['shape'] == 'threshold':
-                x = updated_geom['x']
-                new_population = parent_population[parent_population[x] >= updated_geom['threshold']]
-            if updated_geom['shape'] == 'rect':
-                x = updated_geom['x']
-                y = updated_geom['y']
-                new_population = parent_population[(parent_population[x] >= updated_geom['x_min']) &
-                                                   (parent_population[x] < updated_geom['x_max'])]
-                new_population = new_population[(new_population[y] >= updated_geom['y_min']) &
-                                                (new_population[y] < updated_geom['y_max'])]
-            if updated_geom['shape'] == 'ellipse':
-                data = parent_population[[updated_geom['x'], updated_geom['y']]].values
-                new_population = inside_ellipse(data, width=updated_geom['width'],
-                                                height=updated_geom['height'],
-                                                angle=updated_geom['angle'],
-                                                center=updated_geom['mean'])
-                new_population = parent_population[new_population]
-            if new_population is None:
-                print('Error: Geom shape is not recognised, expecting one of: threshold, 2d_threshold, '
-                      'rect, or ellipse')
-                return None
-            if bool_gate:
-                new_population = parent_population[~parent_population.index.isin(new_population.index)]
-            return new_population
-        except KeyError as e:
-            print(f'Error, invalid Geom: {e}')
-            return None
-
-    def update_geom(self, population_name, updated_geom, bool_gate=False):
-        if population_name not in self.populations.keys():
-            print(f'Error: population name {population_name} not recognised')
-            return None
-        parent_population = self.get_population_df(self.populations[population_name]['parent'])
-        # Generate new population with new definition
-        new_population = self.__update_population(updated_geom, parent_population, bool_gate)
-        if new_population is None:
-            return None
-        # Calculate downstream effects
-        dependent_pops = self.find_dependencies(population=population_name)
-        dependent_pops.append(population_name)
-        parent_name = self.populations[population_name]['parent']
-        self.remove_population(population_name)
-        n = new_population.shape[0]
-        self.populations[population_name] = dict(population_name=population_name,
-                                                 index=new_population.index.values,
-                                                 children=[], parent=parent_name,
-                                                 prop_of_parent=n/parent_population.shape[0],
-                                                 prop_of_total=n/self.data.shape[0],
-                                                 geom=updated_geom, warnings=['Manual gate'])
-        effected_gates = [name for name, gate in self.gates.items() if gate.parent in dependent_pops]
-        if effected_gates:
-            print(f'Recomputing: {effected_gates}')
-            return self.apply_many(gates=effected_gates)
-        print('No downstream effects, re-gating complete!')
-        return None
-
-    def population_to_mongo(self, population_name):
-        pop_mongo = Population()
-        pop_dict = self.populations[population_name]
-        for k, v in pop_dict.items():
-            if k == 'geom':
-                pop_mongo[k] = [(k, v) for k, v in v.items()]
-            elif k != 'index':
-                pop_mongo[k] = v
-            else:
-                pop_mongo.save_index(pop_dict[k])
+    def population_to_mongo(self, population_name: str) -> Population:
+        """
+        Convert a population into a mongoengine Population document
+        :param population_name: Name of population to convert
+        :return: Population document
+        """
+        pop_node = self.populations[population_name]
+        geom = [(k, v) for k, v in pop_node.geom.items()]
+        pop_mongo = Population(population_name=pop_node.name,
+                               parent=pop_node.parent.name,
+                               prop_of_parent=pop_node.prop_of_parent,
+                               prop_of_total=pop_node.prop_of_total,
+                               warnings=pop_node.warnings,
+                               geom=geom)
+        pop_mongo.save_index(pop_node.index)
         return pop_mongo
 
-    def save(self, overwrite=False):
-        fg = FileGroup.objects(primary_id=self.id)[0]
+    def save(self, overwrite=False) -> bool:
+        """
+        Save all gates and population's to mongoDB
+        :param overwrite: If True, existing populations/gates for sample will be overwritten
+        :return: True if successful else False
+        """
+        fg = self.filegroup
         existing_cache = fg.populations
         existing_gates = fg.gates
         if existing_cache or existing_gates:
@@ -481,7 +369,16 @@ class Gating:
 
 
 class Template(Gating):
-    def save_new_template(self, template_name, overwrite=True):
+    """
+    Generate a reusable template for gating. Inherits all functionality of Gating class.
+    """
+    def save_new_template(self, template_name: str, overwrite: bool = True) -> bool:
+        """
+        Save template structure
+        :param template_name: name of the template
+        :param overwrite: If True, any existing template with the same name will be overwritten
+        :return: True if successful, else False
+        """
         gating_strategy = GatingStrategy.objects(template_name=template_name)
         if gating_strategy:
             if not overwrite:
@@ -493,11 +390,11 @@ class Template(Gating):
             gating_strategy.gates = list(self.gates.values())
             gating_strategy.last_edit = datetime.now()
             gating_strategy.save()
-            exp = FCSExperiment.objects(experiment_id=self.experiment_id)
-            templates = [x for x in exp.gating_templates if x.template_name != gating_strategy.template_name]
+            templates = [x for x in self.experiment.gating_templates
+                         if x.template_name != gating_strategy.template_name]
             templates.append(gating_strategy)
-            exp.gating_templates = templates
-            exp.save()
+            self.experiment.gating_templates = templates
+            self.experiment.save()
             return True
         else:
             print(f'No existing template named {template_name}, creating new template')
@@ -507,12 +404,16 @@ class Template(Gating):
             gating_strategy.last_edit = datetime.now()
             gating_strategy.gates = list(self.gates.values())
             gating_strategy.save()
-            exp = FCSExperiment.objects(experiment_id=self.experiment_id).get()
-            exp.gating_templates.append(gating_strategy)
-            exp.save()
+            self.experiment.gating_templates.append(gating_strategy)
+            self.experiment.save()
             return True
 
-    def load_template(self, template_name):
+    def load_template(self, template_name: str) -> bool:
+        """
+        Load gates from a template
+        :param template_name: name of template to load
+        :return: True if successful, else False
+        """
         gating_strategy = GatingStrategy.objects(template_name=template_name)
         if gating_strategy:
             self.gates = {gate.gate_name: gate for gate in gating_strategy[0].gates}
