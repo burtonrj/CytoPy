@@ -12,7 +12,6 @@ import numpy as np
 import re
 import os
 import xlrd
-import json
 
 
 class ChannelMap(mongoengine.EmbeddedDocument):
@@ -242,7 +241,7 @@ class Panel(mongoengine.Document):
             return x, e
         return corrected[0], e
 
-    def __check_duplicate_pairing(self, channel: str, marker: str or None) -> bool:
+    def __check_pairing(self, channel: str, marker: str or None) -> bool:
         """
         Internal method. Given a channel and marker check that a valid pairing exists for this panel.
         :param channel: channel for checking
@@ -283,7 +282,7 @@ class Panel(mongoengine.Document):
             if marker:
                 marker, err = self.__query(marker, self.markers, err)
             # Check channel/marker pairing is correct
-            if not self.__check_duplicate_pairing(channel, marker):
+            if not self.__check_pairing(channel, marker):
                 print(f'The channel/marker pairing {channel}/{marker} does not correspond to any defined in panel')
                 err = True
             new_column_mappings.append((channel, marker))
