@@ -11,19 +11,13 @@ from immunova.flow.gating.density import DensityThreshold
 from immunova.flow.gating.dbscan import DensityBasedClustering
 from immunova.flow.gating.quantile import Quantile
 from immunova.flow.gating.mixturemodel import MixtureModel
-from immunova.flow.gating.utilities import inside_ellipse
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.plotting.static_plots import Plot
 # Housekeeping and other tools
 from anytree import Node
 from anytree.search import findall
 from datetime import datetime
-from itertools import cycle
 import inspect
-# Matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
-from matplotlib import patches
 # Scipy
 from sklearn.neighbors import KNeighborsClassifier
 from imblearn.over_sampling import RandomOverSampler
@@ -51,6 +45,7 @@ class Gating:
             self.fmo = [x for x in data if x['typ'] == 'control']
             self.id = sample_id
             self.experiment = experiment
+            self.plotting = Plot(self)
             del data
 
             fg = experiment.pull_sample(sample_id)
@@ -94,7 +89,7 @@ class Gating:
         return self.data.loc[idx]
 
     # ToDO knn_fmo
-    def knn_fmo(self):
+    def get_fmo_data(self):
         pass
 
     @staticmethod
@@ -206,12 +201,12 @@ class Gating:
             print('FMO gating requires that you specify an FMO')
             return None
         if 'fmo_x' in kwargs.keys():
-            kwargs['fmo_x'] = self.knn_fmo(kwargs['fmo_x'], gatedoc.parent)
+            kwargs['fmo_x'] = self.get_fmo_data(kwargs['fmo_x'], gatedoc.parent)
         if 'fmo_y' in kwargs.keys():
-            kwargs['fmo_y'] = self.knn_fmo(kwargs['fmo_y'], gatedoc.parent)
+            kwargs['fmo_y'] = self.get_fmo_data(kwargs['fmo_y'], gatedoc.parent)
         self.__construct_class_and_gate(gatedoc, kwargs)
         if plot_output:
-            Plot(self).plot_gate(gate_name=gate_name)
+            self.plotting.plot_gate(gate_name=gate_name)
 
     def __update_populations(self, output: ChildPopulationCollection, parent_df: pd.DataFrame, warnings: list,
                              parent_name: str):
