@@ -43,9 +43,11 @@ class Gating:
             assert data is not None
             self.data = [x for x in data if x['typ'] == 'complete'][0]
             self.fmo = [x for x in data if x['typ'] == 'control']
+            self.fmo = {x['name']: x['data'] for x in self.fmo}
             self.id = sample_id
             self.experiment = experiment
             self.plotting = Plot(self)
+            self.fmo_search_cache = {x['id']: dict(root=x['data'].index.values) for x in self.fmo}
             del data
 
             fg = experiment.pull_sample(sample_id)
@@ -88,9 +90,49 @@ class Gating:
         idx = self.populations[population_name].index
         return self.data.loc[idx]
 
+    def search_fmo_cache(self, target_population, fmo):
+        if target_population in self.fmo_search_cache[fmo].keys():
+            return self.fmo_search_cache[fmo][target_population]
+        return None
+
     # ToDO knn_fmo
-    def get_fmo_data(self):
-        pass
+    def get_fmo_data(self, target_population, fmo):
+        cache_idx = self.search_fmo_cache(target_population, fmo)
+        if cache_idx is not None:
+            return self.fmo[fmo].loc[cache_idx]
+        root = self.populations['root']
+        node = self.populations[target_population]
+        route = findall(root, filter_=lambda n: node in root.path)
+        # Search route for start position
+        start = 0
+        for pop in route[::-1]:
+            cache_idx = self.search_fmo_cache(pop.name, fmo)
+            if cache_idx is not None:
+                for idx, pop in enumerate(route):
+                    if pop.name == pop.name:
+                        start = idx
+                        break
+                break
+        # Predict FMO index
+        route = route[start:]
+        fmo_data = self.fmo[fmo].loc[cache_idx]
+        for pop in route:
+            fmo_data = self.fmo[fmo].loc[cache_idx]
+            x = pop.geom['x']
+            y = pop.geom['y'] or 'FSC-A'
+            train = self.get_population_df(pop.name)[[x, y]].copy()
+            train['pos'] = 0
+            if train.shape[0] > 10000:
+                train = train.sample(10000)
+            train.pos = train.pos.mask(train.index.isin(pop.index), 1)
+            y_ = train.pos.values
+            knn = KNeighborsClassifier(n_jobs=-1, algorithm='kd_tree', n_neighbors=5, metric='manhattan')
+            knn.fit(train, y_)
+            y_hat = knn.predict(fmo_data[[x, y]])
+            fmo_data['pos'] = y_hat
+            cache_idx = fmo_data[fmo_data['pos'] == 1].index.values
+            self.fmo_search_cache[fmo][pop.name] = cache_idx
+        return fmo_data.loc[cache_idx]
 
     @staticmethod
     def __check_class_args(klass: Gate, method: str, **kwargs) -> bool:
@@ -201,9 +243,9 @@ class Gating:
             print('FMO gating requires that you specify an FMO')
             return None
         if 'fmo_x' in kwargs.keys():
-            kwargs['fmo_x'] = self.get_fmo_data(kwargs['fmo_x'], gatedoc.parent)
+            kwargs['fmo_x'] = self.get_fmo_data(gatedoc.parent, kwargs['fmo_x'])
         if 'fmo_y' in kwargs.keys():
-            kwargs['fmo_y'] = self.get_fmo_data(kwargs['fmo_y'], gatedoc.parent)
+            kwargs['fmo_y'] = self.get_fmo_data(gatedoc.parent, kwargs['fmo_y'])
         self.__construct_class_and_gate(gatedoc, kwargs)
         if plot_output:
             self.plotting.plot_gate(gate_name=gate_name)
