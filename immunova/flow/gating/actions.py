@@ -95,8 +95,13 @@ class Gating:
             return self.fmo_search_cache[fmo][target_population]
         return None
 
-    # ToDO knn_fmo
     def get_fmo_data(self, target_population, fmo):
+        """
+        Calculate population of fmo data using supervised machine learning and primary data as training set
+        :param target_population:
+        :param fmo:
+        :return:
+        """
         cache_idx = self.search_fmo_cache(target_population, fmo)
         if cache_idx is not None:
             return self.fmo[fmo].loc[cache_idx]
