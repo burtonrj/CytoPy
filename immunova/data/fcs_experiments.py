@@ -197,7 +197,7 @@ class Panel(mongoengine.Document):
             print('Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers')
             return False
         for k in ['channels', 'markers']:
-            if not all([k in ['name', 'regex', 'case', 'permutations']]):
+            if not all([i.keys() == ['name', 'regex', 'case', 'permutations'] for i in x[k]]):
                 print(f'Invalid template dictionary; nested dictionaries for {k} must contain keys: name, regex '
                       f'case, and permutations')
                 return False
@@ -486,6 +486,9 @@ class FCSExperiment(mongoengine.Document):
         :param catch_standardisation_errors: if True, standardisation errors will cause process to abort
         :return: MongoDB ObjectID string for new FileGroup entry
         """
+        if self.panel is None:
+            print('Error: no panel design assigned to this experiment')
+            return None
         if sample_id in self.list_samples():
             print(f'Error: a file group with id {sample_id} already exists')
             return None
