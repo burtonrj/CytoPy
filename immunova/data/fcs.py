@@ -158,10 +158,10 @@ class File(mongoengine.EmbeddedDocument):
             print('Invalid data_type, must be raw or norm')
             return None
         if output_format == 'dataframe':
-            data = self.__as_dataframe(data, columns_default=columns_default)
+            data = self.as_dataframe(data, columns_default=columns_default)
         return dict(id=self.file_id, typ=self.file_type, data=data)
 
-    def __as_dataframe(self, matrix: np.array, columns_default: str = 'marker'):
+    def as_dataframe(self, matrix: np.array, columns_default: str = 'marker'):
         """
         Generate a pandas dataframe using a given numpy multi-dim array with specified column defaults
         :param matrix: numpy matrix to convert to dataframe
