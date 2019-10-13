@@ -1,5 +1,5 @@
 from immunova.data.fcs import File
-from immunova.data.fcs_experiments import Panel
+from immunova.data.panel import Panel
 import pandas as pd
 import numpy as np
 import os

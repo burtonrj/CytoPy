@@ -1,6 +1,5 @@
-from immunova.data.fcs_experiments import ChannelMap
+from immunova.data.panel import ChannelMap
 from immunova.data.gating import Gate
-from immunova.data.patient import Patient
 from bson.binary import Binary
 from anytree import Node
 import pandas as pd
@@ -81,7 +80,7 @@ class File(mongoengine.EmbeddedDocument):
     data = mongoengine.FileField(db_alias='core', collection_name='fcs_file_data')
     norm = mongoengine.FileField(db_alias='core', collection_name='fcs_file_norm')
     compensated = mongoengine.BooleanField(default=False)
-    channel_mappings = mongoengine.ListField(ChannelMap)
+    channel_mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
 
     def raw_data(self, sample: int or None = None):
         """
@@ -194,7 +193,6 @@ class FileGroup(mongoengine.Document):
     notes = mongoengine.StringField(required=False)
     populations = mongoengine.EmbeddedDocumentListField(Population)
     gates = mongoengine.EmbeddedDocumentListField(Gate)
-    patient = mongoengine.ReferenceField(Patient, reverse_delete_rule=mongoengine.PULL)
     meta = {
         'db_alias': 'core',
         'collection': 'fcs_files'
