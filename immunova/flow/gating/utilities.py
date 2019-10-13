@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 
 
-def check_peak(peaks: np.array, probs: np.array, t=0.01) -> np.array:
+def check_peak(peaks: np.array, probs: np.array, t=0.05) -> np.array:
     """Check peaks against largest peak in list,
     if peak < t*largest peak, then peak is removed
     :param peaks: array of indices for peaks

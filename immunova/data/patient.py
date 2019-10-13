@@ -1,5 +1,5 @@
-import mongoengine
 from immunova.data.fcs import FileGroup
+import mongoengine
 
 
 class Drug(mongoengine.EmbeddedDocument):
