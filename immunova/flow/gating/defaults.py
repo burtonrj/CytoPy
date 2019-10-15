@@ -85,27 +85,25 @@ class ChildPopulationCollection:
             :return: None
             """
             try:
-                def check_keys(keys):
-                    for _, x_ in kwargs.items():
-                        assert x_.keys() == set(keys)
                 if gate_type == 'threshold_1d' or gate_type == 'geom':
-                    check_keys(['definition'])
+                    assert kwargs.keys() == {'definition', 'name'}
                     assert kwargs['definition'] in ['-', '+']
                 if gate_type == 'threshold_2d':
-                    check_keys(['definition'])
+                    assert kwargs.keys() == {'definition', 'name'}
                     if type(kwargs['definition']) == list:
                         assert all([x in ['++', '--', '-+', '-+'] for x in kwargs['definition']])
                     else:
                         assert kwargs['definition'] in ['++', '--', '-+', '-+']
                 if gate_type == 'cluster':
-                    check_keys(['target', 'weight'])
+                    assert kwargs.keys() == {'target', 'weight', 'name'}
                     assert len(kwargs['target']) == 2
                     assert len(kwargs['weight']) == 1
                     assert all([isinstance(x, int) or isinstance(x, float) for x in kwargs['target']])
                     assert all([isinstance(x, int) or isinstance(x, float) for x in kwargs['weight']])
-                self.properties = {k: v for k, v in kwargs}
+                self.properties = kwargs
             except AssertionError:
-                print(f'Invalid input for child population construction for gate type {gate_type}')
+                print(f'Invalid input for child population construction for gate type {gate_type}; '
+                      f'keyword arguments given: {kwargs}')
 
         class Geom(dict):
             """
