@@ -85,7 +85,7 @@ class Plot:
         if gate_name not in self.gating.gates.keys():
             print(f'Error: could not find {gate_name} in attached gate object')
         gate = self.gating.gates[gate_name]
-        if gate.gate_type == 'cluster':
+        if 'Clustering' in gate.class_:
             self.__cluster_plot(gate, xlim, ylim)
             return
         data = self.__get_gate_data(gate)
@@ -140,17 +140,16 @@ class Plot:
             ax = self.__2dhist(ax, data, x, y)
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
         # Draw geom
-        if 'threshold' in geom.keys():
+        if geom.shape == 'threshold_1d':
             ax.axvline(geom['threshold'], c='r')
-        if 'threshold_x' in geom.keys():
+        if geom.shape == 'threshold_2d':
             ax.axvline(geom['threshold_x'], c='r')
-        if 'threshold_y' in geom.keys():
             ax.axhline(geom['threshold_y'], c='r')
-        if all([x in geom.keys() for x in ['mean', 'width', 'height', 'angle']]):
-            ellipse = patches.Ellipse(xy=geom['mean'], width=geom['width'], height=geom['height'],
+        if geom.shape == 'ellipse':
+            ellipse = patches.Ellipse(xy=geom['centroid'], width=geom['width'], height=geom['height'],
                                       angle=geom['angle'], fill=False, edgecolor='r')
             ax.add_patch(ellipse)
-        if all([x in geom.keys() for x in ['x_min', 'x_max', 'y_min', 'y_max']]):
+        if geom.shape == 'rect':
             rect = patches.Rectangle(xy=(geom['x_min'], geom['y_min']),
                                      width=((geom['x_max']) - (geom['x_min'])),
                                      height=(geom['y_max'] - geom['y_min']),
