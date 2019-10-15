@@ -41,13 +41,13 @@ class Gating:
         try:
             data = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample)
             assert data is not None
-            self.data = [x for x in data if x['typ'] == 'complete'][0]
+            self.data = [x for x in data if x['typ'] == 'complete'][0]['data']
             self.fmo = [x for x in data if x['typ'] == 'control']
-            self.fmo = {x['name']: x['data'] for x in self.fmo}
+            self.fmo = {x['id']: x['data'] for x in self.fmo}
             self.id = sample_id
             self.experiment = experiment
             self.plotting = Plot(self)
-            self.fmo_search_cache = {x['id']: dict(root=x['data'].index.values) for x in self.fmo}
+            self.fmo_search_cache = {_id: dict(root=data.index.values) for _id, data in self.fmo.items()}
             del data
 
             fg = experiment.pull_sample(sample_id)

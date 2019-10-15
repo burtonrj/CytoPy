@@ -75,7 +75,7 @@ class File(mongoengine.EmbeddedDocument):
         put - given a numpy array, data is serialised and stored
 
     """
-    file_id = mongoengine.StringField(required=True, unique=True)
+    file_id = mongoengine.StringField(required=True)
     file_type = mongoengine.StringField(default='complete')
     data = mongoengine.FileField(db_alias='core', collection_name='fcs_file_data')
     norm = mongoengine.FileField(db_alias='core', collection_name='fcs_file_norm')
