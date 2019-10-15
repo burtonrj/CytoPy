@@ -81,7 +81,7 @@ class MixtureModel(Gate):
         neg = self.child_populations.fetch_by_definition('-')
         pos = self.child_populations.fetch_by_definition('+')
         for x in [pos, neg]:
-            self.child_populations.populations[x].update_geom(shape='geom', x=self.x, y=self.y, **geom)
+            self.child_populations.populations[x].update_geom(shape='ellipse', x=self.x, y=self.y, **geom)
         self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options='overwrite')
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
         return self.child_populations
@@ -133,6 +133,6 @@ class MixtureModel(Gate):
         u = eigen_vec[0] / linalg.norm(eigen_vec[0])
         angle = 180. * np.arctan(u[1] / u[0]) / np.pi
         mask = inside_ellipse(data.values, tp_medoid, eigen_val[0], eigen_val[1], 180. + angle)
-        return mask, dict(mean=tp_medoid, width=eigen_val[0], height=eigen_val[1],
+        return mask, dict(centroid=tp_medoid, width=eigen_val[0], height=eigen_val[1],
                           angle=(180. + angle))
 
