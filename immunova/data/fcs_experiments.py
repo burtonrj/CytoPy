@@ -433,8 +433,8 @@ class FCSExperiment(mongoengine.Document):
             print(f'Error: {sample_id} does not exist')
             return False
         self.fcs_files = [f for f in self.fcs_files if f.primary_id != sample_id]
-        if delete:
-            fg[0].delete()
+        fg[0].delete()
+        self.save()
         return True
 
     def __create_file_entry(self, path: str, file_id: str, comp_matrix: np.array,
