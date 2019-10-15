@@ -14,7 +14,7 @@ class DensityBasedClustering(Gate):
     Class for Density based spatial clustering for applications with noise. Implements both DBSCAN and HDBSCAN
     """
     def __init__(self, data: pd.DataFrame, x: str, y: str, child_populations: ChildPopulationCollection,
-                 min_pop_size: int, nn: int, frac: float or None = 0.2, downsample_method: str = 'uniform',
+                 min_pop_size: int, frac: float or None = 0.2, downsample_method: str = 'uniform',
                  density_downsample_kwargs: dict or None = None):
         """
         Constructor for DensityBasedClustering gating object
@@ -35,20 +35,16 @@ class DensityBasedClustering(Gate):
         super().__init__(data=data, x=x, y=y, child_populations=child_populations, frac=frac,
                          downsample_method=downsample_method, density_downsample_kwargs=density_downsample_kwargs)
         self.sample = self.sampling(self.data, 40000)
-        self.nn = nn
         self.min_pop_size = min_pop_size
 
-    @property
-    def knn_model(self):
-        return KNeighborsClassifier(n_neighbors=self.nn, weights='distance', n_jobs=-1)
-
-    def dbscan(self, distance_nn: int, core_only: bool = False):
+    def dbscan(self, distance_nn: int, nn: int, core_only: bool = False):
         """
         Perform gating with dbscan algorithm
         :param distance_nn: nearest neighbour distance (smaller value will create tighter clusters)
         :param core_only: if True, only core samples in density clusters will be included
         :return: Updated child populations with events indexing complete
         """
+        knn_model = KNeighborsClassifier(n_neighbors=self.nn, weights='distance', n_jobs=-1)
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
             return self.child_populations
@@ -79,7 +75,7 @@ class DensityBasedClustering(Gate):
 
         # Up-sample (if necessary)
         if self.sample is not None:
-            self.__upsample(db_labels)
+            self.__upsample(knn_model, db_labels)
         else:
             self.data['labels'] = db_labels
         population_predictions = self.__predict_pop_clusters()
@@ -117,14 +113,14 @@ class DensityBasedClustering(Gate):
             population_predictions[label[0]].append(name)
         return self.__assign_clusters(population_predictions)
 
-    def __upsample(self, labels):
+    def __upsample(self, model, labels):
         """
         Internal method. Perform up-sampling from clustering labels
         :param labels: labels from clustering analysis
         :return: None
         """
-        self.knn_model.fit(self.sample[[self.x, self.y]], labels)
-        self.data['labels'] = self.knn_model.predict(self.data)
+        model.fit(self.sample[[self.x, self.y]], labels)
+        self.data['labels'] = model.predict(self.data[[self.x, self.y]])
 
     def __predict_pop_clusters(self):
         """
