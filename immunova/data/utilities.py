@@ -29,7 +29,7 @@ def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_c
     :param fcs_dir: target directory for search
     :param control_names: names of expected control files (names must appear in filenames)
     :param ctrl_id: global identifier for control file e.g. 'FMO' (must appear in filenames)
-    :param ignore_comp:
+    :param ignore_comp: If True, files with 'compensation' in their name will be ignored (default = True)
     :return: standard dictionary of fcs files contained in target directory
     """
     file_tree = dict(primary=[], controls=[])
@@ -39,7 +39,7 @@ def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_c
     for c_name in control_names:
         matched_controls = list(filter(lambda x: x.find(c_name) != -1, ctrl_files))
         if not matched_controls:
-            print(f'Warning: not file found for {c_name} control')
+            print(f'Warning: no file found for {c_name} control')
             continue
         if len(matched_controls) > 1:
             print(f'Warning: multiple files found for {c_name} control')
@@ -53,7 +53,7 @@ def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_c
 
 
 def data_from_file(file: File, data_type: str, sample_size: int, output_format: str = 'dataframe',
-                   panel: None or Panel = None, columns_default: str = 'marker') -> None or dict:
+                   columns_default: str = 'marker') -> None or dict:
     """
     Pull data from a given file document
     :param file: File object
@@ -61,7 +61,6 @@ def data_from_file(file: File, data_type: str, sample_size: int, output_format: 
     :param sample_size: return a sample of given integer size
     :param output_format: preferred format of output; can either be 'dataframe' for a pandas dataframe, or 'matrix'
     for a numpy array
-    :param panel: Panel object used for channel/marker mappings (required if output_format='dataframe')
     :param columns_default: how to name columns if output_format='dataframe';
     either 'marker' or 'channel' (default = 'marker')
     :return: Dictionary output {id: file_id, typ: file_type, data: dataframe/matrix}
@@ -75,30 +74,31 @@ def data_from_file(file: File, data_type: str, sample_size: int, output_format: 
         print('Invalid data_type, must be raw or norm')
         return None
     if output_format == 'dataframe':
-        if not panel:
-            print('Error: for format dataframe, panel is required')
-        else:
-            data = as_dataframe(data, panel=panel, columns_default=columns_default)
+        data = as_dataframe(data, column_mappings=file.channel_mappings, columns_default=columns_default)
     return dict(id=file.file_id, typ=file.file_type, data=data)
 
 
-def as_dataframe(matrix: np.array, panel: Panel, columns_default: str = 'marker'):
+def as_dataframe(matrix: np.array, column_mappings, columns_default: str = 'marker'):
     """
     Generate a pandas dataframe using a given numpy multi-dim array with specified column defaults
     :param matrix: numpy matrix to convert to dataframe
-    :param panel: Panel object for formatting conventions
+    :param column_mappings: Channel/marker mappings for each columns in matrix
     :param columns_default: how to name columns; either 'marker' or 'channel' (default = 'marker')
     :return: Pandas dataframe
     """
     columns = []
-    for i, m in enumerate(panel.mappings):
-        if not m[columns_default]:
-            if m['channel']:
-                columns.append(m['channel'])
-            elif m['marker']:
-                columns.append(m['marker'])
+    if columns_default == 'channel':
+        for i, m in enumerate(column_mappings):
+            if m.channel:
+                columns.append(m.channel)
             else:
                 columns.append(f'Unnamed: {i}')
-        else:
-            columns.append(m[columns_default])
+    else:
+        for i, m in enumerate(column_mappings):
+            if m.marker:
+                columns.append(m.marker)
+            elif m.channel:
+                columns.append(m.channel)
+            else:
+                columns.append(f'Unnamed: {i}')
     return pd.DataFrame(matrix, columns=columns, dtype='float32')

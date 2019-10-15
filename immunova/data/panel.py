@@ -277,6 +277,15 @@ class Panel(mongoengine.Document):
             # Normalise marker
             if marker:
                 marker, err = self.__query(marker, self.markers, err)
+            else:
+                # If marker is None, default to that assigned by panel
+                default = [x for x in self.mappings if x.channel == channel]
+                if not default:
+                    print(f'No marker name provided for channel {channel}. Was unable to establish default as'
+                          f' {channel} is not recognised in this panel design.')
+                    err = True
+                else:
+                    marker = default[0].marker
             # Check channel/marker pairing is correct
             if not self.__check_pairing(channel, marker):
                 print(f'The channel/marker pairing {channel}/{marker} does not correspond to any defined in panel')

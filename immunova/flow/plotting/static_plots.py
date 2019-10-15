@@ -1,5 +1,4 @@
 from immunova.data.gating import Gate
-from immunova.flow.gating.actions import Gating
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -13,7 +12,7 @@ class Plot:
     """
     Class for producing facs plots
     """
-    def __init__(self, gating_object: Gating):
+    def __init__(self, gating_object):
         """
         Constructor for plotting class
         :param gating_object: Gating object to generate plots from
