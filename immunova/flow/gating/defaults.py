@@ -97,9 +97,8 @@ class ChildPopulationCollection:
                 if gate_type == 'cluster':
                     assert kwargs.keys() == {'target', 'weight', 'name'}
                     assert len(kwargs['target']) == 2
-                    assert len(kwargs['weight']) == 1
                     assert all([isinstance(x, int) or isinstance(x, float) for x in kwargs['target']])
-                    assert all([isinstance(x, int) or isinstance(x, float) for x in kwargs['weight']])
+                    assert isinstance(kwargs['weight'], int)
                 self.properties = kwargs
             except AssertionError:
                 print(f'Invalid input for child population construction for gate type {gate_type}; '
@@ -120,10 +119,10 @@ class ChildPopulationCollection:
                 """
                 super().__init__()
                 try:
-                    assert shape in ['ellipse', 'rect', 'threshold', '2d_threshold', None]
+                    assert shape in ['ellipse', 'rect', 'threshold', '2d_threshold', 'cluster', None]
                     self.shape = shape
                 except AssertionError:
-                    print('Invalid shape, must be one of: ellipse, rect, threshold, 2d_threshold')
+                    print('Invalid shape, must be one of: ellipse, rect, threshold, 2d_threshold', 'cluster')
                 self.x = x
                 self.y = y
                 for k, v in kwargs.items():
