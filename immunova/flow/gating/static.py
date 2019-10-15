@@ -36,7 +36,7 @@ class Static(Gate):
         neg = self.child_populations.fetch_by_definition('-')
         pos = self.child_populations.fetch_by_definition('+')
         for x in [pos, neg]:
-            self.child_populations.populations[x].update_geom(shape='geom', x=self.x, y=self.y,
+            self.child_populations.populations[x].update_geom(shape='rect', x=self.x, y=self.y,
                                                               x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max)
         self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options='overwrite')
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
@@ -45,13 +45,13 @@ class Static(Gate):
     def ellipse_gate(self, centroid: tuple, width: int or float, height: int or float, angle: int or float):
         if self.y is None:
             raise GateError('For a rectangular filter gate a value for `y` must be given')
-        pos_mask = inside_ellipse(self.data[self.x, self.y].values, centroid, width, height, angle)
+        pos_mask = inside_ellipse(self.data[[self.x, self.y]].values, centroid, width, height, angle)
         pos_pop = self.data[pos_mask]
         neg_pop = self.data[~self.data.index.isin(pos_pop.index.values)]
         neg = self.child_populations.fetch_by_definition('-')
         pos = self.child_populations.fetch_by_definition('+')
         for x in [pos, neg]:
-            self.child_populations.populations[x].update_geom(shape='geom', x=self.x, y=self.y,
+            self.child_populations.populations[x].update_geom(shape='ellipse', x=self.x, y=self.y,
                                                               centroid=centroid, width=width, height=height,
                                                               angle=angle)
         self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options='overwrite')

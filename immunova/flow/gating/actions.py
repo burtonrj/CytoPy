@@ -161,6 +161,8 @@ class Gating:
             method_args = [k for k, v in inspect.signature(getattr(klass, method)).parameters.items()
                            if v.default is inspect.Parameter.empty]
             for arg in method_args:
+                if arg == 'self':
+                    continue
                 if arg not in kwargs.keys():
                     print(f'Error: missing required method argument {arg} for method '
                           f'{method} belonging to {klass.__name__}')
@@ -226,8 +228,8 @@ class Gating:
         """
         klass = self.gating_classes[gatedoc.class_]
         parent_population = self.get_population_df(gatedoc.parent)
-        constructor_args = {k: v for k, v in kwargs if k in inspect.signature(klass).parameters.keys()}
-        method_args = {k: v for k, v in kwargs if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
+        constructor_args = {k: v for k, v in kwargs.items() if k in inspect.signature(klass).parameters.keys()}
+        method_args = {k: v for k, v in kwargs.items() if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
         analyst = klass(data=parent_population, **constructor_args)
         output = getattr(analyst, gatedoc.method)(**method_args)
         self.__update_populations(output, parent_df=parent_population,
@@ -244,9 +246,6 @@ class Gating:
         if gatedoc is None:
             return None
         kwargs = {k: v for k, v in gatedoc.kwargs}
-        if not any([x in ['fmo_x', 'fmo_y'] for x in kwargs.keys()]):
-            print('FMO gating requires that you specify an FMO')
-            return None
         if 'fmo_x' in kwargs.keys():
             kwargs['fmo_x'] = self.get_fmo_data(gatedoc.parent, kwargs['fmo_x'])
         if 'fmo_y' in kwargs.keys():
@@ -279,7 +278,8 @@ class Gating:
             self.populations[name] = Node(name=name, population_name=name, index=population.index,
                                           prop_of_parent=prop_of_parent,
                                           prop_of_total=prop_of_total,
-                                          geom=geom, warnings=warnings, parent=parent_name)
+                                          geom=geom, warnings=warnings,
+                                          parent=self.populations[parent_name])
         return output
 
     def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False, feedback=True):
