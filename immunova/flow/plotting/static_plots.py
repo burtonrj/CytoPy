@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib import patches
 from itertools import cycle
+from scipy.spatial import ConvexHull
 import pandas as pd
 import numpy as np
 
@@ -106,16 +107,29 @@ class Plot:
         x, y = kwargs['x'], kwargs['y'] or 'FSC-A'
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
         fig, ax = plt.subplots(figsize=(5, 5))
-        colours = cycle(['black', 'green', 'blue', 'red', 'magenta', 'cyan'])
+        d = self.gating.get_population_df(gate.parent)
+        ax = self.__2dhist(ax, d, x, y)
+        colours = cycle(['green', 'blue', 'red', 'magenta', 'cyan'])
         for child, colour in zip(gate.children, colours):
             d = self.gating.get_population_df(child)
-            if d is not None:
-                d.sample(frac=0.5)
-            else:
+            if d is None:
                 continue
-            ax.scatter(d[x], d[y], c=colour, s=3, alpha=0.4)
-        ax = self.__plot_asthetics(ax, x, y, xlim, ylim, gate.gate_name)
+            d = d[[x, y]].values
+            centroid = self.__centroid(d)
+            ax.scatter(x=centroid[0], y=centroid[1], c=colour, s=8, label=child)
+            hull = ConvexHull(d)
+            for simplex in hull.simplices:
+                ax.plot(d[simplex, 0], d[simplex, 1], 'k-', c='red')
+        self.__plot_asthetics(ax, x, y, xlim, ylim, title=gate.gate_name)
+        ax.legend()
         fig.show()
+
+    @staticmethod
+    def __centroid(data: np.array):
+        length = data.shape[0]
+        sum_x = np.sum(data[:, 0])
+        sum_y = np.sum(data[:, 1])
+        return sum_x / length, sum_y / length
 
     def __build_geom_plot(self, data: pd.DataFrame, gate: Gate, ax: matplotlib.pyplot.axes,
                           xlim: tuple, ylim: tuple, title: str) -> matplotlib.pyplot.axes:
