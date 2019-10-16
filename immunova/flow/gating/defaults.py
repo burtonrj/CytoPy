@@ -24,7 +24,7 @@ class ChildPopulationCollection:
             assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom', None]
             self.gate_type = gate_type
         except AssertionError:
-            print('Invalid gate type, must be one of: threshold, cluster, geom')
+            print('Invalid gate type, must be one of: threshold_1d, threshold_2d, cluster, geom')
         self.populations = dict()
 
     class ChildPopulation:
@@ -91,7 +91,7 @@ class ChildPopulationCollection:
                 if gate_type == 'threshold_2d':
                     assert kwargs.keys() == {'definition', 'name'}
                     if type(kwargs['definition']) == list:
-                        assert all([x in ['++', '--', '-+', '-+'] for x in kwargs['definition']])
+                        assert all([x in ['++', '--', '-+', '+-'] for x in kwargs['definition']])
                     else:
                         assert kwargs['definition'] in ['++', '--', '-+', '-+']
                 if gate_type == 'cluster':

@@ -58,3 +58,21 @@ class Static(Gate):
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
         return self.child_populations
 
+    def border_gate(self, bottom_cutoff: float = 0.01, top_cutoff: float = 0.99):
+        if self.y is None:
+            raise GateError('For a border filter gate a value for `y` must be given')
+        pos_pop = self.data.copy()
+        lt_x, lt_y = pos_pop[self.x].quantile(bottom_cutoff), pos_pop[self.y].quantile(bottom_cutoff)
+        tt_x, tt_y = pos_pop[self.x].quantile(top_cutoff), pos_pop[self.y].quantile(top_cutoff)
+
+        pos_pop = pos_pop[(pos_pop[self.x] > lt_x) & (pos_pop[self.y] > lt_y)]
+        pos_pop = pos_pop[(pos_pop[self.x] < tt_x) & (pos_pop[self.y] < tt_y)]
+        neg_pop = self.data[~self.data.index.isin(pos_pop.index.values)]
+        neg = self.child_populations.fetch_by_definition('-')
+        pos = self.child_populations.fetch_by_definition('+')
+        for x in [pos, neg]:
+            self.child_populations.populations[x].update_geom(shape='rect', x=self.x, y=self.y,
+                                                              x_min=lt_x, x_max=tt_x, y_min=lt_y, y_max=tt_y)
+        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options='overwrite')
+        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
+        return self.child_populations

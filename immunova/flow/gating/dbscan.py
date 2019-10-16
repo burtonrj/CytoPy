@@ -44,7 +44,7 @@ class DensityBasedClustering(Gate):
         :param core_only: if True, only core samples in density clusters will be included
         :return: Updated child populations with events indexing complete
         """
-        knn_model = KNeighborsClassifier(n_neighbors=self.nn, weights='distance', n_jobs=-1)
+        knn_model = KNeighborsClassifier(n_neighbors=nn, weights='distance', n_jobs=-1)
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
             return self.child_populations
@@ -78,7 +78,7 @@ class DensityBasedClustering(Gate):
             self.__upsample(knn_model, db_labels)
         else:
             self.data['labels'] = db_labels
-        population_predictions = self.__predict_pop_clusters()
+        population_predictions = self.__predict_pop_clusters(knn_model)
         return self.__assign_clusters(population_predictions)
 
     def hdbscan(self, inclusion_threshold: float or None = None):
@@ -95,16 +95,16 @@ class DensityBasedClustering(Gate):
         model = hdbscan.HDBSCAN(core_dist_n_jobs=-1, min_cluster_size=self.min_pop_size, prediction_data=True)
         if self.sample is not None:
             model.fit(self.sample[[self.x, self.y]])
-            self.data['label'], self.data['label_strength'] = hdbscan.approximate_predict(model,
-                                                                                          self.data[[self.x, self.y]])
+            self.data['labels'], self.data['label_strength'] = hdbscan.approximate_predict(model,
+                                                                                           self.data[[self.x, self.y]])
         else:
             model.fit(self.data[[self.x, self.y]])
-            self.data['label'] = model.labels_
+            self.data['labels'] = model.labels_
             self.data['label_strength'] = model.probabilities_
         # Post clustering checks
         if inclusion_threshold is not None:
             mask = self.data['label_strength'] < inclusion_threshold
-            self.data.loc[mask, 'label'] = -1
+            self.data.loc[mask, 'labels'] = -1
         # Predict clusters for child populations
         population_predictions = collections.defaultdict(list)
         for name in self.child_populations.populations.keys():
@@ -122,7 +122,7 @@ class DensityBasedClustering(Gate):
         model.fit(self.sample[[self.x, self.y]], labels)
         self.data['labels'] = model.predict(self.data[[self.x, self.y]])
 
-    def __predict_pop_clusters(self):
+    def __predict_pop_clusters(self, knn_model):
         """
         Internal method. Using KNN model predict which clusters the expected child populations belong to
         using the their target mediod
@@ -132,7 +132,7 @@ class DensityBasedClustering(Gate):
         try:
             for name in self.child_populations.populations.keys():
                 target = self.child_populations.populations[name].properties['target']
-                label = self.knn_model.predict(np.reshape(target, (1, -1)))
+                label = knn_model.predict(np.reshape(target, (1, -1)))
                 predictions[label[0]].append(name)
             return predictions
         except NotFittedError:
@@ -140,8 +140,8 @@ class DensityBasedClustering(Gate):
             # because self.__upsample() (where fitted occurs) was never called. In this case we want to fit the knn
             # model to all our data (since we have performed clustering on all of our data in this case). So call
             # fit method and then call self.__predict_pop_clusters() again
-            self.knn_model.fit(self.data[[self.x, self.y]], self.data['labels'])
-            self.__predict_pop_clusters()
+            knn_model.fit(self.data[[self.x, self.y]], self.data['labels'])
+            self.__predict_pop_clusters(knn_model)
 
     def __assign_clusters(self, population_predictions):
         """
