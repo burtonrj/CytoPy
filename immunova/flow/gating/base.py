@@ -87,7 +87,7 @@ class Gate:
             return True
         return False
 
-    def __child_update_1d(self, threshold: float, method: str, merge_options: str) -> None:
+    def child_update_1d(self, threshold: float, method: str, merge_options: str) -> None:
         """
         Internal method. Given a threshold and method generated from 1 dimensional threshold gating, update the objects child
         population collection.
@@ -105,12 +105,12 @@ class Gate:
         pos_pop = self.data[self.data[self.x] > threshold]
         neg_pop = self.data[self.data[self.x] < threshold]
         for x in [pos, neg]:
-            self.child_populations.populations[x].update_geom(shape='threshold_1d', x=self.x, y=self.y,
+            self.child_populations.populations[x].update_geom(shape='threshold', x=self.x, y=self.y,
                                                               method=method)
         self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options=merge_options)
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options=merge_options)
 
-    def __child_update_2d(self, x_threshold: float, y_threshold: float, method: str) -> None:
+    def child_update_2d(self, x_threshold: float, y_threshold: float, method: str) -> None:
         """
         Internal method. Given thresholds and method generated from 2 dimensional threshold gating,
         update the objects child population collection.
@@ -142,8 +142,9 @@ class Gate:
         self.child_populations.populations[posneg].update_index(idx=pos_idx, merge_options='merge')
 
         for x in [negneg, negpos, posneg, pospos]:
-            self.child_populations.populations[x].update_geom(shape='threshold_2d', x=self.x,
-                                                              y=self.y, method=method)
+            self.child_populations.populations[x].update_geom(shape='2d_threshold', x=self.x,
+                                                              y=self.y, method=method, threshold_x=x_threshold,
+                                                              threshold_y=y_threshold)
 
     def uniform_downsample(self, frac: float):
         """
