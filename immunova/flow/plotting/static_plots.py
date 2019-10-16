@@ -1,4 +1,5 @@
 from immunova.data.gating import Gate
+from immunova.flow.gating.utilities import centroid
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -114,22 +115,17 @@ class Plot:
             d = self.gating.get_population_df(child)
             if d is None:
                 continue
+            if d.shape[0] == 0:
+                continue
             d = d[[x, y]].values
-            centroid = self.__centroid(d)
-            ax.scatter(x=centroid[0], y=centroid[1], c=colour, s=8, label=child)
+            centroid_ = centroid(d)
+            ax.scatter(x=centroid_[0], y=centroid_[1], c=colour, s=8, label=child)
             hull = ConvexHull(d)
             for simplex in hull.simplices:
                 ax.plot(d[simplex, 0], d[simplex, 1], 'k-', c='red')
         self.__plot_asthetics(ax, x, y, xlim, ylim, title=gate.gate_name)
         ax.legend()
         fig.show()
-
-    @staticmethod
-    def __centroid(data: np.array):
-        length = data.shape[0]
-        sum_x = np.sum(data[:, 0])
-        sum_y = np.sum(data[:, 1])
-        return sum_x / length, sum_y / length
 
     def __build_geom_plot(self, data: pd.DataFrame, gate: Gate, ax: matplotlib.pyplot.axes,
                           xlim: tuple, ylim: tuple, title: str) -> matplotlib.pyplot.axes:
@@ -154,9 +150,9 @@ class Plot:
             ax = self.__2dhist(ax, data, x, y)
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
         # Draw geom
-        if geom.shape == 'threshold_1d':
+        if geom.shape == 'threshold':
             ax.axvline(geom['threshold'], c='r')
-        if geom.shape == 'threshold_2d':
+        if geom.shape == '2d_threshold':
             ax.axvline(geom['threshold_x'], c='r')
             ax.axhline(geom['threshold_y'], c='r')
         if geom.shape == 'ellipse':
