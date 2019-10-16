@@ -1,5 +1,6 @@
-from immunova.flow.gating.base import Gate
+from immunova.flow.gating.base import Gate, GateError
 from immunova.flow.gating.defaults import ChildPopulationCollection
+from immunova.flow.gating.utilities import centroid
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.exceptions import NotFittedError
@@ -37,7 +38,7 @@ class DensityBasedClustering(Gate):
         self.sample = self.sampling(self.data, 40000)
         self.min_pop_size = min_pop_size
 
-    def dbscan(self, distance_nn: int, nn: int, core_only: bool = False):
+    def dbscan(self, distance_nn: int, nn: int = 10, core_only: bool = False):
         """
         Perform gating with dbscan algorithm
         :param distance_nn: nearest neighbour distance (smaller value will create tighter clusters)
@@ -124,7 +125,7 @@ class DensityBasedClustering(Gate):
 
     def __predict_pop_clusters(self, knn_model):
         """
-        Internal method. Using KNN model predict which clusters the expected child populations belong to
+        Internal method. Predict which clusters the expected child populations belong to
         using the their target mediod
         :return: predictions {labels: [child population names]}
         """
