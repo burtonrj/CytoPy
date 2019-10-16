@@ -60,7 +60,7 @@ class ChildPopulationCollection:
             if merge_options == 'overwrite':
                 self.index = idx
             elif merge_options == 'merge':
-                self.index = np.concatenate(self.index, idx)
+                self.index = np.concatenate((self.index, idx))
             else:
                 print('Invalid input for merge_options, must be one of: merge, overwrite')
 
