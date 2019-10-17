@@ -14,18 +14,33 @@ class ChildPopulationCollection:
         - add_population: add a population to the collection
         - remove_population: remove a population from the collection
     """
-    def __init__(self, gate_type):
+    def __init__(self, gate_type=None, json_dict=None):
         """
         Constructor for child population collection
         :param gate_type: the gate type of the intended gate to generate this child population. Must be one of:
             'threshold', 'cluster', 'geom'.
         """
-        try:
-            assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom', None]
-            self.gate_type = gate_type
-        except AssertionError:
-            print('Invalid gate type, must be one of: threshold_1d, threshold_2d, cluster, geom')
-        self.populations = dict()
+        if json_dict is not None:
+            self.deserialise(json_dict)
+        else:
+            try:
+                assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom', None]
+                self.gate_type = gate_type
+            except AssertionError:
+                print('Invalid gate type, must be one of: threshold_1d, threshold_2d, cluster, geom')
+            self.populations = dict()
+
+    def serialise(self):
+        serialised = dict(gate_type=self.gate_type, populations=list())
+        for pop in self.populations.keys():
+            serialised['populations'].append(self.populations[pop].properties)
+        return serialised
+
+    def deserialise(self, json_dict):
+        self.gate_type = json_dict['gate_type']
+        for pop in json_dict['populations']:
+            name = pop.pop('name')
+            self.add_population(name=name, **pop)
 
     class ChildPopulation:
         def __init__(self, gate_type, **kwargs):
