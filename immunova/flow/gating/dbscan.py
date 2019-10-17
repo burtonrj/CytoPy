@@ -2,7 +2,7 @@ from immunova.flow.gating.base import Gate, GateError
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.utilities import centroid
 from sklearn.cluster import DBSCAN
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier, KDTree
 from sklearn.exceptions import NotFittedError
 import pandas as pd
 import numpy as np
@@ -123,26 +123,46 @@ class DensityBasedClustering(Gate):
         model.fit(self.sample[[self.x, self.y]], labels)
         self.data['labels'] = model.predict(self.data[[self.x, self.y]])
 
-    def __predict_pop_clusters(self, knn_model):
+    def __filter_by_centroid(self, target, neighbours):
+        distances = []
+        for _, label in neighbours:
+            d = self.data[self.data['labels'] == label]
+            c = centroid(d[[self.x, self.y]])
+            distances.append((label, np.linalg.norm(target-c)))
+        return min(distances, key=lambda x: x[1])[0]
+
+    def __predict_pop_clusters(self):
         """
         Internal method. Predict which clusters the expected child populations belong to
         using the their target mediod
         :return: predictions {labels: [child population names]}
         """
         predictions = collections.defaultdict(list)
-        try:
-            for name in self.child_populations.populations.keys():
-                target = self.child_populations.populations[name].properties['target']
-                label = knn_model.predict(np.reshape(target, (1, -1)))
-                predictions[label[0]].append(name)
-            return predictions
-        except NotFittedError:
-            # If sampling was performed the above code will work, otherwise a NotFittedError will be thrown. This is
-            # because self.__upsample() (where fitted occurs) was never called. In this case we want to fit the knn
-            # model to all our data (since we have performed clustering on all of our data in this case). So call
-            # fit method and then call self.__predict_pop_clusters() again
-            knn_model.fit(self.data[[self.x, self.y]], self.data['labels'])
-            self.__predict_pop_clusters(knn_model)
+        tree = KDTree(self.data[[self.x, self.y]].values)
+        for name in self.child_populations.populations.keys():
+            target = self.child_populations.populations[name].properties['target']
+            dist, ind = tree.query(target, k=100)
+            neighbour_labels_counts = collections.Counter(self.data.iloc[ind[0]]['labels'].values)
+            # Remove noisy neighbours
+            neighbour_labels_counts = [x for x in neighbour_labels_counts if x[0] != -1]
+            if len(neighbour_labels_counts) == 0:
+                # Population is assigned to noise
+                predictions[-1].append(name)
+            # One neighbour class
+            if len(neighbour_labels_counts) == 1:
+                predictions[neighbour_labels_counts[0][0]].append(name)
+                continue
+            #
+            most_popular_neighbour = max(neighbour_labels_counts, key=lambda x: x[1])
+            equivalents = [x for x in neighbour_labels_counts if x[1] == most_popular_neighbour[1]]
+            if len(equivalents) == 1:
+                # No popularity contest
+                predictions[most_popular_neighbour[0]].append(name)
+            else:
+                # Select label with the closest centroid
+                label_with_closest_centroid = self.__filter_by_centroid(target, equivalents)
+                predictions[label_with_closest_centroid].append(name)
+        return predictions
 
     def __assign_clusters(self, population_predictions):
         """
