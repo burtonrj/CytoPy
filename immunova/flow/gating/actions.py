@@ -55,12 +55,16 @@ class Gating:
             self.gates = dict()
             if fg.gates:
                 for g in fg.gates:
-                    self.gates[g.gate_name] = g
+                    self.__deserialise_gate(g)
 
             self.populations = dict()
             if fg.populations:
                 for p in fg.populations:
-                    self.populations[p.population_name] = p.to_node()
+                    p = p.to_python()
+                    parent = p.pop('parent')
+                    if parent is not None:
+                        parent = self.populations[parent]
+                    self.populations[p['name']] = Node(**p, parent=parent)
             else:
                 root = Node(name='root', prop_of_parent=1.0, prop_of_total=1.0,
                             warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values,
@@ -68,6 +72,18 @@ class Gating:
                 self.populations['root'] = root
         except AssertionError:
             print('Error: failed to construct Gating object')
+
+    def __deserialise_gate(self, gate):
+        kwargs = {k: v for k, v in gate.kwargs}
+        kwargs['child_populations'] = ChildPopulationCollection(json_dict=kwargs['child_populations'])
+        gate.kwargs = [[k, v] for k, v in kwargs.items()]
+        self.gates[gate.gate_name] = gate
+
+    def __serailise_gate(self, gate):
+        kwargs = {k: v for k, v in gate.kwargs}
+        kwargs['child_populations'] = kwargs['child_populations'].serialise()
+        gate.kwargs = [[k, v] for k, v in kwargs.items()]
+        return gate
 
     @property
     def gating_classes(self) -> dict:
@@ -219,7 +235,7 @@ class Gating:
                 return None
         return gatedoc
 
-    def __construct_class_and_gate(self, gatedoc: DataGate, kwargs: dict):
+    def __construct_class_and_gate(self, gatedoc: DataGate, kwargs: dict, feedback: bool = True):
         """
         Construct a gating class object and apply the intended method for gating
         :param gatedoc: Gate document generated with `create_gate`
@@ -232,10 +248,14 @@ class Gating:
         method_args = {k: v for k, v in kwargs.items() if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
         analyst = klass(data=parent_population, **constructor_args)
         output = getattr(analyst, gatedoc.method)(**method_args)
+        if feedback:
+            if analyst.warnings:
+                for x in analyst.warnings:
+                    print(x)
         self.__update_populations(output, parent_df=parent_population,
                                   warnings=analyst.warnings, parent_name=gatedoc.parent)
 
-    def apply(self, gate_name: str, plot_output: bool = True) -> None:
+    def apply(self, gate_name: str, plot_output: bool = True, feedback: bool = True) -> None:
         """
         Apply a gate to events data (must be generated with `create_gate` first)
         :param gate_name: Name of the gate to apply
@@ -250,7 +270,7 @@ class Gating:
             kwargs['fmo_x'] = self.get_fmo_data(gatedoc.parent, kwargs['fmo_x'])
         if 'fmo_y' in kwargs.keys():
             kwargs['fmo_y'] = self.get_fmo_data(gatedoc.parent, kwargs['fmo_y'])
-        self.__construct_class_and_gate(gatedoc, kwargs)
+        self.__construct_class_and_gate(gatedoc, kwargs, feedback)
         if plot_output:
             self.plotting.plot_gate(gate_name=gate_name)
 
@@ -376,8 +396,12 @@ class Gating:
         """
         pop_node = self.populations[population_name]
         geom = [(k, v) for k, v in pop_node.geom.items()]
+        if population_name == 'root':
+            parent = None
+        else:
+            parent = pop_node.parent.name
         pop_mongo = Population(population_name=pop_node.name,
-                               parent=pop_node.parent.name,
+                               parent=parent,
                                prop_of_parent=pop_node.prop_of_parent,
                                prop_of_total=pop_node.prop_of_total,
                                warnings=pop_node.warnings,
@@ -405,6 +429,7 @@ class Gating:
         for name in self.populations.keys():
             FileGroup.objects(primary_id=self.id).update(push__populations=self.population_to_mongo(name))
         for _, gate in self.gates.items():
+            gate = self.__serailise_gate(gate)
             FileGroup.objects(primary_id=self.id).update(push__gates=gate)
         print('Saved successfully!')
         return True
