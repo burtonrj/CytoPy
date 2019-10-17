@@ -49,7 +49,7 @@ class FCSExperiment(mongoengine.Document):
             print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
             return None
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
-        return file_grp
+        return FileGroup.objects(id=file_grp.id).get()
         
     def list_samples(self) -> list:
         """
