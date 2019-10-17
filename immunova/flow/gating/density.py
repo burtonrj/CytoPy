@@ -7,33 +7,22 @@ import numpy as np
 
 
 class DensityThreshold(Gate):
-    def __init__(self, data: pd.DataFrame, x: str, child_populations: ChildPopulationCollection, y: str or None = None,
-                 kde_bw: float = 0.01, ignore_double_pos: bool = False, std: float or None = None,
-                 q: float or None = 0.95, peak_threshold: float or None = None, frac: float or None = 0.5,
-                 downsample_method: str = 'uniform', density_downsample_kwargs: dict or None = None):
+    def __init__(self, kde_bw: float = 0.01, ignore_double_pos: bool = False, std: float or None = None,
+                 q: float or None = 0.95, peak_threshold: float or None = None, **kwargs):
         """
         Threshold gating estimated using properties of the KDE of events data
-        :param data: pandas dataframe containing compensated and transformed flow cytometry data
-        :param x: name of column to gate
-        :param child_populations: child populations expected as output (ChildPopulationCollection; see docs for info)
         :param q: if only 1 peak is found, quantile gating is performed using this argument as the quantile
         :param std: alternative to quantile gating, the number of standard deviations from the mean can be used to
         determine the threshold
         :param kde_bw: bandwidth for gaussian kernel density smoothing
-        :param frac: estimating the kernel density can be computationally expensive. By default this
-        is estimated using a sample of the data. This parameter defines the fraction of data to use for kde estimation
         :param peak_threshold: if not None, then this value should be a float. This decimal value represents what the
         minimum height of a peak should be relevant to the highest peak found (e.g. if peak_threshold=0.05, then all peaks
         with a height < 0.05 of the heighest peak will be ignored)
         :param ignore_double_pos: if True, in the case that multiple peaks are detected, peaks to the right of
         the highest peak will be ignored in the local minima calculation
-        :param downsample_method: methodology to use for down-sampling prior to clustering (either 'uniform' or
-        'density')
-        :param density_downsample_kwargs: arguments to pass to density dependent down-sampling function (if method
-        is 'uniform' leave value as None)
+        :param kwargs: Gate constructor arguments (see immunova.flow.gating.base)
         """
-        super().__init__(data=data, x=x, y=y, child_populations=child_populations, frac=frac,
-                         downsample_method=downsample_method, density_downsample_kwargs=density_downsample_kwargs)
+        super().__init__(**kwargs)
         self.kde_bw = kde_bw
         self.ignore_double_pos = ignore_double_pos
         self.std = std

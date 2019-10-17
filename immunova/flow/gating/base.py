@@ -23,7 +23,8 @@ class Gate:
     """
     def __init__(self, data: pd.DataFrame, x: str, child_populations: ChildPopulationCollection, y: str or None = None,
                  frac: float or None = None, downsample_method: str = 'uniform',
-                 density_downsample_kwargs: dict or None = None, transformation: str or None = 'logicle'):
+                 density_downsample_kwargs: dict or None = None, transformation: str or None = 'logicle',
+                 transform_axis: str = 'both'):
         """
         Constructor for Gate definition
         :param data: pandas dataframe of fcs data for gating
@@ -35,10 +36,12 @@ class Gate:
         self.x = x
         self.y = y
         if transformation is not None:
-            data[self.x] = apply_transform(self.data, features_to_transform=[self.x], transform_method=transformation)
-            if self.y is not None:
-                data[self.y] = apply_transform(self.data, features_to_transform=[self.y],
-                                               transform_method=transformation)
+            ta = [self.x, self.y]
+            if transform_axis == 'y' and self.y is not None:
+                ta = [self.y]
+            if transform_axis == 'x' or self.y is None:
+                ta = [self.x]
+            data[self.x] = apply_transform(self.data, features_to_transform=ta, transform_method=transformation)
         self.child_populations = child_populations
         self.warnings = list()
         self.empty_parent = self.__empty_parent()
