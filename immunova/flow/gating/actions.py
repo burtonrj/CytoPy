@@ -4,7 +4,7 @@ from immunova.data.gating import Gate as DataGate, GatingStrategy
 from immunova.data.fcs import FileGroup, Population
 from immunova.data.fcs_experiments import FCSExperiment
 # Immunova.flow
-from immunova.flow.gating.base import Gate
+from immunova.flow.gating.base import GateError
 from immunova.flow.gating.static import Static
 from immunova.flow.gating.fmo import FMOGate
 from immunova.flow.gating.density import DensityThreshold
@@ -156,7 +156,7 @@ class Gating:
         return fmo_data.loc[cache_idx]
 
     @staticmethod
-    def __check_class_args(klass: Gate, method: str, **kwargs) -> bool:
+    def __check_class_args(klass, method: str, **kwargs) -> bool:
         """
         Check parameters meet class requirements
         :param klass: Valid gating class
@@ -165,8 +165,15 @@ class Gating:
         :return: True if valid, else False
         """
         try:
+            parent_klass_args = []
+            try:
+                parent_klass_args = [k for k, v in inspect.signature(klass.__base__[0]).parameters.items()
+                                     if v.default is inspect.Parameter.empty]
+            except TypeError:
+                GateError(f'{klass} Invalid: must inherit from Gate class')
             klass_args = [k for k, v in inspect.signature(klass).parameters.items()
-                          if v.default is inspect.Parameter.empty]
+                          if v.default is inspect.Parameter.empty and k != 'kwargs']
+            klass_args = parent_klass_args + klass_args
             for arg in klass_args:
                 if arg in ['data']:
                     continue
@@ -244,7 +251,9 @@ class Gating:
         """
         klass = self.gating_classes[gatedoc.class_]
         parent_population = self.get_population_df(gatedoc.parent)
-        constructor_args = {k: v for k, v in kwargs.items() if k in inspect.signature(klass).parameters.keys()}
+        constructor_args = {k: v for k, v in kwargs.items()
+                            if k in inspect.signature(klass.__bases__[0]).parameters.keys()
+                            or k in inspect.signature(klass).parameters.keys()}
         method_args = {k: v for k, v in kwargs.items()
                        if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
         analyst = klass(data=parent_population, **constructor_args)
