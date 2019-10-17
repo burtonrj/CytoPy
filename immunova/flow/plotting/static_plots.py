@@ -1,5 +1,6 @@
 from immunova.data.gating import Gate
 from immunova.flow.gating.utilities import centroid
+from immunova.flow.gating.transforms import apply_transform
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -205,7 +206,8 @@ class Plot:
         ax.hist2d(data[x], data[y], bins=bins, norm=LogNorm())
         return ax
 
-    def plot_population(self, population_name: str, x: str, y: str, xlim: tuple = None, ylim: tuple = None):
+    def plot_population(self, population_name: str, x: str, y: str, xlim: tuple = None, ylim: tuple = None,
+                        transform='logicle', transform_axis='both'):
         """
         Generate a static plot of a population
         :param population_name: name of population to plot
@@ -217,7 +219,13 @@ class Plot:
         """
         fig, ax = plt.subplots(figsize=(5, 5))
         if population_name in self.gating.populations.keys():
-            data = self.gating.get_population_df(population_name)
+            data = self.gating.get_population_df(population_name).copy()
+            ta = [x, y]
+            if transform_axis == 'x':
+                ta = [x]
+            if transform_axis == 'y':
+                ta = [y]
+            data = apply_transform(data, ta, transform)
         else:
             print(f'Invalid population name, must be one of {self.gating.populations.keys()}')
             return None
