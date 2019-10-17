@@ -22,6 +22,24 @@ class Plot:
         """
         self.gating = gating_object
 
+    @staticmethod
+    def __transform_gate(data: pd.DataFrame, gate: Gate):
+        data = data.copy()
+        kwargs = {k: v for k, v in gate.kwargs}
+        if 'transform_x' in kwargs.keys():
+            if kwargs['transform_x'] is not None:
+                data = apply_transform(data, [kwargs['x']], transform_method=kwargs['transform_x'])
+        else:
+            # Default = Logicle transform
+            data = apply_transform(data, [kwargs['x']], transform_method='logicle')
+        if 'transform_y' in kwargs.keys():
+            if kwargs['transform_y'] is not None:
+                data = apply_transform(data, [kwargs['y']], transform_method=kwargs['transform_y'])
+        else:
+            # Default = Logicle transform
+            data = apply_transform(data, [kwargs['y']], transform_method='logicle')
+        return data
+
     def __get_gate_data(self, gate: Gate) -> dict:
         """
         Given a gate, return all associated data that gate acts upon
@@ -109,11 +127,11 @@ class Plot:
         x, y = kwargs['x'], kwargs['y'] or 'FSC-A'
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
         fig, ax = plt.subplots(figsize=(5, 5))
-        d = self.gating.get_population_df(gate.parent)
+        d = self.__transform_gate(self.gating.get_population_df(gate.parent), gate)
         ax = self.__2dhist(ax, d, x, y)
         colours = cycle(['green', 'blue', 'red', 'magenta', 'cyan'])
         for child, colour in zip(gate.children, colours):
-            d = self.gating.get_population_df(child)
+            d = self.__transform_gate(self.gating.get_population_df(child), gate)
             if d is None:
                 continue
             if d.shape[0] == 0:
@@ -182,9 +200,11 @@ class Plot:
         """
         if hasattr(axes, '__iter__'):
             for ax, (name, d) in zip(axes, data.items()):
+                d = self.__transform_gate(d, gate)
                 self.__build_geom_plot(d, gate, ax, xlim, ylim, f'{gate.gate_name}_{name}')
         else:
-            self.__build_geom_plot(data['primary'], gate, axes, xlim, ylim, f'{gate.gate_name}')
+            d = self.__transform_gate(data['primary'], gate)
+            self.__build_geom_plot(d, gate, axes, xlim, ylim, f'{gate.gate_name}')
         fig.show()
 
     @staticmethod
@@ -207,7 +227,7 @@ class Plot:
         return ax
 
     def plot_population(self, population_name: str, x: str, y: str, xlim: tuple = None, ylim: tuple = None,
-                        transform='logicle', transform_axis='both'):
+                        transform_x: str or None = None, transform_y: str or None = None):
         """
         Generate a static plot of a population
         :param population_name: name of population to plot
@@ -220,15 +240,13 @@ class Plot:
         fig, ax = plt.subplots(figsize=(5, 5))
         if population_name in self.gating.populations.keys():
             data = self.gating.get_population_df(population_name).copy()
-            ta = [x, y]
-            if transform_axis == 'x':
-                ta = [x]
-            if transform_axis == 'y':
-                ta = [y]
-            data = apply_transform(data, ta, transform)
         else:
             print(f'Invalid population name, must be one of {self.gating.populations.keys()}')
             return None
+        if transform_x is not None:
+            data = apply_transform(data, [x], transform_x)
+        if transform_y is not None:
+            data = apply_transform(data, [y], transform_y)
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
         if data.shape[0] < 1000:
             ax.scatter(x=data[x], y=data[y], s=3)
