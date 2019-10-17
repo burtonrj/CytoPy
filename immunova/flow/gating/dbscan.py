@@ -79,7 +79,7 @@ class DensityBasedClustering(Gate):
             self.__upsample(knn_model, db_labels)
         else:
             self.data['labels'] = db_labels
-        population_predictions = self.__predict_pop_clusters(knn_model)
+        population_predictions = self.__predict_pop_clusters()
         return self.__assign_clusters(population_predictions)
 
     def hdbscan(self, inclusion_threshold: float or None = None):
@@ -107,11 +107,7 @@ class DensityBasedClustering(Gate):
             mask = self.data['label_strength'] < inclusion_threshold
             self.data.loc[mask, 'labels'] = -1
         # Predict clusters for child populations
-        population_predictions = collections.defaultdict(list)
-        for name in self.child_populations.populations.keys():
-            label, _ = hdbscan.approximate_predict(model,
-                                                   [self.child_populations.populations[name].properties['target']])
-            population_predictions[label[0]].append(name)
+        population_predictions = self.__predict_pop_clusters()
         return self.__assign_clusters(population_predictions)
 
     def __upsample(self, model, labels):
@@ -141,18 +137,18 @@ class DensityBasedClustering(Gate):
         tree = KDTree(self.data[[self.x, self.y]].values)
         for name in self.child_populations.populations.keys():
             target = self.child_populations.populations[name].properties['target']
-            dist, ind = tree.query(target, k=100)
-            neighbour_labels_counts = collections.Counter(self.data.iloc[ind[0]]['labels'].values)
+            dist, ind = tree.query(np.array(target).reshape(1, -1), k=int(self.data.shape[0]*0.05))
+            neighbour_labels_counts = collections.Counter(self.data.iloc[ind[0]]['labels'].values).most_common()
             # Remove noisy neighbours
             neighbour_labels_counts = [x for x in neighbour_labels_counts if x[0] != -1]
             if len(neighbour_labels_counts) == 0:
                 # Population is assigned to noise
                 predictions[-1].append(name)
+                continue
             # One neighbour class
             if len(neighbour_labels_counts) == 1:
                 predictions[neighbour_labels_counts[0][0]].append(name)
                 continue
-            #
             most_popular_neighbour = max(neighbour_labels_counts, key=lambda x: x[1])
             equivalents = [x for x in neighbour_labels_counts if x[1] == most_popular_neighbour[1]]
             if len(equivalents) == 1:
