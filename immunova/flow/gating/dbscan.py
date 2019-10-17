@@ -14,27 +14,13 @@ class DensityBasedClustering(Gate):
     """
     Class for Density based spatial clustering for applications with noise. Implements both DBSCAN and HDBSCAN
     """
-    def __init__(self, data: pd.DataFrame, x: str, y: str, child_populations: ChildPopulationCollection,
-                 min_pop_size: int, frac: float or None = 0.2, downsample_method: str = 'uniform',
-                 density_downsample_kwargs: dict or None = None):
+    def __init__(self, min_pop_size: int, **kwargs):
         """
         Constructor for DensityBasedClustering gating object
-        :param data: pandas dataframe representing compensated and transformed flow cytometry data
-        :param x: name of X dimension
-        :param y: name of Y dimension
-        :param child_populations: child populations expected as output (ChildPopulationCollection; see docs for info)
-        :param frac: percentage of events to sample for clustering analysis. If None then all event data is clustered
-        (not recommended when n > 40000)
         :param min_pop_size: minimum population size for a population cluster
-        :param nn: number of neighbours to use for up-sampling with K-nearest neighbours
-        (see documentation for more info)
-        :param downsample_method: methodology to use for down-sampling prior to clustering (either 'uniform' or
-        'density')
-        :param density_downsample_kwargs: arguments to pass to density dependent down-sampling function (if method
-        is 'uniform' leave value as None)
+        :param kwargs: Gate constructor arguments (see immunova.flow.gating.base)
         """
-        super().__init__(data=data, x=x, y=y, child_populations=child_populations, frac=frac,
-                         downsample_method=downsample_method, density_downsample_kwargs=density_downsample_kwargs)
+        super().__init__(**kwargs)
         self.sample = self.sampling(self.data, 40000)
         self.min_pop_size = min_pop_size
 
