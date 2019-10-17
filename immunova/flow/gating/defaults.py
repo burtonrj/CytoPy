@@ -20,6 +20,7 @@ class ChildPopulationCollection:
         :param gate_type: the gate type of the intended gate to generate this child population. Must be one of:
             'threshold', 'cluster', 'geom'.
         """
+        self.populations = dict()
         if json_dict is not None:
             self.deserialise(json_dict)
         else:
@@ -28,7 +29,7 @@ class ChildPopulationCollection:
                 self.gate_type = gate_type
             except AssertionError:
                 print('Invalid gate type, must be one of: threshold_1d, threshold_2d, cluster, geom')
-            self.populations = dict()
+
 
     def serialise(self):
         serialised = dict(gate_type=self.gate_type, populations=list())
