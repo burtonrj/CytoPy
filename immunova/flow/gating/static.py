@@ -5,19 +5,12 @@ import pandas as pd
 
 
 class Static(Gate):
-    def __init__(self, data: pd.DataFrame, x: str, child_populations: ChildPopulationCollection,
-                 y: str or None = None):
+    def __init__(self, **kwargs):
         """
         Gating with static geometric objects
-        :param data: pandas dataframe of fcs data for gating
-        :param x: name of X dimension
-        :param y: name of Y dimension (optional)
-        :param child_populations: ChildPopulationCollection (see flow.gating.defaults.ChildPopulationCollection)
+        :param kwargs: Gate constructor arguments (see immunova.flow.gating.base)
         """
-        super().__init__(data=data, x=x, y=y, child_populations=child_populations,
-                         frac=None, downsample_method='uniform',
-                         density_downsample_kwargs=None)
-        self.y = y
+        super().__init__(**kwargs)
 
     def rect_gate(self, x_min: int or float, x_max: int or float, y_min: int or float, y_max: int or float):
         """

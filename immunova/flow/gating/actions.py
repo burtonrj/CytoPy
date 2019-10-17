@@ -245,7 +245,8 @@ class Gating:
         klass = self.gating_classes[gatedoc.class_]
         parent_population = self.get_population_df(gatedoc.parent)
         constructor_args = {k: v for k, v in kwargs.items() if k in inspect.signature(klass).parameters.keys()}
-        method_args = {k: v for k, v in kwargs.items() if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
+        method_args = {k: v for k, v in kwargs.items()
+                       if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
         analyst = klass(data=parent_population, **constructor_args)
         output = getattr(analyst, gatedoc.method)(**method_args)
         if feedback:

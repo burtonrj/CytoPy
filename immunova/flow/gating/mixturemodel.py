@@ -9,30 +9,19 @@ import math
 
 
 class MixtureModel(Gate):
-    def __init__(self, data: pd.DataFrame, x: str, y: str or None, child_populations: ChildPopulationCollection,
-                 frac: float or None = None, downsample_method: str = 'uniform',
-                 density_downsample_kwargs: dict or None = None, target: tuple = None,
-                 k: int = None, method: str = 'gmm', conf: float = 0.95, rect_filter: dict or None = None,
-                 covar: str = 'full'):
+    def __init__(self, target: tuple = None, k: int = None, method: str = 'gmm', conf: float = 0.95,
+                 rect_filter: dict or None = None, covar: str = 'full', **kwargs):
         """
         Gating using mixture models
-        :param data: pandas dataframe of fcs data for gating
-        :param x: name of X dimension
-        :param y: name of Y dimension (optional)
-        :param child_populations: ChildPopulationCollection (see flow.gating.defaults.ChildPopulationCollection)
-        :param frac: fraction of dataset to sample for kde calculation (optional)
-        :param downsample_method: method used for down-sampling data (ignored if frac is None)
-        :param density_downsample_kwargs: keyword arguments passed to density_dependent_downsampling
-        (see flow.gating.base.density_dependent_downsampling) ignored if downsample_method != 'density' or frac is None.
         :param target: centroid of target population (a rough estimate is fine)
         :param k: estimated number of populations in data
         :param method: mixture model method to use; can be either 'gmm' (gaussian) or 'bayesian'
         :param conf: confidence interval for generating elliptical gate (small = tighter gate)
         :param rect_filter: rectangular filter to apply to data prior to gating (optional)
         :param covar: string describing the type of covariance parameters to use (see sklearn documentation for details)
+        :param kwargs: Gate constructor arguments (see immunova.flow.gating.base)
         """
-        super().__init__(data=data, x=x, y=y, child_populations=child_populations, frac=frac,
-                         downsample_method=downsample_method, density_downsample_kwargs=density_downsample_kwargs)
+        super().__init__(**kwargs)
         self.sample = self.sampling(self.data, 5000)
         self.target = target
         self.k = k

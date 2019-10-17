@@ -4,19 +4,13 @@ import pandas as pd
 
 
 class Quantile(Gate):
-    def __init__(self, data: pd.DataFrame, x: str, child_populations: ChildPopulationCollection,
-                 q: float = 0.95, y: str or None = None):
+    def __init__(self, q: float = 0.95, **kwargs):
         """
         Perform either 1D or 2D quantile gating
-        :param data: pandas dataframe of fcs data for gating
-        :param x: name of X dimension
-        :param y: name of Y dimension (optional)
-        :param child_populations: ChildPopulationCollection (see docs)
         :param q: quantile for calculating threshold (float value between 0 and 1)
+        :param kwargs: Gate constructor arguments (see immunova.flow.gating.base)
         """
-        super().__init__(data=data, x=x, y=y, child_populations=child_populations,
-                         frac=None, downsample_method='uniform',
-                         density_downsample_kwargs=None)
+        super().__init__(**kwargs)
         self.y = y
         self.q = q
 
