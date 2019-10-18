@@ -169,16 +169,16 @@ class Plot:
             ax = self.__2dhist(ax, data, x, y)
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
         # Draw geom
-        if geom.shape == 'threshold':
+        if geom['shape'] == 'threshold':
             ax.axvline(geom['threshold'], c='r')
-        if geom.shape == '2d_threshold':
+        if geom['shape'] == '2d_threshold':
             ax.axvline(geom['threshold_x'], c='r')
             ax.axhline(geom['threshold_y'], c='r')
-        if geom.shape == 'ellipse':
+        if geom['shape'] == 'ellipse':
             ellipse = patches.Ellipse(xy=geom['centroid'], width=geom['width'], height=geom['height'],
                                       angle=geom['angle'], fill=False, edgecolor='r')
             ax.add_patch(ellipse)
-        if geom.shape == 'rect':
+        if geom['shape'] == 'rect':
             rect = patches.Rectangle(xy=(geom['x_min'], geom['y_min']),
                                      width=((geom['x_max']) - (geom['x_min'])),
                                      height=(geom['y_max'] - geom['y_min']),

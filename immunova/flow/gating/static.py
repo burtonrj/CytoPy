@@ -37,7 +37,7 @@ class Static(Gate):
 
     def ellipse_gate(self, centroid: tuple, width: int or float, height: int or float, angle: int or float):
         if self.y is None:
-            raise GateError('For a rectangular filter gate a value for `y` must be given')
+            raise GateError('For a ellipse filter gate a value for `y` must be given')
         pos_mask = inside_ellipse(self.data[[self.x, self.y]].values, centroid, width, height, angle)
         pos_pop = self.data[pos_mask]
         neg_pop = self.data[~self.data.index.isin(pos_pop.index.values)]

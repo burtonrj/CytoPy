@@ -36,9 +36,9 @@ class Gate:
         self.x = x
         self.y = y
         if transform_x is not None:
-            data[self.x] = apply_transform(self.data, features_to_transform=[self.x], transform_method=transform_x)
+            self.data = apply_transform(self.data, features_to_transform=[self.x], transform_method=transform_x)
         if transform_y is not None and self.y is not None:
-            data[self.y] = apply_transform(self.data, features_to_transform=[self.y], transform_method=transform_y)
+            self.data = apply_transform(self.data, features_to_transform=[self.y], transform_method=transform_y)
         self.child_populations = child_populations
         self.warnings = list()
         self.empty_parent = self.__empty_parent()
