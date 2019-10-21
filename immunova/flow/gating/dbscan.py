@@ -58,7 +58,7 @@ class DensityBasedClustering(Gate):
         n_clusters = len(set([x for x in db_labels if x != -1]))
         if n_clusters != n_children:
             self.warnings.append(f'Expected {n_children} populations, '
-                                                f'identified {n_clusters}; {set(db_labels)}')
+                                 f'identified {n_clusters}; {set(db_labels)}')
 
         # Up-sample (if necessary)
         if self.sample is not None:
@@ -157,12 +157,13 @@ class DensityBasedClustering(Gate):
             if len(p_id) > 1:
                 # Multiple child populations have been associated to one cluster. Use the child population weightings
                 # to choose priority population
-                weights = [self.child_populations.populations[x].properties['weight'] for x in
-                           self.child_populations.populations.keys()]
-                priority_i = weights.index(max(weights))
+                weights = [{'name': name, 'weight': x.properties['weight']}
+                           for name, x in self.child_populations.populations.items()
+                           if name in p_id]
+                priority_id = max(weights, key=lambda x: x['weight'])['name']
                 self.warnings.append(f'Populations f{p_id} assigned to the same cluster {label};'
-                                     f'prioritising {p_id[priority_i]} based on weighting.')
-                self.child_populations.populations[p_id[priority_i]].update_index(idx=idx, merge_options='overwrite')
+                                     f'prioritising {priority_id} based on weighting.')
+                self.child_populations.populations[priority_id].update_index(idx=idx, merge_options='overwrite')
             elif label == -1:
                 self.warnings.append(f'Population {p_id} assigned to noise (i.e. population not found)')
             else:
