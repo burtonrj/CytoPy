@@ -56,21 +56,20 @@ class Gate:
         if self.frac is None:
             return None
         if data.shape[0] < threshold:
-            return None
+            return data
         if self.downsample_method == 'uniform':
             return data.sample(frac=self.frac)
         elif self.downsample_method == 'density':
-            try:
-                assert self.density_downsample_kwargs
-                assert type(self.density_downsample_kwargs) == dict
-                features = [self.x]
-                if self.y is not None:
-                    features.append(self.y)
+            features = [self.x]
+            if self.y is not None:
+                features.append(self.y)
+            if self.density_downsample_kwargs is not None:
+                if not type(self.density_downsample_kwargs) == dict:
+                    raise GateError('If applying density dependent down-sampling then a dictionary of '
+                                    'keyword arguments is required as input for density_downsample_kwargs')
                 return self.density_dependent_downsample(frac=self.frac, features=features,
                                                          **self.density_downsample_kwargs)
-            except AssertionError:
-                print('If apply density dependent down-sampling then a dictionary of keyword arguments is required'
-                      ' as input for density_downsample_kwargs')
+            return self.density_dependent_downsample(frac=self.frac, features=features)
         else:
             GateError('Invalid input, downsample_method must be either `uniform` or `density`')
 
@@ -191,7 +190,7 @@ class Gate:
         mmd_sample = df.sample(mmd_sample_n)
         tree = KDTree(mmd_sample[features], metric='manhattan')
         dist, _ = tree.query(mmd_sample[features], k=2)
-        dist = [x[1] for x in dist]
+        dist = np.median([x[1] for x in dist])
         dist_threshold = dist * alpha
         ld = tree.query_radius(df[features], r=dist_threshold)
         od = np.percentile(ld, q=outlier_dens)
