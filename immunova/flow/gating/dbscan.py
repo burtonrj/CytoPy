@@ -164,6 +164,8 @@ class DensityBasedClustering(Gate):
                 self.warnings.append(f'Populations f{p_id} assigned to the same cluster {label};'
                                      f'prioritising {priority_id} based on weighting.')
                 self.child_populations.populations[priority_id].update_index(idx=idx, merge_options='overwrite')
+                for x in p_id:
+                    self.child_populations.populations[x].update_geom(shape='cluster', x=self.x, y=self.y)
             elif label == -1:
                 self.warnings.append(f'Population {p_id} assigned to noise (i.e. population not found)')
             else:
