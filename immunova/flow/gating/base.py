@@ -192,11 +192,15 @@ class Gate:
         dist, _ = tree.query(mmd_sample[features], k=2)
         dist = np.median([x[1] for x in dist])
         dist_threshold = dist * alpha
-        ld = tree.query_radius(df[features], r=dist_threshold)
+        ld = tree.query_radius(df[features], r=dist_threshold, count_only=True)
         od = np.percentile(ld, q=outlier_dens)
         td = np.percentile(ld, q=target_dens)
-        prob_f = partial(prob_downsample, td=td, od=od)
+        prob_f = partial(prob_downsample, target_d=td, outlier_d=od)
         prob = list(map(lambda x: prob_f(x), ld))
+        if sum(prob) == 0:
+            print('Error: density dependendent downsampling failed; weights sum to zero. Defaulting to uniform '
+                  'samplings')
+            return df.sample(frac=frac)
         return df.sample(frac=frac, weights=prob)
 
 
