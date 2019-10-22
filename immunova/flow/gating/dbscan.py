@@ -3,6 +3,7 @@ from immunova.flow.gating.utilities import centroid
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import KNeighborsClassifier, KDTree
 import numpy as np
+import pandas as pd
 import collections
 import hdbscan
 
@@ -27,6 +28,10 @@ class DensityBasedClustering(Gate):
         :param core_only: if True, only core samples in density clusters will be included
         :return: Updated child populations with events indexing complete
         """
+        # If parent is empty just return the child populations with empty index array
+        if self.empty_parent:
+            return self.child_populations
+
         # Break data into workable chunks
         d = np.ceil(self.data.shape[0]/30000)
         chunksize = int(np.ceil(self.data.shape[0]/d))
@@ -37,40 +42,32 @@ class DensityBasedClustering(Gate):
             data = data[~data.index.isin(sample.index)]
             chunks.append(sample)
 
-        knn_model = KNeighborsClassifier(n_neighbors=nn, weights='distance', n_jobs=-1)
-        # If parent is empty just return the child populations with empty index array
-        if self.empty_parent:
-            return self.child_populations
-
-        # Cluster!
-        model = DBSCAN(eps=distance_nn,
-                       min_samples=self.min_pop_size,
-                       algorithm='ball_tree',
-                       n_jobs=-1)
-        if self.sample is not None:
-            model.fit(self.sample[[self.x, self.y]])
-        else:
-            model.fit(self.data[[self.x, self.y]])
-        db_labels = model.labels_
+        # Cluster each chunk!
+        clustered_data = pd.DataFrame()
+        for sample in chunks:
+            model = DBSCAN(eps=distance_nn,
+                           min_samples=self.min_pop_size,
+                           algorithm='ball_tree',
+                           n_jobs=-1)
+            model.fit(sample[[self.x, self.y]])
+            db_labels = model.labels_
+            if core_only:
+                non_core_mask = np.ones(len(db_labels), np.bool)
+                non_core_mask[model.core_sample_indices_] = 0
+                np.put(db_labels, non_core_mask, -1)
+            sample['labels'] = db_labels
+            clustered_data = pd.concat([clustered_data, sample])
 
         # Post clustering error checking
-        if core_only:
-            non_core_mask = np.ones(len(db_labels), np.bool)
-            non_core_mask[model.core_sample_indices_] = 0
-            np.put(db_labels, non_core_mask, -1)
-        if len(set(db_labels)) == 1:
+        if len(clustered_data['labels'].unique()) == 1:
             self.warnings.append('Failed to identify any distinct populations')
+
         n_children = len(self.child_populations.populations.keys())
-        n_clusters = len(set([x for x in db_labels if x != -1]))
+        n_clusters = len(clustered_data['labels'].unique())
         if n_clusters != n_children:
             self.warnings.append(f'Expected {n_children} populations, '
-                                 f'identified {n_clusters}; {set(db_labels)}')
-
-        # Up-sample (if necessary)
-        if self.sample is not None:
-            self.__upsample(knn_model, db_labels)
-        else:
-            self.data['labels'] = db_labels
+                                 f'identified {n_clusters}; {len(clustered_data["labels"].unique())}')
+        self.data = clustered_data
         population_predictions = self.__predict_pop_clusters()
         return self.__assign_clusters(population_predictions)
 
@@ -81,13 +78,16 @@ class DensityBasedClustering(Gate):
         threshold will be classed as noise (Optional)
         :return: Updated child populations with events indexing complete
         """
+        sample = None
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
             return self.child_populations
+        if self.frac is not None:
+            sample = self.sampling(self.data, 40000)
         # Cluster!
         model = hdbscan.HDBSCAN(core_dist_n_jobs=-1, min_cluster_size=self.min_pop_size, prediction_data=True)
-        if self.sample is not None:
-            model.fit(self.sample[[self.x, self.y]])
+        if sample is not None:
+            model.fit(sample[[self.x, self.y]])
             self.data['labels'], self.data['label_strength'] = hdbscan.approximate_predict(model,
                                                                                            self.data[[self.x, self.y]])
         else:
@@ -101,30 +101,6 @@ class DensityBasedClustering(Gate):
         # Predict clusters for child populations
         population_predictions = self.__predict_pop_clusters()
         return self.__assign_clusters(population_predictions)
-
-    def __upsample(self, model, labels):
-        """
-        Internal method. Perform up-sampling from clustering labels
-        :param labels: labels from clustering analysis
-        :return: None
-        """
-        # Fit model to sampled data and then assign labels to all of the data based on nearest neighbour fit
-        self.sample['labels'] = labels
-        model.fit(self.sample[[self.x, self.y]], labels)
-        self.data['labels'] = model.predict(self.data[[self.x, self.y]])
-        # Sometimes data in low density regions which should be assigned to 'noise' will be classified as belonging
-        # to a cluster. Correct for this by testing each data points local density and compare to the local density
-        # of noise
-        # Calculate average distance to 10 nearest neighbours for noise
-        noise = self.sample[self.sample['labels'] == -1]
-        noisy_tree = KDTree(noise[[self.x, self.y]])
-        noise_dist, _ = noisy_tree.query(noise[[self.x, self.y]], k=10)
-        avg_noise_dist = np.mean([np.mean(x[1:]) for x in noise_dist])
-        # For all data points, if >= average
-        tree = KDTree(self.data[[self.x, self.y]])
-        whole_dist, _ = tree.query(self.data[[self.x, self.y]], k=10)
-        self.data['distance'] = [np.mean(x[1:]) for x in whole_dist]
-        self.data['labels'] = np.where(self.data['distance'] >= avg_noise_dist, -1, self.data['labels'])
 
     def __filter_by_centroid(self, target, neighbours):
         distances = []
