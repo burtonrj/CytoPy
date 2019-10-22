@@ -122,7 +122,9 @@ def centroid(data: np.array):
     length = data.shape[0]
     sum_x = np.sum(data[:, 0])
     sum_y = np.sum(data[:, 1])
-    return sum_x / length, sum_y / length
+    x = sum_x/length
+    y = sum_y/length
+    return np.array([x, y])
 
 
 
