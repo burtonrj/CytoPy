@@ -1,10 +1,7 @@
-from immunova.flow.gating.base import Gate, GateError
-from immunova.flow.gating.defaults import ChildPopulationCollection
+from immunova.flow.gating.base import Gate
 from immunova.flow.gating.utilities import centroid
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import KNeighborsClassifier, KDTree
-from sklearn.exceptions import NotFittedError
-import pandas as pd
 import numpy as np
 import collections
 import hdbscan
@@ -21,7 +18,6 @@ class DensityBasedClustering(Gate):
         :param kwargs: Gate constructor arguments (see immunova.flow.gating.base)
         """
         super().__init__(**kwargs)
-        self.sample = self.sampling(self.data, 40000)
         self.min_pop_size = min_pop_size
 
     def dbscan(self, distance_nn: int, nn: int = 10, core_only: bool = False):
@@ -31,6 +27,16 @@ class DensityBasedClustering(Gate):
         :param core_only: if True, only core samples in density clusters will be included
         :return: Updated child populations with events indexing complete
         """
+        # Break data into workable chunks
+        d = np.ceil(self.data.shape[0]/30000)
+        chunksize = int(np.ceil(self.data.shape[0]/d))
+        chunks = list()
+        data = self.data.copy()
+        while data.shape[0] > 0:
+            sample = self.sampling(data, chunksize)
+            data = data[~data.index.isin(sample.index)]
+            chunks.append(sample)
+
         knn_model = KNeighborsClassifier(n_neighbors=nn, weights='distance', n_jobs=-1)
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
@@ -102,8 +108,23 @@ class DensityBasedClustering(Gate):
         :param labels: labels from clustering analysis
         :return: None
         """
+        # Fit model to sampled data and then assign labels to all of the data based on nearest neighbour fit
+        self.sample['labels'] = labels
         model.fit(self.sample[[self.x, self.y]], labels)
         self.data['labels'] = model.predict(self.data[[self.x, self.y]])
+        # Sometimes data in low density regions which should be assigned to 'noise' will be classified as belonging
+        # to a cluster. Correct for this by testing each data points local density and compare to the local density
+        # of noise
+        # Calculate average distance to 10 nearest neighbours for noise
+        noise = self.sample[self.sample['labels'] == -1]
+        noisy_tree = KDTree(noise[[self.x, self.y]])
+        noise_dist, _ = noisy_tree.query(noise[[self.x, self.y]], k=10)
+        avg_noise_dist = np.mean([np.mean(x[1:]) for x in noise_dist])
+        # For all data points, if >= average
+        tree = KDTree(self.data[[self.x, self.y]])
+        whole_dist, _ = tree.query(self.data[[self.x, self.y]], k=10)
+        self.data['distance'] = [np.mean(x[1:]) for x in whole_dist]
+        self.data['labels'] = np.where(self.data['distance'] >= avg_noise_dist, -1, self.data['labels'])
 
     def __filter_by_centroid(self, target, neighbours):
         distances = []
@@ -119,31 +140,20 @@ class DensityBasedClustering(Gate):
         using the their target mediod
         :return: predictions {labels: [child population names]}
         """
+        cluster_centroids = [(x, centroid(self.data[self.data['labels'] == x][[self.x, self.y]].values))
+                             for x in [l for l in self.data['labels'].unique() if l != -1]]
         predictions = collections.defaultdict(list)
         tree = KDTree(self.data[[self.x, self.y]].values)
         for name in self.child_populations.populations.keys():
-            target = self.child_populations.populations[name].properties['target']
-            dist, ind = tree.query(np.array(target).reshape(1, -1), k=int(self.data.shape[0]*0.05))
-            neighbour_labels_counts = collections.Counter(self.data.iloc[ind[0]]['labels'].values).most_common()
-            # Remove noisy neighbours
-            neighbour_labels_counts = [x for x in neighbour_labels_counts if x[0] != -1]
-            if len(neighbour_labels_counts) == 0:
-                # Population is assigned to noise
+            target = np.array(self.child_populations.populations[name].properties['target'])
+            dist, ind = tree.query(target.reshape(1, -1), k=int(self.data.shape[0]*0.01))
+            neighbour_labels = set(self.data.iloc[ind[0]]['labels'].values)
+            # If all neighbours are noise, assign target to noise
+            if neighbour_labels == {-1}:
                 predictions[-1].append(name)
                 continue
-            # One neighbour class
-            if len(neighbour_labels_counts) == 1:
-                predictions[neighbour_labels_counts[0][0]].append(name)
-                continue
-            most_popular_neighbour = max(neighbour_labels_counts, key=lambda x: x[1])
-            equivalents = [x for x in neighbour_labels_counts if x[1] == most_popular_neighbour[1]]
-            if len(equivalents) == 1:
-                # No popularity contest
-                predictions[most_popular_neighbour[0]].append(name)
-            else:
-                # Select label with the closest centroid
-                label_with_closest_centroid = self.__filter_by_centroid(target, equivalents)
-                predictions[label_with_closest_centroid].append(name)
+            distance_to_centroids = [(x, np.linalg.norm(target-c)) for x, c in cluster_centroids]
+            predictions[min(distance_to_centroids, key=lambda x: x[1])[0]].append(name)
         return predictions
 
     def __assign_clusters(self, population_predictions):
