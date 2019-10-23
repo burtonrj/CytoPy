@@ -127,4 +127,14 @@ def centroid(data: np.array):
     return np.array([x, y])
 
 
+def multi_centroid_calculation(data: pd.DataFrame):
+    centroids = list()
+    for c in data['labels'].unique():
+        d = data[data['labels'] == c].values
+        centroid_ = centroid(d)
+        centroids.append(dict(chunk_idx=data['chunk_idx'].values[0],
+                              cluster=c, x=centroid_[0], y=centroid_[1]))
+    return pd.DataFrame(centroids)
+
+
 

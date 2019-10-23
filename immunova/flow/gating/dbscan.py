@@ -1,11 +1,14 @@
-from immunova.flow.gating.base import Gate
-from immunova.flow.gating.utilities import centroid
-from sklearn.cluster import DBSCAN
-from sklearn.neighbors import KNeighborsClassifier, KDTree
-import numpy as np
+from immunova.flow.gating.base import Gate, GateError
+from immunova.flow.gating.utilities import centroid, multi_centroid_calculation
+from multiprocessing import Pool, cpu_count
+from sklearn.cluster import DBSCAN, KMeans
+from sklearn.neighbors import KDTree
+from functools import partial, partialmethod
 import pandas as pd
+import numpy as np
 import collections
 import hdbscan
+from datetime import datetime
 
 
 class DensityBasedClustering(Gate):
@@ -21,7 +24,40 @@ class DensityBasedClustering(Gate):
         super().__init__(**kwargs)
         self.min_pop_size = min_pop_size
 
-    def dbscan(self, distance_nn: int, nn: int = 10, core_only: bool = False):
+    def _meta_clustering(self, clustered_chunks: list):
+        """
+        Given a list of clustered samples, fit a KMeans model to find 'meta-clusters' that will allow for merging
+        of samples into a single dataframe
+        :param clustered_chunks: list of pandas dataframes, each clustered using DBSCAN and cluster labels assigned
+        to a column named 'labels'
+        :return: reference dataframe that assigns each sample cluster to a meta-cluster
+        """
+        # Calculate K (number of meta clusters) as the number of expected populations OR the median number of
+        # clusters found in each sample IF this median is less that the number of expected populations
+        clustered_chunks_wo_noise = [x[x['labels'] != -1] for x in clustered_chunks]
+        median_k = np.median([len(x['labels'].unique()) for x in clustered_chunks_wo_noise])
+        if median_k < len(self.child_populations.populations.keys()):
+            k = int(median_k)
+        else:
+            k = len(self.child_populations.populations.keys())
+
+        # Calculate centroids of each cluster, this will be used as the training data
+        pool = Pool(cpu_count())
+        cluster_centroids = pd.concat(pool.map(multi_centroid_calculation, clustered_chunks_wo_noise))
+        meta = KMeans(n_clusters=k, n_init=10, precompute_distances=True, random_state=42, n_jobs=-1)
+        meta.fit(cluster_centroids[['x', 'y']].values)
+        cluster_centroids['meta_cluster'] = meta.labels_
+        return cluster_centroids
+
+    @staticmethod
+    def __meta_assignment(df, meta_clusters):
+        df = df.copy()
+        ref_df = meta_clusters[meta_clusters['chunk_idx'] == df['chunk_idx'].values[0]]
+        df['labels'] = df['labels'].apply(lambda x:
+                                          -1 if x == -1 else ref_df[ref_df['cluster'] == x]['meta_cluster'].values[0])
+        return df
+
+    def dbscan(self, distance_nn: int, core_only: bool = False):
         """
         Perform gating with dbscan algorithm
         :param distance_nn: nearest neighbour distance (smaller value will create tighter clusters)
@@ -37,13 +73,30 @@ class DensityBasedClustering(Gate):
         chunksize = int(np.ceil(self.data.shape[0]/d))
         chunks = list()
         data = self.data.copy()
-        while data.shape[0] > 0:
-            sample = self.sampling(data, chunksize)
+        if self.downsample_method == 'density':
+            if self.density_downsample_kwargs is not None:
+                if not type(self.density_downsample_kwargs) == dict:
+                    raise GateError('If applying density dependent down-sampling then a dictionary of '
+                                    'keyword arguments is required as input for density_downsample_kwargs')
+                kwargs = dict(sample_n=chunksize, features=[self.x, self.y], **self.density_downsample_kwargs)
+                sampling_func = partial(self.density_dependent_downsample, **kwargs)
+            else:
+                sampling_func = partial(self.density_dependent_downsample, sample_n=chunksize,
+                                        features=[self.x, self.y])
+        else:
+            sampling_func = partial(self.uniform_downsample, frac=None, sample_n=chunksize)
+
+        for x in range(0, int(d)):
+            if data.shape[0] <= chunksize:
+                chunks.append(data)
+                break
+            sample = sampling_func(data=data)
+            sample['chunk_idx'] = x
             data = data[~data.index.isin(sample.index)]
             chunks.append(sample)
 
         # Cluster each chunk!
-        clustered_data = pd.DataFrame()
+        clustered_data = list()
         for sample in chunks:
             model = DBSCAN(eps=distance_nn,
                            min_samples=self.min_pop_size,
@@ -56,18 +109,32 @@ class DensityBasedClustering(Gate):
                 non_core_mask[model.core_sample_indices_] = 0
                 np.put(db_labels, non_core_mask, -1)
             sample['labels'] = db_labels
-            clustered_data = pd.concat([clustered_data, sample])
+            clustered_data.append(sample)
 
+        # Perform meta clustering and merge clusters across samples
+        meta_clusters = self._meta_clustering(clustered_data)
+        data = pd.DataFrame()
+        for i, sample in enumerate(clustered_data):
+            ref = meta_clusters[meta_clusters['chunk_idx'] == i]
+            f = partial(meta_assignment, ref_df=ref)
+            sample['labels'] = sample['labels'].apply(f)
+            data = pd.concat([data, sample])
+
+        e = datetime.now()
+        print(f'Error checking t:{(e-s).total_seconds()}...')
         # Post clustering error checking
-        if len(clustered_data['labels'].unique()) == 1:
+        if len(data['labels'].unique()) == 1:
             self.warnings.append('Failed to identify any distinct populations')
 
         n_children = len(self.child_populations.populations.keys())
-        n_clusters = len(clustered_data['labels'].unique())
+        n_clusters = len(data['labels'].unique())
         if n_clusters != n_children:
             self.warnings.append(f'Expected {n_children} populations, '
-                                 f'identified {n_clusters}; {len(clustered_data["labels"].unique())}')
-        self.data = clustered_data
+                                 f'identified {n_clusters}; {len(data["labels"].unique())}')
+        self.data = data
+
+        e = datetime.now()
+        print(f'Population assignment t:{(e-s).total_seconds()}...')
         population_predictions = self.__predict_pop_clusters()
         return self.__assign_clusters(population_predictions)
 
