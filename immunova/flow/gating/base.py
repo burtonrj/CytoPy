@@ -145,17 +145,23 @@ class Gate:
                                                               y=self.y, method=method, threshold_x=x_threshold,
                                                               threshold_y=y_threshold)
 
-    def uniform_downsample(self, frac: float):
+    def uniform_downsample(self, frac: float, sample_n: int or None = None, data: pd.DataFrame or None = None):
         """
         Sample associated events data
         :param frac: fraction of dataset to return as a sample
         :return: sampled pandas dataframe
         """
+        if data is not None:
+            if sample_n is not None:
+                return data.sample(n=sample_n)
+            return data.sample(frac=frac)
+        if sample_n is not None:
+            return self.data.sample(n=sample_n)
         return self.data.sample(frac=frac)
 
-    def density_dependent_downsample(self, features: list, frac: float = 0.1, alpha: int = 5,
-                                     mmd_sample_n: int = 2000, outlier_dens: float = 1,
-                                     target_dens: float = 5):
+    def density_dependent_downsample(self, features: list, frac: float = 0.1, sample_n: int or None = None,
+                                     data: pd.DataFrame or None = None, alpha: int = 5, mmd_sample_n: int = 2000,
+                                     outlier_dens: float = 1, target_dens: float = 5):
         """
         Perform density dependent down-sampling to remove risk of under-sampling rare populations;
         adapted from SPADE*
@@ -186,7 +192,10 @@ class Gate:
             if local_d > target_d:
                 return target_d / local_d
 
-        df = self.data.copy()
+        if data is not None:
+            df = data.copy()
+        else:
+            df = self.data.copy()
         mmd_sample = df.sample(mmd_sample_n)
         tree = KDTree(mmd_sample[features], metric='manhattan')
         dist, _ = tree.query(mmd_sample[features], k=2)
@@ -200,7 +209,11 @@ class Gate:
         if sum(prob) == 0:
             print('Error: density dependendent downsampling failed; weights sum to zero. Defaulting to uniform '
                   'samplings')
+            if sample_n is not None:
+                return df.sample(n=sample_n)
             return df.sample(frac=frac)
+        if sample_n is not None:
+            return df.sample(n=sample_n, weights=prob)
         return df.sample(frac=frac, weights=prob)
 
 
