@@ -1,14 +1,29 @@
 from immunova.flow.gating.base import Gate, GateError
-from immunova.flow.gating.utilities import centroid, multi_centroid_calculation
+from immunova.flow.gating.utilities import centroid, multi_centroid_calculation, inside_polygon
 from multiprocessing import Pool, cpu_count
 from sklearn.cluster import DBSCAN, KMeans
-from sklearn.neighbors import KDTree
-from functools import partial, partialmethod
+from sklearn.neighbors import KDTree, KNeighborsClassifier
+from shapely.geometry import Point
+from functools import partial
 import pandas as pd
 import numpy as np
 import collections
 import hdbscan
-from datetime import datetime
+
+
+def meta_assignment(df: pd.DataFrame, meta_clusters: pd.DataFrame) -> pd.DataFrame:
+    """
+    Given a reference dataframe of meta-cluster assignments, update the target dataframes cluster
+    assignments
+    :param df: Target dataframe for updating
+    :param meta_clusters: Reference dataframe of meta clusters as generated from self._meta_clustering
+    :return: Updated dataframe
+    """
+    df = df.copy()
+    ref_df = meta_clusters[meta_clusters['chunk_idx'] == df['chunk_idx'].values[0]]
+    df['labels'] = df['labels'].apply(lambda x:
+                                      -1 if x == -1 else ref_df[ref_df['cluster'] == x]['meta_cluster'].values[0])
+    return df
 
 
 class DensityBasedClustering(Gate):
@@ -23,6 +38,7 @@ class DensityBasedClustering(Gate):
         """
         super().__init__(**kwargs)
         self.min_pop_size = min_pop_size
+        self.__meta_assignment = staticmethod(meta_assignment)
 
     def _meta_clustering(self, clustered_chunks: list):
         """
@@ -44,56 +60,16 @@ class DensityBasedClustering(Gate):
         # Calculate centroids of each cluster, this will be used as the training data
         pool = Pool(cpu_count())
         cluster_centroids = pd.concat(pool.map(multi_centroid_calculation, clustered_chunks_wo_noise))
+        pool.close()
+        pool.join()
         meta = KMeans(n_clusters=k, n_init=10, precompute_distances=True, random_state=42, n_jobs=-1)
         meta.fit(cluster_centroids[['x', 'y']].values)
         cluster_centroids['meta_cluster'] = meta.labels_
         return cluster_centroids
 
-    @staticmethod
-    def __meta_assignment(df, meta_clusters):
-        df = df.copy()
-        ref_df = meta_clusters[meta_clusters['chunk_idx'] == df['chunk_idx'].values[0]]
-        df['labels'] = df['labels'].apply(lambda x:
-                                          -1 if x == -1 else ref_df[ref_df['cluster'] == x]['meta_cluster'].values[0])
-        return df
-
-    def dbscan(self, distance_nn: int, core_only: bool = False):
-        """
-        Perform gating with dbscan algorithm
-        :param distance_nn: nearest neighbour distance (smaller value will create tighter clusters)
-        :param core_only: if True, only core samples in density clusters will be included
-        :return: Updated child populations with events indexing complete
-        """
-        # If parent is empty just return the child populations with empty index array
-        if self.empty_parent:
-            return self.child_populations
-
+    def __dbscan_chunks(self, distance_nn, core_only):
         # Break data into workable chunks
-        d = np.ceil(self.data.shape[0]/30000)
-        chunksize = int(np.ceil(self.data.shape[0]/d))
-        chunks = list()
-        data = self.data.copy()
-        if self.downsample_method == 'density':
-            if self.density_downsample_kwargs is not None:
-                if not type(self.density_downsample_kwargs) == dict:
-                    raise GateError('If applying density dependent down-sampling then a dictionary of '
-                                    'keyword arguments is required as input for density_downsample_kwargs')
-                kwargs = dict(sample_n=chunksize, features=[self.x, self.y], **self.density_downsample_kwargs)
-                sampling_func = partial(self.density_dependent_downsample, **kwargs)
-            else:
-                sampling_func = partial(self.density_dependent_downsample, sample_n=chunksize,
-                                        features=[self.x, self.y])
-        else:
-            sampling_func = partial(self.uniform_downsample, frac=None, sample_n=chunksize)
-
-        for x in range(0, int(d)):
-            if data.shape[0] <= chunksize:
-                chunks.append(data)
-                break
-            sample = sampling_func(data=data)
-            sample['chunk_idx'] = x
-            data = data[~data.index.isin(sample.index)]
-            chunks.append(sample)
+        chunks = self.generate_chunks(30000)
 
         # Cluster each chunk!
         clustered_data = list()
@@ -113,30 +89,71 @@ class DensityBasedClustering(Gate):
 
         # Perform meta clustering and merge clusters across samples
         meta_clusters = self._meta_clustering(clustered_data)
-        data = pd.DataFrame()
-        for i, sample in enumerate(clustered_data):
-            ref = meta_clusters[meta_clusters['chunk_idx'] == i]
-            f = partial(meta_assignment, ref_df=ref)
-            sample['labels'] = sample['labels'].apply(f)
-            data = pd.concat([data, sample])
+        pool = Pool(cpu_count())
+        f = partial(meta_assignment, meta_clusters=meta_clusters)
+        data = pd.concat(pool.map(f, clustered_data))
+        pool.close()
+        pool.join()
+        data = self.__post_cluster_checks(data)
 
-        e = datetime.now()
-        print(f'Error checking t:{(e-s).total_seconds()}...')
+        # Generate a Polygon for each cluster and update data according to polygon gates
+        polygon_shapes = self.generate_polygons()
+        for cluster_name, poly in polygon_shapes.items():
+            mask = inside_polygon(data, self.x, self.y, poly)
+            label_mask = data.index.isin(mask.index)
+            data['labels'] = data['labels'].mask(label_mask, cluster_name)
+
+        return data, polygon_shapes
+
+    def __post_cluster_checks(self, data):
         # Post clustering error checking
         if len(data['labels'].unique()) == 1:
             self.warnings.append('Failed to identify any distinct populations')
+            return self.child_populations
 
         n_children = len(self.child_populations.populations.keys())
         n_clusters = len(data['labels'].unique())
         if n_clusters != n_children:
             self.warnings.append(f'Expected {n_children} populations, '
                                  f'identified {n_clusters}; {len(data["labels"].unique())}')
-        self.data = data
+        return data
 
-        e = datetime.now()
-        print(f'Population assignment t:{(e-s).total_seconds()}...')
-        population_predictions = self.__predict_pop_clusters()
-        return self.__assign_clusters(population_predictions)
+    def __dbscan_knn(self, distance_nn, core_only):
+        sample = self.sampling(self.data, 40000)
+        model = DBSCAN(eps=distance_nn,
+                       min_samples=self.min_pop_size,
+                       algorithm='ball_tree',
+                       n_jobs=-1)
+        model.fit(sample[[self.x, self.y]])
+        db_labels = model.labels_
+        if core_only:
+            non_core_mask = np.ones(len(db_labels), np.bool)
+            non_core_mask[model.core_sample_indices_] = 0
+            np.put(db_labels, non_core_mask, -1)
+
+        knn = KNeighborsClassifier(n_neighbors=10, weights='distance').fit(sample[[self.x, self.y]], db_labels)
+        self.data['labels'] = knn.predict(self.data[[self.x, self.y]])
+
+    def dbscan(self, distance_nn: int, core_only: bool = False, chunks: bool =  False):
+        """
+        Perform gating with dbscan algorithm
+        :param distance_nn: nearest neighbour distance (smaller value will create tighter clusters)
+        :param core_only: if True, only core samples in density clusters will be included
+        :return: Updated child populations with events indexing complete
+        """
+        # If parent is empty just return the child populations with empty index array
+        if self.empty_parent:
+            return self.child_populations
+        if chunks:
+            self.data, polygon_shapes = self.__dbscan_chunks(distance_nn, core_only)
+        else:
+            self.__dbscan_knn(distance_nn, core_only)
+            polygon_shapes = self.generate_polygons()
+        # Test if target population falls within polygon and if so, assign accordingly
+        target_predictions = self.__predict_pop_clusters(polygon_shapes)
+
+        # Update child populations
+        return self.__assign_clusters(target_predictions, polygon_shapes)
 
     def hdbscan(self, inclusion_threshold: float or None = None):
         """
@@ -166,8 +183,9 @@ class DensityBasedClustering(Gate):
             mask = self.data['label_strength'] < inclusion_threshold
             self.data.loc[mask, 'labels'] = -1
         # Predict clusters for child populations
-        population_predictions = self.__predict_pop_clusters()
-        return self.__assign_clusters(population_predictions)
+        polygon_shapes = self.generate_polygons()
+        population_predictions = self.__predict_pop_clusters(polygon_shapes)
+        return self.__assign_clusters(population_predictions, polygon_shapes)
 
     def __filter_by_centroid(self, target, neighbours):
         distances = []
@@ -177,51 +195,80 @@ class DensityBasedClustering(Gate):
             distances.append((label, np.linalg.norm(target-c)))
         return min(distances, key=lambda x: x[1])[0]
 
-    def __predict_pop_clusters(self):
+    def __predict_pop_clusters(self, cluster_polygons):
         """
         Internal method. Predict which clusters the expected child populations belong to
-        using the their target mediod
-        :return: predictions {labels: [child population names]}
+        using the their polygon gate or the cluster centroid
+        :return: predictions {child population name: cluster label}
         """
+        if 'labels' not in self.data.columns:
+            GateError('Method self.__generate_polygons called before cluster assignment')
         cluster_centroids = [(x, centroid(self.data[self.data['labels'] == x][[self.x, self.y]].values))
                              for x in [l for l in self.data['labels'].unique() if l != -1]]
-        predictions = collections.defaultdict(list)
-        tree = KDTree(self.data[[self.x, self.y]].values)
-        for name in self.child_populations.populations.keys():
-            target = np.array(self.child_populations.populations[name].properties['target'])
-            dist, ind = tree.query(target.reshape(1, -1), k=int(self.data.shape[0]*0.01))
-            neighbour_labels = set(self.data.iloc[ind[0]]['labels'].values)
-            # If all neighbours are noise, assign target to noise
-            if neighbour_labels == {-1}:
-                predictions[-1].append(name)
+        tree_x = self.data[[self.x, self.y]].values
+        tree = KDTree(tree_x, leaf_size=100)
+        assignments = dict()
+        for p in self.child_populations.populations.keys():
+            target = np.array(self.child_populations.populations[p].properties['target'])
+            target_point = Point(target[0], target[1])
+            # Check which clusters a target falls into
+            cluster_assingments = [cluster_label for cluster_label, poly in cluster_polygons.items()
+                                   if poly.contains(target_point)]
+            if len(cluster_assingments) == 0:
+                # Target does not fall directly into any cluster
+                # Is the target surrounded by noise? (i.e. target cluster not found)
+                k = int(self.data.shape[0]*0.01)
+                if k > 100:
+                    k = 100
+                _, nearest_neighbours_idx = tree.query(tree_x, k=k)
+                neighbours = self.data.loc[nearest_neighbours_idx[0]]
+                if set(neighbours['labels'].unique()) == {-1}:
+                    self.warnings.append(f'Population {p} assigned to noise (i.e. population not found)')
+                    assignments[p] = -1
+                    continue
+                # Not surrounded by noise, assign to nearest centroid
+                distance_to_centroids = [(x, np.linalg.norm(target-c)) for x, c in cluster_centroids]
+                cluster_assingments = min(distance_to_centroids, key=lambda x: x[1])
+            elif len(cluster_assingments) > 1:
+                distance_to_centroids = [(x, np.linalg.norm(target - c)) for x, c in cluster_centroids]
+                assignments[p] = min(distance_to_centroids, key=lambda x: x[1])[0]
                 continue
-            distance_to_centroids = [(x, np.linalg.norm(target-c)) for x, c in cluster_centroids]
-            predictions[min(distance_to_centroids, key=lambda x: x[1])[0]].append(name)
-        return predictions
+            assignments[p] = cluster_assingments[0]
 
-    def __assign_clusters(self, population_predictions):
+        # Check for multiple cluster assignments
+        final_assignments = dict()
+        clusters_pops = collections.defaultdict(list)
+        for population, cluster in assignments.items():
+            clusters_pops[cluster].append(population)
+        pops = set([x for sublist in clusters_pops.values() for x in sublist])
+        if len(clusters_pops.keys()) != len(pops):
+            self.warnings.append(f'Expected {len(pops)} populations but found {len(clusters_pops.keys())}')
+
+        for cluster, population in clusters_pops.items():
+            if len(population) > 1:
+                weights = [{'name': name, 'weight': x.properties['weight']}
+                           for name, x in self.child_populations.populations.items()
+                           if name in population]
+                priority_id = max(weights, key=lambda x: x['weight'])['name']
+                self.warnings.append(f'Populations f{population} assigned to the same cluster {cluster};'
+                                     f'prioritising {priority_id} based on weighting.')
+                final_assignments[priority_id] = cluster
+            if len(population) == 0:
+                continue
+            final_assignments[population[0]] = cluster
+        return final_assignments
+
+    def __assign_clusters(self, target_predictions, polygon_shapes):
         """
         Internal method. Given child population cluster predictions, update index and geom of child populations
         :param population_predictions: predicted clustering assignments {label: [population names]}
         :return: child populations with updated index and geom values
         """
-        for label, p_id in population_predictions.items():
-            idx = self.data[self.data['labels'] == label].index.values
-            if len(p_id) > 1:
-                # Multiple child populations have been associated to one cluster. Use the child population weightings
-                # to choose priority population
-                weights = [{'name': name, 'weight': x.properties['weight']}
-                           for name, x in self.child_populations.populations.items()
-                           if name in p_id]
-                priority_id = max(weights, key=lambda x: x['weight'])['name']
-                self.warnings.append(f'Populations f{p_id} assigned to the same cluster {label};'
-                                     f'prioritising {priority_id} based on weighting.')
-                self.child_populations.populations[priority_id].update_index(idx=idx, merge_options='overwrite')
-                for x in p_id:
-                    self.child_populations.populations[x].update_geom(shape='cluster', x=self.x, y=self.y)
-            elif label == -1:
-                self.warnings.append(f'Population {p_id} assigned to noise (i.e. population not found)')
-            else:
-                self.child_populations.populations[p_id[0]].update_index(idx=idx, merge_options='overwrite')
-            self.child_populations.populations[p_id[0]].update_geom(shape='cluster', x=self.x, y=self.y)
+
+        for population_id, assigned_cluster in target_predictions.items():
+            idx = self.data[self.data['labels'] == assigned_cluster].index.values
+            self.child_populations.populations[population_id].update_index(idx=idx, merge_options='overwrite')
+            x, y = polygon_shapes[assigned_cluster].exterior.xy
+            self.child_populations.populations[population_id].update_geom(shape='poly', x=self.x, y=self.y,
+                                                                          cords=dict(x=x, y=y))
         return self.child_populations
