@@ -9,6 +9,7 @@ from itertools import cycle
 from scipy.spatial import ConvexHull
 import pandas as pd
 import numpy as np
+import random
 
 
 class Plot:
@@ -21,6 +22,9 @@ class Plot:
         :param gating_object: Gating object to generate plots from
         """
         self.gating = gating_object
+        self.colours = ['#FF0000', '#8B0000', '#FFA500', '#BDB76B', '#7CFC00', '#32CD32',
+                        '#008000', '#FF1493', '#2F4F4F', '#000000']
+        random.shuffle(self.colours)
 
     @staticmethod
     def __transform_gate(data: pd.DataFrame, gate: Gate):
@@ -106,45 +110,10 @@ class Plot:
         if gate_name not in self.gating.gates.keys():
             print(f'Error: could not find {gate_name} in attached gate object')
         gate = self.gating.gates[gate_name]
-        if 'Clustering' in gate.class_:
-            self.__cluster_plot(gate, xlim, ylim)
-            return
         data = self.__get_gate_data(gate)
         num_axes = len(data.keys())
         fig, axes = plt.subplots(ncols=num_axes)
         self.__geom_plot(data, fig, axes, gate, xlim, ylim)
-
-    def __cluster_plot(self, gate: Gate, xlim: tuple, ylim: tuple) -> None:
-        """
-        Produce a plot of clusters generated from a cluster gate
-        :param gate: Gate object to plot
-        :param xlim: custom x-axis limit (default = None)
-        :param ylim: custom y-axis limit (default = None)
-        :return: None
-        """
-        # Axes information
-        kwargs = {k: v for k, v in gate.kwargs}
-        x, y = kwargs['x'], kwargs['y'] or 'FSC-A'
-        xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
-        fig, ax = plt.subplots(figsize=(5, 5))
-        d = self.__transform_gate(self.gating.get_population_df(gate.parent), gate)
-        ax = self.__2dhist(ax, d, x, y)
-        colours = cycle(['green', 'blue', 'red', 'magenta', 'cyan'])
-        for child, colour in zip(gate.children, colours):
-            d = self.__transform_gate(self.gating.get_population_df(child), gate)
-            if d is None:
-                continue
-            if d.shape[0] == 0:
-                continue
-            d = d[[x, y]].values
-            centroid_ = centroid(d)
-            ax.scatter(x=centroid_[0], y=centroid_[1], c=colour, s=8, label=child)
-            hull = ConvexHull(d)
-            for simplex in hull.simplices:
-                ax.plot(d[simplex, 0], d[simplex, 1], 'k-', c='red')
-        self.__plot_asthetics(ax, x, y, xlim, ylim, title=gate.gate_name)
-        ax.legend()
-        fig.show()
 
     def __build_geom_plot(self, data: pd.DataFrame, gate: Gate, ax: matplotlib.pyplot.axes,
                           xlim: tuple, ylim: tuple, title: str) -> matplotlib.pyplot.axes:
@@ -161,29 +130,40 @@ class Plot:
         kwargs = {k: v for k, v in gate.kwargs}
         x, y = kwargs['x'], kwargs['y'] or 'FSC-A'
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
-        geom = self.gating.populations[gate.children[0]].geom
+        geoms = {c: self.gating.populations[c].geom for c in gate.children}
         if data.shape[0] < 1000:
             ax.scatter(x=data[x], y=data[y], s=3)
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
         else:
             ax = self.__2dhist(ax, data, x, y)
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
+
+        colours = cycle(self.colours)
         # Draw geom
-        if geom['shape'] == 'threshold':
-            ax.axvline(geom['threshold'], c='r')
-        if geom['shape'] == '2d_threshold':
-            ax.axvline(geom['threshold_x'], c='r')
-            ax.axhline(geom['threshold_y'], c='r')
-        if geom['shape'] == 'ellipse':
-            ellipse = patches.Ellipse(xy=geom['centroid'], width=geom['width'], height=geom['height'],
-                                      angle=geom['angle'], fill=False, edgecolor='r')
-            ax.add_patch(ellipse)
-        if geom['shape'] == 'rect':
-            rect = patches.Rectangle(xy=(geom['x_min'], geom['y_min']),
-                                     width=((geom['x_max']) - (geom['x_min'])),
-                                     height=(geom['y_max'] - geom['y_min']),
-                                     fill=False, edgecolor='r')
-            ax.add_patch(rect)
+        for (child_name, geom), colour in zip(geoms.items(), colours):
+            if geom is None or geom == dict():
+                print(f'Population {child_name} has no associated gate, skipping...')
+                continue
+            if geom['shape'] == 'threshold':
+                ax.axvline(geom['threshold'], c=colour)
+            if geom['shape'] == '2d_threshold':
+                ax.axvline(geom['threshold_x'], c=colour)
+                ax.axhline(geom['threshold_y'], c=colour)
+            if geom['shape'] == 'ellipse':
+                ellipse = patches.Ellipse(xy=geom['centroid'], width=geom['width'], height=geom['height'],
+                                          angle=geom['angle'], fill=False, edgecolor=colour)
+                ax.add_patch(ellipse)
+            if geom['shape'] == 'rect':
+                rect = patches.Rectangle(xy=(geom['x_min'], geom['y_min']),
+                                         width=((geom['x_max']) - (geom['x_min'])),
+                                         height=(geom['y_max'] - geom['y_min']),
+                                         fill=False, edgecolor=colour)
+                ax.add_patch(rect)
+            if geom['shape'] == 'poly':
+                x = geom['cords']['x']
+                y = geom['cords']['y']
+                ax.plot(x, y, '-k', c=colour, label=child_name)
+                ax.legend()
 
     def __geom_plot(self, data: dict, fig: matplotlib.pyplot.figure,
                     axes: np.array or matplotlib.pyplot.axes, gate: Gate,

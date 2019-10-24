@@ -164,10 +164,10 @@ class ChildPopulationCollection:
                 """
                 super().__init__()
                 try:
-                    assert shape in ['ellipse', 'rect', 'threshold', '2d_threshold', 'cluster', None]
+                    assert shape in ['ellipse', 'rect', 'threshold', '2d_threshold', 'poly']
                     self.shape = shape
                 except AssertionError:
-                    print('Invalid shape, must be one of: ellipse, rect, threshold, 2d_threshold', 'cluster')
+                    print('Invalid shape, must be one of: ellipse, rect, threshold, 2d_threshold', 'poly')
                 self.x = x
                 self.y = y
                 for k, v in kwargs.items():
