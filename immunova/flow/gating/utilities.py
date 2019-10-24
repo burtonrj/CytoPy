@@ -1,3 +1,7 @@
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
+from multiprocessing import Pool, cpu_count
+from functools import partial
 from immunova.flow.gating.base import GateError
 from sklearn.neighbors import KernelDensity
 import pandas as pd
@@ -137,4 +141,35 @@ def multi_centroid_calculation(data: pd.DataFrame):
     return pd.DataFrame(centroids)
 
 
+def __multiprocess_point_in_poly(df, x, y, poly):
+    """
+    Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
+    :param df:
+    :param x:
+    :param y:
+    :param poly:
+    :return:
+    """
+    mask = df.apply(lambda r: poly.contains(Point(r[x], r[y])), axis=1)
+    return df.loc[mask]
+
+
+def inside_polygon(df, x, y, poly):
+    """
+    Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
+    :param df:
+    :param x:
+    :param y: S
+    :param poly:
+    :return:
+    """
+    pool = Pool(cpu_count())
+    f = partial(__multiprocess_point_in_poly, x=x, y=y, poly=poly)
+    n = int(df.shape[0]/10)
+    list_df = [df[i: i+1] for i in range(0, df.shape[0], n)]
+    result = pool.map(f, list_df)
+    df_positive = pd.concat(result)
+    pool.close()
+    pool.join()
+    return df_positive
 

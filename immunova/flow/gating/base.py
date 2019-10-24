@@ -1,5 +1,7 @@
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.transforms import apply_transform
+from shapely.geometry.polygon import Polygon
+from scipy.spatial import ConvexHull
 from sklearn.neighbors import KDTree
 from functools import partial
 import pandas as pd
@@ -44,6 +46,11 @@ class Gate:
         self.empty_parent = self.__empty_parent()
         self.frac = frac
         self.downsample_method = downsample_method
+        if self.downsample_method == 'density':
+            if density_downsample_kwargs is not None:
+                if type(density_downsample_kwargs) != dict:
+                    raise GateError('If applying density dependent down-sampling then a dictionary of '
+                                    'keyword arguments is required as input for density_downsample_kwargs')
         self.density_downsample_kwargs = density_downsample_kwargs
 
     def sampling(self, data, threshold):
@@ -145,7 +152,7 @@ class Gate:
                                                               y=self.y, method=method, threshold_x=x_threshold,
                                                               threshold_y=y_threshold)
 
-    def uniform_downsample(self, frac: float, sample_n: int or None = None, data: pd.DataFrame or None = None):
+    def uniform_downsample(self, frac: float or None, sample_n: int or None = None, data: pd.DataFrame or None = None):
         """
         Sample associated events data
         :param frac: fraction of dataset to return as a sample
@@ -216,5 +223,54 @@ class Gate:
             return df.sample(n=sample_n, weights=prob)
         return df.sample(frac=frac, weights=prob)
 
+    def generate_chunks(self, chunksize):
+        """
+        Generate a list of dataframes (chunks) from original data of a target chunksize
+        :param chunksize: target size of chunks (might be smaller or larger than intended value depending on the size
+        of the data)
+        :return: list of pandas dataframes, one for each chunk
+        """
+        chunks = list()
+        d = np.ceil(self.data.shape[0] / chunksize)
+        chunksize = int(np.ceil(self.data.shape[0] / d))
+
+        if self.downsample_method == 'uniform':
+            sampling_func = partial(self.uniform_downsample, frac=None, sample_n=chunksize)
+        else:
+            if self.density_downsample_kwargs is not None:
+                kwargs = dict(sample_n=chunksize, features=[self.x, self.y], **self.density_downsample_kwargs)
+                sampling_func = partial(self.density_dependent_downsample, **kwargs)
+            else:
+                sampling_func = partial(self.density_dependent_downsample, sample_n=chunksize,
+                                        features=[self.x, self.y])
+        data = self.data.copy()
+        for x in range(0, int(d)):
+            if data.shape[0] <= chunksize:
+                data['chunk_idx'] = x
+                chunks.append(data)
+                break
+            sample = sampling_func(data=data)
+            sample['chunk_idx'] = x
+            data = data[~data.index.isin(sample.index)]
+            chunks.append(sample)
+        return chunks
+
+    def generate_polygons(self) -> dict:
+        """
+        Generate a dictionary of polygon coordinates and shapely Polygon from clustered data
+        objects
+        :return: dictionary of polygon coordinates and dictionary of Polygon shapely objects
+        """
+        if 'labels' not in self.data.columns:
+            GateError('Method self.__generate_polygons called before cluster assignment')
+        polygon_cords = {label: [] for label in self.data['labels'].unique() if label != -1}
+        for label in polygon_cords.keys():
+            if label == -1:
+                continue
+            d = self.data[self.data['labels'] == label][[self.x, self.y]].values
+            hull = ConvexHull(d)
+            polygon_cords[label] = [(d[v, 0], d[v, 1]) for v in hull.vertices]
+        polygon_shapes = {label: Polygon(x) for label, x in polygon_cords.items()}
+        return polygon_shapes
 
 

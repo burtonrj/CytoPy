@@ -20,9 +20,7 @@ from datetime import datetime
 import inspect
 # Scipy
 from sklearn.neighbors import KNeighborsClassifier
-from imblearn.over_sampling import RandomOverSampler
 import pandas as pd
-import numpy as np
 
 
 class Gating:
@@ -405,7 +403,10 @@ class Gating:
         :return: Population document
         """
         pop_node = self.populations[population_name]
-        geom = [(k, v) for k, v in pop_node.geom.items()]
+        if pop_node.geom is None:
+            geom = []
+        else:
+            geom = [(k, v) for k, v in pop_node.geom.items()]
         if population_name == 'root':
             parent = None
         else:
