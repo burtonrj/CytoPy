@@ -202,7 +202,10 @@ class DensityBasedClustering(Gate):
         :return: predictions {child population name: cluster label}
         """
         if 'labels' not in self.data.columns:
-            GateError('Method self.__generate_polygons called before cluster assignment')
+            raise GateError('Method self.__generate_polygons called before cluster assignment')
+        if set(self.data['labels'].unique()) == {-1}:
+            raise GateError('Clustering algorithm failed to identify any clusters (all labels attain to noise) '
+                            'If sampling, try increasing sample size')
         cluster_centroids = [(x, centroid(self.data[self.data['labels'] == x][[self.x, self.y]].values))
                              for x in [l for l in self.data['labels'].unique() if l != -1]]
         tree_x = self.data[[self.x, self.y]].values
