@@ -131,7 +131,9 @@ class DensityBasedClustering(Gate):
             non_core_mask[model.core_sample_indices_] = 0
             np.put(db_labels, non_core_mask, -1)
 
-        knn = KNeighborsClassifier(n_neighbors=10, weights='distance').fit(sample[[self.x, self.y]], db_labels)
+        knn = KNeighborsClassifier(n_neighbors=10,
+                                   weights='distance',
+                                   algorithm='ball_tree').fit(sample[[self.x, self.y]], db_labels)
         self.data['labels'] = knn.predict(self.data[[self.x, self.y]])
 
     def dbscan(self, distance_nn: int, core_only: bool = False, chunks: bool =  False):
