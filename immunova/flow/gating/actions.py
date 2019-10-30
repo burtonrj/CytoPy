@@ -17,6 +17,7 @@ from immunova.flow.plotting.static_plots import Plot
 from anytree import Node
 from anytree.search import findall
 from datetime import datetime
+from copy import deepcopy
 import inspect
 # Scipy
 from sklearn.neighbors import KNeighborsClassifier
@@ -81,7 +82,9 @@ class Gating:
         gate.kwargs = [[k, v] for k, v in kwargs.items()]
         self.gates[gate.gate_name] = gate
 
-    def __serailise_gate(self, gate):
+    @staticmethod
+    def __serailise_gate(gate):
+        gate = deepcopy(gate)
         kwargs = {k: v for k, v in gate.kwargs}
         kwargs['child_populations'] = kwargs['child_populations'].serialise()
         gate.kwargs = [[k, v] for k, v in kwargs.items()]
