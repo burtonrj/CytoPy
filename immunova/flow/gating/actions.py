@@ -39,22 +39,25 @@ class Gating:
         try:
             data = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample)
             assert data is not None
-            self.data = [x for x in data if x['typ'] == 'complete'][0]['data']
-            self.fmo = [x for x in data if x['typ'] == 'control']
-            self.fmo = {x['id']: x['data'] for x in self.fmo}
-            self.id = sample_id
-            self.experiment = experiment
-            self.plotting = Plot(self)
-            self.fmo_search_cache = {_id: dict(root=data.index.values) for _id, data in self.fmo.items()}
-            del data
+        except AssertionError:
+            raise GateError(f'Error: failed to fetch data for {sample_id}. Aborting.')
+        self.data = [x for x in data if x['typ'] == 'complete'][0]['data']
+        self.fmo = [x for x in data if x['typ'] == 'control']
+        self.fmo = {x['id']: x['data'] for x in self.fmo}
+        self.id = sample_id
+        self.mongo_id = experiment.fetch_sample_mid(sample_id)
+        self.experiment = experiment
+        self.plotting = Plot(self)
+        self.fmo_search_cache = {_id: dict(root=data.index.values) for _id, data in self.fmo.items()}
+        del data
+        fg = experiment.pull_sample(sample_id)
+        self.filegroup = fg
+        self.gates = dict()
+        if fg.gates:
+            for g in fg.gates:
+                self.__deserialise_gate(g)
 
-            fg = experiment.pull_sample(sample_id)
-            self.filegroup = fg
-            self.gates = dict()
-            if fg.gates:
-                for g in fg.gates:
-                    self.__deserialise_gate(g)
-
+        try:
             self.populations = dict()
             if fg.populations:
                 for p in fg.populations:
@@ -68,8 +71,9 @@ class Gating:
                             warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values,
                             parent=None)
                 self.populations['root'] = root
-        except AssertionError:
-            print('Error: failed to construct Gating object')
+        except KeyError as e:
+            print(f'WARNING: was unable to load populations due to missing parent populations: {e}')
+            print('Continuing with blank Gating object. Check that populations have not been removed.')
 
     def __deserialise_gate(self, gate):
         kwargs = {k: v for k, v in gate.kwargs}
@@ -438,10 +442,10 @@ class Gating:
             fg.gates = []
             fg.save()
         for name in self.populations.keys():
-            FileGroup.objects(primary_id=self.id).update(push__populations=self.population_to_mongo(name))
+            FileGroup.objects(id=self.mongo_id).update(push__populations=self.population_to_mongo(name))
         for _, gate in self.gates.items():
             gate = self.__serailise_gate(gate)
-            FileGroup.objects(primary_id=self.id).update(push__gates=gate)
+            FileGroup.objects(id=self.mongo_id).update(push__gates=gate)
         print('Saved successfully!')
         return True
 
