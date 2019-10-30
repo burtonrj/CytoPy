@@ -38,6 +38,12 @@ class FCSExperiment(mongoengine.Document):
         'db_alias': 'core',
         'collection': 'fcs_experiments'
     }
+
+    def __sample_exists(self, sample_id):
+        if sample_id not in self.list_samples():
+            print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
+            return False
+        return True
     
     def pull_sample(self, sample_id: str) -> FileGroup or None:
         """
@@ -45,8 +51,7 @@ class FCSExperiment(mongoengine.Document):
         :param sample_id: sample ID for search
         :return: FileGroup object; if sample does not belong to experiment, returns Null
         """
-        if sample_id not in self.list_samples():
-            print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
+        if not self.__sample_exists(sample_id):
             return None
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
         return FileGroup.objects(id=file_grp.id).get()
@@ -57,6 +62,12 @@ class FCSExperiment(mongoengine.Document):
         :return: List of IDs of file groups associated to experiment
         """
         return [f.primary_id for f in self.fcs_files]
+
+    def fetch_sample_mid(self, sample_id):
+        if not self.__sample_exists(sample_id):
+            return None
+        file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
+        return file_grp.id.__str__()
     
     def pull_sample_mappings(self, sample_id):
         """
