@@ -7,5 +7,8 @@ class PhenoGraph:
         self.k = k
         self.n_jobs=n_jobs
 
+    def labelled_dataset(self):
+
+
     def cluster(self, sample_id):
         pass

@@ -112,7 +112,7 @@ class Gate:
         neg_pop = self.data[self.data[self.x] < threshold]
         for x in [pos, neg]:
             self.child_populations.populations[x].update_geom(shape='threshold', x=self.x, y=self.y,
-                                                              method=method)
+                                                              method=method, threshold=threshold)
         self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options=merge_options)
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options=merge_options)
 
