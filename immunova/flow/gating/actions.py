@@ -11,6 +11,7 @@ from immunova.flow.gating.density import DensityThreshold
 from immunova.flow.gating.dbscan import DensityBasedClustering
 from immunova.flow.gating.quantile import Quantile
 from immunova.flow.gating.mixturemodel import MixtureModel
+from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.plotting.static_plots import Plot
 # Housekeeping and other tools
@@ -99,7 +100,9 @@ class Gating:
         available_classes = [Static, FMOGate, DensityBasedClustering, DensityThreshold, Quantile, MixtureModel]
         return {x.__name__: x for x in available_classes}
 
-    def get_population_df(self, population_name: str) -> pd.DataFrame or None:
+    def get_population_df(self, population_name: str, transform: bool = False,
+                          transform_method: str = 'logicle',
+                          transform_features: list or str = 'all') -> pd.DataFrame or None:
         """
         Retrieve a population as a pandas dataframe
         :param population_name: name of population to retrieve
@@ -109,7 +112,20 @@ class Gating:
             print(f'Population {population_name} not recognised')
             return None
         idx = self.populations[population_name].index
-        return self.data.loc[idx]
+        data = self.data.loc[idx]
+        if transform:
+            if transform_features == 'all':
+                return apply_transform(data, features_to_transform=data.columns, transform_method=transform_method)
+            if transform_features == 'fluorochromes':
+                features = [x for x in data.columns if all([y not in x for y in ['FSC', 'SSC', 'Time']])]
+                return apply_transform(data, features_to_transform=features, transform_method=transform_method)
+            if type(transform_features) == list:
+                return apply_transform(data, features_to_transform=transform_features,
+                                       transform_method=transform_method)
+            print('Invalid argument for transform_features, should be either string value of `all` or `fluorochomres` '
+                  'or a list of valid column names. Returning untransformed data.')
+            return data
+        return data
 
     def search_fmo_cache(self, target_population, fmo):
         if target_population in self.fmo_search_cache[fmo].keys():
