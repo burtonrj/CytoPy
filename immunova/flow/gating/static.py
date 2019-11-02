@@ -35,6 +35,15 @@ class Static(Gate):
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
         return self.child_populations
 
+    def threshold_2d(self, threshold_x: float, threshold_y: float):
+        if self.empty_parent:
+            return self.child_populations
+        if self.y is None:
+            raise GateError('For a 2D threshold gate gate a value for `y` must be given')
+        method = f'X: manual threshold, Y: manual threshold'
+        self.child_update_2d(threshold_x, threshold_y, method)
+        return self.child_populations
+
     def ellipse_gate(self, centroid: tuple, width: int or float, height: int or float, angle: int or float):
         if self.y is None:
             raise GateError('For a ellipse filter gate a value for `y` must be given')
