@@ -139,37 +139,42 @@ class Gating:
         :param fmo:
         :return:
         """
+        # Check cache if this population has been derived previously
         cache_idx = self.search_fmo_cache(target_population, fmo)
         if cache_idx is not None:
-            return self.fmo[fmo].loc[cache_idx]
+            print(self.fmo[fmo].loc[cache_idx])
+        else:
+            cache_idx = self.fmo_search_cache[fmo]['root']
+
         root = self.populations['root']
         node = self.populations[target_population]
-        route = findall(root, filter_=lambda n: node in root.path)
-        # Search route for start position
-        start = 0
-        for pop in route[::-1]:
-            cache_idx = self.search_fmo_cache(pop.name, fmo)
-            if cache_idx is not None:
-                for idx, pop in enumerate(route):
-                    if pop.name == pop.name:
-                        start = idx
-                        break
+        route = [x.name for x in node.path][1:]
+
+        # Find start position by searching cache
+        for i, pop in enumerate(route[::-1]):
+            if pop in self.fmo_search_cache.keys():
+                route = route[::-1][:i+1][::-1]
+                cache_idx = self.populations[pop].index
                 break
+
         # Predict FMO index
-        route = route[start:]
-        fmo_data = self.fmo[fmo].loc[cache_idx]
         for pop in route:
             fmo_data = self.fmo[fmo].loc[cache_idx]
-            x = pop.geom['x']
-            y = pop.geom['y'] or 'FSC-A'
-            train = self.get_population_df(pop.name)[[x, y]].copy()
+
+            # Train KNN from whole panel data
+            x = self.populations[pop].geom['x']
+            y = self.populations[pop].geom['y'] or 'FSC-A'
+            parent = self.populations[pop].parent.name
+            train = self.get_population_df(parent)[[x, y]].copy()
             train['pos'] = 0
             if train.shape[0] > 10000:
                 train = train.sample(10000)
-            train.pos = train.pos.mask(train.index.isin(pop.index), 1)
+            train.pos = train.pos.mask(train.index.isin(self.populations[pop].index), 1)
             y_ = train.pos.values
-            knn = KNeighborsClassifier(n_jobs=-1, algorithm='kd_tree', n_neighbors=5, metric='manhattan')
-            knn.fit(train, y_)
+            knn = KNeighborsClassifier(n_jobs=-1, algorithm='ball_tree', n_neighbors=5)
+            knn.fit(train[[x, y]], y_)
+
+            # Predict population in FMO
             y_hat = knn.predict(fmo_data[[x, y]])
             fmo_data['pos'] = y_hat
             cache_idx = fmo_data[fmo_data['pos'] == 1].index.values
