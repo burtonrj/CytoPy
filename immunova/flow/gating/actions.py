@@ -142,7 +142,7 @@ class Gating:
         # Check cache if this population has been derived previously
         cache_idx = self.search_fmo_cache(target_population, fmo)
         if cache_idx is not None:
-            print(self.fmo[fmo].loc[cache_idx])
+            return self.fmo[fmo].loc[cache_idx]
         else:
             cache_idx = self.fmo_search_cache[fmo]['root']
 
@@ -157,6 +157,7 @@ class Gating:
                 cache_idx = self.populations[pop].index
                 break
 
+        fmo_data = self.fmo[fmo].loc[cache_idx]
         # Predict FMO index
         for pop in route:
             fmo_data = self.fmo[fmo].loc[cache_idx]
@@ -178,7 +179,7 @@ class Gating:
             y_hat = knn.predict(fmo_data[[x, y]])
             fmo_data['pos'] = y_hat
             cache_idx = fmo_data[fmo_data['pos'] == 1].index.values
-            self.fmo_search_cache[fmo][pop.name] = cache_idx
+            self.fmo_search_cache[fmo][pop] = cache_idx
         return fmo_data.loc[cache_idx]
 
     @staticmethod

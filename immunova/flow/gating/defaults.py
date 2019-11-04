@@ -127,7 +127,7 @@ class ChildPopulationCollection:
                                 raise ChildConstructError(f'Invalid definition {x}, must be one of '
                                                           f'[++, --, -+, +-]')
                     else:
-                        if not kwargs['definition'] in ['++', '--', '-+', '-+']:
+                        if not kwargs['definition'] in ['++', '--', '-+', '+-']:
                             raise ChildConstructError(f'Invalid definition {kwargs["definition"]}, must be '
                                                       f'one of [++, --, -+, +-]')
                 if gate_type == 'cluster':
