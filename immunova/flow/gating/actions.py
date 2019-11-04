@@ -57,7 +57,7 @@ class Gating:
         self.gates = dict()
         if fg.gates:
             for g in fg.gates:
-                self.__deserialise_gate(g)
+                self.deserialise_gate(g)
 
         try:
             self.populations = dict()
@@ -77,14 +77,14 @@ class Gating:
             print(f'WARNING: was unable to load populations due to missing parent populations: {e}')
             print('Continuing with blank Gating object. Check that populations have not been removed.')
 
-    def __deserialise_gate(self, gate):
+    def deserialise_gate(self, gate):
         kwargs = {k: v for k, v in gate.kwargs}
         kwargs['child_populations'] = ChildPopulationCollection(json_dict=kwargs['child_populations'])
         gate.kwargs = [[k, v] for k, v in kwargs.items()]
         self.gates[gate.gate_name] = gate
 
     @staticmethod
-    def __serailise_gate(gate):
+    def serailise_gate(gate):
         gate = deepcopy(gate)
         kwargs = {k: v for k, v in gate.kwargs}
         kwargs['child_populations'] = kwargs['child_populations'].serialise()
@@ -469,7 +469,7 @@ class Gating:
         for name in self.populations.keys():
             FileGroup.objects(id=self.mongo_id).update(push__populations=self.population_to_mongo(name))
         for _, gate in self.gates.items():
-            gate = self.__serailise_gate(gate)
+            gate = self.serailise_gate(gate)
             FileGroup.objects(id=self.mongo_id).update(push__gates=gate)
         print('Saved successfully!')
         return True
@@ -494,7 +494,7 @@ class Template(Gating):
                 return False
             print(f'Overwriting existing gating template {template_name}')
             gating_strategy = gating_strategy[0]
-            gating_strategy.gates = list(self.gates.values())
+            gating_strategy.gates = [self.serailise_gate(gate) for gate in list(self.gates.values())]
             gating_strategy.last_edit = datetime.now()
             gating_strategy.save()
             templates = [x for x in self.experiment.gating_templates
@@ -509,7 +509,7 @@ class Template(Gating):
             gating_strategy.template_name = template_name
             gating_strategy.creation_date = datetime.now()
             gating_strategy.last_edit = datetime.now()
-            gating_strategy.gates = list(self.gates.values())
+            gating_strategy.gates = [self.serailise_gate(gate) for gate in list(self.gates.values())]
             gating_strategy.save()
             self.experiment.gating_templates.append(gating_strategy)
             self.experiment.save()
@@ -523,7 +523,8 @@ class Template(Gating):
         """
         gating_strategy = GatingStrategy.objects(template_name=template_name)
         if gating_strategy:
-            self.gates = {gate.gate_name: gate for gate in gating_strategy[0].gates}
+            for gate in gating_strategy[0].gates:
+                self.deserialise_gate(gate)
             return True
         else:
             print(f'No template with name {template_name}')

@@ -25,6 +25,7 @@ class Plot:
         self.colours = ['#FF0000', '#8B0000', '#FFA500', '#BDB76B', '#7CFC00', '#32CD32',
                         '#008000', '#FF1493', '#2F4F4F', '#000000']
         random.shuffle(self.colours)
+        self.colours = ['#EB1313'] + self.colours
 
     @staticmethod
     def __transform_gate(data: pd.DataFrame, gate: Gate):

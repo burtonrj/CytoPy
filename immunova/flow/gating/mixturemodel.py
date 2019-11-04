@@ -9,7 +9,7 @@ import math
 
 
 class MixtureModel(Gate):
-    def __init__(self, target: tuple = None, k: int = None, method: str = 'gmm', conf: float = 0.95,
+    def __init__(self, target: tuple = None, k: int = None, algo: str = 'gmm', conf: float = 0.95,
                  rect_filter: dict or None = None, covar: str = 'full', **kwargs):
         """
         Gating using mixture models
@@ -25,7 +25,7 @@ class MixtureModel(Gate):
         self.sample = self.sampling(self.data, 5000)
         self.target = target
         self.k = k
-        self.method = method
+        self.method = algo
         self.conf = conf
         self.rect_filter = rect_filter
         self.covar = covar
