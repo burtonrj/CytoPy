@@ -26,7 +26,7 @@ class Gate:
     def __init__(self, data: pd.DataFrame, x: str, child_populations: ChildPopulationCollection, y: str or None = None,
                  frac: float or None = None, downsample_method: str = 'uniform',
                  density_downsample_kwargs: dict or None = None, transform_x: str or None = 'logicle',
-                 transform_y: str or None = 'logicle'):
+                 transform_y: str or None = 'logicle', low_memory: bool = False):
         """
         Constructor for Gate definition
         :param data: pandas dataframe of fcs data for gating
@@ -44,7 +44,10 @@ class Gate:
         self.child_populations = child_populations
         self.warnings = list()
         self.empty_parent = self.__empty_parent()
-        self.frac = frac
+        if low_memory:
+            self.frac = 40000/self.data.shape[0]
+        else:
+            self.frac = frac
         self.downsample_method = downsample_method
         if self.downsample_method == 'density':
             if density_downsample_kwargs is not None:
@@ -87,11 +90,7 @@ class Gate:
         :return: True if empty, else False.
         """
         if self.data.shape[0] == 0:
-            self.warnings.append('No events in parent population!')
-            for name in self.child_populations.populations.keys():
-                self.child_populations.populations[name].update_geom(shape=None, x=self.x, y=self.y)
-            return True
-        return False
+            raise GateError('No events in parent population!')
 
     def child_update_1d(self, threshold: float, method: str, merge_options: str) -> None:
         """
@@ -255,19 +254,23 @@ class Gate:
             chunks.append(sample)
         return chunks
 
-    def generate_polygons(self) -> dict:
+    def generate_polygons(self, data: pd.DataFrame or None = None) -> dict:
         """
         Generate a dictionary of polygon coordinates and shapely Polygon from clustered data
         objects
         :return: dictionary of polygon coordinates and dictionary of Polygon shapely objects
         """
-        if 'labels' not in self.data.columns:
+        if data is None:
+            df = self.data.copy()
+        else:
+            df = data.copy()
+        if 'labels' not in df.columns:
             GateError('Method self.__generate_polygons called before cluster assignment')
-        polygon_cords = {label: [] for label in self.data['labels'].unique() if label != -1}
+        polygon_cords = {label: [] for label in df['labels'].unique() if label != -1}
         for label in polygon_cords.keys():
             if label == -1:
                 continue
-            d = self.data[self.data['labels'] == label][[self.x, self.y]].values
+            d = df[df['labels'] == label][[self.x, self.y]].values
             hull = ConvexHull(d)
             polygon_cords[label] = [(d[v, 0], d[v, 1]) for v in hull.vertices]
         polygon_shapes = {label: Polygon(x) for label, x in polygon_cords.items()}

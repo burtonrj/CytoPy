@@ -11,7 +11,6 @@ class Quantile(Gate):
         :param kwargs: Gate constructor arguments (see immunova.flow.gating.base)
         """
         super().__init__(**kwargs)
-        self.y = y
         self.q = q
 
     def gate_1d(self):
@@ -22,8 +21,8 @@ class Quantile(Gate):
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
             return self.child_populations
-        threshold = self.data[self.x].quantile(self.q, interpolation='nearest')
-        self.__child_update_1d(threshold, 'Quantile', 'overwrite')
+        threshold = float(self.data[self.x].quantile(self.q, interpolation='nearest'))
+        self.child_update_1d(threshold, 'Quantile', 'overwrite')
         return self.child_populations
 
     def gate_2d(self):
@@ -36,7 +35,7 @@ class Quantile(Gate):
             return self.child_populations
         if self.y is None:
             raise GateError('Value for `y` cannot be None if performing 2D gating')
-        x_threshold = self.data[self.x].quantile(self.q, interpolation='nearest')
-        y_threshold = self.data[self.y].quantile(self.q, interpolation='nearest')
-        self.__child_update_2d(x_threshold, y_threshold, method='Quantile')
+        x_threshold = float(self.data[self.x].quantile(self.q, interpolation='nearest'))
+        y_threshold = float(self.data[self.y].quantile(self.q, interpolation='nearest'))
+        self.child_update_2d(x_threshold, y_threshold, method='Quantile')
         return self.child_populations
