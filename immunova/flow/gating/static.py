@@ -1,7 +1,5 @@
-from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.base import Gate, GateError
 from immunova.flow.gating.utilities import rectangular_filter, inside_ellipse
-import pandas as pd
 
 
 class Static(Gate):

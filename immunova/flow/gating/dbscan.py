@@ -226,7 +226,7 @@ class DensityBasedClustering(Gate):
                 if k > 100:
                     k = 100
                 _, nearest_neighbours_idx = tree.query(tree_x, k=k)
-                neighbours = self.data.loc[nearest_neighbours_idx[0]]
+                neighbours = self.data.iloc[nearest_neighbours_idx[0]]
                 if set(neighbours['labels'].unique()) == {-1}:
                     self.warnings.append(f'Population {p} assigned to noise (i.e. population not found)')
                     assignments[p] = -1
@@ -273,7 +273,10 @@ class DensityBasedClustering(Gate):
         for population_id, assigned_cluster in target_predictions.items():
             idx = self.data[self.data['labels'] == assigned_cluster].index.values
             self.child_populations.populations[population_id].update_index(idx=idx, merge_options='overwrite')
-            x, y = polygon_shapes[assigned_cluster].exterior.xy
+            if assigned_cluster != -1:
+                x, y = polygon_shapes[assigned_cluster].exterior.xy
+            else:
+                x, y = list(), list()
             self.child_populations.populations[population_id].update_geom(shape='poly', x=self.x, y=self.y,
                                                                           cords=dict(x=x, y=y))
         return self.child_populations
