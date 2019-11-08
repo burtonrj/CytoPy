@@ -24,7 +24,7 @@ class ClusterExperiment(mongoengine.Document):
         root_population - string value indicating the population on which clustering was performed
         clusters - list of generated clusters, represented by Cluster document
     """
-    fcs_file = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4)
+    fcs_file_grouped = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4)
     method = mongoengine.StringField(required=True)
     root_population = mongoengine.StringField(required=True, default='root')
     clusters = mongoengine.ListField(mongoengine.ReferenceField(Cluster, reverse_delete_rule=4))
@@ -44,7 +44,7 @@ class MetaFile(mongoengine.EmbeddedDocument):
         fcs_file - reference to FileGroup to which the cluster belongs
         cluster - reference to Cluster associated to this meta-cluster
     """
-    fcs_file = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4)
+    fcs_file_group = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4)
     cluster = mongoengine.ReferenceField(Cluster, reverse_delete_rule=4)
 
 
@@ -57,7 +57,7 @@ class MetaCluster(mongoengine.EmbeddedDocument):
         cluster_id - cluster id for meta cluster
         contained_clusters - list of embedded MetaFile documents; each provides an fcs_file, cluster pair
     """
-    cluster_id = mongoengine.StringField(required=True)
+    meta_cluster_id = mongoengine.StringField(required=True)
     contained_clusters = mongoengine.EmbeddedDocumentListField(MetaFile)
 
 
