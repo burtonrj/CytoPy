@@ -52,7 +52,7 @@ class Sample(mongoengine.EmbeddedDocument):
     fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.PULL))
 
 
-class Patient(mongoengine.Document):
+class Patient(mongoengine.DynamicDocument):
     """
     Document based representation of patient meta-data
     """
@@ -86,7 +86,6 @@ class Patient(mongoengine.Document):
     chronic_liver_disease = mongoengine.BooleanField(required=False)
     chronic_cardio_disease = mongoengine.BooleanField(required=False)
     malignancy = mongoengine.BooleanField(required=False)
-    other_comorbidity = mongoengine.ListField(required=False)
 
     # Infection
     infection_source = mongoengine.StringField(require=False)
