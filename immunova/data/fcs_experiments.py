@@ -25,6 +25,9 @@ class FCSExperiment(mongoengine.Document):
         list_samples - Generate a list IDs of file groups associated to experiment
         remove_sample - Remove sample (FileGroup) from experiment.
         add_new_sample - Add a new sample (FileGroup) to this experiment
+        fetch_sample_mid - Given a sample_id, return it's corresponding mongo ObjectID
+        pull_sample_mappings - Given a sample ID, return a dictionary of channel/marker mappings for
+        all associated fcs files
 
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
@@ -63,7 +66,12 @@ class FCSExperiment(mongoengine.Document):
         """
         return [f.primary_id for f in self.fcs_files]
 
-    def fetch_sample_mid(self, sample_id):
+    def fetch_sample_mid(self, sample_id: str) -> str or None:
+        """
+        Given a sample ID (for a sample belonging to this experiment) return it's mongo ObjectID as a string
+        :param sample_id: sample ID for sample of interest
+        :return: string value for ObjectID
+        """
         if not self.__sample_exists(sample_id):
             return None
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
