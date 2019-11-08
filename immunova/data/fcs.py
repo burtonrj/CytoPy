@@ -1,7 +1,6 @@
 from immunova.data.panel import ChannelMap
 from immunova.data.gating import Gate
 from bson.binary import Binary
-from anytree import Node
 import pandas as pd
 import numpy as np
 import mongoengine
