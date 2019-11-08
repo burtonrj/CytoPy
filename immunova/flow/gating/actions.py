@@ -15,7 +15,8 @@ from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.plotting.static_plots import Plot
 # Housekeeping and other tools
-from anytree import Node
+from anytree.exporter import DotExporter
+from anytree import Node, RenderTree
 from anytree.search import findall
 from datetime import datetime
 from copy import deepcopy
@@ -158,7 +159,6 @@ class Gating:
         else:
             cache_idx = self.fmo_search_cache[fmo]['root']
 
-        root = self.populations['root']
         node = self.populations[target_population]
         route = [x.name for x in node.path][1:]
 
@@ -389,13 +389,12 @@ class Gating:
         :return: List of populations dependent on given population
         """
         if population not in self.populations.keys():
-            print(f'Population {population} does not exist')
+            print(f'Error: population {population} does not exist; '
+                  f'valid population names include: {self.populations.keys()}')
             return None
         root = self.populations['root']
         node = self.populations[population]
-        dependent_paths = findall(root, filter_=lambda n: node in root.path)
-        dependencies = [name for name, node in self.populations.items() if node in dependent_paths]
-        return dependencies
+        return [x.name for x in findall(root, filter_=lambda n: node in n.path)]
 
     def remove_population(self, population_name: str) -> None:
         """
@@ -436,6 +435,22 @@ class Gating:
         for g in effected_gates:
             self.gates.pop(g)
         return effected_gates, effected_populations
+
+    def print_population_tree(self, image: bool = False, image_name: str or None = None) -> None:
+        """
+        Generate a tree diagram of the populations associated to this Gating object and print to stdout
+        :param image: if True, an image will be saved to the working directory
+        :param image_name: name of the resulting image file, ignored if image = False (optional; default name is of
+        format `filename_populations.png`
+        :return: None
+        """
+        root = self.populations['root']
+        if image:
+            if image_name is None:
+                image_name = f'{self.id}_population_tree.png'
+            DotExporter(root).to_picture(image_name)
+        for pre, fill, node in RenderTree(root):
+            print('%s%s' % (pre, node.name))
 
     def population_to_mongo(self, population_name: str) -> Population:
         """
