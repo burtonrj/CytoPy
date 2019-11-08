@@ -106,6 +106,12 @@ class Gating:
         """
         Retrieve a population as a pandas dataframe
         :param population_name: name of population to retrieve
+        :param transform: if True, the provided transformation method will be applied to the returned dataframe
+        (default = False)
+        :param transform_method: transformation method to apply, default = 'logicle' (ignored if transform is False)
+        :param transform_features: argument specifying which columns to transform in the returned dataframe. Can either
+        be a string value of 'all' (transform all columns), 'fluorochromes' (transform all columns corresponding to a
+        fluorochrome) or a list of valid column names
         :return: Population dataframe
         """
         if population_name not in self.populations.keys():
@@ -114,17 +120,7 @@ class Gating:
         idx = self.populations[population_name].index
         data = self.data.loc[idx]
         if transform:
-            if transform_features == 'all':
-                return apply_transform(data, features_to_transform=data.columns, transform_method=transform_method)
-            if transform_features == 'fluorochromes':
-                features = [x for x in data.columns if all([y not in x for y in ['FSC', 'SSC', 'Time']])]
-                return apply_transform(data, features_to_transform=features, transform_method=transform_method)
-            if type(transform_features) == list:
-                return apply_transform(data, features_to_transform=transform_features,
-                                       transform_method=transform_method)
-            print('Invalid argument for transform_features, should be either string value of `all` or `fluorochomres` '
-                  'or a list of valid column names. Returning untransformed data.')
-            return data
+            return apply_transform(data, features_to_transform=transform_features, transform_method=transform_method)
         return data
 
     def labelled_data(self, root_population, labels, transform=False, transform_method: str = 'logicle',
