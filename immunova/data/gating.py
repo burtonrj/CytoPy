@@ -17,6 +17,9 @@ class Gate(mongoengine.EmbeddedDocument):
         y_feature - the name of the Y dimension (optional)
         func - the function used to generate this gate
         func_args - list of key value pairs (tuple; (key, value)) forming the kwargs for func
+
+    Methods:
+        to_python - convert gate document to a Python dictionary
     """
     gate_name = mongoengine.StringField(required=True)
     children = mongoengine.ListField()

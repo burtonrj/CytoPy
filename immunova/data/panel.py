@@ -13,6 +13,14 @@ class ChannelMap(mongoengine.EmbeddedDocument):
 
     Defines channel/marker mapping. Each document will contain a single value for channel and a single value for marker,
     these two values are treated as a pair within the panel.
+
+    Attributes:
+        channel - name of channel (fluorochrome)
+        marker - name of marker (protein)
+
+    Methods:
+        check_matched_pair - Check a channel/marker pair for resemblance to this channel_mapping definition
+        to_python - Convert to python dicationary object
     """
     channel = mongoengine.StringField()
     marker = mongoengine.StringField()
