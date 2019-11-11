@@ -12,6 +12,8 @@ class Cluster(mongoengine.Document):
     """
     cluster_id = mongoengine.StringField(required=True)
     index = mongoengine.FileField(db_alias='core', collection_name='cluster_indexes')
+    n_events = mongoengine.IntField(required=True)
+    prop_of_population = mongoengine.StringField(required=True)
 
 
 class ClusterExperiment(mongoengine.Document):
@@ -24,7 +26,7 @@ class ClusterExperiment(mongoengine.Document):
         root_population - string value indicating the population on which clustering was performed
         clusters - list of generated clusters, represented by Cluster document
     """
-    fcs_file_grouped = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4)
+    fcs_experiment = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4)
     method = mongoengine.StringField(required=True)
     root_population = mongoengine.StringField(required=True, default='root')
     clusters = mongoengine.ListField(mongoengine.ReferenceField(Cluster, reverse_delete_rule=4))
@@ -59,6 +61,7 @@ class MetaCluster(mongoengine.EmbeddedDocument):
     """
     meta_cluster_id = mongoengine.StringField(required=True)
     contained_clusters = mongoengine.EmbeddedDocumentListField(MetaFile)
+    n_events = mongoengine.IntField(required=True)
 
 
 class ConsensusClusterExperiment(mongoengine.Document):
