@@ -10,3 +10,4 @@ temp_data
 *.pickle
 build
 deepcytof_local
+BatchEffectRemoval_Local
