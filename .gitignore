@@ -9,4 +9,4 @@ temp_data
 *.so
 *.pickle
 build
-deepcytof
+deepcytof_local

@@ -225,7 +225,6 @@ class DeepGating:
         test_performance['test_train'] = 'test'
         return pd.concat([train_performance, test_performance])
 
-
     def train_holdout(self, holdout_frac: float = 0.3):
         train_X, test_X, train_y, test_y = train_test_split(self.ref_X, self.ref_y,
                                                             test_size=holdout_frac,
