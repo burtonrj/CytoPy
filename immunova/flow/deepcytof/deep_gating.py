@@ -2,6 +2,8 @@ from immunova.data.fcs_experiments import FCSExperiment
 from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.actions import Gating
+from immunova.flow.deepcytof import MMDResNet
+from immunova.flow.deepcytof.classifier import cell_classifier, evaluate_model
 from keras.models import load_model
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -112,7 +114,7 @@ class DeepGating:
         if calibrator is not None:
             if not os.path.isfile(calibrator):
                 raise DeepGateError(f'Error: invalid file name passed for calibrator model {calibrator}')
-            self.calibrator = load_model(calibrator)
+            self.calibrator = MMDResNet.load_model(calibrator)
 
         if hidden_layer_sizes is None:
             self.hidden_layer_sizes = [12, 6, 3]
@@ -166,8 +168,18 @@ class DeepGating:
     #        self.train_autoencoder()
     #    return self.autoencoder.predict(target)
 
-    def calibrate(self):
-        pass
+    def calibrate(self, sample, evaluate=False):
+        source = sample[self.features].values
+        target = self.ref_X.values
+        mmdnet = MMDResNet.MMDNet(len(self.features), epochs=500, denoise=False, layer_sizes=[25, 25, 25],
+                                  l2_penalty=self.l2_penalty)
+        mmdnet.build_model()
+        mmdnet.fit(source, target, initial_lr=1e-3, lr_decay=0.97)
+        if evaluate:
+            print('Evaluating calibration...')
+            mmdnet.evaluate(source, target)
+        calibrated_source = mmdnet.net.predict(source)
+        return calibrated_source
 
     def load_model(self, path: str, model_type: str = 'classifier'):
         if not os.path.isfile(path):
@@ -188,7 +200,7 @@ class DeepGating:
         print(f'Autoencoder saved to {path}')
 
     def save_calibrator(self, path):
-        self.calibrator.save(path)
+        self.calibrator.save_weights(path)
         print(f'Calibrator saved to {path}')
 
     def save_classifier(self, path):
@@ -197,9 +209,11 @@ class DeepGating:
 
     def __train(self, train_X, train_y):
         if self.multi_label:
-            self.classifier = cellClasifierML(train_X, train_y, self.hidden_layer_sizes, self.l2_penalty)
+            self.classifier = cell_classifier(train_X, train_y, self.hidden_layer_sizes, self.l2_penalty,
+                                              activation='softmax', loss='binary_crossentropy',
+                                              output_activation='sigmoid')
         else:
-            self.classifier = cellClasifier(train_X, train_y, self.hidden_layer_sizes, self.l2_penalty)
+            self.classifier = cell_classifier(train_X, train_y, self.hidden_layer_sizes, self.l2_penalty)
 
     def train_cv(self, k=5):
         kf = KFold(n_splits=k)
