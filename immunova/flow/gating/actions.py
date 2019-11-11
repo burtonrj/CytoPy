@@ -124,6 +124,15 @@ class Gating:
             return apply_transform(data, features_to_transform=transform_features, transform_method=transform_method)
         return data
 
+    def valid_populations(self, populations: list):
+        valid = list()
+        for pop in populations:
+            if pop not in self.populations.keys():
+                print(f'Error: {pop} is not a valid population')
+            else:
+                valid.append(pop)
+        return valid
+
     def labelled_data(self, root_population, labels, transform=False, transform_method: str = 'logicle',
                       transform_features: list or str = 'all'):
         data = self.get_population_df(root_population, transform=transform, transform_method=transform_method,
@@ -301,8 +310,8 @@ class Gating:
             if analyst.warnings:
                 for x in analyst.warnings:
                     print(x)
-        self.__update_populations(output, parent_df=parent_population,
-                                  warnings=analyst.warnings, parent_name=gatedoc.parent)
+        self.update_populations(output, parent_df=parent_population,
+                                warnings=analyst.warnings, parent_name=gatedoc.parent)
 
     def apply(self, gate_name: str, plot_output: bool = True, feedback: bool = True) -> None:
         """
@@ -323,8 +332,8 @@ class Gating:
         if plot_output:
             self.plotting.plot_gate(gate_name=gate_name)
 
-    def __update_populations(self, output: ChildPopulationCollection, parent_df: pd.DataFrame, warnings: list,
-                             parent_name: str):
+    def update_populations(self, output: ChildPopulationCollection, parent_df: pd.DataFrame, warnings: list,
+                           parent_name: str):
         """
         Given some ChildPopulationCollection object generated from a gate, update saved populations
         :param output: ChildPopulationCollection object generated from a gate

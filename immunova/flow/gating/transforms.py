@@ -2,6 +2,10 @@ from flowutils.transforms import logicle, hyperlog, log_transform, asinh
 import pandas as pd
 
 
+class TransformError(Exception):
+    pass
+
+
 def apply_transform(data: pd.DataFrame, features_to_transform: list or str = 'all',
                     transform_method: str = 'logicle', prescale=1) -> pd.DataFrame:
     """
@@ -36,5 +40,5 @@ def apply_transform(data: pd.DataFrame, features_to_transform: list or str = 'al
         return log_transform(data, features_to_transform)
     if transform_method == 'asinh':
         return asinh(data, features_to_transform, prescale)
-    print('Error: invalid transform_method, returning untransformed data')
-    return data
+    raise TransformError("Error: invalid transform_method, must be one of: 'logicle', 'hyperlog', 'log_transform',"
+                         " 'asinh'")
