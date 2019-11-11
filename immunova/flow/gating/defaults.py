@@ -30,10 +30,10 @@ class ChildPopulationCollection:
             self.deserialise(json_dict)
         else:
             try:
-                assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom', None]
+                assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom', 'deep_gate', None]
                 self.gate_type = gate_type
             except AssertionError:
-                print('Invalid gate type, must be one of: threshold_1d, threshold_2d, cluster, geom')
+                print('Invalid gate type, must be one of: threshold_1d, threshold_2d, cluster, deep_gate, geom')
 
     def serialise(self):
         serialised = dict(gate_type=self.gate_type, populations=list())
@@ -86,7 +86,7 @@ class ChildPopulationCollection:
             else:
                 print('Invalid input for merge_options, must be one of: merge, overwrite')
 
-        def update_geom(self, x: str, shape: str or None = None, y: str or None = None, **kwargs):
+        def update_geom(self, x: str or None, shape: str or None = None, y: str or None = None, **kwargs):
             """
             Update geom associated to this child population instance
             :param shape: type of shape generated, current valid inputs are: ellipse, rect, threshold, 2d_threshold
