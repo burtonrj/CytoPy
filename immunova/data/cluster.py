@@ -1,4 +1,5 @@
 from immunova.data.fcs import FileGroup
+from immunova.data.fcs_experiments import FCSExperiment
 import mongoengine
 
 
@@ -13,7 +14,7 @@ class Cluster(mongoengine.Document):
     cluster_id = mongoengine.StringField(required=True)
     index = mongoengine.FileField(db_alias='core', collection_name='cluster_indexes')
     n_events = mongoengine.IntField(required=True)
-    prop_of_population = mongoengine.StringField(required=True)
+    prop_of_root = mongoengine.StringField(required=True)
 
 
 class ClusterExperiment(mongoengine.Document):
@@ -26,8 +27,10 @@ class ClusterExperiment(mongoengine.Document):
         root_population - string value indicating the population on which clustering was performed
         clusters - list of generated clusters, represented by Cluster document
     """
-    fcs_experiment = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4)
+    file_group = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4)
     method = mongoengine.StringField(required=True)
+    parameters = mongoengine.ListField(required=True)
+    transform_method = mongoengine.StringField(required=True)
     root_population = mongoengine.StringField(required=True, default='root')
     clusters = mongoengine.ListField(mongoengine.ReferenceField(Cluster, reverse_delete_rule=4))
 
@@ -60,6 +63,7 @@ class MetaCluster(mongoengine.EmbeddedDocument):
         contained_clusters - list of embedded MetaFile documents; each provides an fcs_file, cluster pair
     """
     meta_cluster_id = mongoengine.StringField(required=True)
+    fcs_experiment = mongoengine.ReferenceField(FCSExperiment, reverse_delete_rule=4)
     contained_clusters = mongoengine.EmbeddedDocumentListField(MetaFile)
     n_events = mongoengine.IntField(required=True)
 
