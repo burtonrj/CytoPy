@@ -13,7 +13,7 @@ from immunova.flow.gating.quantile import Quantile
 from immunova.flow.gating.mixturemodel import MixtureModel
 from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.defaults import ChildPopulationCollection
-from immunova.flow.plotting.static_plots import Plot
+from immunova.flow.gating.plotting.static_plots import Plot
 # Housekeeping and other tools
 from anytree.exporter import DotExporter
 from anytree import Node, RenderTree
