@@ -22,7 +22,7 @@ def random_colours(n):
     return colours
 
 
-def sample(data, n, frac=None, method='uniform'):
+def sample_data(data, n, frac=None, method='uniform'):
     if frac is not None:
         if method == 'uniform':
             return data.sample(frac=frac, random_state=42)
@@ -35,9 +35,8 @@ def sample(data, n, frac=None, method='uniform'):
     raise PlottingError('Error: invalid sampling method, must be either `uniform` or `density`')
 
 
-def dimensionality_reduction(data, features, method, sample_n, sample_method, n_components):
+def dimensionality_reduction(data, features, method, n_components):
     data = data.copy()
-    data = sample(data, n=sample_n, method=sample_method)
     if method == 'umap':
         reducer = UMAP(n_components=n_components)
     elif method == 'pca':
@@ -56,7 +55,8 @@ def dim_reduction_plot(data, method, features, title, sample_n=100000, sample_me
                        save_path=None):
     if n_components not in [2, 3]:
         raise PlottingError('Error: number of components must be either 2 or 3')
-    data = dimensionality_reduction(data, features, method, sample_n, sample_method, n_components)
+    sample = sample_data(data, sample_n, method=method)
+    data = dimensionality_reduction(sample, features, method, n_components)
     fig, ax = plt.subplots(figsize=(10, 10))
     if n_components == 2:
         ax.scatter(data[f'{method}_0'], data[f'{method}_1'], s=1, alpha=0.5)
@@ -112,7 +112,8 @@ def plot_clusters(data, clusters, method, title, sample_n=100000, sample_method=
     # Label dataset and perform dim reduction
     data = label_dataset_clusters(data, clusters)
     features = [x for x in data.columns if x != 'clusters']
-    data = dimensionality_reduction(data, features, method, sample_n, sample_method, n_components)
+    sample = sample_data(data, sample_n, method=method)
+    data = dimensionality_reduction(sample, features, method, n_components)
     # Plotting
     fig, ax = __coloured_scatter(data, method, n_components, title, label_prefix='Cluster:')
     if save_path is not None:
@@ -141,7 +142,8 @@ def dim_reduction_plot_gates(gating, root_population, features, labels, method, 
     data = gating.get_population_df(root_population, transform=True, transform_method='logicle')
     if not data:
         raise PlottingError(f'Error: unable to load population {root_population}')
-    data = dimensionality_reduction(data, features, method, sample_n, sample_method, n_components)
+    sample = sample_data(data, sample_n, method=method)
+    data = dimensionality_reduction(sample, features, method, n_components)
     data = label_dataset_clusters(data, {name: node for name, node in gating.populations.items() if name in labels})
     fig, ax = __coloured_scatter(data, method, n_components, title, label_prefix='Population:')
 
@@ -166,7 +168,6 @@ def dim_reduction_plot_gates(gating, root_population, features, labels, method, 
 
 def heatmap(data, clusters, title, save_path=None):
     data = label_dataset_clusters(data, clusters)
-    data = data.apply(lambda x: (x-x.mean())/x.std(), axis=1)
     mfi_summary = data.groupby(by='clusters').mean()
     fig, ax = plt.subplots(figsize=(10, 10))
     ax = sns.heatmap(mfi_summary, robust=True, square=True, ax=ax)
@@ -179,7 +180,7 @@ def heatmap(data, clusters, title, save_path=None):
 def clustermap(data, clusters, title, save_path=None):
     data = label_dataset_clusters(data, clusters)
     mfi_summary = data.groupby(by='clusters').mean()
-    g = sns.clustermap(mfi_summary, z_score=0, col_cluster=False, square=True)
+    g = sns.clustermap(mfi_summary, col_cluster=False, square=True)
     fig, ax = plt.subplots(figsize=(10, 10))
     if save_path is not None:
         g.savefig(f'{save_path}/{title}_heatmap.jpg', res=300, bbox_inches='tight')
