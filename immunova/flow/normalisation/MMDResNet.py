@@ -5,23 +5,28 @@ Created on Dec 5, 2016
 '''
 
 import keras.optimizers
-from keras.layers import Input, Dense, merge, Activation, add
+from keras.layers import Input, Dense, Activation, add
 from keras.models import Model
 from keras import callbacks as cb
 import numpy as np
 from keras.layers.normalization import BatchNormalization
 
-import immunova.flow.deepcytof.CostFunctions as cf
-import immunova.flow.deepcytof.Monitoring as mn
+import immunova.flow.normalisation.CostFunctions as cf
+import immunova.flow.normalisation.Monitoring as mn
 from keras.regularizers import l2
 from sklearn import decomposition
 from keras.callbacks import LearningRateScheduler
 import math
-import immunova.flow.deepcytof.ScatterHist as sh
+import immunova.flow.normalisation.ScatterHist as sh
 from keras import initializers
 import sklearn.preprocessing as prep
 import tensorflow as tf
 import keras.backend as K
+
+
+# ToDo Create load model function
+def load_model(path):
+    pass
 
 
 def create_block(x_input, layer_size, l2_penalty):

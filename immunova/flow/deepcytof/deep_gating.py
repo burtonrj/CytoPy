@@ -2,8 +2,8 @@ from immunova.data.fcs_experiments import FCSExperiment
 from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.actions import Gating
-from immunova.flow.deepcytof import MMDResNet
-from immunova.flow.deepcytof.classifier import cell_classifier, evaluate_model
+from immunova.flow.normalisation import MMDResNet
+from immunova.flow.deepcytof.classifier import cell_classifier, evaluate_model, predict_class
 from keras.models import load_model
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -78,7 +78,7 @@ class DeepGating:
                  multi_label: bool = False, samples: str or list = 'all',
                  transform: str = 'log_transform', autoencoder: str or None = None,
                  calibrator: str or None = None, hidden_layer_sizes: list or None = None,
-                 l2_penalty: float = 1e-4, root_population: str = 'root'):
+                 l2_penalty: float = 1e-4, root_population: str = 'root', threshold: float = 0.5):
 
         self.experiment = experiment
         self.transform = transform
@@ -89,6 +89,7 @@ class DeepGating:
         self.l2_penalty = l2_penalty
         self.features = features
         self.root_population = root_population
+        self.threshold = threshold
 
         ref = Gating(self.experiment, reference_sample)
         self.population_labels = ref.valid_populations(population_labels)
@@ -224,10 +225,10 @@ class DeepGating:
             train_X, test_X = self.ref_X[train_index], self.ref_X[test_index]
             train_y, test_y = self.ref_y[train_index], self.ref_y[test_index]
             self.__train(train_X, train_y)
-            p = evaluate_model(self.classifier, train_X, train_y)
+            p = evaluate_model(self.classifier, train_X, train_y, self.multi_label, self.threshold)
             p['k'] = i
             train_performance.append(p)
-            p = evaluate_model(self.classifier, test_X, test_y)
+            p = evaluate_model(self.classifier, test_X, test_y, self.multi_label, self.threshold)
             p['k'] = i
             test_performance.append(p)
 
@@ -244,20 +245,21 @@ class DeepGating:
                                                             test_size=holdout_frac,
                                                             random_state=42)
         self.__train(train_X, train_y)
-        train_performance = evaluate_model(self.classifier, train_X, train_y)
+        train_performance = evaluate_model(self.classifier, train_X, train_y, self.multi_label, self.threshold)
         train_performance['test_train'] = 'train'
-        test_performance = evaluate_model(self.classifier, test_X, test_y)
+        test_performance = evaluate_model(self.classifier, test_X, test_y, self.multi_label, self.threshold)
         test_performance['test_train'] = 'test'
         return pd.concat([test_performance, test_performance])
 
     def train_classifier(self, calc_performance: bool = True) -> pd.DataFrame or None:
         self.__train(self.ref_X, self.ref_y)
         if calc_performance:
-            train_performance = evaluate_model(self.classifier, self.ref_X, self.ref_y)
+            train_performance = evaluate_model(self.classifier, self.ref_X, self.ref_y,
+                                               self.multi_label, self.threshold)
             train_performance['test_train'] = 'train'
             return train_performance
 
-    def predict(self, target_sample, denoise=False, calibrate=False):
+    def predict(self, target_sample, denoise=False, calibrate=False, threshold=None):
         sample_gates = Gating(self.experiment, target_sample)
         sample = standard_scale(sample_gates.get_population_df(self.root_population,
                                                                transform=True,
@@ -272,7 +274,8 @@ class DeepGating:
         if calibrate:
             sample = self.calibrate(sample)
 
-        y_hat = self.classifier.predict(sample)
+        y_probs = self.classifier.predict(sample)
+        y_hat = predict_class(y_probs, threshold)
         new_populations = ChildPopulationCollection(gate_type='deep_gate')
         if self.multi_label:
             y_hat = pd.DataFrame(y_hat, columns=self.mappings)
@@ -281,5 +284,5 @@ class DeepGating:
                 new_populations.add_population(name=label)
                 new_populations.populations[label].update_index(x.nonzero())
                 new_populations.populations[label].update_geom(shape='deep_gate', x=None)
-        sample_gates.update_populations(new_populations, sample, parent_name=self.root_population)
+        sample_gates.update_populations(new_populations, sample, parent_name=self.root_population, warnings=[])
         print('Deep gating complete!')
