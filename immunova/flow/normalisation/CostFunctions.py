@@ -10,12 +10,14 @@ from sklearn.neighbors import NearestNeighbors
 IntType = 'int32'
 FloatType = 'float32'
 
-#calculate the squared distance between x and y
+
+# calculate the squared distance between x and y
 def squaredDistance(X,Y):
     # X is nxd, Y is mxd, returns nxm matrix of all pairwise Euclidean distances
     # broadcasted subtraction, a square, and a sum.
     r = K.expand_dims(X, axis=1)
     return K.sum(K.square(r-Y), axis=-1)
+
 
 class MMD:
     MMDTargetTrain = None
