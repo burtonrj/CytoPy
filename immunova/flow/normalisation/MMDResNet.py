@@ -6,7 +6,7 @@ Created on Dec 5, 2016
 
 import keras.optimizers
 from keras.layers import Input, Dense, Activation, add
-from keras.models import Model
+from keras.models import Model, load_model
 from keras import callbacks as cb
 import numpy as np
 from keras.layers.normalization import BatchNormalization
@@ -22,11 +22,6 @@ from keras import initializers
 import sklearn.preprocessing as prep
 import tensorflow as tf
 import keras.backend as K
-
-
-# ToDo Create load model function
-def load_model(path):
-    pass
 
 
 def create_block(x_input, layer_size, l2_penalty):
@@ -48,15 +43,20 @@ def create_block(x_input, layer_size, l2_penalty):
 class MMDNet:
     def __init__(self, data_dim, epochs=500, denoise=False,
                  ae_keep_prob=.8, ae_latent_dim=25, ae_l2_penalty=1e-2,
-                 layer_sizes=[25, 25, 25], l2_penalty=1e-2):
+                 layer_sizes=None, l2_penalty=1e-2):
         self.data_dim = data_dim
         self.epochs = epochs
         self.denoise = denoise
         self.ae_keep_prob = ae_keep_prob
         self.ae_latent_dim = ae_latent_dim
         self.ae_l2_penalty = ae_l2_penalty
-        self.layer_sizes = layer_sizes
         self.l2_penalty = l2_penalty
+        self.layers = None
+        self.net = None
+        if layer_sizes is None:
+            self.layer_sizes = [25, 25, 25]
+        else:
+            self.layer_sizes = layer_sizes
 
     def build_model(self):
         calib_input = Input(shape=(self.data_dim,))
@@ -91,7 +91,7 @@ class MMDNet:
 
             ae_y = np.concatenate([source[s_to_keep], target[t_to_keep]], axis=0)
             np.random.shuffle(ae_y)
-            ae_x = ae_y * np.random.binomial(n=1, p=self.ae_keep_prob, size = ae_y.shape)
+            ae_x = ae_y * np.random.binomial(n=1, p=self.ae_keep_prob, size=ae_y.shape)
             self.ae.fit(ae_x, ae_y, epochs=self.epochs, batch_size=128, shuffle=True,  validation_split=0.1,
                             callbacks=[mn.monitor(), cb.EarlyStopping(monitor='val_loss', patience=25,  mode='auto')])
             source = self.ae.predict(source)
@@ -120,6 +120,14 @@ class MMDNet:
         self.net.fit(source, sourceLabels, epochs=self.epochs, batch_size=1000,validation_split=0.1, verbose=1,
                    callbacks=[lrate, mn.monitorMMD(source, target, self.net.predict),
                               cb.EarlyStopping(monitor='val_loss',patience=50,mode='auto')])
+
+    def save_model(self, model_path, weights_path=None):
+        self.net.save(model_path)
+        if weights_path is not None:
+            self.net.save_weights(weights_path)
+
+    def load_model(self, path):
+        self.net = load_model(path)
 
     def evaluate(self, source, target):
         calibratedSource = self.net.predict(source)
