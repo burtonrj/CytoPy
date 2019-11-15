@@ -18,6 +18,8 @@ class Bug(mongoengine.EmbeddedDocument):
     Document representation of isolated pathogen. Single document instance represents one pathogen.
     """
     gram_status = mongoengine.StringField(required=False)
+    hmbpp_status = mongoengine.StringField(required=False)
+    ribo_status = mongoengine.StringField(required=False)
     org_name = mongoengine.StringField(required=False)
     id_method = mongoengine.StringField(required=False)
     culture_source = mongoengine.StringField(required=False)
@@ -39,33 +41,23 @@ class Biology(mongoengine.EmbeddedDocument):
     test_category = mongoengine.StringField()
 
 
-class Sample(mongoengine.EmbeddedDocument):
-    """
-    Embedded document -> Patient
-    Document representation of sample. Patient can have multiple samples associated to it. Contains reference list
-    to corresponding fcs files
-    """
-    sample_id = mongoengine.StringField(required=True)
-    collection_datetime = mongoengine.DateTimeField(required=True)
-    processing_datetime = mongoengine.DateTimeField(required=True)
-    flags = mongoengine.StringField(required=False)
-    fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.PULL))
-
-
 class Patient(mongoengine.DynamicDocument):
     """
     Document based representation of patient meta-data
     """
     patient_id = mongoengine.StringField(required=True, unique=True)
     age = mongoengine.IntField(required=False)
+    dob = mongoengine.DateField(required=False)
     gender = mongoengine.IntField(required=False)
     date_first_symptoms = mongoengine.DateTimeField(required=False)
+
+    # Associated FCS Files
+    files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.PULL))
 
     # Embeddings
     drug_data = mongoengine.EmbeddedDocumentListField(Drug)
     infection_data = mongoengine.EmbeddedDocumentListField(Bug)
     patient_biology = mongoengine.EmbeddedDocumentListField(Biology)
-    samples = mongoengine.EmbeddedDocumentListField(Sample)
 
     # Admission
     admission_date_hosp = mongoengine.DateTimeField(required=False)
