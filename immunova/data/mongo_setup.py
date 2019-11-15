@@ -23,3 +23,7 @@ def pd_test_init():
     :return:
     """
     mongoengine.register_connection(alias='core', name='pd_test_server')
+
+
+def pd_init():
+    mongoengine.register_connection(alias='core', name='pd_server')

@@ -55,7 +55,7 @@ class Population(mongoengine.EmbeddedDocument):
     prop_of_total = mongoengine.FloatField()
     warnings = mongoengine.ListField()
     geom = mongoengine.ListField()
-    clustering = mongoengine.EmbeddedDocument(Clustering)
+    clustering = mongoengine.EmbeddedDocumentField(Clustering)
     clusters = mongoengine.EmbeddedDocumentListField(Cluster)
 
     def save_index(self, data: np.array) -> None:
@@ -212,7 +212,9 @@ class FileGroup(mongoengine.Document):
     primary_id = mongoengine.StringField(required=True)
     files = mongoengine.EmbeddedDocumentListField(File)
     flags = mongoengine.StringField(required=False)
-    notes = mongoengine.StringField(required=False)
+    notes = mongoengine.StringField(required=False),
+    collection_datetime = mongoengine.DateTimeField(required=False)
+    processing_datetime = mongoengine.DateTimeField(required=False)
     populations = mongoengine.EmbeddedDocumentListField(Population)
     gates = mongoengine.EmbeddedDocumentListField(Gate)
     meta = {
