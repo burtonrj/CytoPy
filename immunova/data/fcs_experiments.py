@@ -1,4 +1,5 @@
 from immunova.data.fcs import FileGroup, File
+from immunova.data.patient import Patient
 from immunova.data.gating import GatingStrategy
 from immunova.data.utilities import data_from_file
 from immunova.data.panel import Panel, ChannelMap
@@ -175,12 +176,15 @@ class FCSExperiment(mongoengine.Document):
         new_file.channel_mappings = [ChannelMap(channel=c, marker=m) for c, m in column_mappings]
         return new_file
 
-    def add_new_sample(self, sample_id: str, file_path: str, controls: list,
+    def add_new_sample(self, sample_id: str, file_path: str, controls: list, patient_id: str or None = None,
                        comp_matrix: np.array or None = None, compensate: bool = True,
-                       feedback: bool = True, catch_standardisation_errors: bool = False) -> None or str:
+                       feedback: bool = True, catch_standardisation_errors: bool = False,
+                       processing_datetime: str or None = None,
+                       collection_datetime: str or None = None) -> None or str:
         """
         Add a new sample (FileGroup) to this experiment
         :param sample_id: primary ID for identification of sample (FileGroup.primary_id)
+        :param patient_id: ID for patient to associate sample too
         :param file_path: file path of the primary fcs file (e.g. the fcs file that is of primary interest such as the
         file with complete staining)
         :param controls: list of file paths for control files e.g. a list of file paths for associated FMO controls
@@ -201,6 +205,10 @@ class FCSExperiment(mongoengine.Document):
         if feedback:
             print('Generating main file entry...')
         file_collection = FileGroup()
+        if processing_datetime is not None:
+            file_collection.processing_datetime = processing_datetime
+        if collection_datetime is not None:
+            file_collection.collection_datetime = collection_datetime
         file_collection.primary_id = sample_id
         primary_file = self.__create_file_entry(file_path, sample_id, comp_matrix=comp_matrix, compensate=compensate,
                                                 catch_standardisation_errors=catch_standardisation_errors)
@@ -219,6 +227,14 @@ class FCSExperiment(mongoengine.Document):
             file_collection.files.append(control)
         file_collection.save()
         self.fcs_files.append(file_collection)
+        if patient_id is not None:
+            p = Patient.objects(patient_id=patient_id)
+            if len(p) == 0:
+                print(f'Error: no such patient {patient_id}, continuing without association.')
+            else:
+                p = p[0]
+                p.files.append(file_collection)
+                p.save()
         if feedback:
             print(f'Successfully created {sample_id} and associated to {self.experiment_id}')
         self.save()
