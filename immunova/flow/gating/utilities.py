@@ -1,11 +1,11 @@
 from shapely.geometry import Point
-from shapely.geometry.polygon import Polygon
 from multiprocessing import Pool, cpu_count
 from functools import partial
 from immunova.flow.gating.base import GateError
 from sklearn.neighbors import KernelDensity, KDTree
 import pandas as pd
 import numpy as np
+import inspect
 
 
 def check_peak(peaks: np.array, probs: np.array, t=0.05) -> np.array:
@@ -227,3 +227,18 @@ def density_dependent_downsample(data: pd.DataFrame, features: list, frac: float
     if sample_n is not None:
         return df.sample(n=sample_n, weights=prob)
     return df.sample(frac=frac, weights=prob)
+
+
+def get_params(klass, required_only=False, exclude_kwargs=True):
+    if required_only:
+        required_params = list(map(lambda x: [k for k, v in inspect.signature(x).parameters.items()
+                                              if v.default is inspect.Parameter.empty],
+                                   [c for c in inspect.getmro(klass)]))
+    else:
+        required_params = list(map(lambda x: inspect.signature(x).parameters.keys(),
+                                   [c for c in inspect.getmro(klass)]))
+    required_params = [l for sl in required_params for l in sl]
+    if exclude_kwargs:
+        return [x for x in required_params if x != 'kwargs']
+    return required_params
+
