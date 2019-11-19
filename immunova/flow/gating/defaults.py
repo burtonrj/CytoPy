@@ -164,7 +164,7 @@ class ChildPopulationCollection:
                 """
                 super().__init__()
                 try:
-                    assert shape in ['ellipse', 'rect', 'threshold', '2d_threshold', 'poly']
+                    assert shape in ['ellipse', 'rect', 'threshold', '2d_threshold', 'poly', 'sml', 'sub']
                     self.shape = shape
                 except AssertionError:
                     print('Invalid shape, must be one of: ellipse, rect, threshold, 2d_threshold', 'poly')
