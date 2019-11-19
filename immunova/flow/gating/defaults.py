@@ -30,7 +30,7 @@ class ChildPopulationCollection:
             self.deserialise(json_dict)
         else:
             try:
-                assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom', 'deep_gate', None]
+                assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom', 'sml', 'sub', None]
                 self.gate_type = gate_type
             except AssertionError:
                 print('Invalid gate type, must be one of: threshold_1d, threshold_2d, cluster, deep_gate, geom')

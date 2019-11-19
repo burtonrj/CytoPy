@@ -243,6 +243,31 @@ class Gating:
             print(f'Error: {method} is not a valid method for class {klass.__name__}')
             return False
 
+    def subtraction(self, target: str, parent: str, new_population_name: str) -> bool:
+        """
+        Given a target population and a parent population, generate a new population by subtraction of the
+        target population from the parent
+        :return: True if successful, else False
+        """
+        if parent not in self.populations.keys():
+            print('Error: parent population not recognised')
+            return False
+        if target not in self.populations.keys():
+            print('Error: target population not recognised')
+            return False
+        x = self.populations[parent].geom['x']
+        y = self.populations[parent].geom['y']
+        pindex = self.populations[parent].index
+        tindex = self.populations[parent].index
+        index = [p for p in pindex if p not in tindex]
+        new_population = ChildPopulationCollection(gate_type='sub')
+        new_population.add_population(new_population_name)
+        new_population.populations[new_population_name].update_geom(x=x, y=y, shape='sub')
+        new_population.populations[new_population_name].update_index(index)
+        self.update_populations(output=new_population, parent_df=self.get_population_df(parent),
+                                parent_name=parent)
+        return True
+
     def create_gate(self, gate_name: str, parent: str, class_: str, method: str, kwargs: dict,
                     child_populations: ChildPopulationCollection) -> bool:
         """
