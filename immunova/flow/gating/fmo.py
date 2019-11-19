@@ -5,7 +5,8 @@ import pandas as pd
 
 
 class FMOGate(DensityThreshold):
-    def __init__(self, fmo_x: pd.DataFrame, fmo_y: pd.DataFrame or None = None, z_score_threshold: float = 2):
+    def __init__(self, fmo_x: pd.DataFrame, fmo_y: pd.DataFrame or None = None, z_score_threshold: float = 2,
+                 **kwargs):
         """
         FMO guided density threshold gating
         :param fmo_x: pandas dataframe of fcs data for x-dimensional FMO
@@ -16,9 +17,7 @@ class FMOGate(DensityThreshold):
         FMO threshold. If the z score exceeds z_score_threshold a warning is logged and the fmo is ignored.
         :param kwargs: DensityThreshold constructor arguments (see immunova.gating.density)
         """
-        super().__init__(data=data, x=x, y=y, child_populations=child_populations, kde_bw=kde_bw,
-                         frac=frac, q=q, std=std, downsample_method=downsample_method,
-                         density_downsample_kwargs=density_downsample_kwargs)
+        super().__init__(**kwargs)
         self.z_score_t = z_score_threshold
         self.fmo_x = fmo_x.copy()
         self.fmo_y = fmo_y.copy()
@@ -48,7 +47,7 @@ class FMOGate(DensityThreshold):
             fmo = self.fmo_x
         threshold, method = self.__1d(data, fmo, self.x)
 
-        self.__child_update_1d(threshold, method, merge_options)
+        self.child_update_1d(threshold, method, merge_options)
         return self.child_populations
 
     def __1d(self, whole: pd.DataFrame, fmo: pd.DataFrame, feature: str) -> float and str:
@@ -111,5 +110,5 @@ class FMOGate(DensityThreshold):
             fmo = self.fmo_y
         y_threshold, y_method = self.__1d(data, fmo, self.y)
         method = f'X: {x_method}, Y: {y_method}'
-        self.__child_update_2d(x_threshold, y_threshold, method)
+        self.child_update_2d(x_threshold, y_threshold, method)
         return self.child_populations

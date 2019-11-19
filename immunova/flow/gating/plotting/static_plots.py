@@ -1,12 +1,10 @@
 from immunova.data.gating import Gate
-from immunova.flow.gating.utilities import centroid
 from immunova.flow.gating.transforms import apply_transform
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib import patches
 from itertools import cycle
-from scipy.spatial import ConvexHull
 import pandas as pd
 import numpy as np
 import random
@@ -132,7 +130,7 @@ class Plot:
         x, y = kwargs['x'], kwargs['y'] or 'FSC-A'
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
         geoms = {c: self.gating.populations[c].geom for c in gate.children}
-        if geoms['shape'] == 'sml':
+        if any([x['shape'] == 'sml' for _, x in geoms.items()]):
             print(f'Error: {gate.gate_name} is a supervised machine learning gate. This type of gating does not produce'
                   f'2D geometries but instead classifies cells based using high dimensional feature space. To observe'
                   f'a population classified by this method in 2D, use the `plot_sml` method')
@@ -242,3 +240,13 @@ class Plot:
             self.__2dhist(ax, data, x, y)
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title=population_name)
         fig.show()
+
+    def plot_3d(self, population_name: str, x: str, y: str, z: str, transforms: dict, gates: list,
+                xlim: tuple = None, ylim: tuple = None):
+        fig, ax = plt.subplots(figsize=(10, 10))
+        if population_name in self.gating.populations.keys():
+            data = self.gating.get_population_df(population_name).copy()
+        else:
+            print(f'Invalid population name, must be one of {self.gating.populations.keys()}')
+            return None
+
