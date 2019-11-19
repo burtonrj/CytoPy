@@ -4,7 +4,6 @@ import flowio
 import dateutil.parser as date_parser
 import numpy as np
 import pandas as pd
-import os
 import json
 
 
