@@ -276,13 +276,13 @@ class DeepGating:
 
         y_probs = self.classifier.predict(sample)
         y_hat = predict_class(y_probs, threshold)
-        new_populations = ChildPopulationCollection(gate_type='deep_gate')
+        new_populations = ChildPopulationCollection(gate_type='sml')
         if self.multi_label:
             y_hat = pd.DataFrame(y_hat, columns=self.mappings)
             for label in y_hat.columns:
                 x = y_hat[label].values
                 new_populations.add_population(name=label)
                 new_populations.populations[label].update_index(x.nonzero())
-                new_populations.populations[label].update_geom(shape='deep_gate', x=None)
+                new_populations.populations[label].update_geom(shape='sml', x=None)
         sample_gates.update_populations(new_populations, sample, parent_name=self.root_population, warnings=[])
         print('Deep gating complete!')
