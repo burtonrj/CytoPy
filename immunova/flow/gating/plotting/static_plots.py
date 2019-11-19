@@ -117,7 +117,7 @@ class Plot:
         self.__geom_plot(data, fig, axes, gate, xlim, ylim)
 
     def __build_geom_plot(self, data: pd.DataFrame, gate: Gate, ax: matplotlib.pyplot.axes,
-                          xlim: tuple, ylim: tuple, title: str) -> matplotlib.pyplot.axes:
+                          xlim: tuple, ylim: tuple, title: str) -> matplotlib.pyplot.axes or None:
         """
         Produce a plot of a gate that generates a geometric object
         :param data: pandas dataframe of events data to plot
@@ -132,6 +132,11 @@ class Plot:
         x, y = kwargs['x'], kwargs['y'] or 'FSC-A'
         xlim, ylim = self.__plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
         geoms = {c: self.gating.populations[c].geom for c in gate.children}
+        if geoms['shape'] == 'sml':
+            print(f'Error: {gate.gate_name} is a supervised machine learning gate. This type of gating does not produce'
+                  f'2D geometries but instead classifies cells based using high dimensional feature space. To observe'
+                  f'a population classified by this method in 2D, use the `plot_sml` method')
+            return None
         if data.shape[0] < 1000:
             ax.scatter(x=data[x], y=data[y], s=3)
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
@@ -142,6 +147,7 @@ class Plot:
         colours = cycle(self.colours)
         # Draw geom
         for (child_name, geom), colour in zip(geoms.items(), colours):
+            colour = '#EB1313'
             if geom is None or geom == dict():
                 print(f'Population {child_name} has no associated gate, skipping...')
                 continue
