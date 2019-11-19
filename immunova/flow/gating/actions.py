@@ -14,6 +14,7 @@ from immunova.flow.gating.mixturemodel import MixtureModel
 from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.plotting.static_plots import Plot
+from immunova.flow.gating.utilities import get_params
 # Housekeeping and other tools
 from anytree.exporter import DotExporter
 from anytree import Node, RenderTree
@@ -213,16 +214,9 @@ class Gating:
         :return: True if valid, else False
         """
         try:
-            parent_klass_args = []
-            try:
-
-                parent_klass_args = [k for k, v in inspect.signature(klass.__base__[0]).parameters.items()
-                                     if v.default is inspect.Parameter.empty]
-            except TypeError:
-                GateError(f'{klass} Invalid: must inherit from Gate class')
-            klass_args = [k for k, v in inspect.signature(klass).parameters.items()
-                          if v.default is inspect.Parameter.empty and k != 'kwargs']
-            klass_args = parent_klass_args + klass_args
+            if not inspect.getmro(klass):
+                raise GateError(f'{klass} Invalid: must inherit from Gate class')
+            klass_args = get_params(klass, required_only=True, exclude_kwargs=True)
             for arg in klass_args:
                 if arg in ['data']:
                     continue
@@ -325,15 +319,11 @@ class Gating:
         """
         klass = self.gating_classes[gatedoc.class_]
         parent_population = self.get_population_df(gatedoc.parent)
+        expected_const_args = get_params(klass)
         constructor_args = {k: v for k, v in kwargs.items()
-                            if k in inspect.signature(klass.__bases__[0]).parameters.keys()
-                            or k in inspect.signature(klass).parameters.keys()}
+                            if k in expected_const_args}
         method_args = {k: v for k, v in kwargs.items()
                        if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
-        print('Constructor args')
-        print(constructor_args)
-        print('Method args')
-        print(method_args)
         analyst = klass(data=parent_population, **constructor_args)
         output = getattr(analyst, gatedoc.method)(**method_args)
         if feedback:
