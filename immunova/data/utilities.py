@@ -13,6 +13,8 @@ def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True) -> list:
     """
     fcs_files = []
     for root, dirs, files in os.walk(fcs_dir):
+        if os.path.basename(root) == 'DUPLICATES':
+            continue
         if exclude_comps:
             fcs = [f for f in files if f.endswith('.fcs') and f.lower().find('comp') == -1]
         else:
