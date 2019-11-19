@@ -194,6 +194,8 @@ class FCSExperiment(mongoengine.Document):
         :param feedback: boolean value, if True function will provide feedback in the form of print statements
         (default=True)
         :param catch_standardisation_errors: if True, standardisation errors will cause process to abort
+        :param processing_datetime:
+        :param collection_datetime:
         :return: MongoDB ObjectID string for new FileGroup entry
         """
         if self.panel is None:
