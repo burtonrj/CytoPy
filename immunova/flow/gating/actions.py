@@ -46,7 +46,7 @@ class Gating:
             raise GateError(f'Error: failed to fetch data for {sample_id}. Aborting.')
         self.data = [x for x in data if x['typ'] == 'complete'][0]['data']
         self.fmo = [x for x in data if x['typ'] == 'control']
-        self.fmo = {x['id']: x['data'] for x in self.fmo}
+        self.fmo = {x['id'].replace(f'{sample_id}_', ''): x['data'] for x in self.fmo}
         self.id = sample_id
         self.mongo_id = experiment.fetch_sample_mid(sample_id)
         self.experiment = experiment
@@ -215,6 +215,7 @@ class Gating:
         try:
             parent_klass_args = []
             try:
+
                 parent_klass_args = [k for k, v in inspect.signature(klass.__base__[0]).parameters.items()
                                      if v.default is inspect.Parameter.empty]
             except TypeError:
@@ -258,14 +259,14 @@ class Gating:
         x = self.populations[parent].geom['x']
         y = self.populations[parent].geom['y']
         pindex = self.populations[parent].index
-        tindex = self.populations[parent].index
+        tindex = self.populations[target].index
         index = [p for p in pindex if p not in tindex]
         new_population = ChildPopulationCollection(gate_type='sub')
         new_population.add_population(new_population_name)
         new_population.populations[new_population_name].update_geom(x=x, y=y, shape='sub')
         new_population.populations[new_population_name].update_index(index)
         self.update_populations(output=new_population, parent_df=self.get_population_df(parent),
-                                parent_name=parent)
+                                parent_name=parent, warnings=[])
         return True
 
     def create_gate(self, gate_name: str, parent: str, class_: str, method: str, kwargs: dict,
@@ -329,6 +330,10 @@ class Gating:
                             or k in inspect.signature(klass).parameters.keys()}
         method_args = {k: v for k, v in kwargs.items()
                        if k in inspect.signature(getattr(klass, gatedoc.method)).parameters.keys()}
+        print('Constructor args')
+        print(constructor_args)
+        print('Method args')
+        print(method_args)
         analyst = klass(data=parent_population, **constructor_args)
         output = getattr(analyst, gatedoc.method)(**method_args)
         if feedback:
