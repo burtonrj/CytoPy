@@ -5,8 +5,8 @@ import pandas as pd
 
 
 class FMOGate(DensityThreshold):
-    def __init__(self, fmo_x: pd.DataFrame, fmo_y: pd.DataFrame or None = None, z_score_threshold: float = 2,
-                 **kwargs):
+    def __init__(self, fmo_x: pd.DataFrame, fmo_y: pd.DataFrame or None = None, fmo_z: pd.DataFrame or None = None,
+                 z_score_threshold: float = 2, **kwargs):
         """
         FMO guided density threshold gating
         :param fmo_x: pandas dataframe of fcs data for x-dimensional FMO
@@ -20,10 +20,14 @@ class FMOGate(DensityThreshold):
         super().__init__(**kwargs)
         self.z_score_t = z_score_threshold
         self.fmo_x = fmo_x.copy()
-        self.fmo_y = fmo_y.copy()
         self.sample = self.sampling(self.data, 5000)
         self.sample_fmo_x = self.sampling(self.fmo_x, 5000)
-        self.sample_fmo_y = self.sampling(self.fmo_y, 5000)
+        if fmo_y is not None:
+            self.fmo_y = fmo_y.copy()
+            self.sample_fmo_y = self.sampling(self.fmo_y, 5000)
+        else:
+            self.fmo_y = None
+            self.sample_fmo_y = None
 
     def fmo_1d(self, merge_options: str = 'overwrite') -> ChildPopulationCollection:
         """
@@ -91,6 +95,8 @@ class FMOGate(DensityThreshold):
             return self.child_populations
         if not self.y:
             raise GateError('For a 2D threshold gate a value for `y` is required')
+        if self.fmo_y is None:
+            raise GateError('For a 2D threshold gate a value for `fmo_y` is required')
 
         # Calculate threshold
         if self.sample is not None:
