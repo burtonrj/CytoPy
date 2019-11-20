@@ -7,6 +7,13 @@ import mongoengine
 import pickle
 
 
+def sample(data, n) -> np.array:
+    if n < data.shape[0]:
+        idx = np.random.randint(data.shape[0], size=n)
+        return data[idx, :]
+    return data
+
+
 class Clustering(mongoengine.EmbeddedDocument):
     method = mongoengine.StringField(required=True)
     parameters = mongoengine.ListField(required=True)
@@ -77,6 +84,38 @@ class Population(mongoengine.EmbeddedDocument):
         return population
 
 
+class Normalisation(mongoengine.EmbeddedDocument):
+    data = mongoengine.FileField(db_alias='core', collection_name='fcs_file_norm')
+    root_population = mongoengine.StringField()
+    method = mongoengine.StringField()
+
+    def norm_data(self, sample: int or None = None) -> np.array:
+        """
+        Load normalised data
+        :param sample: int value; produces a sample of given value
+        :return:  Numpy array of events data (normalised)
+        """
+        data = pickle.loads(self.data.read())
+        if sample:
+            return sample(data, sample)
+        return data
+
+    def put(self, data: np.array, root_population: str, method: str) -> None:
+        """
+        Save events data to database
+        :param data: numpy array of events data
+        :return: None
+        """
+        if self.data:
+            self.data.replace(Binary(pickle.dumps(data, protocol=2)))
+        else:
+            self.data.new_file()
+            self.data.write(Binary(pickle.dumps(data, protocol=2)))
+            self.data.close()
+        self.root_population = root_population
+        self.method = method
+
+
 class File(mongoengine.EmbeddedDocument):
     """
     Embedded document -> FileGroup
@@ -100,7 +139,7 @@ class File(mongoengine.EmbeddedDocument):
     file_id = mongoengine.StringField(required=True)
     file_type = mongoengine.StringField(default='complete')
     data = mongoengine.FileField(db_alias='core', collection_name='fcs_file_data')
-    norm = mongoengine.FileField(db_alias='core', collection_name='fcs_file_norm')
+    norm = mongoengine.EmbeddedDocument(Normalisation)
     compensated = mongoengine.BooleanField(default=False)
     channel_mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
 
@@ -112,51 +151,22 @@ class File(mongoengine.EmbeddedDocument):
         """
         data = pickle.loads(self.data.read())
         if sample:
-            return self.__sample(data, sample)
+            return sample(data, sample)
         return data
 
-    def norm_data(self, sample: int or None = None) -> np.array:
-        """
-        Load normalised data
-        :param sample: int value; produces a sample of given value
-        :return:  Numpy array of events data (normalised)
-        """
-        data = pickle.loads(self.norm.read())
-        if sample:
-            return self.__sample(data, sample)
-        return data
-
-    @staticmethod
-    def __sample(data, n) -> np.array:
-        if n < data.shape[0]:
-            idx = np.random.randint(data.shape[0], size=n)
-            return data[idx, :]
-        return data
-
-    def put(self, data: np.array, typ: str = 'data') -> None:
+    def put(self, data: np.array) -> None:
         """
         Save events data to database
         :param data: numpy array of events data
         :param typ: type of data; either `data` (raw) or `norm` (normalised)
         :return: None
         """
-        if not any([typ == x for x in ['data', 'norm']]):
-            print('Error: type must be one of [data, norm]')
-            return None
-        if typ == 'data':
-            if self.data:
-                self.data.replace(Binary(pickle.dumps(data, protocol=2)))
-            else:
-                self.data.new_file()
-                self.data.write(Binary(pickle.dumps(data, protocol=2)))
-                self.data.close()
-        if typ == 'norm':
-            if self.norm:
-                self.norm.replace(Binary(pickle.dumps(data, protocol=2)))
-            else:
-                self.norm.new_file()
-                self.norm.write(Binary(pickle.dumps(data, protocol=2)))
-                self.norm.close()
+        if self.data:
+            self.data.replace(Binary(pickle.dumps(data, protocol=2)))
+        else:
+            self.data.new_file()
+            self.data.write(Binary(pickle.dumps(data, protocol=2)))
+            self.data.close()
 
     def data_from_file(self, data_type: str, sample_size: int or None, output_format: str = 'dataframe',
                        columns_default: str = 'marker') -> None or dict:

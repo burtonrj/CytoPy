@@ -187,6 +187,7 @@ class Gating:
             # Train KNN from whole panel data
             x = self.populations[pop].geom['x']
             y = self.populations[pop].geom['y'] or 'FSC-A'
+
             parent = self.populations[pop].parent.name
             train = self.get_population_df(parent)[[x, y]].copy()
             train['pos'] = 0
