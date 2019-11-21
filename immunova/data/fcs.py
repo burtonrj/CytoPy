@@ -139,7 +139,7 @@ class File(mongoengine.EmbeddedDocument):
     file_id = mongoengine.StringField(required=True)
     file_type = mongoengine.StringField(default='complete')
     data = mongoengine.FileField(db_alias='core', collection_name='fcs_file_data')
-    norm = mongoengine.EmbeddedDocument(Normalisation)
+    norm = mongoengine.EmbeddedDocumentField(Normalisation)
     compensated = mongoengine.BooleanField(default=False)
     channel_mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
 
