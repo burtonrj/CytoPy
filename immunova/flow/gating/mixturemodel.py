@@ -1,5 +1,4 @@
 from immunova.flow.gating.utilities import inside_ellipse, rectangular_filter
-from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.base import Gate, GateError
 from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
 from scipy import linalg, stats
