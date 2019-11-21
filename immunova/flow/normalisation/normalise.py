@@ -1,5 +1,7 @@
 from immunova.data.fcs_experiments import FCSExperiment
+from immunova.data.fcs import Normalisation
 from immunova.flow.gating.transforms import apply_transform
+from immunova.flow.gating.actions import Gating
 from immunova.flow.normalisation.MMDResNet import MMDNet
 from immunova.flow.deepcytof.deep_gating import calculate_reference_sample
 import pandas as pd
@@ -13,7 +15,7 @@ class Normalise:
     """
     Class for normalising a flow cytometry file using a reference target file
     """
-    def __init__(self, experiment: FCSExperiment, source_id: str,
+    def __init__(self, experiment: FCSExperiment, source_id: str, root_population: str,
                  features: list, reference_sample: str or None = None, transform: str = 'logicle',
                  **mmdresnet_kwargs):
         """
@@ -26,7 +28,8 @@ class Normalise:
         :param mmdresnet_kwargs: keyword arguments for MMD-ResNet
         """
         self.experiment = experiment
-        self.source_fg = self.experiment.pull_sample(source_id)
+        self.source_id = source_id
+        self.root_population = root_population
         self.transform = transform
         self.model = MMDNet(data_dim=len(features), **mmdresnet_kwargs)
         self.reference_sample = reference_sample or None
@@ -35,7 +38,7 @@ class Normalise:
             raise CalibrationError(f'Error: invalid target sample {source_id}; '
                                    f'must be one of {self.experiment.list_samples()}')
         else:
-            self.source = self.__load_and_transform(source_id)
+            self.source = self.__load_and_transform(sample_id=source_id)
 
     def load_model(self, model_path:str) -> None:
         """
@@ -52,7 +55,7 @@ class Normalise:
         """
         self.model.build_model()
 
-    def calculate_reference_sample(self):
+    def calculate_reference_sample(self) -> None:
         """
         Calculate the optimal reference sample. This is performed as described in Li et al paper
         (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5860171/) on DeepCyTOF: for every 2 samples i, j compute
@@ -63,23 +66,21 @@ class Normalise:
         self.reference_sample = calculate_reference_sample(self.experiment)
         print(f'{self.reference_sample} chosen as optimal reference sample.')
 
-    def __load_and_transform(self, sample_id: str) -> list:
+    def __load_and_transform(self, sample_id) -> pd.DataFrame:
         """
         Given a sample ID, retrieve the sample data and apply transformation
         :param sample_id: ID corresponding to sample for retrieval
         :return: transformed data as a list of dictionary objects:
         {id: file id, typ: type of file (either 'complete' or 'control'), data: Pandas DataFrame}
         """
-        data = self.experiment.pull_sample_data(sample_id=sample_id, data_type='raw')
+        gating = Gating(experiment=self.experiment, sample_id=sample_id)
+        data = gating.get_population_df(self.root_population,
+                                        transform=True,
+                                        transform_method=self.transform)
         if data is None:
-            raise CalibrationError(f'Error: unable to load data for {sample_id}')
+            raise CalibrationError(f'Error: unable to load data for population {self.root_population}')
         features = [c for c in data[0]['data'] if c.lower() != 'time']
-        transformed = [dict(id=x['id'],
-                            typ=x['typ'],
-                            data=apply_transform(x['data'],
-                                                 features_to_transform=features,
-                                                 transform_method=self.transform)) for x in data]
-        return transformed
+        return data[features]
 
     def __put_norm_data(self, file_id: str, data: pd.DataFrame):
         """
@@ -88,8 +89,12 @@ class Normalise:
         :param data: Pandas DataFrame of normalised and transformed data
         :return:
         """
-        file = [f for f in self.source_fg.files if f.file_id == file_id][0]
-        file.put(data=data.values, typ='norm')
+        source_fg = self.experiment.pull_sample(self.source_id)
+        file = [f for f in source_fg.files if f.file_id == file_id][0]
+        norm = Normalisation()
+        norm.put(data.values, root_population=self.root_population, method='MMD-ResNet')
+        file.norm = norm
+        source_fg.save()
 
     def normalise_and_save(self) -> None:
         """
@@ -99,14 +104,10 @@ class Normalise:
         if self.model.net is None:
             print('Error: normalisation model has not yet been calibrated')
             return None
-        features = [x for x in self.source[0]['data'].columns if x.lower() != 'time']
-        for x in self.source:
-            print(f'Saving normalised data for {x["file_id"]}')
-            data = self.model.net.predict(x['data'])
-            data = pd.DataFrame(data, columns=features)
-            if 'Time' in data.columns:
-                data['Time'] = x['data']['Time']
-            self.__put_norm_data(x['file_id'], data)
+        print(f'Saving normalised data for {self.source_id} population {self.root_population}')
+        data = self.model.net.predict(self.source)
+        data = pd.DataFrame(data, columns=self.source.columns)
+        self.__put_norm_data(self.source_id, data)
         print('Save complete!')
 
     def calibrate(self, initial_lr=1e-3, lr_decay=0.97, evaluate=False, save=False) -> None:
@@ -129,15 +130,12 @@ class Normalise:
             return
         # Load and transform data
         target = self.__load_and_transform(self.reference_sample)
-        target = [x for x in target if x['typ'] == 'complete'][0]['data']
-        features = [x for x in target.columns if x.lower() != 'time']
         print('Warning: calibration can take some time and is dependent on the sample size')
-        s = [x for x in self.source if x['typ'] == 'complete'][0]['data']
-        self.model.fit(s[features], target[features], initial_lr, lr_decay)
+        self.model.fit(self.source.values, target.values, initial_lr, lr_decay)
         print('Calibration complete!')
         if evaluate:
             print('Evaluating calibration...')
-            self.model.evaluate(s[features], target[features])
+            self.model.evaluate(self.source.values, target.values)
         if save:
             self.normalise_and_save()
 
