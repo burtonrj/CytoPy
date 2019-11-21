@@ -1,3 +1,4 @@
+from mongoengine.base.datastructures import BaseList
 import numpy as np
 import mongoengine
 
@@ -228,7 +229,7 @@ class ChildPopulationCollection:
 
     def fetch_by_definition(self, definition):
         for name, d in self.populations.items():
-            if type(d.properties['definition']) == list:
+            if type(d.properties['definition']) == list or type(d.properties['definition']) == BaseList:
                 if definition in d.properties['definition']:
                     return name
             else:

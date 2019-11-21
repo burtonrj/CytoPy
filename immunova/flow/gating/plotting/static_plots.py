@@ -120,21 +120,25 @@ class Plot:
         """
         if gate_name not in self.gating.gates.keys():
             raise PlottingError(f'Error: could not find {gate_name} in attached gate object')
-        if transforms is None:
-            transforms = dict(x='logicle', y='logicle')
         gate = self.gating.gates[gate_name]
         kwargs = {k: v for k, v in gate.kwargs}
+
+        y = 'FSC-A'
         if 'y' in kwargs.keys():
             y = kwargs['y']
-        else:
-            y = 'FSC-A'
-            transforms['y'] = None
         axes_vars = {'x': kwargs['x'], 'y': y}
+
+        if transforms is None:
+            transforms = dict(x='logicle', y='logicle')
+            for a in ['x', 'y']:
+                if any([x in axes_vars[a] for x in ['FSC', 'SSC']]):
+                    transforms[a] = None
+
         geoms = {c: self.gating.populations[c].geom for c in gate.children}
         data = {k: transform_axes(v, axes_vars, transforms) for k, v in self.__get_gate_data(gate).items()}
         xlim, ylim = self.__plot_axis_lims(data=data, x=axes_vars['x'], y=y, xlim=xlim, ylim=ylim)
         num_axes = len(data.keys())
-        fig, axes = plt.subplots(ncols=num_axes, figsize=(10, 10))
+        fig, axes = plt.subplots(ncols=num_axes, figsize=(5, 5))
         self.__geom_plot(data=data, fig=fig, axes=axes,
                          geoms=geoms, axes_vars=axes_vars,
                          xlim=xlim, ylim=ylim, name=gate_name)
@@ -207,26 +211,23 @@ class Plot:
             if geom['shape'] == 'ellipse':
                 ellipse = patches.Ellipse(xy=geom['centroid'], width=geom['width'], height=geom['height'],
                                           angle=geom['angle'], fill=False, edgecolor=colour)
-                ax.scatter(x=geom['centroid'][0], y=geom['centroid'][1], s=25, c=cc,
-                           linewidth=1, edgecolors='black', label=child_name)
+                #ax.scatter(x=geom['centroid'][0], y=geom['centroid'][1], s=25, c=[cc],
+                #           linewidth=1, edgecolors='black', label=child_name)
                 ax.add_patch(ellipse)
             if geom['shape'] == 'rect':
-                x_c = geom['x_min'] + ((geom['x_max'] - geom['x_min'])/2)
-                y_c = geom['y_min'] + ((geom['y_max'] - geom['y_min']) / 2)
                 rect = patches.Rectangle(xy=(geom['x_min'], geom['y_min']),
                                          width=((geom['x_max']) - (geom['x_min'])),
                                          height=(geom['y_max'] - geom['y_min']),
                                          fill=False, edgecolor=colour)
-                ax.scatter(x=x_c, y=y_c, s=25, c=cc,
-                           linewidth=1, edgecolors='black', label=child_name)
                 ax.add_patch(rect)
             if geom['shape'] == 'poly':
-                centre = centroid(geom['cords'])
-                ax.scatter(x=centre[0], y=centre[1], s=25, c=cc,
-                           linewidth=1, edgecolors='black', label=child_name)
+                #centre = centroid((np.array(geom['cords']['x'], geom['cords']['y'])))
+                #ax.scatter(x=centre[0], y=centre[1], s=25, c=[cc],
+                #           linewidth=1, edgecolors='black', label=child_name)
                 x = geom['cords']['x']
                 y = geom['cords']['y']
                 ax.plot(x, y, '-k', c=colour, label=child_name)
+               # ax.legend()
 
     @staticmethod
     def __2dhist(ax: matplotlib.pyplot.axes, data: pd.DataFrame, x: str, y: str) -> matplotlib.pyplot.axes:
