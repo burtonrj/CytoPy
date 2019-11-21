@@ -2,8 +2,7 @@ from immunova.data.fcs_experiments import FCSExperiment
 from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.actions import Gating
-from immunova.flow.normalisation import MMDResNet
-from immunova.flow.deepcytof.classifier import cell_classifier, evaluate_model, predict_class
+from immunova.flow.deep_gating.classifier import cell_classifier, evaluate_model, predict_class
 from keras.models import load_model
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -75,17 +74,15 @@ class DeepGating:
     DeepGating class for performing an adaption of DeepCyTOF in Immmunova.
     """
     def __init__(self, experiment: FCSExperiment, reference_sample: str, population_labels: list, features: list,
-                 multi_label: bool = False, samples: str or list = 'all',
-                 transform: str = 'log_transform', autoencoder: str or None = None,
-                 calibrator: str or None = None, hidden_layer_sizes: list or None = None,
-                 l2_penalty: float = 1e-4, root_population: str = 'root', threshold: float = 0.5):
+                 multi_label: bool = True, samples: str or list = 'all',
+                 transform: str = 'log_transform', hidden_layer_sizes: list or None = None,
+                 l2_penalty: float = 1e-4, root_population: str = 'root', threshold: float = 0.5,
+                 scale: str = 'Standardise'):
 
         self.experiment = experiment
         self.transform = transform
         self.multi_label = multi_label
         self.classifier = None
-        self.calibrator = None
-        self.autoencoder = None
         self.l2_penalty = l2_penalty
         self.features = features
         self.root_population = root_population
@@ -102,39 +99,36 @@ class DeepGating:
         else:
             self.ref_X, self.ref_y, self.mappings = self.single_label_data(ref, features)
 
+        if scale == 'Standardise':
+            self.ref_X = standard_scale(self.ref_X)
+        elif scale == 'Normalise':
+            self.ref_X = norm_scale(self.ref_X)
+        elif scale is None:
+            print('Warning: it is recommended that data is scaled prior to training. Unscaled data can result '
+                  'in some weights updating faster than others, having a negative effect on classifier performance')
+        else:
+            raise DeepGateError('Error: scale method not recognised, must be either `Standardise` or `Normalise`')
+
         if self.samples == 'all':
             self.samples = self.experiment.list_samples()
         else:
             self.samples = samples
-
-        if autoencoder is not None:
-            if not os.path.isfile(autoencoder):
-                raise DeepGateError(f'Error: invalid file name passed for autoencoder model {autoencoder}')
-            self.autoencoder = load_model(autoencoder)
-
-        if calibrator is not None:
-            if not os.path.isfile(calibrator):
-                raise DeepGateError(f'Error: invalid file name passed for calibrator model {calibrator}')
-            self.calibrator = MMDResNet.load_model(calibrator)
 
         if hidden_layer_sizes is None:
             self.hidden_layer_sizes = [12, 6, 3]
         else:
             self.hidden_layer_sizes = hidden_layer_sizes
 
-    def dummy_data(self, ref: Gating, features, scale: bool = True) -> (pd.DataFrame, pd.DataFrame, list):
+    def dummy_data(self, ref: Gating, features) -> (pd.DataFrame, pd.DataFrame, list):
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
-        labels = {pop: np.zeros((1, root.shape[0]))[0] for pop in self.population_labels}
+        y = {pop: np.zeros((1, root.shape[0]))[0] for pop in self.population_labels}
         for pop in self.population_labels:
             pop_idx = ref.populations[pop].index
-            np.put(labels[pop], pop_idx, [1 for n in pop_idx])
-        if scale:
-            root = standard_scale(root)
-        labels = pd.DataFrame(labels)
-        return root, labels, list(labels.columns)
+            np.put(y[pop], pop_idx, [1 for n in pop_idx])
+        y = pd.DataFrame(y)
+        return root, y, list(y.columns)
 
-    def single_label_data(self, ref: Gating, features, scale: bool = True) -> \
-            (pd.DataFrame, np.array, list):
+    def single_label_data(self, ref: Gating, features) -> (pd.DataFrame, np.array, list):
         if self.__check_downstream_overlaps(ref):
             raise DeepGateError('Error: one or more population dependency errors')
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
@@ -142,8 +136,6 @@ class DeepGating:
         for i, pop in enumerate(self.population_labels):
             pop_idx = ref.populations[pop].index
             np.put(y, pop_idx, [i+1 for n in pop_idx])
-        if scale:
-            root = standard_scale(root)
         return root, y, self.population_labels
 
     def __check_downstream_overlaps(self, ref: Gating):
@@ -163,58 +155,23 @@ class DeepGating:
                     downstream_overlaps = True
         return downstream_overlaps
 
-    #def denoise(self, target):
-    #    if self.autoencoder is None:
-    #        print('No autoencoder found, training autoencoder...')
-    #        self.train_autoencoder()
-    #    return self.autoencoder.predict(target)
-
-    def calibrate(self, sample, evaluate=False):
-        source = sample[self.features].values
-        target = self.ref_X.values
-        mmdnet = MMDResNet.MMDNet(len(self.features), epochs=500, denoise=False, layer_sizes=[25, 25, 25],
-                                  l2_penalty=self.l2_penalty)
-        mmdnet.build_model()
-        mmdnet.fit(source, target, initial_lr=1e-3, lr_decay=0.97)
-        if evaluate:
-            print('Evaluating calibration...')
-            mmdnet.evaluate(source, target)
-        calibrated_source = mmdnet.net.predict(source)
-        return calibrated_source
-
-    def load_model(self, path: str, model_type: str = 'classifier'):
+    def load_model(self, path: str):
         if not os.path.isfile(path):
             raise DeepGateError(f'Error: invalid file name passed to load_model {path}')
-        if model_type == 'classifier':
-            self.classifier = load_model(path)
-            print('Classifier loaded successfully!')
-        elif model_type == 'autoencoder':
-            self.autoencoder = load_model(path)
-            print('Autoencoder loaded successfully!')
-        elif model_type == 'calibrator':
-            self.calibrator = load_model(path)
-            print('Calibrator loaded successfully!')
-        print("Error: model_type not recognised, expecting one of: 'classifier', 'autoencoder', 'calibrator'")
-
-    def save_autoencoder(self, path):
-        self.autoencoder.save(path)
-        print(f'Autoencoder saved to {path}')
-
-    def save_calibrator(self, path):
-        self.calibrator.save_weights(path)
-        print(f'Calibrator saved to {path}')
+        self.classifier = load_model(path)
+        print('Classifier loaded successfully!')
 
     def save_classifier(self, path):
         self.classifier.save(path)
         print(f'Classifier saved to {path}')
 
-    def __train(self, train_X, train_y):
+    def __train(self, train_x, train_y):
         if self.multi_label:
-            self.classifier = cell_classifier(train_X, train_y, self.hidden_layer_sizes, self.l2_penalty,
+            self.classifier = cell_classifier(train_x, train_y, self.hidden_layer_sizes, self.l2_penalty,
                                               activation='softmax', loss='binary_crossentropy',
                                               output_activation='sigmoid')
         else:
-            self.classifier = cell_classifier(train_X, train_y, self.hidden_layer_sizes, self.l2_penalty)
+            self.classifier = cell_classifier(train_x, train_y, self.hidden_layer_sizes, self.l2_penalty)
 
     def train_cv(self, k=5):
         kf = KFold(n_splits=k)
@@ -222,13 +179,13 @@ class DeepGating:
         test_performance = list()
 
         for i, (train_index, test_index) in enumerate(kf.split(self.ref_X)):
-            train_X, test_X = self.ref_X[train_index], self.ref_X[test_index]
+            train_x, test_x = self.ref_X[train_index], self.ref_X[test_index]
             train_y, test_y = self.ref_y[train_index], self.ref_y[test_index]
-            self.__train(train_X, train_y)
-            p = evaluate_model(self.classifier, train_X, train_y, self.multi_label, self.threshold)
+            self.__train(train_x, train_y)
+            p = evaluate_model(self.classifier, train_x, train_y, self.multi_label, self.threshold)
             p['k'] = i
             train_performance.append(p)
-            p = evaluate_model(self.classifier, test_X, test_y, self.multi_label, self.threshold)
+            p = evaluate_model(self.classifier, test_x, test_y, self.multi_label, self.threshold)
             p['k'] = i
             test_performance.append(p)
 
@@ -241,13 +198,13 @@ class DeepGating:
         return pd.concat([train_performance, test_performance])
 
     def train_holdout(self, holdout_frac: float = 0.3):
-        train_X, test_X, train_y, test_y = train_test_split(self.ref_X, self.ref_y,
+        train_x, test_x, train_y, test_y = train_test_split(self.ref_X, self.ref_y,
                                                             test_size=holdout_frac,
                                                             random_state=42)
-        self.__train(train_X, train_y)
-        train_performance = evaluate_model(self.classifier, train_X, train_y, self.multi_label, self.threshold)
+        self.__train(train_x, train_y)
+        train_performance = evaluate_model(self.classifier, train_x, train_y, self.multi_label, self.threshold)
         train_performance['test_train'] = 'train'
-        test_performance = evaluate_model(self.classifier, test_X, test_y, self.multi_label, self.threshold)
+        test_performance = evaluate_model(self.classifier, test_x, test_y, self.multi_label, self.threshold)
         test_performance['test_train'] = 'test'
         return pd.concat([test_performance, test_performance])
 
@@ -259,7 +216,7 @@ class DeepGating:
             train_performance['test_train'] = 'train'
             return train_performance
 
-    def predict(self, target_sample, denoise=False, calibrate=False, threshold=None):
+    def predict(self, target_sample, threshold=None):
         sample_gates = Gating(self.experiment, target_sample)
         sample = standard_scale(sample_gates.get_population_df(self.root_population,
                                                                transform=True,
@@ -267,12 +224,6 @@ class DeepGating:
         if self.classifier is None:
             raise DeepGateError('Error: cell classifier has not been trained, either load an existing model using '
                                 'the `load_model` method or train the classifier using the `train_classifier` method')
-        #if denoise:
-            #print('Removing noise with Autoencoder')
-            #sample = self.denoise(sample)
-
-        if calibrate:
-            sample = self.calibrate(sample)
 
         y_probs = self.classifier.predict(sample)
         y_hat = predict_class(y_probs, threshold)
@@ -283,6 +234,6 @@ class DeepGating:
                 x = y_hat[label].values
                 new_populations.add_population(name=label)
                 new_populations.populations[label].update_index(x.nonzero())
-                new_populations.populations[label].update_geom(shape='sml', x=None)
+                new_populations.populations[label].update_geom(shape='sml', x=None, y=None)
         sample_gates.update_populations(new_populations, sample, parent_name=self.root_population, warnings=[])
         print('Deep gating complete!')
