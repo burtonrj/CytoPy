@@ -44,11 +44,11 @@ class MMD:
                 sample = MMDTargetTrain[np.random.randint(MMDTargetTrain.shape[0], size=MMDTargetSampleSize),:]
                 nbrs = NearestNeighbors(n_neighbors=n_neighbors).fit(sample)
                 distances,dummy = nbrs.kneighbors(sample)
-                #nearest neighbor is the point so we need to exclude it
+                # nearest neighbor is the point so we need to exclude it
                 med[ii]=np.median(distances[:,1:n_neighbors])
             med = np.median(med)  
             scales = [med/2, med, med*2] # CyTOF    
-            print(scales)
+            print(f'Scales: {scales}')
         scales = K.variable(value=np.asarray(scales))
         if weights == None:
             print("setting all scale weights to 1")

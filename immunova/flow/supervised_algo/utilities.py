@@ -1,6 +1,21 @@
 from immunova.data.fcs_experiments import FCSExperiment
 from immunova.flow.gating.transforms import apply_transform
+from multiprocessing import Pool, cpu_count
+from functools import partial
 import numpy as np
+
+
+def find_common_features(experiment: FCSExperiment):
+    def pull(sid):
+        d = experiment.pull_sample_data(sample_id=sid, data_type='raw', include_controls=False)
+        return [x for x in d if x['typ'] == 'complete'][0]['data']
+
+    all_features = list(map(lambda x: list(pull(x).columns),
+                            experiment.list_samples()))
+    common_features = set(all_features[0])
+    for f in all_features[1:]:
+        common_features.intersection_update(f)
+    return list(common_features)
 
 
 def predict_class(y_probs, threshold):
@@ -24,6 +39,50 @@ def predict_class(y_probs, threshold):
     return list(map(lambda j: np.argmax(j), y_probs))
 
 
+def calculate_ref_sample_mem(experiment, exclude_samples):
+    # Calculate common features
+    features = find_common_features(experiment)
+    # List samples
+    all_samples = [x for x in experiment.list_samples() if x not in exclude_samples]
+    # Fetch data
+    pool = Pool(cpu_count())
+    f = partial(pull_data, experiment=experiment, features=features)
+    all_data_ = pool.map(f, all_samples)
+    # Calculate covar for each
+    all_data = dict()
+    for d in all_data_:
+        all_data.update(d)
+    del all_data_
+    all_data = {k: np.cov(v, rowvar=False) for k, v in all_data.items()}
+    # Make comparisons
+    n = len(all_samples)
+    norms = np.zeros(shape=[n, n])
+    ref_ind = None
+    for i in range(0, n):
+        cov_i = all_data[all_samples[i]]
+        for j in range(0, n):
+            cov_j = all_data[all_samples[j]]
+            cov_diff = cov_i - cov_j
+            norms[i, j] = np.linalg.norm(cov_diff, ord='fro')
+            norms[j, i] = norms[i, j]
+            avg = np.mean(norms, axis=1)
+            ref_ind = np.argmin(avg)
+    return all_samples[ref_ind[0]]
+
+
+def pull_data_hashtable(sid, experiment, features):
+    return {sid: pull_data(sid, experiment, features)}
+
+
+def pull_data(sid, experiment, features):
+    d = experiment.pull_sample_data(sample_id=sid, data_type='raw', include_controls=False)
+    if d is None:
+        return None
+    d = [x for x in d if x['typ'] == 'complete'][0]['data'][features]
+    d = d[[x for x in d.columns if x != 'Time']]
+    return apply_transform(d, transform_method='log_transform')
+
+
 def calculate_reference_sample(experiment: FCSExperiment, exclude_samples: list) -> str:
     """
     Given an FCS Experiment with multiple FCS files, calculate the optimal reference file.
@@ -34,54 +93,34 @@ def calculate_reference_sample(experiment: FCSExperiment, exclude_samples: list)
     :param experiment: FCSExperiment with multiple FCS samples
     :return: sample ID for optimal reference sample
     """
-    def pull_data(sid):
-        d = experiment.pull_sample_data(sample_id=sid, data_type='raw')
-        if d is None:
-            return None
-        d = [x for x in d if x['typ'] == 'complete'][0]['data']
-        d = d[[x for x in d.columns if x != 'Time']]
-        return apply_transform(d, transform_method='log_transform')
-
+    features = find_common_features(experiment)
     samples = experiment.list_samples()
+    samples = [x for x in samples if x not in exclude_samples]
     if len(samples) == 0:
         raise ValueError('Error: no samples associated to given FCSExperiment')
     n = len(samples)
     norms = np.zeros(shape=[n, n])
     ref_ind = None
-
-    print('Running comparisons....')
-    for i in range(0, n):
-        print(f'----------------------- {samples[i]} -----------------------')
-        if samples[i] in exclude_samples:
-            print(f'Skipping {samples[i]}; found in exclude list')
-            continue
-
-        print('Estimating covariance matrix')
-        data_i = pull_data(samples[i])
+    for i, si in enumerate(samples):
+        print(f'Running comparisons for {si}')
+        data_i = pull_data(si, experiment, features)
         if data_i is None:
-            print(f'Error: failed to fetch data for {samples[i]}. Skipping.')
+            print(f'Error: failed to fetch data for {si}. Skipping.')
             continue
         cov_i = np.cov(data_i, rowvar=False)
-
-        print('Make comparisons to other samples...')
-        for j in range(0, n):
-            if samples[j] in exclude_samples:
-                continue
-            print(f'Compare to {samples[j]}..')
-            data_j = pull_data(samples[j])
-            if data_i is None:
-                print(f'Error: failed to fetch data for {samples[i]}. Skipping.')
+        for j, sj in enumerate(samples):
+            data_j = pull_data(sj, experiment, features)
+            if data_j is None:
+                print(f'Error: failed to fetch data for {sj}. Skipping.')
                 continue
             cov_j = np.cov(data_j, rowvar=False)
-
             cov_diff = cov_i - cov_j
             norms[i, j] = np.linalg.norm(cov_diff, ord='fro')
             norms[j, i] = norms[i, j]
             avg = np.mean(norms, axis=1)
             ref_ind = np.argmin(avg)
     if ref_ind is not None:
-        print('Complete!')
-        return samples[ref_ind[0]]
+        return samples[int(ref_ind)]
     else:
         raise ValueError('Error: unable to calculate sample with minimum average distance. You must choose'
                          ' manually.')
