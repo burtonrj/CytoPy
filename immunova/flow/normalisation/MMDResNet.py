@@ -110,7 +110,7 @@ class MMDNet:
         optimizer = keras.optimizers.rmsprop(lr=0.0)
 
         self.net.compile(optimizer=optimizer,
-                         loss=lambda y_true, y_pred: cf.MMD(self.layers,
+                         loss=lambda y_true, y_pred: cf.MMD(self.layers[-1],
                                                             target, MMDTargetValidation_split=0.1).KerasCost(y_true,
                                                                                                              y_pred))
 

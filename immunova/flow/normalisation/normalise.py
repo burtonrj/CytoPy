@@ -30,10 +30,10 @@ class Normalise:
         self.source_id = source_id
         self.root_population = root_population
         self.transform = transform
-        self.model = MMDNet(data_dim=len(features), **mmdresnet_kwargs)
+        self.features = features = [c for c in features if c.lower() != 'time']
+        self.model = MMDNet(data_dim=len(self.features), **mmdresnet_kwargs)
         self.model.build_model()
         self.reference_sample = reference_sample or None
-        self.features = features
 
         if source_id not in self.experiment.list_samples():
             raise CalibrationError(f'Error: invalid target sample {source_id}; '
@@ -73,8 +73,7 @@ class Normalise:
                                         transform_method=self.transform)
         if data is None:
             raise CalibrationError(f'Error: unable to load data for population {self.root_population}')
-        features = [c for c in self.features if c.lower() != 'time']
-        return data[features]
+        return data[self.features]
 
     def __put_norm_data(self, file_id: str, data: pd.DataFrame):
         """
