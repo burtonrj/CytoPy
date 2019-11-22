@@ -116,12 +116,12 @@ class FCSExperiment(mongoengine.Document):
         # Fetch data
         if not include_controls:  # Fetch data for primary file only
             f = [f for f in files if f.file_type == 'complete'][0]
-            complete = f.data_from_file(data_type=data_type, sample_size=sample_size, output_format=output_format,
-                                        columns_default=columns_default)
+            complete = data_from_file(file=f, sample_size=sample_size, output_format=output_format,
+                                      columns_default=columns_default)
             return [complete]
         # Fetch data for primary file & controls
         pool = Pool(cpu_count())
-        f = partial(data_from_file, data_type=data_type, sample_size=sample_size, output_format=output_format,
+        f = partial(data_from_file, sample_size=sample_size, output_format=output_format,
                     columns_default=columns_default)
         data = pool.map(f, files)
         pool.close()
