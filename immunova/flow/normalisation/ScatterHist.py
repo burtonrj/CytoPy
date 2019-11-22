@@ -24,9 +24,9 @@ def scatterHist(x1,x2, y1,y2, axis1='', axis2=''):
     # start with a rectangular Figure
     plt.figure(figsize=(8, 8))
        
-    axScatter = plt.axes(*rect_scatter)
-    axHistx = plt.axes(*rect_histx)
-    axHisty = plt.axes(*rect_histy)
+    axScatter = plt.axes(rect_scatter)
+    axHistx = plt.axes(rect_histx)
+    axHisty = plt.axes(rect_histy)
     
     # no labels
     axHistx.xaxis.set_major_formatter(nullfmt)
