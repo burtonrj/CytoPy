@@ -1,9 +1,8 @@
 from immunova.data.fcs_experiments import FCSExperiment
 from immunova.data.fcs import Normalisation
-from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.actions import Gating
 from immunova.flow.normalisation.MMDResNet import MMDNet
-from immunova.flow.deep_gating.deep_gating import calculate_reference_sample
+from flow.supervised_algo.deep_gating import calculate_reference_sample
 import pandas as pd
 
 

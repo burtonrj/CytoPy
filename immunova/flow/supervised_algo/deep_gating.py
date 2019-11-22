@@ -2,19 +2,35 @@ from immunova.data.fcs_experiments import FCSExperiment
 from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.actions import Gating
-from immunova.flow.deep_gating.classifier import cell_classifier, evaluate_model, predict_class
+from keras.models import Model
+from keras.layers import Input, Dense
 from keras.models import load_model
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
-from tqdm import tqdm
+from keras.regularizers import l2
+from keras import callbacks as cb
+from keras.callbacks import LearningRateScheduler
+import keras.optimizers
 import pandas as pd
 import numpy as np
+import math
 import os
 
 
 class DeepGateError(Exception):
     pass
+
+
+def step_decay(epoch):
+    '''
+    Learning rate schedule.
+    '''
+    initial_lrate = 1e-3
+    drop = 0.5
+    epochs_drop = 50.0
+    lrate = initial_lrate * math.pow(drop,math.floor((1+epoch)/epochs_drop))
+    return lrate
 
 
 def standard_scale(data: np.array):
@@ -24,49 +40,34 @@ def standard_scale(data: np.array):
     return data
 
 
-def calculate_reference_sample(experiment: FCSExperiment) -> str:
-    """
-    Given an FCS Experiment with multiple FCS files, calculate the optimal reference file.
+def cell_classifier(train_x, train_y, hidden_layer_sizes, l2_penalty=1e-4,
+                    activation='softplus', loss='sparse_categorical_crossentropy',
+                    output_activation='softmax'):
+    # Expand labels, to work with sparse categorical cross entropy.
+    if loss == 'sparse_categorical_crossentropy':
+        train_y = np.expand_dims(train_y, -1)
 
-    This is performed as described in Li et al paper (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5860171/) on
-    DeepCyTOF: for every 2 samples i, j compute the Frobenius norm of the difference between their covariance matrics
-    and then select the sample with the smallest average distance to all other samples.
-    :param experiment: FCSExperiment with multiple FCS samples
-    :return: sample ID for optimal reference sample
-    """
-    print('Warning: this process can take some time as comparisons are made between all samples in the experiment.')
-    samples = experiment.list_samples()
-    if len(samples) == 0:
-        raise DeepGateError('Error: no samples associated to given FCSExperiment')
-    n = len(samples)
-    norms = np.zeros(shape=[n, n])
-    ref_ind = None
-    for i in tqdm(range(0, n)):
-        data_i = experiment.pull_sample_data(sample_id=samples[i], data_type='raw',
-                                             output_format='matrix')
-        data_i = data_i[[x for x in data_i.columns if x != 'Time']]
-        data_i = apply_transform(data_i, transform_method='log_transform')
-        if data_i is None:
-            print(f'Error: failed to fetch data for {samples[i]}. Skipping.')
-            continue
+    # Construct a feed-forward neural network.
+    input_layer = Input(shape=(train_x.shape[1],))
+    hidden1 = Dense(hidden_layer_sizes[0], activation=activation,
+                    W_regularizer=l2(l2_penalty))(input_layer)
+    hidden2 = Dense(hidden_layer_sizes[1], activation=activation,
+                    W_regularizer=l2(l2_penalty))(hidden1)
+    hidden3 = Dense(hidden_layer_sizes[2], activation=activation,
+                    W_regularizer=l2(l2_penalty))(hidden2)
+    num_classes = len(np.unique(train_y)) - 1
+    output_layer = Dense(num_classes, activation=output_activation)(hidden3)
 
-        cov_i = np.cov(data_i, rowvar=False)
-        for j in range(0, n):
-            data_j = experiment.pull_sample_data(sample_id=samples[j], data_type='raw',
-                                                 output_format='matrix')
-            data_j = data_j[[x for x in data_j.columns if x != 'Time']]
-            data_j = apply_transform(data_j, transform_method='log_transform')
-            cov_j = np.cov(data_j, rowvar=False)
-            cov_diff = cov_i - cov_j
-            norms[i, j] = np.linalg.norm(cov_diff, ord='fro')
-            norms[j, i] = norms[i, j]
-            avg = np.mean(norms, axis=1)
-            ref_ind = np.argmin(avg)[0]
-    if ref_ind is not None:
-        return samples[ref_ind]
-    else:
-        raise DeepGateError('Error: unable to calculate sample with minimum average distance. You must choose'
-                            ' manually.')
+    net = Model(input=input_layer, output=output_layer)
+    lrate = LearningRateScheduler(step_decay)
+    optimizer = keras.optimizers.rmsprop(lr=0.0)
+
+    net.compile(optimizer=optimizer, loss=loss)
+    net.fit(train_x, train_y, nb_epoch=80, batch_size=128, shuffle=True,
+            validation_split=0.1,
+            callbacks=[lrate, cb.EarlyStopping(monitor='val_loss',
+                                               patience=25, mode='auto')])
+    return net
 
 
 class DeepGating:
