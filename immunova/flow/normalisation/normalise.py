@@ -2,7 +2,7 @@ from immunova.data.fcs_experiments import FCSExperiment
 from immunova.data.fcs import Normalisation
 from immunova.flow.gating.actions import Gating
 from immunova.flow.normalisation.MMDResNet import MMDNet
-from flow.supervised_algo.deep_gating import calculate_reference_sample
+from immunova.flow.supervised_algo.utilities import calculate_reference_sample
 import pandas as pd
 
 
@@ -31,7 +31,9 @@ class Normalise:
         self.root_population = root_population
         self.transform = transform
         self.model = MMDNet(data_dim=len(features), **mmdresnet_kwargs)
+        self.model.build_model()
         self.reference_sample = reference_sample or None
+        self.features = features
 
         if source_id not in self.experiment.list_samples():
             raise CalibrationError(f'Error: invalid target sample {source_id}; '
@@ -39,20 +41,13 @@ class Normalise:
         else:
             self.source = self.__load_and_transform(sample_id=source_id)
 
-    def load_model(self, model_path:str) -> None:
+    def load_model(self, model_path: str) -> None:
         """
         Load an existing MMD-ResNet model from .h5 file
         :param model_path: path to model .h5 file
         :return: None
         """
         self.model.load_model(path=model_path)
-
-    def build_model(self) -> None:
-        """
-        Construct the MMD-ResNet model infrastructure.
-        :return:
-        """
-        self.model.build_model()
 
     def calculate_reference_sample(self) -> None:
         """
@@ -78,7 +73,7 @@ class Normalise:
                                         transform_method=self.transform)
         if data is None:
             raise CalibrationError(f'Error: unable to load data for population {self.root_population}')
-        features = [c for c in data[0]['data'] if c.lower() != 'time']
+        features = [c for c in self.features if c.lower() != 'time']
         return data[features]
 
     def __put_norm_data(self, file_id: str, data: pd.DataFrame):
