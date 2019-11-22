@@ -120,8 +120,8 @@ class MMDNet:
         # train model
         sourceLabels = np.zeros(source.shape[0])
         self.net.fit(source, sourceLabels, epochs=self.epochs, batch_size=1000,validation_split=0.1, verbose=1,
-                   callbacks=[lrate, mn.monitorMMD(source, target, self.net.predict),
-                              cb.EarlyStopping(monitor='val_loss',patience=50,mode='auto')])
+                   callbacks=[lrate, cb.EarlyStopping(monitor='val_loss',patience=50,mode='auto')])
+        # mn.monitorMMD(source, target, self.net.predict)
 
     def save_model(self, model_path, weights_path=None):
         self.net.save(model_path)
@@ -132,7 +132,7 @@ class MMDNet:
         self.net = load_model(path)
 
     def evaluate(self, source, target):
-        calibratedSource = self.net.predict(source)
+        calibrated_source = self.net.predict(source)
 
         #
         # qualitative evaluation: PCA
@@ -143,7 +143,7 @@ class MMDNet:
         # project data onto PCs
         target_sample_pca = pca.transform(target)
         projection_before = pca.transform(source)
-        projection_after = pca.transform(calibratedSource)
+        projection_after = pca.transform(calibrated_source)
 
         # choose PCs to plot
         pc1 = 0

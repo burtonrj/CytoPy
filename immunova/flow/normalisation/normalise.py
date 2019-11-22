@@ -30,7 +30,7 @@ class Normalise:
         self.source_id = source_id
         self.root_population = root_population
         self.transform = transform
-        self.features = features = [c for c in features if c.lower() != 'time']
+        self.features = [c for c in features if c.lower() != 'time']
         self.model = MMDNet(data_dim=len(self.features), **mmdresnet_kwargs)
         self.model.build_model()
         self.reference_sample = reference_sample or None
