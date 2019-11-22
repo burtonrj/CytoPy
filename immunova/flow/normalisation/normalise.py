@@ -70,7 +70,8 @@ class Normalise:
         gating = Gating(experiment=self.experiment, sample_id=sample_id)
         data = gating.get_population_df(self.root_population,
                                         transform=True,
-                                        transform_method=self.transform)
+                                        transform_method=self.transform,
+                                        transform_features=self.features)
         if data is None:
             raise CalibrationError(f'Error: unable to load data for population {self.root_population}')
         return data[self.features]
