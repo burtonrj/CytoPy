@@ -1,6 +1,7 @@
 from immunova.data.fcs_experiments import FCSExperiment
 from immunova.flow.gating.transforms import apply_transform
 from multiprocessing import Pool, cpu_count
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from functools import partial
 import numpy as np
 
@@ -16,6 +17,20 @@ def find_common_features(experiment: FCSExperiment):
     for f in all_features[1:]:
         common_features.intersection_update(f)
     return list(common_features)
+
+
+def standard_scale(data: np.array):
+    data = data.copy()
+    preprocessor = StandardScaler().fit(data)
+    data = preprocessor.transform(data)
+    return data, preprocessor
+
+
+def norm_scale(data: np.array):
+    data = data.copy()
+    preprocessor = MinMaxScaler().fit(data)
+    data = preprocessor.transform(data)
+    return data, preprocessor
 
 
 def predict_class(y_probs, threshold):
