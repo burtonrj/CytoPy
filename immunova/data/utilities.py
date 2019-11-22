@@ -53,7 +53,7 @@ def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_c
     return file_tree
 
 
-def data_from_file(file: File, data_type: str, sample_size: int, output_format: str = 'dataframe',
+def data_from_file(file: File, sample_size: int, output_format: str = 'dataframe',
                    columns_default: str = 'marker') -> None or dict:
     """
     Pull data from a given file document
@@ -66,14 +66,7 @@ def data_from_file(file: File, data_type: str, sample_size: int, output_format: 
     either 'marker' or 'channel' (default = 'marker')
     :return: Dictionary output {id: file_id, typ: file_type, data: dataframe/matrix}
     """
-    if data_type == 'raw':
-        data = file.raw_data(sample=sample_size)
-
-    elif data_type == 'norm':
-        data = file.norm_data(sample=sample_size)
-    else:
-        print('Invalid data_type, must be raw or norm')
-        return None
+    data = file.raw_data(sample=sample_size)
     if output_format == 'dataframe':
         data = as_dataframe(data, column_mappings=file.channel_mappings, columns_default=columns_default)
     return dict(id=file.file_id, typ=file.file_type, data=data)
