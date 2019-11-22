@@ -70,9 +70,9 @@ class MMDNet:
 
         if self.denoise:
             input_cell = Input(shape=(self.data_dim,))
-            encoded = Dense(self.ae_latent_dim, activation='relu',W_regularizer=l2(self.ae_l2_penalty))(input_cell)
-            encoded1 = Dense(self.ae_latent_dim, activation='relu',W_regularizer=l2(self.ae_l2_penalty))(encoded)
-            decoded = Dense(self.data_dim, activation='linear',W_regularizer=l2(self.ae_l2_penalty))(encoded1)
+            encoded = Dense(self.ae_latent_dim, activation='relu', W_regularizer=l2(self.ae_l2_penalty))(input_cell)
+            encoded1 = Dense(self.ae_latent_dim, activation='relu', W_regularizer=l2(self.ae_l2_penalty))(encoded)
+            decoded = Dense(self.data_dim, activation='linear', W_regularizer=l2(self.ae_l2_penalty))(encoded1)
             autoencoder = Model(input=input_cell, output=decoded)
             autoencoder.compile(optimizer='rmsprop', loss='mse')
             self.ae = autoencoder
