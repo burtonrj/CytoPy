@@ -31,8 +31,7 @@ class Normalise:
         self.root_population = root_population
         self.transform = transform
         self.features = [c for c in features if c.lower() != 'time']
-        self.model = MMDNet(data_dim=len(self.features), **mmdresnet_kwargs)
-        self.model.build_model()
+        self.calibrator = MMDNet(data_dim=len(self.features), **mmdresnet_kwargs)
         self.reference_sample = reference_sample or None
 
         if source_id not in self.experiment.list_samples():
@@ -47,7 +46,7 @@ class Normalise:
         :param model_path: path to model .h5 file
         :return: None
         """
-        self.model.load_model(path=model_path)
+        self.calibrator.load_model(path=model_path)
 
     def calculate_reference_sample(self) -> None:
         """
@@ -95,11 +94,11 @@ class Normalise:
         Apply normalisation to source sample and save result to the database.
         :return:
         """
-        if self.model.net is None:
+        if self.calibrator.model is None:
             print('Error: normalisation model has not yet been calibrated')
             return None
         print(f'Saving normalised data for {self.source_id} population {self.root_population}')
-        data = self.model.net.predict(self.source)
+        data = self.calibrator.model.predict(self.source)
         data = pd.DataFrame(data, columns=self.source.columns)
         self.__put_norm_data(self.source_id, data)
         print('Save complete!')
@@ -125,11 +124,11 @@ class Normalise:
         # Load and transform data
         target = self.__load_and_transform(self.reference_sample)
         print('Warning: calibration can take some time and is dependent on the sample size')
-        self.model.fit(self.source.values, target.values, initial_lr, lr_decay)
+        self.calibrator.fit(self.source.values, target.values, initial_lr, lr_decay)
         print('Calibration complete!')
         if evaluate:
             print('Evaluating calibration...')
-            self.model.evaluate(self.source.values, target.values)
+            self.calibrator.evaluate(self.source.values, target.values)
         if save:
             self.normalise_and_save()
 

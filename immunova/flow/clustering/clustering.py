@@ -39,7 +39,7 @@ class Clustering:
         if heatmap == 'standard':
             static.heatmap(self.data, self.clusters, title, save_path)
         if heatmap == 'cluster':
-            static.clustermap(self.data, self.clusters, title, save_path)
+            static.clustermap(self.data, self.clusters, title, save_pathgit )
 
 
     def interactive_plots(self):
