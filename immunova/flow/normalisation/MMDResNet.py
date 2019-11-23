@@ -16,13 +16,13 @@ import keras.backend as K
 # Immunova imports
 from immunova.flow.normalisation import CostFunctions as cf
 from immunova.flow.normalisation import Monitoring as mn
-from immunova.flow.normalisation.normalise import CalibrationError
 # Scikit-Learn
 from sklearn import decomposition
 import sklearn.preprocessing as prep
 # Scipy and other imports
 import numpy as np
 import seaborn as sns
+import matplotlib.pyplot as plt
 import pandas as pd
 import matplotlib
 import math
@@ -42,8 +42,8 @@ def train_preprocessor(data, method):
         return prep.StandardScaler().fit(data)
     if method == 'MixMax':
         return prep.MinMaxScaler().fit(data)
-    raise CalibrationError('Currently only Z-score standardisation and MinMax normalisation are valid '
-                           'scaling methods')
+    raise ValueError('Currently only Z-score standardisation and MinMax normalisation are valid '
+                     'scaling methods')
 
 
 # learning rate schedule
@@ -60,7 +60,7 @@ class MMDNet:
                  batch_size=1000, verbose=1):
         self.data_dim = data_dim
         self.epochs = epochs
-        self.batch_size = batch_sizeannot_kws=dict(stat="r")
+        self.batch_size = batch_size
         self.verbose = verbose
         self.l2_penalty = l2_penalty
         self.layers = None
@@ -134,11 +134,11 @@ class MMDNet:
         self.model = load_model(path)
 
     def evaluate(self, source, target):
+        source = source.copy()
+        target = target.copy()
         calibrated_source = self.model.predict(source)
 
-        #
-        # qualitative evaluation: PCA
-        #
+        # ----- PCA ----- #
         pca = decomposition.PCA()
         pca.fit(target)
 
@@ -149,13 +149,33 @@ class MMDNet:
         projection_before['Label'] = 'Source before calibration'
         projection_after = pd.DataFrame(pca.transform(calibrated_source)[:, 0:2], columns=['PCA1', 'PCA2'])
         projection_after['Label'] = 'Source after calibration'
-        pca_df = pd.concat([target_sample_pca, projection_before, projection_after])
 
-        sns.set(style="white", color_codes=True)
-        g = sns.jointplot(x="PCA1", y="PCA2", hue='Label', data=pca_df,
-                          marginal_kws=dict(bins=50, rug=True), annot_kws=dict(stat="r"), s=2,
-                          alpha=0.5)
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ax.scatter(target_sample_pca['PCA1'], target_sample_pca['PCA2'],
+                   c='blue', s=4, alpha=0.4, label=f'Target')
+        ax.scatter(projection_before['PCA1'], projection_before['PCA2'],
+                   c='red', s=4, alpha=0.4, label=f'Before')
+        ax.scatter(projection_after['PCA1'], projection_after['PCA2'],
+                   c='green', s=4, alpha=0.4, label=f'After')
+        ax.set_xlabel('PCA1')
+        ax.set_ylabel('PCA2')
+        ax.set_title('Performance of normalisation')
+        ax.legend()
+        plt.show()
+
+        # ----- Histograms ----- #
+        target['Label'] = 'Target'
+        source['Label'] = 'Source '
+        calibrated_source['Label'] = 'After'
+
+        data = pd.concat([target, source, calibrated_source])
+        data = pd.melt(data, id_vars=['Label'], var_name='Marker', value_name='MFI')
+        g = sns.FacetGrid(data, col="Marker", col_wrap=2, height=3, aspect=2, hue='Label', sharey=False)
+        g.map(sns.distplot, "MFI", hist=False, kde=True).add_legend()
         return g
+
+
+
 
 
 
