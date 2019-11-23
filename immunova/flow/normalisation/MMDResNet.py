@@ -1,138 +1,140 @@
 '''
-Created on Dec 5, 2016
-
 @author: urishaham
 '''
 
+# Keras
 import keras.optimizers
-from keras.layers import Input, Dense, Activation, add
+from keras.layers import Input, Dense, merge, Activation, add
+from keras.layers.normalization import BatchNormalization
+from keras.callbacks import LearningRateScheduler
 from keras.models import Model, load_model
 from keras import callbacks as cb
-import numpy as np
-from keras.layers.normalization import BatchNormalization
-
-import immunova.flow.normalisation.CostFunctions as cf
-import immunova.flow.normalisation.Monitoring as mn
-from keras.regularizers import l2
-from sklearn import decomposition
-from keras.callbacks import LearningRateScheduler
-import math
-import immunova.flow.normalisation.ScatterHist as sh
 from keras import initializers
-import sklearn.preprocessing as prep
+from keras.regularizers import l2
 import tensorflow as tf
 import keras.backend as K
+# Immunova imports
+from immunova.flow.normalisation import CostFunctions as cf
+from immunova.flow.normalisation import Monitoring as mn
+from immunova.flow.normalisation.normalise import CalibrationError
+# Scikit-Learn
+from sklearn import decomposition
+import sklearn.preprocessing as prep
+# Scipy and other imports
+import numpy as np
+import seaborn as sns
+import pandas as pd
+import matplotlib
+import math
+np.random.seed(42)
+# detect display
+import os
+havedisplay = "DISPLAY" in os.environ
+# if we have a display use a plotting backend
+if havedisplay:
+    matplotlib.use('TkAgg')
+else:
+    matplotlib.use('Agg')
 
 
-def create_block(x_input, layer_size, l2_penalty):
-    input_dim = int(x_input.get_shape()[-1])
-    block_bn1 = BatchNormalization()(x_input)
-    block_a1 = Activation('relu')(block_bn1)
-    block_w1 = Dense(layer_size, activation='linear',
-                     kernel_regularizer=l2(l2_penalty),
-                     kernel_initializer=initializers.RandomNormal(stddev=1e-4))(block_a1)
-    block_bn2 = BatchNormalization()(block_w1)
-    block_a2 = Activation('relu')(block_bn2)
-    block_w2 = Dense(input_dim, activation='linear',
-                     kernel_regularizer=l2(l2_penalty),
-                     kernel_initializer=initializers.RandomNormal(stddev=1e-4))(block_a2)
-    block_output = add([block_w2, x_input])
-    return block_output
+def train_preprocessor(data, method):
+    if method == 'Standardise':
+        return prep.StandardScaler().fit(data)
+    if method == 'MixMax':
+        return prep.MinMaxScaler().fit(data)
+    raise CalibrationError('Currently only Z-score standardisation and MinMax normalisation are valid '
+                           'scaling methods')
+
+
+# learning rate schedule
+def step_decay(epoch):
+    initial_lrate = 0.001
+    drop = 0.1
+    epochs_drop = 150.0
+    lrate = initial_lrate * math.pow(drop, math.floor((1+epoch)/epochs_drop))
+    return lrate
 
 
 class MMDNet:
-    def __init__(self, data_dim, epochs=500, denoise=False,
-                 ae_keep_prob=.8, ae_latent_dim=25, ae_l2_penalty=1e-2,
-                 layer_sizes=None, l2_penalty=1e-2):
+    def __init__(self, data_dim, epochs=500, layer_sizes=None, l2_penalty=1e-2,
+                 batch_size=1000, verbose=1):
         self.data_dim = data_dim
         self.epochs = epochs
-        self.denoise = denoise
-        self.ae_keep_prob = ae_keep_prob
-        self.ae_latent_dim = ae_latent_dim
-        self.ae_l2_penalty = ae_l2_penalty
+        self.batch_size = batch_sizeannot_kws=dict(stat="r")
+        self.verbose = verbose
         self.l2_penalty = l2_penalty
         self.layers = None
-        self.net = None
+        self.model = None
         if layer_sizes is None:
-            self.layer_sizes = [25, 25, 25]
+            self.layer_sizes = [25, 25]
         else:
             self.layer_sizes = layer_sizes
 
-    def build_model(self):
-        calib_input = Input(shape=(self.data_dim,))
-
-        # create all layers of MMDNet
-        layers = [calib_input]
-        for layer_size in self.layer_sizes:
-            layers.append(create_block(layers[-1], layer_size, self.l2_penalty))
-
-        calibMMDNet = Model(inputs=calib_input, outputs=layers[-1])
-
-        if self.denoise:
-            input_cell = Input(shape=(self.data_dim,))
-            encoded = Dense(self.ae_latent_dim, activation='relu', W_regularizer=l2(self.ae_l2_penalty))(input_cell)
-            encoded1 = Dense(self.ae_latent_dim, activation='relu', W_regularizer=l2(self.ae_l2_penalty))(encoded)
-            decoded = Dense(self.data_dim, activation='linear', W_regularizer=l2(self.ae_l2_penalty))(encoded1)
-            autoencoder = Model(input=input_cell, output=decoded)
-            autoencoder.compile(optimizer='rmsprop', loss='mse')
-            self.ae = autoencoder
-
-        self.layers = layers
-        self.net = calibMMDNet
-
-    def fit(self, source, target, initial_lr=1e-3, lr_decay=0.97):
-        # preprocess data
-
-        if self.denoise:
-            # denoise with autoencoder
-            numZerosOK = 1
-            s_to_keep = np.sum(source == 0 , axis=1) <= numZerosOK
-            t_to_keep = np.sum(target == 0, axis=1) <= numZerosOK
-
-            ae_y = np.concatenate([source[s_to_keep], target[t_to_keep]], axis=0)
-            np.random.shuffle(ae_y)
-            ae_x = ae_y * np.random.binomial(n=1, p=self.ae_keep_prob, size=ae_y.shape)
-            self.ae.fit(ae_x, ae_y, epochs=self.epochs, batch_size=128, shuffle=True,  validation_split=0.1,
-                            callbacks=[mn.monitor(), cb.EarlyStopping(monitor='val_loss', patience=25,  mode='auto')])
-            source = self.ae.predict(source)
-            target = self.ae.predict(target)
-
-        # rescale source to have zero mean and unit variance
-        # apply same transformation to the target
-        preprocessor = prep.StandardScaler().fit(source)
+    def fit(self, source, target, initial_lr=1e-3, lr_decay=0.97, scale_method='Standardise',
+            evaluate=True):
+        # rescale source
+        preprocessor = train_preprocessor(source, scale_method)
         source = preprocessor.transform(source)
         target = preprocessor.transform(target)
 
-        # compile net
-        step_decay = lambda epoch: initial_lr * math.pow(lr_decay, epoch)
-        lrate = LearningRateScheduler(step_decay)
+        inputDim = target.shape[1]
+        calibInput = Input(shape=(inputDim,))
+        block1_bn1 = BatchNormalization()(calibInput)
+        block1_a1 = Activation('relu')(block1_bn1)
+        block1_w1 = Dense(self.layer_sizes[0], activation='linear', kernel_regularizer=l2(self.l2_penalty),
+                          kernel_initializer=initializers.RandomNormal(stddev=1e-4))(block1_a1)
+        block1_bn2 = BatchNormalization()(block1_w1)
+        block1_a2 = Activation('relu')(block1_bn2)
+        block1_w2 = Dense(inputDim, activation='linear', kernel_regularizer=l2(self.l2_penalty),
+                          kernel_initializer=initializers.RandomNormal(stddev=1e-4))(block1_a2)
+        block1_output = add([block1_w2, calibInput])
+        block2_bn1 = BatchNormalization()(block1_output)
+        block2_a1 = Activation('relu')(block2_bn1)
+        block2_w1 = Dense(self.layer_sizes[1], activation='linear', kernel_regularizer=l2(self.l2_penalty),
+                          kernel_initializer=initializers.RandomNormal(stddev=1e-4))(block2_a1)
+        block2_bn2 = BatchNormalization()(block2_w1)
+        block2_a2 = Activation('relu')(block2_bn2)
+        block2_w2 = Dense(inputDim, activation='linear', kernel_regularizer=l2(self.l2_penalty),
+                          kernel_initializer=initializers.RandomNormal(stddev=1e-4))(block2_a2)
+        block2_output = add([block2_w2, block1_output])
+        block3_bn1 = BatchNormalization()(block2_output)
+        block3_a1 = Activation('relu')(block3_bn1)
+        block3_w1 = Dense(self.layer_sizes[1], activation='linear', kernel_regularizer=l2(self.l2_penalty),
+                          kernel_initializer=initializers.RandomNormal(stddev=1e-4))(block3_a1)
+        block3_bn2 = BatchNormalization()(block3_w1)
+        block3_a2 = Activation('relu')(block3_bn2)
+        block3_w2 = Dense(inputDim, activation='linear', kernel_regularizer=l2(self.l2_penalty),
+                          kernel_initializer=initializers.RandomNormal(stddev=1e-4))(block3_a2)
+        block3_output = add([block3_w2, block2_output])
 
+        self.model = Model(inputs=calibInput, outputs=block3_output)
+        lrate = LearningRateScheduler(step_decay)
         optimizer = keras.optimizers.rmsprop(lr=0.0)
 
-        self.net.compile(optimizer=optimizer,
-                         loss=lambda y_true, y_pred: cf.MMD(self.layers[-1],
-                                                            target, MMDTargetValidation_split=0.1).KerasCost(y_true,
-                                                                                                             y_pred))
-
-        # initialize all variables
+        self.model.compile(optimizer=optimizer,
+                           loss=lambda y_true,
+                                       y_pred:
+                           cf.MMD(block3_output, target, MMDTargetValidation_split=0.1).KerasCost(y_true, y_pred))
         K.get_session().run(tf.global_variables_initializer())
+        source_labels = np.zeros(source.shape[0])
+        self.model.fit(source, source_labels, nb_epoch=self.epochs, batch_size=self.batch_size,
+                       validation_split=0.1, verbose=self.verbose,
+                       callbacks=[lrate, mn.monitorMMD(source, target, self.model.predict),
+                                  cb.EarlyStopping(monitor='val_loss', patience=50, mode='auto')])
 
-        # train model
-        sourceLabels = np.zeros(source.shape[0])
-        self.net.fit(source, sourceLabels, epochs=self.epochs, batch_size=1000,validation_split=0.1, verbose=1,
-                   callbacks=[lrate, cb.EarlyStopping(monitor='val_loss',patience=50,mode='auto')])
-        # mn.monitorMMD(source, target, self.net.predict)
+        if evaluate:
+            self.evaluate(source, target)
 
     def save_model(self, model_path, weights_path=None):
-        self.net.save(model_path)
+        self.model.save(model_path)
         if weights_path is not None:
-            self.net.save_weights(weights_path)
+            self.model.save_weights(weights_path)
 
     def load_model(self, path):
-        self.net = load_model(path)
+        self.model = load_model(path)
 
     def evaluate(self, source, target):
-        calibrated_source = self.net.predict(source)
+        calibrated_source = self.model.predict(source)
 
         #
         # qualitative evaluation: PCA
@@ -141,15 +143,19 @@ class MMDNet:
         pca.fit(target)
 
         # project data onto PCs
-        target_sample_pca = pca.transform(target)
-        projection_before = pca.transform(source)
-        projection_after = pca.transform(calibrated_source)
+        target_sample_pca = pd.DataFrame(pca.transform(target)[:, 0:2], columns=['PCA1', 'PCA2'])
+        target_sample_pca['Label'] = 'Target'
+        projection_before = pd.DataFrame(pca.transform(source)[:, 0:2], columns=['PCA1', 'PCA2'])
+        projection_before['Label'] = 'Source before calibration'
+        projection_after = pd.DataFrame(pca.transform(calibrated_source)[:, 0:2], columns=['PCA1', 'PCA2'])
+        projection_after['Label'] = 'Source after calibration'
+        pca_df = pd.concat([target_sample_pca, projection_before, projection_after])
 
-        # choose PCs to plot
-        pc1 = 0
-        pc2 = 1
-        axis1 = 'PC'+str(pc1)
-        axis2 = 'PC'+str(pc2)
-        sh.scatterHist(target_sample_pca[:,pc1], target_sample_pca[:,pc2], projection_before[:,pc1], projection_before[:,pc2], axis1, axis2)
-        sh.scatterHist(target_sample_pca[:,pc1], target_sample_pca[:,pc2], projection_after[:,pc1], projection_after[:,pc2], axis1, axis2)
+        sns.set(style="white", color_codes=True)
+        g = sns.jointplot(x="PCA1", y="PCA2", hue='Label', data=pca_df,
+                          marginal_kws=dict(bins=50, rug=True), annot_kws=dict(stat="r"), s=2,
+                          alpha=0.5)
+        return g
+
+
 
