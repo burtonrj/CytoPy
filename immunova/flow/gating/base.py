@@ -32,7 +32,7 @@ class Gate:
         :param data: pandas dataframe of fcs data for gating
         :param x: name of X dimension
         :param y: name of Y dimension (optional)
-        :param child_populations: ChildPopulationCollection (see docs)
+        :param child_populations: ChildPopulationCollection (see docs)one
         """
         self.data = data.copy()
         self.x = x
@@ -45,7 +45,10 @@ class Gate:
         self.warnings = list()
         self.empty_parent = self.__empty_parent()
         if low_memory:
-            self.frac = 40000/self.data.shape[0]
+            if self.data.shape[0] > 20000:
+                self.frac = 20000/self.data.shape[0]
+            else:
+                self.frac = None
         else:
             self.frac = frac
         self.downsample_method = downsample_method
@@ -68,7 +71,10 @@ class Gate:
         if data.shape[0] < threshold:
             return data
         if self.downsample_method == 'uniform':
-            return data.sample(frac=self.frac)
+            try:
+                return data.sample(frac=self.frac)
+            except ValueError:
+                return data
         elif self.downsample_method == 'density':
             features = [self.x]
             if self.y is not None:
