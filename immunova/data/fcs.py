@@ -7,7 +7,7 @@ import mongoengine
 import pickle
 
 
-def sample(data, n) -> np.array:
+def generate_sample(data, n) -> np.array:
     if n < data.shape[0]:
         idx = np.random.randint(data.shape[0], size=n)
         return data[idx, :]
@@ -97,7 +97,7 @@ class Normalisation(mongoengine.EmbeddedDocument):
         """
         data = pickle.loads(self.data.read())
         if sample:
-            return sample(data, sample)
+            return generate_sample(data, sample)
         return data
 
     def put(self, data: np.array, root_population: str, method: str) -> None:
@@ -151,7 +151,7 @@ class File(mongoengine.EmbeddedDocument):
         """
         data = pickle.loads(self.data.read())
         if sample:
-            return sample(data, sample)
+            return generate_sample(data, sample)
         return data
 
     def put(self, data: np.array) -> None:

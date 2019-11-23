@@ -4,6 +4,7 @@ from immunova.flow.gating.actions import Gating
 from immunova.flow.normalisation.MMDResNet import MMDNet
 from immunova.flow.supervised_algo.utilities import calculate_reference_sample
 from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
@@ -149,7 +150,7 @@ class EvaluateBatchEffects:
         :return: transformed data as a list of dictionary objects:
         {id: file id, typ: type of file (either 'complete' or 'control'), data: Pandas DataFrame}
         """
-        gating = Gating(experiment=self.experiment, sample_id=sample_id)
+        gating = Gating(experiment=self.experiment, sample_id=sample_id, include_controls=False)
         data = gating.get_population_df(root_population,
                                         transform=True,
                                         transform_method=self.transform,
@@ -160,31 +161,38 @@ class EvaluateBatchEffects:
 
     def marker_variance(self, reference_id, root_population, marker):
         reference = self.__load_and_transform(reference_id, root_population).sample(500)[marker]
-        ax = sns.kdeplot(reference[marker], shade=True, color="r")
         for sample in self.experiment.list_samples():
             try:
                 d = self.__load_and_transform(sample, root_population).sample(500)[marker]
-                ax = sns.kdeplot(d[marker], color='b', shade=False)
+                ax = sns.kdeplot(d, color='b', shade=False, alpha=0.5)
             except ValueError:
                 print(f'{sample} has less than 500 events, this sample will not be included in the comparison')
-        ax.show()
+            except CalibrationError:
+                print(f'{sample} does not contain the population {root_population}, skipping')
+        ax = sns.kdeplot(reference, shade=True, color="r")
+        ax.set_title(f'Total variance in {marker}')
+        ax.get_legend().remove()
+        return ax
 
     def pca(self, sample_id, reference_id, root_population, sample_n=1000):
         reference = self.__load_and_transform(reference_id, root_population).sample(sample_n)
         sample = self.__load_and_transform(sample_id, root_population).sample(sample_n)
+        ref_features = set(reference.columns)
+        features = ref_features.intersection(list(sample.columns))
         # project data onto PCs
         reducer = PCA()
-        reducer.fit(reference)
+        reducer.fit(reference[features])
 
-        ref_pca = pd.DataFrame(reducer.transform(reference)[:, 0:2], columns=['PCA1', 'PCA2'])
+        ref_pca = pd.DataFrame(reducer.transform(reference[features])[:, 0:2], columns=['PCA1', 'PCA2'])
         ref_pca['Label'] = 'Target'
-        sample_pca = pd.DataFrame(reducer.transform(sample)[:, 0:2], columns=['PCA1', 'PCA2'])
+        sample_pca = pd.DataFrame(reducer.transform(sample[features])[:, 0:2], columns=['PCA1', 'PCA2'])
         sample_pca['Label'] = 'Source before calibration'
         pca_df = pd.concat([ref_pca, sample_pca])
 
-        sns.set(style="white", color_codes=True)
-        g = sns.jointplot(x="PCA1", y="PCA2", hue='Label', data=pca_df,
-                          marginal_kws=dict(bins=50, rug=True), annot_kws=dict(stat="r"), s=2,
-                          alpha=0.5)
-        return g
-
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ax.scatter(ref_pca['PCA1'], ref_pca['PCA2'], c='blue', s=4, alpha=0.4, label=f'Target: {reference_id}')
+        ax.scatter(sample_pca['PCA1'], sample_pca['PCA2'], c='red', s=4, alpha=0.4, label=f'Sample: {sample_id}')
+        ax.set_xlabel('PCA1')
+        ax.set_ylabel('PCA2')
+        ax.legend()
+        plt.show()
