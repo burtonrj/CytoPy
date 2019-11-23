@@ -32,7 +32,8 @@ class Gating:
     Central class for performing gating on an FCS FileGroup of a single sample
     """
     def __init__(self, experiment: FCSExperiment, sample_id: str,
-                 data_type='raw', sample: int or None = None):
+                 data_type='raw', sample: int or None = None,
+                 include_controls=True):
         """
         Constructor for Gating
         :param experiment: FCSExperiment currently being processed
@@ -41,13 +42,17 @@ class Gating:
         :param sample: if an integer value is supplied then data will be sampled to this size. Optional (default = None)
         """
         try:
-            data = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample)
+            data = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample,
+                                               include_controls=include_controls)
             assert data is not None
         except AssertionError:
             raise GateError(f'Error: failed to fetch data for {sample_id}. Aborting.')
         self.data = [x for x in data if x['typ'] == 'complete'][0]['data']
-        self.fmo = [x for x in data if x['typ'] == 'control']
-        self.fmo = {x['id'].replace(f'{sample_id}_', ''): x['data'] for x in self.fmo}
+        if include_controls:
+            self.fmo = [x for x in data if x['typ'] == 'control']
+            self.fmo = {x['id'].replace(f'{sample_id}_', ''): x['data'] for x in self.fmo}
+        else:
+            self.fmo = {}
         self.id = sample_id
         self.mongo_id = experiment.fetch_sample_mid(sample_id)
         self.experiment = experiment
