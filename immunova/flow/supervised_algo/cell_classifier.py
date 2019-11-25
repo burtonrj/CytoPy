@@ -1,7 +1,9 @@
 from immunova.data.fcs_experiments import FCSExperiment
+from immunova.data.fcs import FileGroup, File, ChannelMap
+from immunova.data.panel import Panel
 from immunova.flow.gating.actions import Gating
 from immunova.flow.gating.defaults import ChildPopulationCollection
-from immunova.flow.supervised_algo.utilities import standard_scale, norm_scale
+from immunova.flow.supervised_algo.utilities import standard_scale, norm_scale, find_common_features
 from sklearn.model_selection import train_test_split
 import pandas as pd
 import numpy as np
@@ -9,6 +11,86 @@ import numpy as np
 
 class CellClassifierError(Exception):
     pass
+
+
+def __channel_mappings(features: list, panel: Panel):
+    mappings = list()
+    panel_mappings = panel.mappings
+    for f in features:
+        channel = list(filter(lambda x: x.channel == f, panel_mappings))
+        marker = list(filter(lambda x: x.marker == f, panel_mappings))
+        if (len(channel) > 1 or len(marker) > 1) or (len(channel) == 1 and len(marker) == 1):
+            raise ValueError(f'Feature {f} found in multiple channel_marker mappings in panel {panel.panel_name}: '
+                             f'{channel}; {marker}.')
+        if len(channel) == 0:
+            if len(marker) == 0:
+                raise ValueError(f'Feature {f} not found in associated panel')
+            mappings.append(ChannelMap(channel=marker[0].channel,
+                                       marker=marker[0].marker))
+            continue
+        mappings.append(ChannelMap(channel=channel[0].channel,
+                                   marker=channel[0].marker))
+    return mappings
+
+
+def create_reference_sample(experiment: FCSExperiment,
+                            root_population='root',
+                            exclude: list or None = None,
+                            new_file_name: str or None = None,
+                            sampling_method: str = 'uniform',
+                            sample_n: int = 1000,
+                            sample_frac: float or None = None):
+    """
+    Given some experiment and a root population that is common to all fcs file groups within this experiment, take
+    a sample from each and create a new file group from the concatenation of these data
+    :param experiment:
+    :param root_population:
+    :param exclude:
+    :return:
+    """
+    def sample(d):
+        if sampling_method == 'uniform':
+            if sample_frac is None:
+                if d.shape[0] > sample_n:
+                    return d.sample(sample_n)
+                return d
+            return d.sample(frac=sample_frac)
+        raise CellClassifierError('Error: currently only uniform sampling is implemented in this version of immunova')
+
+    print('-------------------- Generating Reference Sample --------------------')
+    if exclude is None:
+        exclude = []
+    if new_file_name is None:
+        new_file_name = f'{experiment.experiment_id}_sampled_data'
+    print('Finding features common to all fcs files...')
+    features = find_common_features(experiment=experiment, exclude=exclude)
+    channel_mappings = __channel_mappings(features,
+                                          experiment.panel)
+    files = [f for f in experiment.list_samples() if f not in exclude]
+    data = pd.DataFrame()
+    for f in files:
+        print(f'Sampling {f}...')
+        g = Gating(experiment, f, include_controls=False)
+        if root_population not in g.populations.keys():
+            print(f'Skipping {f} as {root_population} is absent from gated populations')
+            continue
+        df = g.get_population_df(root_population)[features]
+        data = pd.concat([data, sample(df)])
+    print('Sampling complete!')
+    new_filegroup = FileGroup(primary_id=new_file_name)
+    new_filegroup.flags = 'sampled data'
+    new_file = File(file_id=new_file_name,
+                    compensated=True,
+                    channel_mappings=channel_mappings)
+    print('Inserting sampled data to database...')
+    new_file.put(data.values)
+    new_filegroup.files.append(new_file)
+    print('Saving changes...')
+    mid = new_filegroup.save()
+    experiment.fcs_files.append(new_filegroup)
+    experiment.save()
+    print(f'Complete! New file saved to database: {new_file_name}, {mid}')
+    print('-----------------------------------------------------------------')
 
 
 class CellClassifier:
@@ -28,12 +110,8 @@ class CellClassifier:
         self.root_population = root_population
         self.threshold = threshold
 
-        if reference_sample == 'sample':
-            # ToDo Create reference from sampling all available gated data
-            # ref = self.sample_all()
-            raise CellClassifierError(f'Error: training from concatenated sample currently not implemented')
-        else:
-            ref = Gating(self.experiment, reference_sample)
+        ref = Gating(self.experiment, reference_sample)
+
         self.population_labels = ref.valid_populations(population_labels)
         if len(ref.populations) < 2:
             raise CellClassifierError(f'Error: reference sample {reference_sample} does not contain any '
