@@ -42,7 +42,7 @@ class Gating:
         :param sample: if an integer value is supplied then data will be sampled to this size. Optional (default = None)
         """
         try:
-            data = experiment.pull_sample_data(sample_id=sample_id, data_type=data_type, sample_size=sample,
+            data = experiment.pull_sample_data(sample_id=sample_id, sample_size=sample,
                                                include_controls=include_controls)
             assert data is not None
         except AssertionError:
