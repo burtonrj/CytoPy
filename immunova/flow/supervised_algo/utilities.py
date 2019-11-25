@@ -6,13 +6,20 @@ from functools import partial
 import numpy as np
 
 
-def find_common_features(experiment: FCSExperiment):
-    def pull(sid):
-        d = experiment.pull_sample_data(sample_id=sid, data_type='raw', include_controls=False)
-        return [x for x in d if x['typ'] == 'complete'][0]['data']
+def __pull_features(sid, experiment):
+    d = experiment.pull_sample_data(sample_id=sid, include_controls=False)
+    d = [x for x in d if x['typ'] == 'complete'][0]['data']
+    return list(d.columns)
 
-    all_features = list(map(lambda x: list(pull(x).columns),
-                            experiment.list_samples()))
+
+def find_common_features(experiment: FCSExperiment, exclude: list or None = None):
+    pool = Pool(cpu_count())
+    if exclude is not None:
+        samples = [f for f in experiment.list_samples() if f not in exclude]
+    else:
+        samples = experiment.list_samples()
+    pull = partial(__pull_features, experiment=experiment)
+    all_features = pool.map(pull, samples)
     common_features = set(all_features[0])
     for f in all_features[1:]:
         common_features.intersection_update(f)
@@ -82,6 +89,8 @@ def calculate_ref_sample_fast(experiment, exclude_samples, sample_n):
             norms[j, i] = norms[i, j]
             avg = np.mean(norms, axis=1)
             ref_ind = np.argmin(avg)
+    pool.close()
+    pool.join()
     return all_samples[int(ref_ind)]
 
 

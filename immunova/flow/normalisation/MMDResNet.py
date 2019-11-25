@@ -73,6 +73,8 @@ class MMDNet:
     def fit(self, source, target, initial_lr=1e-3, lr_decay=0.97, scale_method='Standardise',
             evaluate=True):
         # rescale source
+        sc = source.columns
+        tc = target.columns
         preprocessor = train_preprocessor(source, scale_method)
         source = preprocessor.transform(source)
         target = preprocessor.transform(target)
@@ -123,6 +125,8 @@ class MMDNet:
                                   cb.EarlyStopping(monitor='val_loss', patience=50, mode='auto')])
 
         if evaluate:
+            source = pd.DataFrame(source, columns=sc)
+            target = pd.DataFrame(target, columns=tc)
             self.evaluate(source, target)
 
     def save_model(self, model_path, weights_path=None):
@@ -136,7 +140,7 @@ class MMDNet:
     def evaluate(self, source, target):
         source = source.copy()
         target = target.copy()
-        calibrated_source = self.model.predict(source)
+        calibrated_source = pd.DataFrame(self.model.predict(source), columns=source.columns)
 
         # ----- PCA ----- #
         pca = decomposition.PCA()

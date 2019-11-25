@@ -92,8 +92,7 @@ class FCSExperiment(mongoengine.Document):
             mappings[f.file_id] = [m.to_python() for m in f.channel_mappings]
         return mappings
 
-    def pull_sample_data(self, sample_id: str, sample_size: int or None = None,
-                         data_type: str = 'raw', include_controls: bool = True,
+    def pull_sample_data(self, sample_id: str, sample_size: int or None = None, include_controls: bool = True,
                          output_format: str = 'dataframe', columns_default: str = 'marker') -> None or list:
         """
         Given a sample ID, associated to this experiment, fetch the fcs data

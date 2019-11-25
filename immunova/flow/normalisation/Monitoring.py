@@ -13,8 +13,8 @@ class monitor(Callback):
         self.val_losses = []
         #initialize plotting
         plt.ion()
-        fig = plt.figure()
-        self.ax = fig.add_subplot(111)
+        self.loss_fig = plt.figure()
+        self.ax = self.loss_fig.add_subplot(111)
     #Keras calls this at the end of each epoch
     def on_epoch_end(self, epoch, logs={}):
         Callback.on_epoch_end(self, epoch, logs=logs)
@@ -24,7 +24,7 @@ class monitor(Callback):
         lossHandle, = self.ax.plot(self.losses,color='blue', label = 'loss')
         val_lossHandle, = self.ax.plot(self.val_losses,color='red', label = 'validation loss')
         self.ax.legend(handles = [lossHandle, val_lossHandle])
-        plt.draw()
+        self.loss_fig.canvas.draw()
         plt.pause(0.01)
         
 #TODO this currently uses the last layer of the net which isnt what you want if you are doing MMD on
