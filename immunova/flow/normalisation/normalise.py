@@ -129,11 +129,8 @@ class Normalise:
         # Load and transform data
         target = self.__load_and_transform(self.reference_sample)
         print('Warning: calibration can take some time and is dependent on the sample size')
-        self.calibrator.fit(self.source.values, target.values, initial_lr, lr_decay)
+        self.calibrator.fit(self.source, target, initial_lr, lr_decay, evaluate=evaluate)
         print('Calibration complete!')
-        if evaluate:
-            print('Evaluating calibration...')
-            self.calibrator.evaluate(self.source.values, target.values)
         if save:
             self.normalise_and_save()
 
