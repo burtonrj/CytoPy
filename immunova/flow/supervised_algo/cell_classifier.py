@@ -158,9 +158,9 @@ class CellClassifier:
                                       f'been gated prior to training.')
 
         if multi_label:
-            self.train_X, self.train_y, self.mappings = self.dummy_data(ref, features)
+            self.train_X, self.train_y = self.dummy_data(ref, features)
         else:
-            self.train_X, self.train_y, self.mappings = self.single_label_data(ref, features)
+            self.train_X, self.train_y = self.single_label_data(ref, features)
 
         if scale == 'Standardise':
             self.train_X, self.preprocessor = standard_scale(self.train_X)
@@ -172,32 +172,46 @@ class CellClassifier:
         else:
             raise CellClassifierError('Error: scale method not recognised, must be either `Standardise` or `Normalise`')
 
-    def dummy_data(self, ref: Gating, features) -> (pd.DataFrame, pd.DataFrame, list):
+    def dummy_data(self, ref: Gating, features) -> (pd.DataFrame, np.array):
         """
-        Generate training data, labels, and column mappings when a cell can belong to multiple populations
+        Generate training data and labels when a cell can belong to multiple populations
+        (multi-label learning)
         :param ref: Gating object to retrieve data from
         :param features: list of features for training
-        :return: DataFrame of
+        :return: DataFrame of feature space, array of target labels
         """
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
-        y = {pop: np.zeros((1, root.shape[0]))[0] for pop in self.population_labels}
-        for pop in self.population_labels:
+        y = np.zeros((root.shape[0], len(self.population_labels)))
+        for pi, pop in enumerate(self.population_labels):
             pop_idx = ref.populations[pop].index
-            np.put(y[pop], pop_idx, [1 for n in pop_idx])
-        y = pd.DataFrame(y)
-        return root, y, list(y.columns)
+            for ci in pop_idx:
+                y[ci, pi] = 1
+        return root, y
 
-    def single_label_data(self, ref: Gating, features) -> (pd.DataFrame, np.array, list):
+    def single_label_data(self, ref: Gating, features) -> (pd.DataFrame, np.array):
+        """
+        Generate training data and labels when a cell can belong to only one population
+        :param ref: Gating object to retrieve data from
+        :param features: list of features for training
+        :return: DataFrame of feature space, array of target labels
+        """
         if self.__check_downstream_overlaps(ref):
             raise CellClassifierError('Error: one or more population dependency errors')
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
-        y = np.zeros((0, root.shape[0]))[0]
+        y = np.zeros(root.shape[0])
         for i, pop in enumerate(self.population_labels):
             pop_idx = ref.populations[pop].index
-            np.put(y, pop_idx, [i+1 for n in pop_idx])
-        return root, y, self.population_labels
+            np.put(y, pop_idx, i + 1)
+        return root, y
 
-    def __check_downstream_overlaps(self, ref: Gating):
+    def __check_downstream_overlaps(self, ref: Gating) -> bool:
+        """
+        Internal method. Check if a chosen root population is downstream of target populations for classification.
+        This is a problem because if the root population is downstream then the model won't have access to the events
+        it needs to classify.
+        :param ref: Gating object whom's populations you wish to check
+        :return: True if overlaps exist, otherwise False
+        """
         downstream_overlaps = False
         for pop_i in self.population_labels:
             dependencies = ref.find_dependencies(pop_i)
@@ -214,22 +228,47 @@ class CellClassifier:
                     downstream_overlaps = True
         return downstream_overlaps
 
-    def train_test_split(self, test_size):
+    def train_test_split(self, test_size=0.3) -> list:
+        """
+        Create train/test split of data using Sklearn's train_test_split function
+        (https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.html)
+        :param test_size: size of test population as a proportion of the the dataset (default = 0.3)
+        :return: List containing train-test split of inputs.
+        """
         return train_test_split(self.train_X, self.train_y, test_size=test_size, random_state=42)
 
-    def save_gating(self, target, y_hat):
+    def __save_gating(self, target: Gating, y_hat: np.array) -> Gating:
+        """
+        Internal method. Given some Gating object of the target file for prediction and the predicted labels,
+        generate new population objects and insert them into the Gating object
+        :param target: Gating object of the target file
+        :param y_hat: array of predicted population labels
+        :return: None
+        """
         parent = target.get_population_df(population_name=self.root_population)
         new_populations = ChildPopulationCollection(gate_type='sml')
         if self.multi_label:
-            y_hat = pd.DataFrame(y_hat, columns=self.mappings)
+            y_hat = pd.DataFrame(y_hat, columns=self.population_labels)
             for label in y_hat.columns:
                 x = y_hat[label].values
                 new_populations.add_population(name=label)
                 new_populations.populations[label].update_index(x.nonzero())
                 new_populations.populations[label].update_geom(shape='sml', x=None, y=None)
+        else:
+            for i, label in enumerate(self.population_labels):
+                y_ = np.where(y_hat == i+1)[0]
+                new_populations.add_population(name=label)
+                new_populations.populations[label].update_index(y_)
+                new_populations.populations[label].update_geom(shape='sml', x=None, y=None)
         target.update_populations(new_populations, parent, parent_name=self.root_population, warnings=[])
+        return target
 
-    def __preprocess_target(self, sample_gates: Gating):
+    def __preprocess_target(self, sample_gates: Gating) -> pd.DataFrame:
+        """
+        Internal method. Transform and scale data from the given Gating object.
+        :param sample_gates: Gating object
+        :return: Transformed and scaled DataFrame.
+        """
         if self.preprocessor is not None:
             return self.preprocessor.fit_transform(sample_gates.get_population_df(self.root_population,
                                                                                   transform=True,
@@ -238,7 +277,13 @@ class CellClassifier:
                                               transform=True,
                                               transform_method=self.transform)[self.features]
 
-    def predict(self, target_sample, threshold=None):
+    def predict(self, target_sample: str) -> Gating:
+        """
+        Given a sample ID, predict cell populations. Model must already be trained. Results are saved as new
+        populations in a Gating object returned to the user.
+        :param target_sample: Name of file for prediction. Must belong to experiment associated to CellClassifier obj.
+        :return: Gating object containing new predicted populations.
+        """
         sample_gates = Gating(self.experiment, target_sample)
         target_sample = self.__preprocess_target(sample_gates)
         if self.classifier is None:
@@ -247,14 +292,24 @@ class CellClassifier:
                                       'the classifier using the `train_classifier` method')
 
         y_probs = self.classifier.predict(target_sample)
-        y_hat = predict_class(y_probs, threshold)
-        self.save_gating(sample_gates, y_hat)
-        print('Prediction complete!')
+        y_hat = predict_class(y_probs, self.threshold)
+        return self.__save_gating(sample_gates, y_hat)
 
-    def fit(self, **kwargs):
+    def fit(self, **kwargs) -> None:
+        """
+        Fit classifier to training data.
+        :param kwargs: Optional additional kwargs for model fit.
+        :return: None
+        """
         self.classifier.fit(self.train_X, self.train_y, **kwargs)
 
-    def train_cv(self, k=5, **kwargs):
+    def train_cv(self, k: int = 5, **kwargs) -> pd.DataFrame:
+        """
+        Fit classifier to training data using cross-validation
+        :param k: Number of folds for cross-validation (default = 5)
+        :param kwargs: kwargs: Optional additional kwargs for model fit.
+        :return: Pandas DataFrame detailing performance
+        """
         kf = KFold(n_splits=k)
         train_performance = list()
         test_performance = list()
@@ -278,9 +333,15 @@ class CellClassifier:
         test_performance['test_train'] = 'test'
         return pd.concat([train_performance, test_performance])
 
-    def train_holdout(self, holdout_frac: float = 0.3):
+    def train_holdout(self, holdout_frac: float = 0.3, **kwargs) -> pd.DataFrame:
+        """
+        Fit classifier to training data and evaluate on holdout data.
+        :param holdout_frac: Proportion of data to keep as holdout
+        :param kwargs: kwargs: Optional additional kwargs for model fit.
+        :return: Pandas DataFrame detailing performance
+        """
         train_x, test_x, train_y, test_y = self.train_test_split(test_size=holdout_frac)
-        self.fit()
+        self.fit(**kwargs)
         train_performance = evaluate_model(self.classifier, train_x, train_y, self.multi_label, self.threshold)
         train_performance['test_train'] = 'train'
         test_performance = evaluate_model(self.classifier, test_x, test_y, self.multi_label, self.threshold)
