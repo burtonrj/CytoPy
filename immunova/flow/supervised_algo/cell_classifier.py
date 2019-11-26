@@ -1,10 +1,11 @@
 from immunova.data.fcs_experiments import FCSExperiment
-from immunova.data.fcs import FileGroup, File, ChannelMap
+from immunova.data.fcs import FileGroup, File, ChannelMap, Population
 from immunova.data.panel import Panel
 from immunova.flow.gating.actions import Gating
 from immunova.flow.gating.defaults import ChildPopulationCollection
-from immunova.flow.supervised_algo.utilities import standard_scale, norm_scale, find_common_features
-from sklearn.model_selection import train_test_split
+from immunova.flow.supervised_algo.utilities import standard_scale, norm_scale, find_common_features, predict_class
+from immunova.flow.supervised_algo.evaluate import evaluate_model
+from sklearn.model_selection import train_test_split, KFold
 import pandas as pd
 import numpy as np
 
@@ -13,7 +14,14 @@ class CellClassifierError(Exception):
     pass
 
 
-def __channel_mappings(features: list, panel: Panel):
+def __channel_mappings(features: list, panel: Panel) -> list:
+    """
+    Internal function. Given a list of features and a Panel object, return a list of ChannelMapping objects
+    that correspond with the given Panel.
+    :param features: list of features to compare to Panel object
+    :param panel: Panel object of channel mappings
+    :return: list of ChannelMappings
+    """
     mappings = list()
     panel_mappings = panel.mappings
     for f in features:
@@ -39,14 +47,22 @@ def create_reference_sample(experiment: FCSExperiment,
                             new_file_name: str or None = None,
                             sampling_method: str = 'uniform',
                             sample_n: int = 1000,
-                            sample_frac: float or None = None):
+                            sample_frac: float or None = None) -> None:
     """
     Given some experiment and a root population that is common to all fcs file groups within this experiment, take
-    a sample from each and create a new file group from the concatenation of these data
-    :param experiment:
-    :param root_population:
-    :param exclude:
-    :return:
+    a sample from each and create a new file group from the concatenation of these data. New file group will be created
+    and associated to the given FileExperiment object.
+    If no file name is given it will default to '{Experiment Name}_sampled_data'
+    :param experiment: FCSExperiment object for corresponding experiment to sample
+    :param root_population: if the files in this experiment have already been gated, you can specify to sample
+    from a particular population e.g. Live CD3+ cells or Live CD45- cells
+    :param exclude: list of sample IDs for samples to be excluded from sampling process
+    :param new_file_name: name of file group generated
+    :param sampling_method: method to use for sampling files (currently only supports 'uniform')
+    :param sample_n: number of events to sample from each file
+    :param sample_frac: fraction of events to sample from each file (default = None, if not None then sample_n is
+    ignored)
+    :return: None
     """
     def sample(d):
         if sampling_method == 'uniform':
@@ -85,6 +101,11 @@ def create_reference_sample(experiment: FCSExperiment,
     print('Inserting sampled data to database...')
     new_file.put(data.values)
     new_filegroup.files.append(new_file)
+    root_p = Population(population_name=root_population,
+                        prop_of_parent=1.0, prop_of_total=1.0,
+                        warnings=[], geom=[['shape', None], ['x', 'FSC-A'], ['y', 'SSC-A']])
+    root_p.save_index(data.index.values)
+    new_filegroup.populations.append(root_p)
     print('Saving changes...')
     mid = new_filegroup.save()
     experiment.fcs_files.append(new_filegroup)
@@ -95,11 +116,29 @@ def create_reference_sample(experiment: FCSExperiment,
 
 class CellClassifier:
     """
-    DeepGating class for performing an adaption of DeepCyTOF in Immmunova.
+    Class for performing classification of cells by supervised machine learning.
     """
     def __init__(self, experiment: FCSExperiment, reference_sample: str, population_labels: list, features: list,
                  multi_label: bool = True, transform: str = 'log_transform', root_population: str = 'root',
-                 threshold: float = 0.5, scale: str = 'Standardise'):
+                 threshold: float = 0.5, scale: str or None = 'Standardise'):
+        """
+        Constructor for CellClassifier
+        :param experiment: FCSExperiment for classification
+        :param reference_sample: sample ID for training sample (see 'create_reference_sample')
+        :param population_labels: list of populations for prediction (populations must be valid gated populations
+        that exist in the reference sample)
+        :param features: list of features (channel/marker column names) to include
+        :param multi_label: If True, cells can belong to multiple classes and the problem is treated as a
+        'multi-label' classification task
+        :param transform: name of transform method to use (see flow.gating.transforms for info)
+        :param root_population: name of root population i.e. the population to derive training and test data from
+        :param threshold: minimum probability threshold to class as positive (default = 0.5)
+        :param scale: how to scale the data prior to learning; either 'Standardise', 'Normalise' or None.
+        Standardise scales using the standard score, removing the mean and scaling to unit variance
+        (https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html)
+        Normalise scales data between 0 and 1 using the MinMaxScaler
+        (https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html)
+        """
 
         self.experiment = experiment
         self.transform = transform
@@ -113,20 +152,20 @@ class CellClassifier:
         ref = Gating(self.experiment, reference_sample)
 
         self.population_labels = ref.valid_populations(population_labels)
-        if len(ref.populations) < 2:
+        if len(self.population_labels) < 2:
             raise CellClassifierError(f'Error: reference sample {reference_sample} does not contain any '
                                       f'gated populations, please ensure that the reference sample has '
                                       f'been gated prior to training.')
 
         if multi_label:
-            self.ref_X, self.ref_y, self.mappings = self.dummy_data(ref, features)
+            self.train_X, self.train_y, self.mappings = self.dummy_data(ref, features)
         else:
-            self.ref_X, self.ref_y, self.mappings = self.single_label_data(ref, features)
+            self.train_X, self.train_y, self.mappings = self.single_label_data(ref, features)
 
         if scale == 'Standardise':
-            self.ref_X, self.preprocessor = standard_scale(self.ref_X)
+            self.train_X, self.preprocessor = standard_scale(self.train_X)
         elif scale == 'Normalise':
-            self.ref_X, self.preprocessor = norm_scale(self.ref_X)
+            self.train_X, self.preprocessor = norm_scale(self.train_X)
         elif scale is None:
             print('Warning: it is recommended that data is scaled prior to training. Unscaled data can result '
                   'in some weights updating faster than others, having a negative effect on classifier performance')
@@ -134,6 +173,12 @@ class CellClassifier:
             raise CellClassifierError('Error: scale method not recognised, must be either `Standardise` or `Normalise`')
 
     def dummy_data(self, ref: Gating, features) -> (pd.DataFrame, pd.DataFrame, list):
+        """
+        Generate training data, labels, and column mappings when a cell can belong to multiple populations
+        :param ref: Gating object to retrieve data from
+        :param features: list of features for training
+        :return: DataFrame of
+        """
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
         y = {pop: np.zeros((1, root.shape[0]))[0] for pop in self.population_labels}
         for pop in self.population_labels:
@@ -170,7 +215,7 @@ class CellClassifier:
         return downstream_overlaps
 
     def train_test_split(self, test_size):
-        return train_test_split(self.ref_X, self.ref_y, test_size=test_size, random_state=42)
+        return train_test_split(self.train_X, self.train_y, test_size=test_size, random_state=42)
 
     def save_gating(self, target, y_hat):
         parent = target.get_population_df(population_name=self.root_population)
@@ -183,3 +228,61 @@ class CellClassifier:
                 new_populations.populations[label].update_index(x.nonzero())
                 new_populations.populations[label].update_geom(shape='sml', x=None, y=None)
         target.update_populations(new_populations, parent, parent_name=self.root_population, warnings=[])
+
+    def __preprocess_target(self, sample_gates: Gating):
+        if self.preprocessor is not None:
+            return self.preprocessor.fit_transform(sample_gates.get_population_df(self.root_population,
+                                                                                  transform=True,
+                                                                                  transform_method=self.transform)[self.features])
+        return sample_gates.get_population_df(self.root_population,
+                                              transform=True,
+                                              transform_method=self.transform)[self.features]
+
+    def predict(self, target_sample, threshold=None):
+        sample_gates = Gating(self.experiment, target_sample)
+        target_sample = self.__preprocess_target(sample_gates)
+        if self.classifier is None:
+            raise CellClassifierError('Error: cell classifier has not been trained, either '
+                                      'load an existing model using the `load_model` method or train '
+                                      'the classifier using the `train_classifier` method')
+
+        y_probs = self.classifier.predict(target_sample)
+        y_hat = predict_class(y_probs, threshold)
+        self.save_gating(sample_gates, y_hat)
+        print('Prediction complete!')
+
+    def fit(self, **kwargs):
+        self.classifier.fit(self.train_X, self.train_y, **kwargs)
+
+    def train_cv(self, k=5, **kwargs):
+        kf = KFold(n_splits=k)
+        train_performance = list()
+        test_performance = list()
+
+        for i, (train_index, test_index) in enumerate(kf.split(self.train_X)):
+            train_x, test_x = self.train_X[train_index], self.train_X[test_index]
+            train_y, test_y = self.train_y[train_index], self.train_y[test_index]
+            self.fit(**kwargs)
+            p = evaluate_model(self.classifier, train_x, train_y, self.multi_label, self.threshold)
+            p['k'] = i
+            train_performance.append(p)
+            p = evaluate_model(self.classifier, test_x, test_y, self.multi_label, self.threshold)
+            p['k'] = i
+            test_performance.append(p)
+
+        train_performance = pd.concat(train_performance)
+        train_performance['average_performance'] = train_performance.mean(axis=1)
+        train_performance['test_train'] = 'train'
+        test_performance = pd.concat(test_performance)
+        test_performance['average_performance'] = test_performance.mean(axis=1)
+        test_performance['test_train'] = 'test'
+        return pd.concat([train_performance, test_performance])
+
+    def train_holdout(self, holdout_frac: float = 0.3):
+        train_x, test_x, train_y, test_y = self.train_test_split(test_size=holdout_frac)
+        self.fit()
+        train_performance = evaluate_model(self.classifier, train_x, train_y, self.multi_label, self.threshold)
+        train_performance['test_train'] = 'train'
+        test_performance = evaluate_model(self.classifier, test_x, test_y, self.multi_label, self.threshold)
+        test_performance['test_train'] = 'test'
+        return pd.concat([test_performance, test_performance])

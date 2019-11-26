@@ -127,11 +127,10 @@ class FCSExperiment(mongoengine.Document):
         pool.join()
         return data
 
-    def remove_sample(self, sample_id: str, delete=False) -> bool:
+    def remove_sample(self, sample_id: str) -> bool:
         """
         Remove sample (FileGroup) from experiment.
         :param sample_id: ID of sample to remove
-        :param delete: if True, the FileGroup entry will be deleted from the database
         :return: True if successful
         """
         fg = FileGroup.objects(primary_id=sample_id)
