@@ -498,9 +498,8 @@ class Gating:
             geom = []
         else:
             geom = [(k, v) for k, v in pop_node.geom.items()]
-        if population_name == 'root':
-            parent = None
-        else:
+        parent = None
+        if pop_node.parent:
             parent = pop_node.parent.name
         pop_mongo = Population(population_name=pop_node.name,
                                parent=parent,
