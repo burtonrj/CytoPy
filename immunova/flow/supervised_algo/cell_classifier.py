@@ -119,7 +119,8 @@ class CellClassifier:
     Class for performing classification of cells by supervised machine learning.
     """
     def __init__(self, experiment: FCSExperiment, reference_sample: str, population_labels: list, features: list,
-                 multi_label: bool = True, transform: str = 'log_transform', root_population: str = 'root',
+                 multi_label: bool = True, multi_label_method: str = 'convert',
+                 transform: str = 'log_transform', root_population: str = 'root',
                  threshold: float = 0.5, scale: str or None = 'Standardise'):
         """
         Constructor for CellClassifier
@@ -130,6 +131,10 @@ class CellClassifier:
         :param features: list of features (channel/marker column names) to include
         :param multi_label: If True, cells can belong to multiple classes and the problem is treated as a
         'multi-label' classification task
+        :param multi_label_method: method by which to handle the multi-label classification problem. Can be either
+        'convert' (default) or 'one hot encode'. The former will convert the problem into a multi-class classification
+        problem  by performing one-hot encoding and creating a new label for each unique class. 'one hot encode' will
+        simply assign a one-hot encoded label to each cells that represents the multiple populations it belongs to.
         :param transform: name of transform method to use (see flow.gating.transforms for info)
         :param root_population: name of root population i.e. the population to derive training and test data from
         :param threshold: minimum probability threshold to class as positive (default = 0.5)
@@ -148,6 +153,7 @@ class CellClassifier:
         self.features = features
         self.root_population = root_population
         self.threshold = threshold
+        self.mappings = None
 
         ref = Gating(self.experiment, reference_sample)
 
@@ -158,9 +164,12 @@ class CellClassifier:
                                       f'been gated prior to training.')
 
         if multi_label:
-            self.train_X, self.train_y = self.dummy_data(ref, features)
+            if multi_label_method == 'one hot encode':
+                self.train_X, self.train_y = self.one_hot_labels(ref, features)
+            else:
+                self.train_X, self.train_y = self.multiclass_to_singleclass_labels(ref, features)
         else:
-            self.train_X, self.train_y = self.single_label_data(ref, features)
+            self.train_X, self.train_y = self.singleclass_labels(ref, features)
 
         if scale == 'Standardise':
             self.train_X, self.preprocessor = standard_scale(self.train_X)
@@ -172,9 +181,11 @@ class CellClassifier:
         else:
             raise CellClassifierError('Error: scale method not recognised, must be either `Standardise` or `Normalise`')
 
-    def dummy_data(self, ref: Gating, features) -> (pd.DataFrame, np.array):
+    def one_hot_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
         """
-        Generate training data and labels when a cell can belong to multiple populations
+        Generate feature space and labels when a cell can belong to multiple populations. Labels are returned as a
+        one-hot encoded sequence for each cell that represents the populations that cell belongs to (e.g for the
+        population labels ['CD3+', 'CD4+', 'CD8+'] an encoding of [1,0,1] would be a CD3+CD8+ cell type.
         (multi-label learning)
         :param ref: Gating object to retrieve data from
         :param features: list of features for training
@@ -188,9 +199,28 @@ class CellClassifier:
                 y[ci, pi] = 1
         return root, y
 
-    def single_label_data(self, ref: Gating, features) -> (pd.DataFrame, np.array):
+    def multiclass_to_singleclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
         """
-        Generate training data and labels when a cell can belong to only one population
+        Generate feature space and labels for a multi-label multi-class classification problem and handle the
+        multi-label aspect of this problem by converting multi-label signatures to single labels. This can be important
+        if there are correlations between labels e.g. the classification CD3+/- and CD4+/- are not independent because
+        a cell that is CD4+, CD3- will have a very different meaning to a cell that is CD4+ CD3+. The problem is
+        converted to a multi class, single label classification by converting each unique one-hot encoded representation
+        to a 'fake label'.
+        :param ref: Gating object to retrieve data from
+        :param features: list of features for training
+        :return: DataFrame of feature space, array of target labels
+        """
+        train_X, train_y = self.one_hot_labels(ref, features)
+        labels = {x: i for i, x in enumerate(np.unique(train_y, axis=0))}
+        train_y = np.array(map(lambda x: labels[x], labels))
+        pops = np.array(self.population_labels)
+        self.mappings = {i: pops[np.where(x == 1)] for x, i in labels.items()}
+        return train_X, train_y
+
+    def singleclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
+        """
+        Generate feature space and labels where a cell can belong to only one population
         :param ref: Gating object to retrieve data from
         :param features: list of features for training
         :return: DataFrame of feature space, array of target labels
@@ -347,3 +377,13 @@ class CellClassifier:
         test_performance = evaluate_model(self.classifier, test_x, test_y, self.multi_label, self.threshold)
         test_performance['test_train'] = 'test'
         return pd.concat([test_performance, test_performance])
+
+    def manual_validation(self, sample_id: str):
+        pass
+
+    def random_over_sample(self):
+        pass
+
+    def density_dependent_sample(self):
+        pass
+
