@@ -123,7 +123,9 @@ class CellClassifier:
     def __init__(self, experiment: FCSExperiment, reference_sample: str, population_labels: list, features: list,
                  multi_label: bool = True, multi_label_method: str = 'convert',
                  transform: str = 'log_transform', root_population: str = 'root',
-                 threshold: float = 0.5, scale: str or None = 'Standardise'):
+                 threshold: float = 0.5, scale: str or None = 'Standardise',
+                 balance_method: None or str or dict = None, frac: float or None = None,
+                 **downsampling_kwargs):
         """
         Constructor for CellClassifier
         :param experiment: FCSExperiment for classification
@@ -157,6 +159,7 @@ class CellClassifier:
         self.root_population = root_population
         self.threshold = threshold
         self.mappings = None
+        self.class_weights = None
 
         ref = Gating(self.experiment, reference_sample)
 
@@ -183,6 +186,14 @@ class CellClassifier:
                   'in some weights updating faster than others, having a negative effect on classifier performance')
         else:
             raise CellClassifierError('Error: scale method not recognised, must be either `Standardise` or `Normalise`')
+
+        if type(balance_method) == str:
+            if frac:
+                self.balance_dataset(method=balance_method, frac=frac, **downsampling_kwargs)
+            else:
+                self.balance_dataset(method=balance_method, **downsampling_kwargs)
+        elif type(balance_method) == dict:
+            self.class_weights = balance_method
 
     def one_hot_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
         """
@@ -328,14 +339,6 @@ class CellClassifier:
         y_hat = predict_class(y_probs, self.threshold)
         return self.__save_gating(sample_gates, y_hat)
 
-    def fit(self, **kwargs) -> None:
-        """
-        Fit classifier to training data.
-        :param kwargs: Optional additional kwargs for model fit.
-        :return: None
-        """
-        self.classifier.fit(self.train_X, self.train_y, **kwargs)
-
     def train_cv(self, k: int = 5, **kwargs) -> pd.DataFrame:
         """
         Fit classifier to training data using cross-validation
@@ -350,7 +353,7 @@ class CellClassifier:
         for i, (train_index, test_index) in enumerate(kf.split(self.train_X)):
             train_x, test_x = self.train_X[train_index], self.train_X[test_index]
             train_y, test_y = self.train_y[train_index], self.train_y[test_index]
-            self.fit(**kwargs)
+            self.classifier.fit(train_x, train_y)
             p = evaluate_model(self.classifier, train_x, train_y, self.multi_label_method, self.threshold)
             p['k'] = i
             train_performance.append(p)
@@ -374,7 +377,7 @@ class CellClassifier:
         :return: Pandas DataFrame detailing performance
         """
         train_x, test_x, train_y, test_y = self.train_test_split(test_size=holdout_frac)
-        self.fit(**kwargs)
+        self.classifier.fit(train_x, train_y)
         train_performance = evaluate_model(self.classifier, train_x, train_y, self.multi_label_method, self.threshold)
         train_performance['test_train'] = 'train'
         test_performance = evaluate_model(self.classifier, test_x, test_y, self.multi_label_method, self.threshold)
@@ -404,8 +407,8 @@ class CellClassifier:
 
         return evaluate_model(self.classifier, x, y, multi_label=self.multi_label_method, threshold=self.threshold)
 
-    def balance_dataset(self, x: np.array or pd.DataFrame, y: np.array or pd.DataFrame,
-                        method: str = 'oversample', frac=0.5, **kwargs) -> (pd.DataFrame or np.array, np.array):
+    def balance_dataset(self, method: str = 'oversample', frac: float = 0.5,
+                        **kwargs) -> (pd.DataFrame or np.array, np.array):
         """
         Given an imbalanced dataset, generate a new dataset with class balance attenuated. Method can either be
         'oversample' whereby the RandomOverSampler class of Imbalance Learn is implemented to sample with replacement
@@ -425,10 +428,10 @@ class CellClassifier:
                                       'classification. If you wish to still use density dependent downsampling '
                                       'set `multi_label_method` to `convert`')
         if method == 'oversample':
-            return random_oversampling(x, y)
+            return random_oversampling(self.train_X, self.train_y)
         elif method == 'density':
-            if type(x) == np.array:
-                x = pd.DataFrame(x, columns=self.features)
-            x['labels'] = y
-            sample = density_dependent_downsample(data=x, features=self.features, frac=frac, **kwargs)
+            if type(self.train_X) == np.array:
+                x = pd.DataFrame(self.train_X, columns=self.features)
+            self.train_X['labels'] = self.train_y
+            x = density_dependent_downsample(data=self.train_X, features=self.features, frac=frac, **kwargs)
             return x[self.features], x['labels'].values
