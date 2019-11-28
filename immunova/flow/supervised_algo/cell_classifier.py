@@ -207,6 +207,7 @@ class CellClassifier:
         """
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
         y = np.zeros((root.shape[0], len(self.population_labels)))
+        # ToDo use sklearn.preprocessing import MultiLabelBinarizer
         for pi, pop in enumerate(self.population_labels):
             pop_idx = ref.populations[pop].index
             for ci in pop_idx:
