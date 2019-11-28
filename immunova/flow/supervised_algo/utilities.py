@@ -2,8 +2,14 @@ from immunova.data.fcs_experiments import FCSExperiment
 from immunova.flow.gating.transforms import apply_transform
 from multiprocessing import Pool, cpu_count
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from imblearn.over_sampling import RandomOverSampler
 from functools import partial
 import numpy as np
+
+
+def random_oversampling(x, y):
+    ros = RandomOverSampler(random_state=42)
+    return ros.fit_resample(x, y)
 
 
 def __pull_features(sid, experiment):

@@ -3,7 +3,9 @@ from immunova.data.fcs import FileGroup, File, ChannelMap, Population
 from immunova.data.panel import Panel
 from immunova.flow.gating.actions import Gating
 from immunova.flow.gating.defaults import ChildPopulationCollection
-from immunova.flow.supervised_algo.utilities import standard_scale, norm_scale, find_common_features, predict_class
+from immunova.flow.supervised_algo.utilities import standard_scale, norm_scale, find_common_features, \
+    predict_class, random_oversampling
+from immunova.flow.gating.utilities import density_dependent_downsample
 from immunova.flow.supervised_algo.evaluate import evaluate_model
 from sklearn.model_selection import train_test_split, KFold
 import pandas as pd
@@ -148,6 +150,7 @@ class CellClassifier:
         self.experiment = experiment
         self.transform = transform
         self.multi_label = multi_label
+        self.multi_label_method = multi_label_method
         self.classifier = None
         self.preprocessor = None
         self.features = features
@@ -348,10 +351,10 @@ class CellClassifier:
             train_x, test_x = self.train_X[train_index], self.train_X[test_index]
             train_y, test_y = self.train_y[train_index], self.train_y[test_index]
             self.fit(**kwargs)
-            p = evaluate_model(self.classifier, train_x, train_y, self.multi_label, self.threshold)
+            p = evaluate_model(self.classifier, train_x, train_y, self.multi_label_method, self.threshold)
             p['k'] = i
             train_performance.append(p)
-            p = evaluate_model(self.classifier, test_x, test_y, self.multi_label, self.threshold)
+            p = evaluate_model(self.classifier, test_x, test_y, self.multi_label_method, self.threshold)
             p['k'] = i
             test_performance.append(p)
 
@@ -372,18 +375,60 @@ class CellClassifier:
         """
         train_x, test_x, train_y, test_y = self.train_test_split(test_size=holdout_frac)
         self.fit(**kwargs)
-        train_performance = evaluate_model(self.classifier, train_x, train_y, self.multi_label, self.threshold)
+        train_performance = evaluate_model(self.classifier, train_x, train_y, self.multi_label_method, self.threshold)
         train_performance['test_train'] = 'train'
-        test_performance = evaluate_model(self.classifier, test_x, test_y, self.multi_label, self.threshold)
+        test_performance = evaluate_model(self.classifier, test_x, test_y, self.multi_label_method, self.threshold)
         test_performance['test_train'] = 'test'
         return pd.concat([test_performance, test_performance])
 
-    def manual_validation(self, sample_id: str):
-        pass
+    def manual_validation(self, sample_id: str) -> pd.DataFrame:
+        """
+        Perform manual validation of the classifier using a sample associated to the same experiment as the
+        training data. Important: the sample given MUST be pre-gated with the same populations as the training dataset
+        :param sample_id: sample ID for file group to classify
+        :return: Pandas DataFrame of classification performance
+        """
+        if self.classifier is None:
+            raise CellClassifierError('Error: model must be trained prior to validation')
+        ref = Gating(self.experiment, sample_id)
+        if self.multi_label:
+            if self.multi_label_method == 'one hot encode':
+                x, y = self.one_hot_labels(ref, self.features)
+            else:
+                x, y = self.multiclass_to_singleclass_labels(ref, self.features)
+        else:
+            x, y = self.singleclass_labels(ref, self.features)
 
-    def random_over_sample(self):
-        pass
+        if self.preprocessor is not None:
+            x = self.preprocessor.transform(x)
 
-    def density_dependent_sample(self):
-        pass
+        return evaluate_model(self.classifier, x, y, multi_label=self.multi_label_method, threshold=self.threshold)
 
+    def balance_dataset(self, x: np.array or pd.DataFrame, y: np.array or pd.DataFrame,
+                        method: str = 'oversample', frac=0.5, **kwargs) -> (pd.DataFrame or np.array, np.array):
+        """
+        Given an imbalanced dataset, generate a new dataset with class balance attenuated. Method can either be
+        'oversample' whereby the RandomOverSampler class of Imbalance Learn is implemented to sample with replacement
+        in such a way that classes become balanced, or 'density' where density dependent downsampling is performed;
+        see immunova.flow.gating.utilities.density_dependent_downsampling.
+        :param x: Feature space
+        :param y: Target labels
+        :param method: Either 'oversample' or 'density' (default = 'oversample'
+        :param frac: Ignored if method = 'oversample'. Density dependent downsampling is an absolute sampling technique
+        that reduces the size of the dataset, this parameter indicates how large the resulting feature space (as a
+        percentage of the original) should be
+        :param kwargs: Keyword arguments to pass to density_dependent_downsample
+        :return: Balanced feature space and labels
+        """
+        if self.multi_label and self.multi_label_method == 'one hot encode':
+            raise CellClassifierError('Error: density dependent downsampling is not supported for multi-label '
+                                      'classification. If you wish to still use density dependent downsampling '
+                                      'set `multi_label_method` to `convert`')
+        if method == 'oversample':
+            return random_oversampling(x, y)
+        elif method == 'density':
+            if type(x) == np.array:
+                x = pd.DataFrame(x, columns=self.features)
+            x['labels'] = y
+            sample = density_dependent_downsample(data=x, features=self.features, frac=frac, **kwargs)
+            return x[self.features], x['labels'].values
