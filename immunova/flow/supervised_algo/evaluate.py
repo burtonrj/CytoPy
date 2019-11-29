@@ -10,11 +10,9 @@ def multi_label_performance(y, y_probs):
                              label_ranking_loss=label_ranking_loss(y_true=y, y_score=y_probs)))
 
 
-def evaluate_model(classifier, x, y, multi_label, threshold=None):
+def evaluate_model(classifier, x, y, threshold=None):
     y_probs = classifier.predict(x)
     y_hat = predict_class(y_probs, threshold)
-    if multi_label == 'one hot encoding':
-        return multi_label_performance(y, y_hat)
     return pd.DataFrame(dict(f1_score=f1_score(y_true=y, y_pred=y_hat, average='weighted'),
                              accuracy=accuracy_score(y_true=y, y_pred=y_hat),
                              precision=precision_score(y_true=y, y_pred=y_hat, average='weighted'),
