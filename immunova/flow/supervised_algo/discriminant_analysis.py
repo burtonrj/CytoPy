@@ -12,9 +12,6 @@ class DiscriminantAnalysis(CellClassifier):
         if self.class_weights is not None:
             print('Warning: discriminant analysis does not support class weights and so they will be ignored. '
                   'If you are handling an imbalanced dataset, we suggest you perform resampling.')
-        if self.multi_label_method == 'one hot encode':
-            raise CellClassifierError('Error: discriminant analysis does not support multi-label classification '
-                                      'set multi_label_method to `convert`')
 
     def build_linear(self, **kwargs):
         """
