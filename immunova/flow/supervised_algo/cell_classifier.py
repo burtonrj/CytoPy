@@ -121,8 +121,7 @@ class CellClassifier:
     Class for performing classification of cells by supervised machine learning.
     """
     def __init__(self, experiment: FCSExperiment, reference_sample: str, population_labels: list, features: list,
-                 multi_label: bool = True, multi_label_method: str = 'convert',
-                 transform: str = 'log_transform', root_population: str = 'root',
+                 multi_label: bool = True, transform: str = 'log_transform', root_population: str = 'root',
                  threshold: float = 0.5, scale: str or None = 'Standardise',
                  balance_method: None or str or dict = None, frac: float or None = None,
                  **downsampling_kwargs):
@@ -134,11 +133,8 @@ class CellClassifier:
         that exist in the reference sample)
         :param features: list of features (channel/marker column names) to include
         :param multi_label: If True, cells can belong to multiple classes and the problem is treated as a
-        'multi-label' classification task
-        :param multi_label_method: method by which to handle the multi-label classification problem. Can be either
-        'convert' (default) or 'one hot encode'. The former will convert the problem into a multi-class classification
-        problem  by performing one-hot encoding and creating a new label for each unique class. 'one hot encode' will
-        simply assign a one-hot encoded label to each cells that represents the multiple populations it belongs to.
+        'multi-label' classification task. Labels will be binarised and a new 'fake' label generated for each
+        unique instance of a cell label. This is important to account for correlations between individual labels.
         :param transform: name of transform method to use (see flow.gating.transforms for info)
         :param root_population: name of root population i.e. the population to derive training and test data from
         :param threshold: minimum probability threshold to class as positive (default = 0.5)
@@ -152,7 +148,6 @@ class CellClassifier:
         self.experiment = experiment
         self.transform = transform
         self.multi_label = multi_label
-        self.multi_label_method = multi_label_method
         self.classifier = None
         self.preprocessor = None
         self.features = features
@@ -170,10 +165,7 @@ class CellClassifier:
                                       f'been gated prior to training.')
 
         if multi_label:
-            if multi_label_method == 'one hot encode':
-                self.train_X, self.train_y = self.one_hot_labels(ref, features)
-            else:
-                self.train_X, self.train_y = self.multiclass_to_singleclass_labels(ref, features)
+            self.train_X, self.train_y = self.multiclass_labels(ref, features)
         else:
             self.train_X, self.train_y = self.singleclass_labels(ref, features)
 
@@ -195,7 +187,7 @@ class CellClassifier:
         elif type(balance_method) == dict:
             self.class_weights = balance_method
 
-    def one_hot_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
+    def _binarize_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
         """
         Generate feature space and labels when a cell can belong to multiple populations. Labels are returned as a
         one-hot encoded sequence for each cell that represents the populations that cell belongs to (e.g for the
@@ -207,14 +199,13 @@ class CellClassifier:
         """
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
         y = np.zeros((root.shape[0], len(self.population_labels)))
-        # ToDo use sklearn.preprocessing import MultiLabelBinarizer
         for pi, pop in enumerate(self.population_labels):
             pop_idx = ref.populations[pop].index
             for ci in pop_idx:
                 y[ci, pi] = 1
         return root, y
 
-    def multiclass_to_singleclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
+    def multiclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
         """
         Generate feature space and labels for a multi-label multi-class classification problem and handle the
         multi-label aspect of this problem by converting multi-label signatures to single labels. This can be important
@@ -226,7 +217,7 @@ class CellClassifier:
         :param features: list of features for training
         :return: DataFrame of feature space, array of target labels
         """
-        train_X, train_y = self.one_hot_labels(ref, features)
+        train_X, train_y = self._binarize_labels(ref, features)
         labels = {x: i for i, x in enumerate(np.unique(train_y, axis=0))}
         train_y = np.array(map(lambda x: labels[x], labels))
         pops = np.array(self.population_labels)
@@ -355,10 +346,10 @@ class CellClassifier:
             train_x, test_x = self.train_X[train_index], self.train_X[test_index]
             train_y, test_y = self.train_y[train_index], self.train_y[test_index]
             self.classifier.fit(train_x, train_y)
-            p = evaluate_model(self.classifier, train_x, train_y, self.multi_label_method, self.threshold)
+            p = evaluate_model(self.classifier, train_x, train_y, self.threshold)
             p['k'] = i
             train_performance.append(p)
-            p = evaluate_model(self.classifier, test_x, test_y, self.multi_label_method, self.threshold)
+            p = evaluate_model(self.classifier, test_x, test_y, self.threshold)
             p['k'] = i
             test_performance.append(p)
 
@@ -379,9 +370,9 @@ class CellClassifier:
         """
         train_x, test_x, train_y, test_y = self.train_test_split(test_size=holdout_frac)
         self.classifier.fit(train_x, train_y)
-        train_performance = evaluate_model(self.classifier, train_x, train_y, self.multi_label_method, self.threshold)
+        train_performance = evaluate_model(self.classifier, train_x, train_y, self.threshold)
         train_performance['test_train'] = 'train'
-        test_performance = evaluate_model(self.classifier, test_x, test_y, self.multi_label_method, self.threshold)
+        test_performance = evaluate_model(self.classifier, test_x, test_y, self.threshold)
         test_performance['test_train'] = 'test'
         return pd.concat([test_performance, test_performance])
 
@@ -396,17 +387,14 @@ class CellClassifier:
             raise CellClassifierError('Error: model must be trained prior to validation')
         ref = Gating(self.experiment, sample_id)
         if self.multi_label:
-            if self.multi_label_method == 'one hot encode':
-                x, y = self.one_hot_labels(ref, self.features)
-            else:
-                x, y = self.multiclass_to_singleclass_labels(ref, self.features)
+            x, y = self.multiclass_labels(ref, self.features)
         else:
             x, y = self.singleclass_labels(ref, self.features)
 
         if self.preprocessor is not None:
             x = self.preprocessor.transform(x)
 
-        return evaluate_model(self.classifier, x, y, multi_label=self.multi_label_method, threshold=self.threshold)
+        return evaluate_model(self.classifier, x, y, threshold=self.threshold)
 
     def balance_dataset(self, method: str = 'oversample', frac: float = 0.5,
                         **kwargs) -> (pd.DataFrame or np.array, np.array):
@@ -424,10 +412,6 @@ class CellClassifier:
         :param kwargs: Keyword arguments to pass to density_dependent_downsample
         :return: Balanced feature space and labels
         """
-        if self.multi_label and self.multi_label_method == 'one hot encode':
-            raise CellClassifierError('Error: density dependent downsampling is not supported for multi-label '
-                                      'classification. If you wish to still use density dependent downsampling '
-                                      'set `multi_label_method` to `convert`')
         if method == 'oversample':
             return random_oversampling(self.train_X, self.train_y)
         elif method == 'density':
