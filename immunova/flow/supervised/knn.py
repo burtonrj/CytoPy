@@ -1,4 +1,4 @@
-from immunova.flow.supervised_algo.cell_classifier import CellClassifier, CellClassifierError
+from immunova.flow.supervised.cell_classifier import CellClassifier, CellClassifierError
 from sklearn.neighbors import KNeighborsClassifier
 
 

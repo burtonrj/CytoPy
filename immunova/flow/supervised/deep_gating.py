@@ -1,5 +1,5 @@
-from immunova.flow.supervised_algo.evaluate import evaluate_model
-from immunova.flow.supervised_algo.cell_classifier import CellClassifier, CellClassifierError
+from immunova.flow.supervised.evaluate import evaluate_model
+from immunova.flow.supervised.cell_classifier import CellClassifier, CellClassifierError
 from keras.models import Model
 from keras.layers import Input, Dense
 from keras.models import load_model
