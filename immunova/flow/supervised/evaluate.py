@@ -1,4 +1,4 @@
-from immunova.flow.supervised_algo.utilities import  predict_class
+from immunova.flow.supervised.utilities import  predict_class
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, multilabel_confusion_matrix, \
     roc_auc_score, label_ranking_average_precision_score, label_ranking_loss
 import pandas as pd
