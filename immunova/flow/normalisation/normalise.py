@@ -2,7 +2,7 @@ from immunova.data.fcs_experiments import FCSExperiment
 from immunova.data.fcs import Normalisation
 from immunova.flow.gating.actions import Gating
 from immunova.flow.normalisation.MMDResNet import MMDNet
-from immunova.flow.supervised_algo.utilities import calculate_reference_sample
+from immunova.flow.supervised.utilities import calculate_reference_sample
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import seaborn as sns

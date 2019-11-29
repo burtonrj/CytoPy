@@ -3,10 +3,10 @@ from immunova.data.fcs import FileGroup, File, ChannelMap, Population
 from immunova.data.panel import Panel
 from immunova.flow.gating.actions import Gating
 from immunova.flow.gating.defaults import ChildPopulationCollection
-from immunova.flow.supervised_algo.utilities import standard_scale, norm_scale, find_common_features, \
+from immunova.flow.supervised.utilities import standard_scale, norm_scale, find_common_features, \
     predict_class, random_oversampling
 from immunova.flow.gating.utilities import density_dependent_downsample
-from immunova.flow.supervised_algo.evaluate import evaluate_model
+from immunova.flow.supervised.evaluate import evaluate_model
 from sklearn.model_selection import train_test_split, KFold
 import pandas as pd
 import numpy as np
@@ -94,6 +94,7 @@ def create_reference_sample(experiment: FCSExperiment,
             continue
         df = g.get_population_df(root_population)[features]
         data = pd.concat([data, sample(df)])
+    data = data.reset_index(drop=True)
     print('Sampling complete!')
     new_filegroup = FileGroup(primary_id=new_file_name)
     new_filegroup.flags = 'sampled data'
@@ -198,12 +199,10 @@ class CellClassifier:
         :return: DataFrame of feature space, array of target labels
         """
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
-        y = np.zeros((root.shape[0], len(self.population_labels)))
-        for pi, pop in enumerate(self.population_labels):
-            pop_idx = ref.populations[pop].index
-            for ci in pop_idx:
-                y[ci, pi] = 1
-        return root, y
+        for pop in self.population_labels:
+            root[pop] = 0
+            root.loc[ref.populations[pop].index, pop] = 1
+        return root[features], root[self.population_labels].values
 
     def multiclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
         """
