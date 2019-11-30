@@ -8,12 +8,49 @@ from immunova.flow.supervised.utilities import standard_scale, norm_scale, find_
 from immunova.flow.gating.utilities import density_dependent_downsample
 from immunova.flow.supervised.evaluate import evaluate_model
 from sklearn.model_selection import train_test_split, KFold
+from multiprocessing import Pool, cpu_count
 import pandas as pd
 import numpy as np
 
 
 class CellClassifierError(Exception):
     pass
+
+
+def multi_process_ordered(func: callable, x: iter, chunksize: int = 100) -> list:
+    """
+    Map a function (func) to some iterable (x) using multiprocessing. Iterable will be divided into chunks
+    of size `chunksize`. The chunks will be given as a list of tuples, where the first value is the index of
+    the chunk and the second value the chunk itself; this allows for ordered reassembly once processing has
+    completed. For this reason, the function `func` MUST handle and return the index of the chunk upon which
+    it acts.
+    :param func: callable function to applied in parallel
+    :param x: some iterable to apply the function to
+    :param chunksize: size of chunks for multiprocessing
+    :return: ordered list of funciton output
+    """
+    def chunks(l: iter):
+        for i in range(0, len(l), chunksize):
+            yield l[i:i + chunksize]
+    indexed_chunks = [(i, xc) for i, xc in enumerate(chunks(x))]
+    pool = Pool(cpu_count())
+    results = pool.map(func, indexed_chunks)
+    results = [x[1] for x in sorted(results, key=lambda t: t[0])]
+    results = [x for l in results for x in l]
+    pool.close()
+    pool.join()
+    return results
+
+
+def __assign_labels(x: tuple, labels: dict) -> tuple:
+    """
+    Internal function. Used for assigning a unique 'fake' label to each multi-label sequence in a set in
+    a parallel process
+    :param x: tuple; (index of chunk, list of multi-label sequence's)
+    :param labels: dicitonary; {multi-label sequence: unique 'fake' label}
+    :return: tuple; (index of chunk, list of 'fake' labels)
+    """
+    return x[0], [labels[np.array_str(s)] for s in x[1]]
 
 
 def __channel_mappings(features: list, panel: Panel) -> list:
