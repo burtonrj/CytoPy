@@ -11,10 +11,9 @@ def multi_label_performance(y, y_probs):
 
 
 def evaluate_model(classifier, x, y, threshold=None):
-    y_probs = classifier.predict(x)
+    y_probs = classifier.predict_proba(x)
     y_hat = predict_class(y_probs, threshold)
-    return pd.DataFrame(dict(f1_score=f1_score(y_true=y, y_pred=y_hat, average='weighted'),
-                             accuracy=accuracy_score(y_true=y, y_pred=y_hat),
-                             precision=precision_score(y_true=y, y_pred=y_hat, average='weighted'),
-                             recall=recall_score(y_true=y, y_pred=y_hat, average='weighted'),
-                             auc_score=roc_auc_score(y_true=y, y_score=[x[i] for i, x in zip(y_hat, y_probs)])))
+    return pd.DataFrame(dict(f1_score=[f1_score(y_true=y, y_pred=y_hat, average='weighted')],
+                             accuracy=[accuracy_score(y_true=y, y_pred=y_hat)],
+                             precision=[precision_score(y_true=y, y_pred=y_hat, average='weighted')],
+                             recall=[recall_score(y_true=y, y_pred=y_hat, average='weighted')]))

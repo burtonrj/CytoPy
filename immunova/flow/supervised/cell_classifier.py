@@ -9,12 +9,43 @@ from immunova.flow.gating.utilities import density_dependent_downsample
 from immunova.flow.supervised.evaluate import evaluate_model
 from sklearn.model_selection import train_test_split, KFold
 from multiprocessing import Pool, cpu_count
+from IPython import get_ipython
+from tqdm import tqdm_notebook, tqdm
+from functools import partial
 import pandas as pd
 import numpy as np
 
 
 class CellClassifierError(Exception):
     pass
+
+
+def which_environment():
+    """
+    Test if module is being executed in the Jupyter environment.
+    :return:
+    """
+    try:
+        ipy_str = str(type(get_ipython()))
+        if 'zmqshell' in ipy_str:
+            return 'jupyter'
+        if 'terminal' in ipy_str:
+            return 'ipython'
+    except:
+        return 'terminal'
+
+
+def progress_bar(x: iter, **kwargs) -> callable:
+    """
+    Generate a progress bar using the tqdm library. If execution environment is Jupyter, return tqdm_notebook
+    otherwise used tqdm.
+    :param x: some iterable to pass to tqdm function
+    :param kwargs: additional keyword arguments for tqdm
+    :return: tqdm or tqdm_notebook, depending on environment
+    """
+    if which_environment() == 'jupyter':
+        return tqdm_notebook(x, **kwargs)
+    return tqdm(x, **kwargs)
 
 
 def multi_process_ordered(func: callable, x: iter, chunksize: int = 100) -> list:
@@ -42,7 +73,7 @@ def multi_process_ordered(func: callable, x: iter, chunksize: int = 100) -> list
     return results
 
 
-def __assign_labels(x: tuple, labels: dict) -> tuple:
+def _assign_labels(x: tuple, labels: dict) -> tuple:
     """
     Internal function. Used for assigning a unique 'fake' label to each multi-label sequence in a set in
     a parallel process
@@ -182,7 +213,7 @@ class CellClassifier:
         Normalise scales data between 0 and 1 using the MinMaxScaler
         (https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html)
         """
-
+        print('Constructing cell classifier object...')
         self.experiment = experiment
         self.transform = transform
         self.multi_label = multi_label
@@ -193,20 +224,21 @@ class CellClassifier:
         self.threshold = threshold
         self.mappings = None
         self.class_weights = None
-
-        ref = Gating(self.experiment, reference_sample)
+        print('Loading information on reference sample...')
+        ref = Gating(self.experiment, reference_sample, include_controls=False)
 
         self.population_labels = ref.valid_populations(population_labels)
         if len(self.population_labels) < 2:
             raise CellClassifierError(f'Error: reference sample {reference_sample} does not contain any '
                                       f'gated populations, please ensure that the reference sample has '
                                       f'been gated prior to training.')
-
+        print('Preparing training data and labels...')
         if multi_label:
+            self.threshold = None
             self.train_X, self.train_y = self.multiclass_labels(ref, features)
         else:
             self.train_X, self.train_y = self.singleclass_labels(ref, features)
-
+        print('Scaling data...')
         if scale == 'Standardise':
             self.train_X, self.preprocessor = standard_scale(self.train_X)
         elif scale == 'Normalise':
@@ -218,12 +250,14 @@ class CellClassifier:
             raise CellClassifierError('Error: scale method not recognised, must be either `Standardise` or `Normalise`')
 
         if type(balance_method) == str:
+            print('Balancing dataset by sampling...')
             if frac:
                 self.balance_dataset(method=balance_method, frac=frac, **downsampling_kwargs)
             else:
                 self.balance_dataset(method=balance_method, **downsampling_kwargs)
         elif type(balance_method) == dict:
             self.class_weights = balance_method
+        print('Ready for training!')
 
     def _binarize_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
         """
@@ -254,10 +288,13 @@ class CellClassifier:
         :return: DataFrame of feature space, array of target labels
         """
         train_X, train_y = self._binarize_labels(ref, features)
-        labels = {x: i for i, x in enumerate(np.unique(train_y, axis=0))}
-        train_y = np.array(map(lambda x: labels[x], labels))
+        labels = {np.array2string(x): i for i, x in enumerate(np.unique(train_y, axis=0))}
+        label_f = partial(_assign_labels, labels=labels)
+        train_y = np.array(multi_process_ordered(label_f, train_y))
+        labels = {i: list(map(lambda x: int(x), a.replace('[', '').replace(']', '').split(' ')))
+                  for a, i in labels.items()}
         pops = np.array(self.population_labels)
-        self.mappings = {i: pops[np.where(x == 1)] for x, i in labels.items()}
+        self.mappings = {i: pops[np.where(np.array(x) == 1)] for i, x in labels.items()}
         return train_X, train_y
 
     def singleclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
@@ -377,11 +414,11 @@ class CellClassifier:
         kf = KFold(n_splits=k)
         train_performance = list()
         test_performance = list()
-
-        for i, (train_index, test_index) in enumerate(kf.split(self.train_X)):
+        print(f'----------- Cross Validation: {k} folds -----------')
+        for i, (train_index, test_index) in progress_bar(enumerate(kf.split(self.train_X))):
             train_x, test_x = self.train_X[train_index], self.train_X[test_index]
             train_y, test_y = self.train_y[train_index], self.train_y[test_index]
-            self.classifier.fit(train_x, train_y)
+            self.classifier.fit(train_x, train_y, **kwargs)
             p = evaluate_model(self.classifier, train_x, train_y, self.threshold)
             p['k'] = i
             train_performance.append(p)
@@ -390,10 +427,8 @@ class CellClassifier:
             test_performance.append(p)
 
         train_performance = pd.concat(train_performance)
-        train_performance['average_performance'] = train_performance.mean(axis=1)
         train_performance['test_train'] = 'train'
         test_performance = pd.concat(test_performance)
-        test_performance['average_performance'] = test_performance.mean(axis=1)
         test_performance['test_train'] = 'test'
         return pd.concat([train_performance, test_performance])
 
@@ -410,9 +445,9 @@ class CellClassifier:
         train_performance['test_train'] = 'train'
         test_performance = evaluate_model(self.classifier, test_x, test_y, self.threshold)
         test_performance['test_train'] = 'test'
-        return pd.concat([test_performance, test_performance])
+        return pd.concat([test_performance, train_performance])
 
-    def manual_validation(self, sample_id: str) -> pd.DataFrame:
+    def manual_validation(self, sample_id: str, return_probs: bool = False) -> pd.DataFrame or (pd.DataFrame and np.array):
         """
         Perform manual validation of the classifier using a sample associated to the same experiment as the
         training data. Important: the sample given MUST be pre-gated with the same populations as the training dataset
@@ -430,7 +465,10 @@ class CellClassifier:
         if self.preprocessor is not None:
             x = self.preprocessor.transform(x)
 
-        return evaluate_model(self.classifier, x, y, threshold=self.threshold)
+        performance = evaluate_model(self.classifier, x, y, threshold=self.threshold)
+        if return_probs:
+            return self.classifier.predict_proba(x), performance
+        return performance
 
     def balance_dataset(self, method: str = 'oversample', frac: float = 0.5,
                         **kwargs) -> (pd.DataFrame or np.array, np.array):
