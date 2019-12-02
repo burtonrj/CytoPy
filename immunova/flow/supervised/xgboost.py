@@ -10,7 +10,7 @@ class XGBoostClassifier(CellClassifier):
         super().__init__(**kwargs)
         self.objective = 'binary:logistic'
         if self.multi_label:
-            self.objective = 'multi:softmax'
+            self.objective = 'multi:softprob'
 
     def build_model(self, **kwargs):
         """
