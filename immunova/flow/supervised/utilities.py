@@ -46,11 +46,11 @@ def norm_scale(data: np.array):
     return data, preprocessor
 
 
-def predict_class(y_probs, threshold):
+def predict_class(y_probs: np.array, threshold: float or None = None):
     """
     Returns the predicted class given the probabilities of each class. If threshold = None, the class with
-    the highest probability is returned for each value in y, otherwise assumed to be multi-class prediction
-    and converts output to one-hot-encoded multi-label output using the given threshold.
+    the highest probability is returned for each value in y, otherwise assumed to be multi-label prediction
+    and converts output to binarised-encoded multi-label output using the given threshold.
     :param y_probs:
     :param threshold:
     :return:
