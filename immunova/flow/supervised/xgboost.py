@@ -8,6 +8,7 @@ class XGBoostClassifier(CellClassifier):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.prefix = 'XGBoost'
         self.objective = 'binary:logistic'
         if self.multi_label:
             self.objective = 'multi:softprob'

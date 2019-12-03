@@ -224,6 +224,7 @@ class CellClassifier:
         self.threshold = threshold
         self.mappings = None
         self.class_weights = None
+        self.prefix = 'sml'
         print('Loading information on reference sample...')
         ref = Gating(self.experiment, reference_sample, include_controls=False)
 
@@ -332,19 +333,13 @@ class CellClassifier:
         """
         parent = target.get_population_df(population_name=self.root_population)
         new_populations = ChildPopulationCollection(gate_type='sml')
-        if self.multi_label:
-            y_hat = pd.DataFrame(y_hat, columns=self.population_labels)
-            for label in y_hat.columns:
-                x = y_hat[label].values
-                new_populations.add_population(name=label)
-                new_populations.populations[label].update_index(x.nonzero())
-                new_populations.populations[label].update_geom(shape='sml', x=None, y=None)
-        else:
-            for i, label in enumerate(self.population_labels):
-                y_ = np.where(y_hat == i+1)[0]
-                new_populations.add_population(name=label)
-                new_populations.populations[label].update_index(y_)
-                new_populations.populations[label].update_geom(shape='sml', x=None, y=None)
+        for i, label in enumerate(self.population_labels):
+            label = f'{self.prefix}_{label}'
+            y_ = np.where(y_hat == i)[0]
+            idx = target.populations[self.root_population].index[y_]
+            new_populations.add_population(name=label)
+            new_populations.populations[label].update_index(idx)
+            new_populations.populations[label].update_geom(shape='sml', x=None, y=None)
         target.update_populations(new_populations, parent, parent_name=self.root_population, warnings=[])
         return target
 
