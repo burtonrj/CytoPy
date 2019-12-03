@@ -9,6 +9,7 @@ class DiscriminantAnalysis(CellClassifier):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.prefix = 'DiscriminantAnalysis'
         if self.class_weights is not None:
             print('Warning: discriminant analysis does not support class weights and so they will be ignored. '
                   'If you are handling an imbalanced dataset, we suggest you perform resampling.')
