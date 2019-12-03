@@ -9,6 +9,7 @@ class SupportVectorMachine(CellClassifier):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.prefix = 'SVM'
 
     def build_linear(self, **kwargs) -> None:
         """

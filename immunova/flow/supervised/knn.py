@@ -8,6 +8,7 @@ class KNN(CellClassifier):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.prefix = 'KNN'
         if self.class_weights is not None:
             print('Warning: KNN classifier does not support class weights and so they will be ignored. If you are '
                   'handling an imbalanced dataset, we suggest you perform resampling.')

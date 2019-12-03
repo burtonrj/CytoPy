@@ -37,6 +37,7 @@ class DeepGating(CellClassifier):
         self.activation_func = activation_func
         self.loss_func = loss_func
         self.output_activation_func = output_activation_func
+        self.prefix = 'DeepNeuralNet'
 
         if hidden_layer_sizes is None:
             self.hidden_layer_sizes = [12, 6, 3]
