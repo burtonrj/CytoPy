@@ -1,6 +1,7 @@
 from immunova.data.gating import Gate
 from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.utilities import centroid
+from scipy.spatial import ConvexHull
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -34,7 +35,7 @@ def transform_axes(data: pd.DataFrame, axes_vars: dict, transforms: dict) -> pd.
             if transforms[ax] is None:
                 continue
             data = apply_transform(data=data, transform_method=transforms[ax], features_to_transform=[axes_vars[ax]])
-    return data
+    return data[axes_vars.values()]
 
 
 class Plot:
@@ -280,6 +281,39 @@ class Plot:
             self.__2dhist(ax, data, x, y)
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title=population_name)
         fig.show()
+
+    def backgate(self, root_population: str, x: str, y: str, populations: list,
+                 xlim: tuple or None = None, ylim: tuple or None = None,
+                 transforms: dict or None = None, title: str or None = None) -> None:
+        for p in [root_population] + populations:
+            if p not in self.gating.populations.keys():
+                raise PlottingError(f'Error: could not find {p} in associated gatting object')
+
+        axes_vars = {'x': x, 'y': y}
+
+        if transforms is None:
+            transforms = dict(x='logicle', y='logicle')
+            for a in ['x', 'y']:
+                if any([x in axes_vars[a] for x in ['FSC', 'SSC']]):
+                    transforms[a] = None
+        root_data = transform_axes(self.gating.get_population_df(root_population),
+                                   transforms=transforms, axes_vars=axes_vars)
+        pop_data = {p: transform_axes(self.gating.get_population_df(p),
+                                      axes_vars, transforms)
+                    for p in populations}
+        pop_hull = {p: ConvexHull(d.values) for p, d in pop_data.items()}
+        pop_hull = {p: (pop_data[p][v, 0], pop_data[p][v, 0] for v in hull.vertices) for p, hull in pop_hull.items()}
+        pop_centroids = {p: centroid(d.values) for p, d in pop_data.items()}
+        if title is None:
+            title = f'{root_population}: {populations}'
+        fig, ax = plt.subplots(figsize=(8,8))
+        ax = self.__2dhist(ax=ax, data=root_data, x=x, y=y)
+        ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
+        for p in pop_data.keys():
+            ax.plot(pop_hull[p][0], pop_hull[p][1], '-k', c='r', label=p)
+
+
+
 
 
 
