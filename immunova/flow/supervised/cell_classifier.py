@@ -5,7 +5,7 @@ from immunova.flow.gating.actions import Gating
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.supervised.utilities import standard_scale, norm_scale, find_common_features, \
     predict_class, random_oversampling
-from immunova.flow.gating.utilities import density_dependent_downsample
+from immunova.flow.gating.utilities import density_dependent_downsample, check_downstream_overlaps
 from immunova.flow.supervised.evaluate import evaluate_model
 from sklearn.model_selection import train_test_split, KFold
 from multiprocessing import Pool, cpu_count
@@ -304,7 +304,7 @@ class CellClassifier:
         :param features: list of features for training
         :return: DataFrame of feature space, array of target labels
         """
-        if self.__check_downstream_overlaps(ref):
+        if check_downstream_overlaps(ref, self.root_population, self.population_labels):
             raise CellClassifierError('Error: one or more population dependency errors')
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
         y = np.zeros(root.shape[0])
@@ -312,30 +312,6 @@ class CellClassifier:
             pop_idx = ref.populations[pop].index
             np.put(y, pop_idx, i + 1)
         return root, y
-
-    def __check_downstream_overlaps(self, ref: Gating) -> bool:
-        """
-        Internal method. Check if a chosen root population is downstream of target populations for classification.
-        This is a problem because if the root population is downstream then the model won't have access to the events
-        it needs to classify.
-        :param ref: Gating object whom's populations you wish to check
-        :return: True if overlaps exist, otherwise False
-        """
-        downstream_overlaps = False
-        for pop_i in self.population_labels:
-            dependencies = ref.find_dependencies(pop_i)
-            if self.root_population in dependencies:
-                print(f'Error: population {pop_i} is upstream from the chosen root population {self.root_population}')
-                downstream_overlaps = True
-            for pop_j in self.population_labels:
-                if pop_j == pop_i:
-                    continue
-                if pop_j in dependencies:
-                    print(f'Error: population {pop_j} is a dependency of population {pop_i} (i.e. it is downstream '
-                          f'from this population). This will result in invalid labelling. If you wish to continue '
-                          f'with these population targets, please set multi_label parameter to True')
-                    downstream_overlaps = True
-        return downstream_overlaps
 
     def train_test_split(self, test_size=0.3) -> list:
         """
