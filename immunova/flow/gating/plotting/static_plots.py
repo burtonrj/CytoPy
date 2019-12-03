@@ -317,13 +317,16 @@ class Plot:
                     transforms[a] = None
 
         # Collect data and build polygons
+        def poly_cords(pdata):
+            v = ConvexHull(pdata.values).vertices
+            return pdata[v[0], 0], pdata[v[1], 1]
+
         root_data = transform_axes(self.gating.get_population_df(root_population),
                                    transforms=transforms, axes_vars=axes_vars)
         pop_data = {p: transform_axes(self.gating.get_population_df(p),
                                       axes_vars, transforms)
                     for p in populations}
-        pop_hull = {p: ConvexHull(d.values) for p, d in pop_data.items()}
-        pop_hull = {p: (pop_data[p][v, 0], pop_data[p][v, 0] for v in hull.vertices) for p, hull in pop_hull.items()}
+        pop_hull = {p: poly_cords(d.values) for p, d in pop_data.items()}
         pop_centroids = {p: centroid(d.values) for p, d in pop_data.items()}
 
         # Build plotting constructs
