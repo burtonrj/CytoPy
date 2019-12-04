@@ -320,7 +320,7 @@ class Plot:
         # Collect data and build polygons
         def poly_cords(pdata):
             v = ConvexHull(pdata).vertices
-            return pdata[v[0], 0], pdata[v[1], 1]
+            return pdata[v, 0], pdata[v, 1]
 
         root_data = transform_axes(self.gating.get_population_df(root_population),
                                    transforms=transforms, axes_vars=axes_vars)
