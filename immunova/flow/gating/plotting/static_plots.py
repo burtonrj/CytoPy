@@ -6,6 +6,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib import patches
+from matplotlib import cm
 from itertools import cycle
 import pandas as pd
 import numpy as np
@@ -318,7 +319,7 @@ class Plot:
 
         # Collect data and build polygons
         def poly_cords(pdata):
-            v = ConvexHull(pdata.values).vertices
+            v = ConvexHull(pdata).vertices
             return pdata[v[0], 0], pdata[v[1], 1]
 
         root_data = transform_axes(self.gating.get_population_df(root_population),
@@ -335,7 +336,7 @@ class Plot:
         fig, ax = plt.subplots(figsize=(8,8))
         ax = self.__2dhist(ax=ax, data=root_data, x=x, y=y)
         ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
-        for p, c in zip(pop_data.keys(), plt.get_cmap('tab20')):
+        for p, c in zip(pop_data.keys(), cm.cmap_d['tab20'].colors):
             ax.plot(pop_hull[p][0], pop_hull[p][1], '-k', c='r', label=p)
             ax.scatter(x=pop_centroids[p][0], y=pop_centroids[p][0], s=25, c=[c],
                        linewidth=1, edgecolors='black', label=p)

@@ -81,9 +81,9 @@ class ChildPopulationCollection:
             :return: None
             """
             if merge_options == 'overwrite':
-                self.index = idx
+                self.index = np.array(idx, dtype=np.int)
             elif merge_options == 'merge':
-                self.index = np.concatenate((self.index, idx))
+                self.index = np.array(np.unique(np.concatenate((self.index, idx))), dtype=np.int)
             else:
                 print('Invalid input for merge_options, must be one of: merge, overwrite')
 
