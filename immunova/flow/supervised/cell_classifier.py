@@ -335,7 +335,7 @@ class CellClassifier:
         new_populations = ChildPopulationCollection(gate_type='sml')
         for i, label in enumerate(self.population_labels):
             label = f'{self.prefix}_{label}'
-            y_ = np.where(y_hat == i)[0]
+            y_ = np.where(y_hat == i)
             idx = target.populations[self.root_population].index[y_]
             new_populations.add_population(name=label)
             new_populations.populations[label].update_index(idx)
@@ -349,13 +349,14 @@ class CellClassifier:
         :param sample_gates: Gating object
         :return: Transformed and scaled DataFrame.
         """
-        if self.preprocessor is not None:
-            return self.preprocessor.fit_transform(sample_gates.get_population_df(self.root_population,
-                                                                                  transform=True,
-                                                                                  transform_method=self.transform)[self.features])
-        return sample_gates.get_population_df(self.root_population,
+        data = sample_gates.get_population_df(self.root_population,
                                               transform=True,
                                               transform_method=self.transform)[self.features]
+        if self.preprocessor is None:
+            return data
+        transformed_data = self.preprocessor.fit_transform(data)
+        transformed_data.index = data.index
+        return transformed_data
 
     def predict(self, target_sample: str) -> Gating:
         """
@@ -371,8 +372,8 @@ class CellClassifier:
                                       'load an existing model using the `load_model` method or train '
                                       'the classifier using the `train_classifier` method')
 
-        y_probs = self.classifier.predict(target_sample)
-        y_hat = predict_class(y_probs, self.threshold)
+        y_probs = self.classifier.predict_proba(target_sample.values)
+        y_hat = np.array(predict_class(y_probs, self.threshold))
         return self.__save_gating(sample_gates, y_hat)
 
     def train_cv(self, k: int = 5, **kwargs) -> pd.DataFrame:
@@ -423,6 +424,8 @@ class CellClassifier:
         Perform manual validation of the classifier using a sample associated to the same experiment as the
         training data. Important: the sample given MUST be pre-gated with the same populations as the training dataset
         :param sample_id: sample ID for file group to classify
+        :param return_probs: if True, will return array (nrows, nclasses) of probability corresponding to each
+        class prediction
         :return: Pandas DataFrame of classification performance
         """
         if self.classifier is None:
