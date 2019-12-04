@@ -236,9 +236,9 @@ class CellClassifier:
         print('Preparing training data and labels...')
         if multi_label:
             self.threshold = None
-            self.train_X, self.train_y = self.multiclass_labels(ref, features)
+            self.train_X, self.train_y, self.mappings = self.multiclass_labels(ref, features)
         else:
-            self.train_X, self.train_y = self.singleclass_labels(ref, features)
+            self.train_X, self.train_y, self.mappings = self.singleclass_labels(ref, features)
         print('Scaling data...')
         if scale == 'Standardise':
             self.train_X, self.preprocessor = standard_scale(self.train_X)
@@ -276,7 +276,7 @@ class CellClassifier:
             root.loc[ref.populations[pop].index, pop] = 1
         return root[features], root[self.population_labels].values
 
-    def multiclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
+    def multiclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array, dict):
         """
         Generate feature space and labels for a multi-label multi-class classification problem and handle the
         multi-label aspect of this problem by converting multi-label signatures to single labels. This can be important
@@ -286,7 +286,7 @@ class CellClassifier:
         to a 'fake label'.
         :param ref: Gating object to retrieve data from
         :param features: list of features for training
-        :return: DataFrame of feature space, array of target labels
+        :return: DataFrame of feature space, array of target labels, and a dictionary of cell population mappings
         """
         train_X, train_y = self._binarize_labels(ref, features)
         labels = {np.array2string(x): i for i, x in enumerate(np.unique(train_y, axis=0))}
@@ -295,24 +295,26 @@ class CellClassifier:
         labels = {i: list(map(lambda x: int(x), a.replace('[', '').replace(']', '').split(' ')))
                   for a, i in labels.items()}
         pops = np.array(self.population_labels)
-        self.mappings = {i: pops[np.where(np.array(x) == 1)] for i, x in labels.items()}
-        return train_X, train_y
+        mappings = {i: pops[np.where(np.array(x) == 1)] for i, x in labels.items()}
+        return train_X, train_y, mappings
 
-    def singleclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array):
+    def singleclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array, dict):
         """
         Generate feature space and labels where a cell can belong to only one population
         :param ref: Gating object to retrieve data from
         :param features: list of features for training
-        :return: DataFrame of feature space, array of target labels
+        :return: DataFrame of feature space, array of target labels, mappings of cell population labels
         """
         if check_downstream_overlaps(ref, self.root_population, self.population_labels):
             raise CellClassifierError('Error: one or more population dependency errors')
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
         y = np.zeros(root.shape[0])
+        mappings = dict()
         for i, pop in enumerate(self.population_labels):
             pop_idx = ref.populations[pop].index
             np.put(y, pop_idx, i + 1)
-        return root, y
+            mappings[i+1] = pop
+        return root, y, mappings
 
     def train_test_split(self, test_size=0.3) -> list:
         """
@@ -333,13 +335,15 @@ class CellClassifier:
         """
         parent = target.get_population_df(population_name=self.root_population)
         new_populations = ChildPopulationCollection(gate_type='sml')
-        for i, label in enumerate(self.population_labels):
-            label = f'{self.prefix}_{label}'
+        for i, pops in self.mappings.items():
             y_ = np.where(y_hat == i)
             idx = target.populations[self.root_population].index[y_]
-            new_populations.add_population(name=label)
-            new_populations.populations[label].update_index(idx)
-            new_populations.populations[label].update_geom(shape='sml', x=None, y=None)
+            for p in pops:
+                l = f'{self.prefix}_{p}'
+                if l not in new_populations.populations.keys():
+                    new_populations.add_population(name=l)
+                    new_populations.populations[l].update_geom(shape='sml', x=None, y=None)
+                new_populations.populations[l].update_index(idx)
         target.update_populations(new_populations, parent, parent_name=self.root_population, warnings=[])
         return target
 
@@ -354,8 +358,8 @@ class CellClassifier:
                                               transform_method=self.transform)[self.features]
         if self.preprocessor is None:
             return data
-        transformed_data = self.preprocessor.fit_transform(data)
-        transformed_data.index = data.index
+        transformed_data = pd.DataFrame(self.preprocessor.fit_transform(data.copy()),
+                                        columns=self.features, index=data.index)
         return transformed_data
 
     def predict(self, target_sample: str) -> Gating:
@@ -432,9 +436,9 @@ class CellClassifier:
             raise CellClassifierError('Error: model must be trained prior to validation')
         ref = Gating(self.experiment, sample_id)
         if self.multi_label:
-            x, y = self.multiclass_labels(ref, self.features)
+            x, y, mappings = self.multiclass_labels(ref, self.features)
         else:
-            x, y = self.singleclass_labels(ref, self.features)
+            x, y, mappings = self.singleclass_labels(ref, self.features)
 
         if self.preprocessor is not None:
             x = self.preprocessor.transform(x)
