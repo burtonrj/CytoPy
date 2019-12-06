@@ -55,7 +55,7 @@ def dim_reduction_plot(data, method, features, title, sample_n=100000, sample_me
                        save_path=None):
     if n_components not in [2, 3]:
         raise PlottingError('Error: number of components must be either 2 or 3')
-    sample = sample_data(data, sample_n, method=method)
+    sample = sample_data(data, sample_n, method=sample_method)
     data = dimensionality_reduction(sample, features, method, n_components)
     fig, ax = plt.subplots(figsize=(10, 10))
     if n_components == 2:
@@ -112,7 +112,7 @@ def plot_clusters(data, clusters, method, title, sample_n=100000, sample_method=
     # Label dataset and perform dim reduction
     data = label_dataset_clusters(data, clusters)
     features = [x for x in data.columns if x != 'clusters']
-    sample = sample_data(data, sample_n, method=method)
+    sample = sample_data(data, sample_n, method=sample_method)
     data = dimensionality_reduction(sample, features, method, n_components)
     # Plotting
     fig, ax = __coloured_scatter(data, method, n_components, title, label_prefix='Cluster:')
