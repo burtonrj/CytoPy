@@ -1,9 +1,12 @@
-from immunova.flow.clustering.clustering import Clustering, ClusteringError
+from immunova.flow.clustering.clustering import Clustering
 import phenograph
 import numpy as np
 
 
 class PhenoGraph(Clustering):
+    """
+    Perform clustering using the PhenoGraph algorithm
+    """
     def __init__(self, k=30,  **kwargs):
         super().__init__(**kwargs)
         self.parameters['k'] = k
@@ -11,9 +14,15 @@ class PhenoGraph(Clustering):
         self.graph = None
         self.q = None
 
-    def cluster(self):
+    def cluster(self, prefix: str):
+        """
+        Apply clustering and assign the results to 'clusters' parameter. Clusters will be number 0 to n, where n is the
+        total number of clusters. The user can provide a prefix for cluster names by specifying a value for the 'prefix'
+        argument.
+        :param prefix: prefix to assign to every cluster (optional)
+        :return None
+        """
         communities, self.graph, self.q = phenograph.cluster(self.data)
         for x in np.unique(communities):
             indices = np.where(communities == x)[0]
-            self.add_cluster(x, indices)
-
+            self._add_cluster(x, indices)
