@@ -1,7 +1,6 @@
 from immunova.data.panel import ChannelMap
 from immunova.data.gating import Gate
 from bson.binary import Binary
-import pandas as pd
 import numpy as np
 import mongoengine
 import pickle
@@ -12,12 +11,6 @@ def generate_sample(data, n) -> np.array:
         idx = np.random.randint(data.shape[0], size=n)
         return data[idx, :]
     return data
-
-
-class Clustering(mongoengine.EmbeddedDocument):
-    method = mongoengine.StringField(required=True)
-    parameters = mongoengine.ListField(required=True)
-    transform_method = mongoengine.StringField(required=True)
 
 
 class Cluster(mongoengine.EmbeddedDocument):
@@ -32,6 +25,25 @@ class Cluster(mongoengine.EmbeddedDocument):
     index = mongoengine.FileField(db_alias='core', collection_name='cluster_indexes')
     n_events = mongoengine.IntField(required=True)
     prop_of_root = mongoengine.StringField(required=True)
+
+    def save_index(self, data: np.array) -> None:
+        if self.index:
+            self.index.replace(Binary(pickle.dumps(data, protocol=2)))
+        else:
+            self.index.new_file()
+            self.index.write(Binary(pickle.dumps(data, protocol=2)))
+            self.index.close()
+
+    def load_index(self) -> np.array:
+        return pickle.loads(bytes(self.index.read()))
+
+
+class ClusteringExperiment(mongoengine.EmbeddedDocument):
+    clustering_uid = mongoengine.StringField(required=True)
+    method = mongoengine.StringField(required=True)
+    parameters = mongoengine.ListField(required=True)
+    transform_method = mongoengine.StringField(required=True)
+    clusters = mongoengine.EmbeddedDocumentListField(Cluster)
 
 
 class Population(mongoengine.EmbeddedDocument):
@@ -62,8 +74,7 @@ class Population(mongoengine.EmbeddedDocument):
     prop_of_total = mongoengine.FloatField()
     warnings = mongoengine.ListField()
     geom = mongoengine.ListField()
-    clustering = mongoengine.EmbeddedDocumentField(Clustering)
-    clusters = mongoengine.EmbeddedDocumentListField(Cluster)
+    clustering = mongoengine.EmbeddedDocumentListField(ClusteringExperiment)
 
     def save_index(self, data: np.array) -> None:
         if self.index:
@@ -82,6 +93,19 @@ class Population(mongoengine.EmbeddedDocument):
                           prop_of_total=self.prop_of_total, warnings=self.warnings, geom=geom,
                           parent=self.parent, index=self.load_index())
         return population
+
+    def list_clustering_experiments(self):
+        return [c.clustering_uid for c in self.clustering]
+
+    def pull_clustering_experiment(self, clustering_uid: str):
+        if clustering_uid not in self.list_clustering_experiments():
+            raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
+        return [c for c in self.clustering if c.clustering_uid == clustering_uid][0]
+
+    def delete_clustering(self, clustering_uid: str):
+        if clustering_uid not in self.list_clustering_experiments():
+            raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
+        self.clustering = [c for c in self.clustering if c.clustering_uid != clustering_uid]
 
 
 class Normalisation(mongoengine.EmbeddedDocument):
