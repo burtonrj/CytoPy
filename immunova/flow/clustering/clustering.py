@@ -29,7 +29,7 @@ class Clustering:
         root_p = [p for p in fg.populations if p.population_name == self.root_population][0]
         if clustering_uid in root_p.list_clustering_experiments():
             print(f'Loading existing clustering experiment...')
-            self._load_clusters(clustering_uid)
+            self._load_clusters(root_p, clustering_uid)
         self._load_data(transform=transform, features=features)
 
     def _load_data(self, transform: bool, features: str or list):
@@ -62,7 +62,7 @@ class Clustering:
                                    prop_of_root=len(indexes)/self.data.shape[0])
 
     def static_plot_clusters(self, method: str, title: str, save_path: str or None = None,
-                             n_components: int = 2, sample_n: int = 100000,
+                             n_components: int = 2, sample_n: int or None = 100000,
                              sample_method: str = 'uniform', heatmap: str or None = None) -> None:
         """
         Generate static plots for clusters. Performs dimensionality reduction and creates a scatter plot with
@@ -127,13 +127,11 @@ class Clustering:
         root_p.clustering = exp
         fg.save()
 
-    def _load_clusters(self, clustering_uid: str):
+    def _load_clusters(self, root_p, clustering_uid: str):
         """
         Load existing clusters (associated to given cluster UID) associated to the root population of chosen sample.
         :param clustering_uid: unique identifier to associate to save clustering experiment
         """
-        fg = self.experiment.pull_sample(self.sample_id)
-        root_p = [p for p in fg.populations if p.population_name == self.root_population][0]
         clustering = root_p.pull_clustering_experiment(clustering_uid)
 
         # Rebuild clustering information
