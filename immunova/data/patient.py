@@ -123,4 +123,3 @@ class Patient(mongoengine.DynamicDocument):
     }
 
 
-
