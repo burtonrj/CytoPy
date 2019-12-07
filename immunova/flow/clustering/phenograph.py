@@ -14,7 +14,7 @@ class PhenoGraph(Clustering):
         self.graph = None
         self.q = None
 
-    def cluster(self, prefix: str):
+    def cluster(self, prefix: str or None = None):
         """
         Apply clustering and assign the results to 'clusters' parameter. Clusters will be number 0 to n, where n is the
         total number of clusters. The user can provide a prefix for cluster names by specifying a value for the 'prefix'
@@ -25,4 +25,7 @@ class PhenoGraph(Clustering):
         communities, self.graph, self.q = phenograph.cluster(self.data)
         for x in np.unique(communities):
             indices = np.where(communities == x)[0]
-            self._add_cluster(x, indices)
+            label = x
+            if prefix is not None:
+                label = f'{prefix}_{x}'
+            self._add_cluster(label, indices)

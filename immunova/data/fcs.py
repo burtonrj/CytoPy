@@ -75,6 +75,7 @@ class Population(mongoengine.EmbeddedDocument):
     warnings = mongoengine.ListField()
     geom = mongoengine.ListField()
     clustering = mongoengine.EmbeddedDocumentListField(ClusteringExperiment)
+    clusters = mongoengine.ListField()
 
     def save_index(self, data: np.array) -> None:
         if self.index:
