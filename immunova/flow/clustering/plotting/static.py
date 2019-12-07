@@ -112,8 +112,9 @@ def plot_clusters(data, clusters, method, title, sample_n=100000, sample_method=
     # Label dataset and perform dim reduction
     data = label_dataset_clusters(data, clusters)
     features = [x for x in data.columns if x != 'clusters']
-    sample = sample_data(data, sample_n, method=sample_method)
-    data = dimensionality_reduction(sample, features, method, n_components)
+    if sample_n is not None:
+        data = sample_data(data, sample_n, method=sample_method)
+    data = dimensionality_reduction(data, features, method, n_components)
     # Plotting
     fig, ax = __coloured_scatter(data, method, n_components, title, label_prefix='Cluster:')
     if save_path is not None:
