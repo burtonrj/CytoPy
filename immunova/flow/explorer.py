@@ -1,6 +1,6 @@
 from mongoengine.base.datastructures import EmbeddedDocumentList
 from immunova.data.fcs_experiments import FCSExperiment
-from immunova.data.patient import Patient
+from immunova.data.patient import Patient, Bug
 from immunova.flow.gating.actions import Gating
 import pandas as pd
 
@@ -105,7 +105,7 @@ class Explorer:
         """
         self.data[variable] = self.data['pt_id'].apply(lambda x: self.__meta(pt_id=x, variable=variable), axis=1)
 
-    def __meta(self, pt_id: str, variable: str):
+    def __meta(self, pt_id: str, variable: str) -> str:
         """
         Internal method. Applied to 'pt_id' column of 'data' to create new variable that is patient specific.
         """
@@ -116,18 +116,72 @@ class Explorer:
             raise TypeError('Chosen variable is an embedded document.')
         return p[variable]
 
-    def load_infectious_data(self, multi_org: str = 'list', include_hmbpp: bool = False,
-                             include_ribo: bool = False):
+    def load_infectious_data(self, multi_org: str = 'list'):
         """
         Load the bug data from each patient and populate 'data' accordingly. As default variables will be created as
         follows:
         * organism_name = If 'multi_org' equals 'list' then multiple organisms will be stored as a comma separated list
         without duplicates, whereas if the value is 'mixed' then multiple organisms will result in a value of 'mixed'.
-        * organism_type = value of either 'gram positive', 'gram negative', 'mixed' or 'fungal'
-        * hmbpp (optional; set include_hmbpp to True) = True or False based on HMBPP status
-        * ribo (optional; set include_ribo to True) = True or False based on Ribo status
+        * organism_type = value of either 'gram positive', 'gram negative', 'virus', 'mixed' or 'fungal'
+        * hmbpp = True or False based on HMBPP status (Note: it only takes one positive organism for this value to be
+        True)
+        * ribo = True or False based on Ribo status (Note: it only takes one positive organism for this value to be
+        True)
         """
-        pass
+        self.data['organism_name'] = self.data['pt_id'].apply(lambda x: self.__bugs(x, multi_org=multi_org))
+        self.data['organism_type'] = self.data['pt_id'].apply(self.__org_type)
+        self.data['hmbpp'] = self.data['pt_id'].apply(lambda x: self.__hmbpp_ribo(x, field='hmbpp_status'))
+        self.data['ribo'] = self.data['pt_id'].apply(lambda x: self.__hmbpp_ribo(x, field='ribo_status'))
+
+    @staticmethod
+    def __bugs(pt_id: str, multi_org: str) -> str:
+        """
+        Internal function. Fetch the name of isolated organisms for each patient.
+        :param pt_id: patient identifier
+        :param multi_org: If 'multi_org' equals 'list' then multiple organisms will be stored as a comma separated list
+        without duplicates, whereas if the value is 'mixed' then multiple organisms will result in a value of 'mixed'.
+        """
+        if pt_id == 'NONE':
+            return 'NONE'
+        p = Patient.objects(patient_id=pt_id).get()
+        if not p.infection_data:
+            return 'NONE'
+        orgs = [b.org_name for b in p.infection_data]
+        if len(orgs) == 1:
+            return orgs[0]
+        if multi_org == 'list':
+            return ','.join(orgs)
+        return 'mixed'
+
+    @staticmethod
+    def __org_type(pt_id: str) -> str:
+        """
+        Parse all infectious isolates for each patient and return the organism type isolated, one of either:
+        'gram positive', 'gram negative', 'virus', 'mixed' or 'fungal'
+        :param pt_id: patient identifier
+        """
+        def bug_type(b: Bug):
+            if b.organism_type == 'bacteria':
+                return b.gram_status
+            return b.organism_type
+        if pt_id == 'NONE':
+            return 'NONE'
+        p = Patient.objects(patient_id=pt_id).get()
+        bugs = set(map(bug_type, p.infection_data))
+        if len(bugs) == 1:
+            return bugs[0]
+        return 'mixed'
+
+    @staticmethod
+    def __hmbpp_ribo(pt_id: str, field: str) -> bool or None:
+        """
+        Given a value of either 'hmbpp' or 'ribo' for 'field' argument, return True if any Bug has a positive status
+        for the given patient ID.
+        """
+        if pt_id == 'NONE':
+            return None
+        p = Patient.objects(patient_id=pt_id).get()
+        return any([b[field] for b in p.infection_data])
 
     def load_biology_data(self, test_name: str, summary_method: str = 'average'):
         """
@@ -145,6 +199,9 @@ class Explorer:
         pass
 
     def static_phate(self):
+        pass
+
+    def launch_bokeh_dashboard(self):
         pass
 
 
