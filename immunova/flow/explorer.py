@@ -2,36 +2,36 @@ from mongoengine.base.datastructures import EmbeddedDocumentList
 from immunova.data.fcs_experiments import FCSExperiment
 from immunova.data.patient import Patient, Bug
 from immunova.flow.gating.actions import Gating
+from anytree.node import Node
+import matplotlib.pyplot as plt
+import phenograph
 import pandas as pd
+import numpy as np
+import umap
+import phate
+import scprep
 
 
 class Explorer:
     """
     Using a dimensionality reduction technique, explore high dimensional flow cytometry data.
     """
-    def __init__(self, root_population: str = 'root', transform: str or None = 'logicle',
-                 clustering_uid: str or None = None):
+    def __init__(self, root_population: str = 'root', transform: str or None = 'logicle'):
         """
         :param root_population: data included in the indicated population will be pulled from each file
         :param transform: transform to be applied to each sample, provide a value of None to use raw data
         (default = 'logicle')
-        :param clustering_uid: if a clustering_uid is provided, then will pull clustering experiment from the root
         population of each file group (optional)
         """
         self.data = pd.DataFrame()
-        self.gate_labels = dict()
-        self.cluster_labels = dict()
         self.transform = transform
         self.root_population = root_population
-        self.clustering_uid = clustering_uid
 
     def clear_data(self):
         """
         Clear all existing data, gate labels, and cluster labels.
         """
         self.data = None
-        self.cluster_labels = dict()
-        self.gate_labels = dict()
 
     def load_data(self, experiment: FCSExperiment, samples: list, sample_n: None or int = None):
         """
@@ -57,12 +57,10 @@ class Explorer:
             if sample_n is not None:
                 print('...sampling...')
                 fdata = fdata.sample(n=sample_n)
-            if self.clustering_uid is not None:
-                print('...loading clusters...')
-                self.__load_clusters(experiment, sid)
             print('...loading gated populations...')
-            self.__load_gates(g)
+            fdata = self.__population_labels(fdata, g.populations[self.root_population])
             fdata = fdata.reset_index()
+            fdata = fdata.rename({'index': 'original_index'}, axis=1)
             print('...associating to patient...')
             pt = Patient.objects(files__contains=g.mongo_id)
             if pt:
@@ -74,27 +72,26 @@ class Explorer:
             self.data = pd.concat([self.data, fdata])
     print('------------ Completed! ------------')
 
-    def __load_clusters(self, exp: FCSExperiment, sid: str):
+    def __population_labels(self, data: pd.DataFrame, root_node: Node) -> pd.DataFrame:
         """
-        Internal method. Load root population from given sample and update cluster_labels.
-        :param exp: experiment object sample is associated to
-        :param sid: sample ID
+        Internal function. Called when loading data. Populates DataFrame column named 'population_label' with the
+        name of the node associated with each event most downstream of the root population.
+        :param data: Pandas DataFrame of events corresponding to root population from single patient
+        :param root_node: anytree Node object of root population
+        :return: Pandas DataFrame with 'population_label' column
         """
-        fg = exp.pull_sample(sid)
-        root_p = [p for p in fg.populations if p.population_name == self.root_population][0]
-        clustering = root_p.pull_clustering_experiment(self.clustering_uid)
-        self.cluster_labels[sid] = dict()
-        for c in clustering.clusters:
-            self.cluster_labels[sid][c.cluster_id] = c.load_index()
-
-    def __load_gates(self, gating: Gating):
-        """
-        Given some gating object for a sample, update the gating labels with all populations downstream of the root
-        population.
-        :param gating: gating object of the sample.
-        """
-        populations = gating.find_dependencies(self.root_population)
-        self.gate_labels[gating.id] = {p: gating.populations[p].index for p in populations}
+        def recursive_label(d, n):
+            mask = d.index.isin(n.index)
+            d.loc[mask, 'population_label'] = n.name
+            if len(n.children) == 0:
+                return d
+            for c in n.children:
+                recursive_label(d, c)
+            return d
+        data = data.copy()
+        data['population_label'] = self.root_population
+        data = recursive_label(data, root_node)
+        return data
 
     def load_meta(self, variable: str):
         """
@@ -193,16 +190,113 @@ class Explorer:
         * min - the minimum value is stored
         * median - the median test result is generated and stored
         """
-        pass
+        self.data[test_name] = self.data['pt_id'].apply(lambda x: self.__biology(x, test_name, summary_method))
 
-    def static_umap(self):
-        pass
+    @staticmethod
+    def __biology(pt_id: str, test_name: str, method: str) -> np.float or None:
+        """
+        Given some test name, return a summary statistic of all results for a given patient ID
+        :param pt_id: patient identifier
+        :param test_name: name of test to search for
+        :param method: summary statistic to use
+        """
+        if pt_id == 'NONE':
+            return None
+        tests = Patient.objects(patient_id=pt_id).get().patient_biology
+        tests = [t.result for t in tests if t.test == test_name]
+        if not tests:
+            return None
+        if method == 'max':
+            return np.max(tests)
+        if method == 'min':
+            return np.min(tests)
+        if method == 'median':
+            return np.median(tests)
+        return np.average(tests)
 
-    def static_phate(self):
-        pass
+    def __plotting_labels(self, label: str, populations: list or None):
+        """
+        Internal function called by plotting functions to generate array that will be used for the colour property
+        of each data point.
+        :param label: string value of the label option (see scatter_plot method)
+        :param populations: list of populations to include if label = 'gated populations' (optional)
+        """
+        if label in self.data.columns:
+            return self.data[label].values
+        elif label == 'global clusters':
+            if 'PhenoGraph labels' not in self.data.columns:
+                raise ValueError('Must call phenograph_clustering method prior to plotting PhenoGraph clusters')
+            return self.data['PhenoGraph labels'].values
+        elif label == 'gated populations':
+            if populations:
+                return np.array(list(map(lambda x: x if x in populations else 'None',
+                                         self.data['population_label'].values)))
+            return self.data['population_label'].values
+        raise ValueError(f'Label {label} is invalid; must be either a column name in the existing dataframe '
+                         f'({self.data.columns.tolist()}), "global clusters" which labels events according to '
+                         f'clustering on the concatenated dataset, or "gated populations" which are common populations '
+                         f'gated on a per sample basis.')
+
+    def scatter_plot(self, primary_label: str, features: list, secondary_label: str or None = None,
+                     populations: list or None = None, n_components: int = 2,
+                     dim_reduction_method: str = 'UMAP', **kwargs) -> plt.Axes:
+        """
+        Generate a 2D/3D scatter plot (dimensions depends on the number of components chosen for dimensionality
+        reduction. Each data point is labelled according to the option provided to the label arguments. If a value
+        is given to both primary and secondary label, the secondary label colours the background and the primary label
+        colours the foreground of each datapoint.
+        :param primary_label: option for the primary label, must be one of the following:
+        * A valid column name in Explorer attribute 'data' (check valid column names using Explorer.data.columns)
+        * 'global clusters' - requires that phenograph_clustering method has been called prior to plotting. Each data
+        point will be coloured according to cluster association.
+        * 'gated populations' - each data point is coloured according to population identified by prior gating
+        :param features: list of column names used as feature space for dimensionality reduction
+        :param secondary_label: option for the secondary label, options same as primary_label (optional)
+        :param populations: if primary/secondary label has value of 'gated populations', only populations in this
+        list will be included (events with no population associated will be labelled 'None')
+        :param n_components: number of components to produce from dimensionality reduction, valid values are 2 or 3
+        (default = 2)
+        :param dim_reduction_method: method to use for dimensionality reduction, valid values are 'UMAP' or 'PHATE'
+        (default = 'UMAP')
+        :param kwargs: additional keyword arguments to pass to dimensionality reduction algorithm
+        :return: matplotlib subplot axes object
+        """
+        fig, ax = plt.subplots(figsize=(12, 8))
+        if n_components not in [2, 3]:
+            raise ValueError('n_components must have a value of 2 or 3')
+        if dim_reduction_method == 'UMAP':
+            embeddings = umap.UMAP(n_components=n_components, **kwargs).fit_transform(self.data[features])
+        else:
+            phate_operator = phate.PHATE(n_jobs=-2, **kwargs)
+            embeddings = phate_operator.fit_transform(self.data[features])
+        plabel = self.__plotting_labels(primary_label, populations)
+        if secondary_label is not None:
+            slabel = self.__plotting_labels(secondary_label, populations)
+            if n_components == 2:
+                ax = scprep.plot.scatter2d(embeddings, c=slabel, ticks=False,
+                                           label_prefix=dim_reduction_method, ax=ax, s=50)
+            else:
+                ax = scprep.plot.scatter3d(embeddings, c=slabel, ticks=False,
+                                           label_prefix=dim_reduction_method, ax=ax, s=50)
+        if n_components == 2:
+            ax = scprep.plot.scatter2d(embeddings, c=plabel, ticks=False,
+                                       label_prefix=dim_reduction_method, ax=ax, s=50)
+        else:
+            ax = scprep.plot.scatter3d(embeddings, c=plabel, ticks=False,
+                                       label_prefix=dim_reduction_method, ax=ax, s=50)
+        return ax
 
     def launch_bokeh_dashboard(self):
         pass
+
+    def phenograph_clustering(self, features: list, **kwargs):
+        """
+        Using the PhenoGraph clustering algorithm, cluster all events in concatenated dataset.
+        :param features: list of features to perform clustering on
+        :param kwargs: keyword arguments to pass to PhenoGraph clustering object
+        """
+        communities, graph, q = phenograph.cluster(self.data[features], **kwargs)
+        self.data['PhenoGraph labels'] = communities
 
 
 
