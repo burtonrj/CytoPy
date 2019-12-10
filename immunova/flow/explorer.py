@@ -2,6 +2,7 @@ from mongoengine.base.datastructures import EmbeddedDocumentList
 from immunova.data.fcs_experiments import FCSExperiment
 from immunova.data.patient import Patient, Bug
 from immunova.flow.gating.actions import Gating
+from immunova.flow.utilities import progress_bar
 from anytree.node import Node
 import matplotlib.pyplot as plt
 import phenograph
@@ -42,11 +43,9 @@ class Explorer:
         amount (optional)
         """
         print(f'------------ Loading flow data: {experiment.experiment_id} ------------')
-        for sid in samples:
-            print(f'Loading {sid}...')
+        for sid in progress_bar(samples):
             g = Gating(experiment, sid, include_controls=False)
             if self.transform is not None:
-                print(f'...applying {self.transform} transformation...')
                 fdata = g.get_population_df(population_name=self.root_population,
                                             transform=True,
                                             transform_method=self.transform)
@@ -55,22 +54,19 @@ class Explorer:
             if fdata is None:
                 raise ValueError(f'Population {self.root_population} does not exist for {sid}')
             if sample_n is not None:
-                print('...sampling...')
-                fdata = fdata.sample(n=sample_n)
-            print('...loading gated populations...')
+                if sample_n < fdata.shape[0]:
+                    fdata = fdata.sample(n=sample_n)
             fdata = self.__population_labels(fdata, g.populations[self.root_population])
             fdata = fdata.reset_index()
             fdata = fdata.rename({'index': 'original_index'}, axis=1)
-            print('...associating to patient...')
             pt = Patient.objects(files__contains=g.mongo_id)
             if pt:
                 fdata['pt_id'] = pt[0].patient_id
-                print(f'...patient ID = {pt[0].patient_id}...')
             else:
                 print(f'File group {g.id} in experiment {experiment.experiment_id} is not associated to any patient')
                 fdata['pt_id'] = 'NONE'
             self.data = pd.concat([self.data, fdata])
-    print('------------ Completed! ------------')
+        print('------------ Completed! ------------')
 
     def __population_labels(self, data: pd.DataFrame, root_node: Node) -> pd.DataFrame:
         """
@@ -100,18 +96,14 @@ class Explorer:
         that pertains to the variable given and the value will correspond to that of the patients.
         :param variable: field name to populate data with
         """
-        self.data[variable] = self.data['pt_id'].apply(lambda x: self.__meta(pt_id=x, variable=variable), axis=1)
-
-    def __meta(self, pt_id: str, variable: str) -> str:
-        """
-        Internal method. Applied to 'pt_id' column of 'data' to create new variable that is patient specific.
-        """
-        if pt_id == 'NONE':
-            return 'NONE'
-        p = Patient.objects(patient_id=pt_id).get()
-        if type(p[variable]) == EmbeddedDocumentList:
-            raise TypeError('Chosen variable is an embedded document.')
-        return p[variable]
+        self.data[variable] = 'NONE'
+        for pt_id in progress_bar(self.data.pt_id.unique()):
+            if pt_id == 'NONE':
+                continue
+            p = Patient.objects(patient_id=pt_id).get()
+            if type(p[variable]) == EmbeddedDocumentList:
+                raise TypeError('Chosen variable is an embedded document.')
+            self.data.loc[self.data.pt_id == pt_id, variable] = p[variable]
 
     def load_infectious_data(self, multi_org: str = 'list'):
         """
@@ -125,25 +117,35 @@ class Explorer:
         * ribo = True or False based on Ribo status (Note: it only takes one positive organism for this value to be
         True)
         """
-        self.data['organism_name'] = self.data['pt_id'].apply(lambda x: self.__bugs(x, multi_org=multi_org))
-        self.data['organism_type'] = self.data['pt_id'].apply(self.__org_type)
-        self.data['hmbpp'] = self.data['pt_id'].apply(lambda x: self.__hmbpp_ribo(x, field='hmbpp_status'))
-        self.data['ribo'] = self.data['pt_id'].apply(lambda x: self.__hmbpp_ribo(x, field='ribo_status'))
+        self.data['organism_name'] = 'Unknown'
+        self.data['organism_type'] = 'Unknown'
+        self.data['hmbpp'] = 'Unknown'
+        self.data['ribo'] = 'Unknown'
+
+        for pt_id in progress_bar(self.data.pt_id.unique()):
+            if pt_id == 'NONE':
+                continue
+            p = Patient.objects(patient_id=pt_id).get()
+            self.data.loc[self.data.pt_id == pt_id, 'organism_name'] = self.__bugs(patient=p, multi_org=multi_org)
+            self.data.loc[self.data.pt_id == pt_id, 'organism_type'] = self.__org_type(patient=p)
+            self.data.loc[self.data.pt_id == pt_id, 'hmbpp'] = self.__hmbpp_ribo(patient=p, field='hmbpp_status')
+            self.data.loc[self.data.pt_id == pt_id, 'ribo'] = self.__hmbpp_ribo(patient=p, field='ribo_status')
 
     @staticmethod
-    def __bugs(pt_id: str, multi_org: str) -> str:
+    def __bugs(patient: Patient, multi_org: str) -> str:
         """
         Internal function. Fetch the name of isolated organisms for each patient.
-        :param pt_id: patient identifier
+        :param patient: Patient model object
         :param multi_org: If 'multi_org' equals 'list' then multiple organisms will be stored as a comma separated list
         without duplicates, whereas if the value is 'mixed' then multiple organisms will result in a value of 'mixed'.
+        :return: string of isolated organisms comma seperated, or 'mixed' if multi_org == 'mixed' and multiple organisms
+        listed for patient
         """
-        if pt_id == 'NONE':
-            return 'NONE'
-        p = Patient.objects(patient_id=pt_id).get()
-        if not p.infection_data:
-            return 'NONE'
-        orgs = [b.org_name for b in p.infection_data]
+        if not patient.infection_data:
+            return 'Unknown'
+        orgs = [b.org_name for b in patient.infection_data if b.org_name]
+        if not orgs:
+            return 'Unknown'
         if len(orgs) == 1:
             return orgs[0]
         if multi_org == 'list':
@@ -151,34 +153,42 @@ class Explorer:
         return 'mixed'
 
     @staticmethod
-    def __org_type(pt_id: str) -> str:
+    def __org_type(patient: Patient) -> str:
         """
         Parse all infectious isolates for each patient and return the organism type isolated, one of either:
         'gram positive', 'gram negative', 'virus', 'mixed' or 'fungal'
-        :param pt_id: patient identifier
+        :param patient: Patient model object
+        :return: common organism type isolated for patient
         """
         def bug_type(b: Bug):
+            if not b.organism_type:
+                return 'Unknown'
             if b.organism_type == 'bacteria':
                 return b.gram_status
             return b.organism_type
-        if pt_id == 'NONE':
-            return 'NONE'
-        p = Patient.objects(patient_id=pt_id).get()
-        bugs = set(map(bug_type, p.infection_data))
+        bugs = list(set(map(bug_type, patient.infection_data)))
+        if len(bugs) == 0:
+            return 'Unknown'
         if len(bugs) == 1:
             return bugs[0]
         return 'mixed'
 
     @staticmethod
-    def __hmbpp_ribo(pt_id: str, field: str) -> bool or None:
+    def __hmbpp_ribo(patient: Patient, field: str) -> str:
         """
         Given a value of either 'hmbpp' or 'ribo' for 'field' argument, return True if any Bug has a positive status
         for the given patient ID.
+        :param patient: Patient model object
+        :param field: field name to search for; expecting either 'hmbpp_status' or 'ribo_status'
+        :return: common value of hmbpp_status/ribo_status
         """
-        if pt_id == 'NONE':
-            return None
-        p = Patient.objects(patient_id=pt_id).get()
-        return any([b[field] for b in p.infection_data])
+        if all([b[field] is None for b in patient.infection_data]):
+            return 'Unknown'
+        if all([b[field] == 'P+ve' for b in patient.infection_data]):
+            return 'P+ve'
+        if all([b[field] == 'N-ve' for b in patient.infection_data]):
+            return 'N-ve'
+        return 'mixed'
 
     def load_biology_data(self, test_name: str, summary_method: str = 'average'):
         """
@@ -261,6 +271,7 @@ class Explorer:
         :param kwargs: additional keyword arguments to pass to dimensionality reduction algorithm
         :return: matplotlib subplot axes object
         """
+        #ToDo Add caching
         fig, ax = plt.subplots(figsize=(12, 8))
         if n_components not in [2, 3]:
             raise ValueError('n_components must have a value of 2 or 3')
