@@ -18,8 +18,8 @@ class Bug(mongoengine.EmbeddedDocument):
     Document representation of isolated pathogen. Single document instance represents one pathogen.
     """
     gram_status = mongoengine.StringField(required=False)
-    hmbpp_status = mongoengine.BooleanField(required=False)
-    ribo_status = mongoengine.BooleanField(required=False)
+    hmbpp_status = mongoengine.StringField(required=False)
+    ribo_status = mongoengine.StringField(required=False)
     org_name = mongoengine.StringField(required=False)
     id_method = mongoengine.StringField(required=False)
     culture_source = mongoengine.StringField(required=False)
