@@ -1,10 +1,7 @@
 from immunova.flow.gating.utilities import density_dependent_downsample
+from immunova.flow.dim_reduction import dimensionality_reduction
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
-from umap import UMAP
-import numpy as np
 import random
 
 
@@ -33,22 +30,6 @@ def sample_data(data, n, frac=None, method='uniform'):
     if method == 'density':
         return density_dependent_downsample(data=data, features=data.columns, sample_n=n)
     raise PlottingError('Error: invalid sampling method, must be either `uniform` or `density`')
-
-
-def dimensionality_reduction(data, features, method, n_components):
-    data = data.copy()
-    if method == 'umap':
-        reducer = UMAP(n_components=n_components)
-    elif method == 'pca':
-        reducer = PCA(n_components=n_components)
-    elif method == 'tsne':
-        reducer = TSNE(n_components=n_components)
-    else:
-        raise PlottingError("Error: invalid method given for plot clusters, must be one of: 'umap', 'tsne', 'pca'")
-    embeddings = reducer.fit_transform(data[features])
-    for i, e in enumerate(embeddings.T):
-        data[f'{method}_{i}'] = e
-    return data
 
 
 def dim_reduction_plot(data, method, features, title, sample_n=100000, sample_method='uniform', n_components=2,
