@@ -27,12 +27,17 @@ class Explorer:
         self.data = pd.DataFrame()
         self.transform = transform
         self.root_population = root_population
+        self.cache = dict()
 
     def clear_data(self):
         """
-        Clear all existing data, gate labels, and cluster labels.
+        Clear existing data and cache.
         """
-        self.data = None
+        self.data = pd.DataFrame()
+        self.cache = dict()
+
+    def save_data(self, name: str):
+        pass
 
     def load_data(self, experiment: FCSExperiment, samples: list, sample_n: None or int = None):
         """
@@ -249,7 +254,7 @@ class Explorer:
 
     def scatter_plot(self, primary_label: str, features: list, secondary_label: str or None = None,
                      populations: list or None = None, n_components: int = 2,
-                     dim_reduction_method: str = 'UMAP', **kwargs) -> plt.Axes:
+                     dim_reduction_method: str = 'UMAP', use_cache: bool = True, **kwargs) -> plt.Axes:
         """
         Generate a 2D/3D scatter plot (dimensions depends on the number of components chosen for dimensionality
         reduction. Each data point is labelled according to the option provided to the label arguments. If a value
@@ -268,10 +273,15 @@ class Explorer:
         (default = 2)
         :param dim_reduction_method: method to use for dimensionality reduction, valid values are 'UMAP' or 'PHATE'
         (default = 'UMAP')
+        :param use_cache: dimensionality reduction can be computationally expensive. If use_cache = True, then the
+        results of this calculation are stored in an internal attribute named 'cache'. Only one cache can be stored
+        at a time and has the structure {'method': 'UMAP' or 'PHATE', 'features': list of features used in calculation,
+        'data': embeddings}. If use_cache is True and the features and method match that in 'cache', results are
+        loaded directly from the cache, otherwise dim reduction is performed again and cache is overwritten.
         :param kwargs: additional keyword arguments to pass to dimensionality reduction algorithm
         :return: matplotlib subplot axes object
         """
-        #ToDo Add caching
+        # ToDo Add caching
         fig, ax = plt.subplots(figsize=(12, 8))
         if n_components not in [2, 3]:
             raise ValueError('n_components must have a value of 2 or 3')
