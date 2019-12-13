@@ -1,11 +1,10 @@
-from immunova.flow.clustering.plotting.static import label_dataset_clusters, dimensionality_reduction, sample_data
+from flow.clustering.main import label_dataset_clusters, dimensionality_reduction, sample_data
 
 from bokeh.io import output_file
 from bokeh.plotting import figure, show
 from bokeh.models import ColumnDataSource, LinearColorMapper, BasicTicker, ColorBar
 from bokeh.transform import factor_cmap
-from bokeh.layouts import row, column, gridplot
-from bokeh.models.widgets import Tabs, Panel
+from bokeh.layouts import gridplot
 import colorcet as cc
 
 import pandas as pd
