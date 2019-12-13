@@ -1,5 +1,6 @@
 from immunova.data.panel import ChannelMap
 from immunova.data.gating import Gate
+from immunova.data.clustering import ClusteringExperiment
 from bson.binary import Binary
 import numpy as np
 import mongoengine
@@ -25,6 +26,7 @@ class Cluster(mongoengine.EmbeddedDocument):
     index = mongoengine.FileField(db_alias='core', collection_name='cluster_indexes')
     n_events = mongoengine.IntField(required=True)
     prop_of_root = mongoengine.StringField(required=True)
+    cluster_experiment = mongoengine.ReferenceField(ClusteringExperiment, reverse_delete_rule=mongoengine.PULL)
 
     def save_index(self, data: np.array) -> None:
         if self.index:
@@ -36,14 +38,6 @@ class Cluster(mongoengine.EmbeddedDocument):
 
     def load_index(self) -> np.array:
         return pickle.loads(bytes(self.index.read()))
-
-
-class ClusteringExperiment(mongoengine.EmbeddedDocument):
-    clustering_uid = mongoengine.StringField(required=True)
-    method = mongoengine.StringField(required=True)
-    parameters = mongoengine.ListField(required=True)
-    transform_method = mongoengine.StringField(required=True)
-    clusters = mongoengine.EmbeddedDocumentListField(Cluster)
 
 
 class Population(mongoengine.EmbeddedDocument):
@@ -74,7 +68,7 @@ class Population(mongoengine.EmbeddedDocument):
     prop_of_total = mongoengine.FloatField()
     warnings = mongoengine.ListField()
     geom = mongoengine.ListField()
-    clustering = mongoengine.EmbeddedDocumentListField(ClusteringExperiment)
+    clustering = mongoengine.EmbeddedDocumentListField(Cluster)
     clusters = mongoengine.ListField()
 
     def save_index(self, data: np.array) -> None:
@@ -96,17 +90,17 @@ class Population(mongoengine.EmbeddedDocument):
         return population
 
     def list_clustering_experiments(self):
-        return [c.clustering_uid for c in self.clustering]
+        return [c.cluster_experiment.clustering_uid for c in self.clustering]
 
-    def pull_clustering_experiment(self, clustering_uid: str):
+    def pull_clusters(self, clustering_uid: str):
         if clustering_uid not in self.list_clustering_experiments():
             raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
-        return [c for c in self.clustering if c.clustering_uid == clustering_uid][0]
+        return [c for c in self.clustering if c.cluster_experiment.clustering_uid == clustering_uid]
 
-    def delete_clustering(self, clustering_uid: str):
+    def delete_clusters(self, clustering_uid: str):
         if clustering_uid not in self.list_clustering_experiments():
             raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
-        self.clustering = [c for c in self.clustering if c.clustering_uid != clustering_uid]
+        self.clustering = [c for c in self.clustering if c.cluster_experiment.clustering_uid != clustering_uid]
 
 
 class Normalisation(mongoengine.EmbeddedDocument):
