@@ -6,53 +6,24 @@ from immunova.data.patient import Patient, Bug
 from immunova.flow.gating.actions import Gating
 from immunova.flow.utilities import progress_bar
 from immunova.flow.dim_reduction import dimensionality_reduction
+from immunova.flow.utilities import which_environment
+# Interactive plotting
+from bokeh.io import output_file, save, show, output_notebook
+from bokeh.plotting import figure
+from bokeh.models import ColumnDataSource, BoxSelectTool, CustomJS
+from bokeh.models.widgets import TextAreaInput
+from bokeh.layouts import row
 # SciPy
-from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-# BokehJS
-from bokeh.io import output_file, save, show, output_notebook
-from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, LinearColorMapper, BasicTicker, ColorBar
-from bokeh.transform import factor_cmap
-from bokeh.layouts import gridplot
-import colorcet as cc
 # AnyTree
 from anytree.node import Node
 # Other
 import phenograph
 import scprep
-from math import pi
 
-
-def calc_heatmap_data(data: pd.DataFrame, heatmap_var: str, features: list,
-                      format_long: bool = True):
-    """
-    Summarise the given features for presentation in a heatmap. Data is Z-score normalised within each patient
-    per column.
-    :param data: Pandas DataFrame of events data
-    :param heatmap_var: Variable for heatmap rows, can be either 'PhenoGraph labels' or 'gated populations'
-    :param features: Features for heatmap columns
-    :param format_long: returns data in long format with column for MFI and channels, leave as True for BokehJS
-    heatmaps. Change value to False for matplotlib and seaborn.
-    :return: Reformatted DataFrame
-    """
-    # Z-score normalise per patient
-    data[features] = data[features].apply(pd.to_numeric)
-    for pt_id, df in data.groupby(by='pt_id'):
-        zscore = StandardScaler()
-        data.loc[df.index, features] = zscore.fit_transform(df[features])
-
-    hm_data = data[features]
-    hm_data[heatmap_var] = data[heatmap_var]
-    if not format_long:
-        return hm_data.set_index('PhenoGraph labels')
-    hm_data = hm_data.groupby(by=[heatmap_var]).mean()
-    hm_data.columns.name = 'channel'
-    hm_data = pd.DataFrame(hm_data.stack(), columns=['MFI']).reset_index()
-    return hm_data
 
 
 class Explorer:
@@ -428,6 +399,13 @@ class Explorer:
         return ax
 
     def heatmap(self, heatmap_var: str, features: list, clustermap: bool = False):
+        """
+        Generate a heatmap of marker expression for either global clusters or gated populations
+        (indicated with 'heatmap_var' argument)
+        :param heatmap_var: variable to use, either 'global clusters' or 'gated populations'
+        :param features: list of column names to use for generating heatmap
+        :param clustermap: if True, rows (clusters/populations) are grouped by single linkage clustering
+        """
         if heatmap_var == 'global clusters':
             heatmap_var = 'PhenoGraph labels'
         elif heatmap_var == 'gated populations':
@@ -447,6 +425,12 @@ class Explorer:
         return ax
 
     def cluster_representation(self, variable: str, discrete: bool = True):
+        """
+        Present a breakdown of how a variable is represented within each cluster
+        :param variable: name of variable to plot
+        :param discrete: if True, the variable is assumed to be discrete
+        :return: matplotlib axes object
+        """
         if variable == 'patient representation':
             x = self.data[['PhenoGraph labels', 'pt_id']].groupby('PhenoGraph labels')['pt_id'].nunique() / len(
                 self.data.pt_id.unique()) * 100
@@ -474,101 +458,11 @@ class Explorer:
             ax = sns.swarmplot(x='PhenoGraph labels', y=variable, data=d, ax=ax, s=3)
             return ax
 
-
-
     @staticmethod
     def __discrete(labels):
         if all([type(x) == float for x in labels]):
             return False
         return True
-
-    def launch_bokeh_dashboard(self, output_path: str, features: list,
-                               extra_labels: list or None = None, n_components: int = 2,
-                               dim_reduction_method: str = 'UMAP', use_cache: bool = True,
-                               heatmap_var: str = 'global clusters', sample_n: int = 100000,
-                               **kwargs):
-        if heatmap_var == 'global clusters':
-            heatmap_var = 'PhenoGraph labels'
-        elif heatmap_var == 'gated populations':
-            heatmap_var = 'population_label'
-        else:
-            raise ValueError('Error: heatmap_var must have value of either "global clusters" or "PhenoGraph labels", '
-                             f'not {heatmap_var}')
-
-        # Dimensionality reduction
-        embeddings = self.__dim_reduction(dim_reduction_method=dim_reduction_method,
-                                          features=features, use_cache=use_cache,
-                                          n_components=n_components, **kwargs)
-        # Sample data
-        if self.data.shape[0] > sample_n:
-            data = self.data.sample(sample_n)
-            embeddings = embeddings[data.index, :]
-        else:
-            data = self.data.copy()
-
-        # Build ColumnDataSource for scatter plot and heatmap
-        hm_data = calc_heatmap_data(data, heatmap_var, features)
-        mfi_min = hm_data.MFI.min()
-        mfi_max = hm_data.MFI.max()
-        hm_data = ColumnDataSource(data=dict(x=hm_data['channel'],
-                                             y=hm_data[heatmap_var],
-                                             fill=hm_data['MFI']))
-
-        sc_data = dict(x=embeddings[:, 0],
-                       y=embeddings[:, 1],
-                       fill=data[heatmap_var],
-                       patient=data['pt_id'])
-        if extra_labels:
-            for l in extra_labels:
-                sc_data[l] = data[l]
-        sc_data = ColumnDataSource(data=sc_data)
-
-        # Heatmap
-        hm_colours = ["#75968f", "#a5bab7", "#c9d9d3", "#e2e2e2",
-                      "#dfccce", "#ddb7b1", "#cc7878", "#933b41",
-                      "#550b1d"]
-        tools = "hover,save,reset"
-        factors = [str(x) for x in sorted(data[heatmap_var].unique())]
-        mapper = LinearColorMapper(palette=hm_colours, low=mfi_min, high=mfi_max)
-        p = figure(title='Mean Fluorescence Intensity per Cluster',
-                   x_range=features, y_range=factors,
-                   x_axis_location="above", plot_width=600, plot_height=400,
-                   tools=tools, toolbar_location='below',
-                   tooltips=[('Cluster', '@x'), ('Channel', '@y'), ('Z-score standardised MFI', '@fill')])
-
-        p.grid.grid_line_color = None
-        p.axis.axis_line_color = None
-        p.axis.major_tick_line_color = None
-        p.axis.major_label_text_font_size = "10pt"
-        p.axis.major_label_standoff = 0
-        p.xaxis.major_label_orientation = pi / 3
-
-        p.rect(x="x", y="y", width=1, height=1,
-               source=hm_data,
-               fill_color={'field': 'fill', 'transform': mapper},
-               line_color=None)
-        color_bar = ColorBar(color_mapper=mapper, major_label_text_font_size="10pt",
-                             ticker=BasicTicker(desired_num_ticks=len(hm_colours)),
-                             label_standoff=6, border_line_color=None, location=(0, 0))
-        p.add_layout(color_bar, 'right')
-
-        # Scatter plot
-        umap_colours = [cc.rainbow[i * 5] for i in range(len(data[heatmap_var].unique()))]
-        hover_tools = [(x, f'@{x}') for x in extra_labels]
-        hover_tools.append(('Cluster', '@fill'))
-        q = figure(tools=tools, plot_width=500, plot_height=500, toolbar_location='below',
-                   tooltips=hover_tools)
-
-        q.circle(x='x', y='y', source=sc_data, fill_alpha=0.4, line_alpha=0.4, size=1,
-                 fill_color=factor_cmap('fill', palette=umap_colours,
-                                        factors=factors))
-
-        #grid = gridplot([[q, p]])
-        #output_file(output_path, mode="inline")
-        #save(grid)
-        #show(grid)
-        output_notebook()
-        show(q)
 
     def phenograph_clustering(self, features: list, **kwargs):
         """
@@ -578,3 +472,52 @@ class Explorer:
         """
         communities, graph, q = phenograph.cluster(self.data[features], **kwargs)
         self.data['PhenoGraph labels'] = communities
+
+    def select_cells(self, dim_reduction_method: str, features: list, colour: str = 'global clusters',
+                     use_cache: bool = True, n_components: int = 2, output_path: str or None = None, **kwargs):
+        env = which_environment()
+        if env == 'jupyter':
+            output_notebook()
+        else:
+            if output_path is None:
+                raise ValueError("If you're not running in a Jupyter Notebook environment, you must provide an output "
+                                 "path for the resulting HTML file")
+        # Dimensionality reduction
+        embeddings = self.__dim_reduction(dim_reduction_method=dim_reduction_method,
+                                          features=features, use_cache=use_cache,
+                                          n_components=n_components, **kwargs)
+        if colour == 'global clusters':
+            colour = 'PhenoGraph labels'
+        elif colour == 'gated populations':
+            colour = 'population_label'
+        else:
+            raise ValueError('Error: "colour" must have value of either "global clusters" or "PhenoGraph labels", '
+                             f'not {colour}')
+        sc_data = dict(x=list(embeddings[:, 0]),
+                       y=list(embeddings[:, 1]),
+                       fill=self.data[colour],
+                       patient=self.data['pt_id'],
+                       cluster=self.data['PhenoGraph labels'],
+                       population=self.data['population_label'],
+                       index=self.data.index)
+        sc_data = ColumnDataSource(data=sc_data)
+        # colour_map = [cc.rainbow[i * 5] for i in range(len(self.data[colour].unique()))]
+        tools = "hover,save,reset,box_zoom,box_select"
+        text_output = TextAreaInput(value="Select data points...", title="Selection index:",
+                                         rows=12)
+        q = figure(tools=tools, plot_width=500, plot_height=500, toolbar_location='below')
+        q.circle(x='x', y='y', source=sc_data, fill_alpha=0.4, line_alpha=0.4, size=2,
+                 fill_color='fill')
+        select_tool = q.select(dict(type=BoxSelectTool))
+        sc_data.callback = CustomJS(args=dict(q=q), code="""
+            var inds = cb_obj.get('selected')['1d'].indices;
+            var d1 = cb_obj.get('data');
+            console.log(d1)
+            var kernel = IPython.notebook.kernel;
+            IPython.notebook.kernel.execute("inds = " + inds);
+        """)
+        layout = row(q, text_output)
+        if env != 'jupyter':
+            output_file(output_path, layout)
+            save(layout)
+        show(layout)
