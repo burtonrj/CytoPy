@@ -2,6 +2,11 @@ from immunova.data.fcs import FileGroup
 import mongoengine
 
 
+class MetaDataDictionary(mongoengine.Document):
+    key = mongoengine.StringField()
+    desc = mongoengine.StringField()
+
+
 class Drug(mongoengine.EmbeddedDocument):
     """
     Embedded document -> Patient

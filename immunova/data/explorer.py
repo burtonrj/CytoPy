@@ -43,7 +43,6 @@ class ExplorerData(mongoengine.Document):
     root_population = mongoengine.StringField(required=True)
     cache = mongoengine.EmbeddedDocumentField(DimReduction)
     column_names = mongoengine.ListField()
-    data = mongoengine.FileField(db_alias='core', collection_name='concatenated_data')
     meta = {
         'db_alias': 'core',
         'collection': 'explorer'
@@ -62,20 +61,5 @@ class ExplorerData(mongoengine.Document):
                      'data': embeddings}
         return {'transform': self.transform,
                 'root_population': self.root_population,
-                'data': pd.DataFrame(pickle.loads(self.data.read()), columns=self.column_names),
                 'cache': cache}
 
-    def put(self, data: pd.DataFrame) -> None:
-        """
-        Save embeddings
-        :param data: numpy array of events data
-        :return: None
-        """
-        if self.data:
-            self.column_names = data.columns.tolist()
-            self.data.replace(Binary(pickle.dumps(data.values, protocol=2)))
-        else:
-            self.data.new_file()
-            self.column_names = data.columns.tolist()
-            self.data.write(Binary(pickle.dumps(data.values, protocol=2)))
-            self.data.close()
