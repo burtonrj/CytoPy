@@ -1,6 +1,5 @@
 from immunova.data.panel import ChannelMap
 from immunova.data.gating import Gate
-from immunova.data.clustering import ClusteringDefinition
 from bson.binary import Binary
 import numpy as np
 import mongoengine
@@ -12,6 +11,40 @@ def generate_sample(data, n) -> np.array:
         idx = np.random.randint(data.shape[0], size=n)
         return data[idx, :]
     return data
+
+
+class ClusteringDefinition(mongoengine.Document):
+    """
+    Defines the methodology and parameters of clustering to apply to an FCS File Group, or in the case of
+    meta-clustering, a collection of FCS File Groups from the same FCS Experiment
+
+    Parameters
+    clustering_uid: unique identifier
+    method: type of clustering performed, either PhenoGraph or FlowSOM
+    parameters: parameters passed to clustering algorithm
+    features: list of channels/markers that clustering is performed on
+    transform_method: type of transformation to be applied to data prior to clustering
+    root_population: population that clustering is performed on (default = 'root')
+    cluster_prefix: a prefix to add to the name of each resulting cluster
+    meta_clustering: refers to whether the clustering is 'meta-clustering'
+    """
+    clustering_uid = mongoengine.StringField(required=True, unique=True)
+    method = mongoengine.StringField(required=True, choices=['PhenoGraph', 'FlowSOM'])
+    parameters = mongoengine.ListField(required=True)
+    features = mongoengine.ListField(required=True)
+    transform_method = mongoengine.StringField(required=False, default='logicle')
+    root_population = mongoengine.StringField(required=True, default='root')
+    cluster_prefix = mongoengine.StringField(required=True, default='cluster')
+    meta_clustering = mongoengine.BooleanField(required=True, default=False)
+
+    def delete(self, signal_kwargs=None, **write_concern):
+        FileGroup.objects().update(pull__populations__clustering__cluster_experiment=self.id)
+        super().delete(signal_kwargs=signal_kwargs, **write_concern)
+
+    meta = {
+        'db_alias': 'core',
+        'collection': 'clustering_definitions'
+    }
 
 
 class Cluster(mongoengine.EmbeddedDocument):
@@ -26,7 +59,7 @@ class Cluster(mongoengine.EmbeddedDocument):
     index = mongoengine.FileField(db_alias='core', collection_name='cluster_indexes')
     n_events = mongoengine.IntField(required=True)
     prop_of_root = mongoengine.StringField(required=True)
-    cluster_experiment = mongoengine.ReferenceField(ClusteringDefinition, reverse_delete_rule=mongoengine.PULL)
+    cluster_experiment = mongoengine.ReferenceField(ClusteringDefinition)
 
     def save_index(self, data: np.array) -> None:
         if self.index:
