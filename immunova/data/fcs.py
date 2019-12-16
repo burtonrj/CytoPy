@@ -1,6 +1,6 @@
 from immunova.data.panel import ChannelMap
 from immunova.data.gating import Gate
-from immunova.data.clustering import ClusteringExperiment
+from immunova.data.clustering import ClusteringDefinition
 from bson.binary import Binary
 import numpy as np
 import mongoengine
@@ -26,7 +26,7 @@ class Cluster(mongoengine.EmbeddedDocument):
     index = mongoengine.FileField(db_alias='core', collection_name='cluster_indexes')
     n_events = mongoengine.IntField(required=True)
     prop_of_root = mongoengine.StringField(required=True)
-    cluster_experiment = mongoengine.ReferenceField(ClusteringExperiment, reverse_delete_rule=mongoengine.PULL)
+    cluster_experiment = mongoengine.ReferenceField(ClusteringDefinition, reverse_delete_rule=mongoengine.PULL)
 
     def save_index(self, data: np.array) -> None:
         if self.index:
