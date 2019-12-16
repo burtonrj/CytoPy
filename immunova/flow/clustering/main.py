@@ -2,7 +2,6 @@ from mongoengine.base.datastructures import EmbeddedDocumentList
 from immunova.data.fcs_experiments import FCSExperiment
 from immunova.data.patient import Patient, Bug, MetaDataDictionary
 from immunova.data.fcs import Cluster, Population
-from immunova.data.clustering import ClusteringDefinition
 from immunova.flow.dim_reduction import dimensionality_reduction
 from immunova.flow.gating.actions import Gating
 from immunova.flow.utilities import progress_bar
@@ -13,6 +12,22 @@ import pandas as pd
 import numpy as np
 import phenograph
 import scprep
+
+
+class ClusteringDefinition:
+    def __init__(self, clustering_uid: str,
+                 method: str, parameters: dict,
+                 features: list, transform_method: str = 'logicle',
+                 root_population: str = 'root', cluster_prefix: str or None = None):
+        clustering_uid = clustering_uid
+        if method not in ['PhenoGraph', 'FlowSOM']:
+            raise ValueError('Method must be one of "PhenoGraph" or "FlowSOM"')
+        method = method
+        parameters = parameters
+        features = features
+        transform_method = transform_method
+        root_population = root_population
+        cluster_prefix = cluster_prefix
 
 
 def meta_dict_lookup(key: str):
@@ -347,9 +362,20 @@ class Explorer:
 
 
 class Clustering:
-    def __init__(self, clustering_definition: ClusteringDefinition):
-        self.ce = clustering_definition
+    def __init__(self, clustering_uid: str,
+                 method: str, parameters: dict,
+                 features: list, transform_method: str = 'logicle',
+                 root_population: str = 'root', cluster_prefix: str or None = None):
         self.data = pd.DataFrame()
+        self.clustering_uid = clustering_uid
+        if method not in ['PhenoGraph', 'FlowSOM']:
+            raise ValueError('Method must be one of "PhenoGraph" or "FlowSOM"')
+        self.method = method
+        self.parameters = parameters
+        self.features = features
+        self.transform_method = transform_method
+        self.root_population = root_population
+        self.cluster_prefix = cluster_prefix
 
     def _has_data(self):
         """
@@ -387,7 +413,6 @@ class SingleClustering(Clustering):
 
     Parameters:
         self.data - a Pandas DataFrame of FCS single cell data that clustering will be performed upon
-        self.ce - associated clustering definition
         self.clusters - dictionary object of identified clusters
     """
     def __init__(self, **kwargs):
@@ -396,8 +421,6 @@ class SingleClustering(Clustering):
         :param clustering_definition: ClusteringDefinition object (see data.clustering.ClusteringDefinition)
         """
         super().__init__(**kwargs)
-        if self.ce.meta_clustering:
-            raise ValueError('Error: definition is for meta-clustering, not single clustering')
         self.clusters = dict()
         self.data = None
         self.experiment = None
@@ -417,20 +440,20 @@ class SingleClustering(Clustering):
         :param sample_id: sample identifier
         """
         fg = experiment.pull_sample(sample_id)
-        root_p = [p for p in fg.populations if p.population_name == self.ce.root_population]
+        root_p = [p for p in fg.populations if p.population_name == self.root_population]
         if not root_p:
-            raise ValueError(f'Error: {self.ce.root_population} does not exist for sample {sample_id}')
-        if self.ce.clustering_uid in root_p[0].list_clustering_experiments():
+            raise ValueError(f'Error: {self.root_population} does not exist for sample {sample_id}')
+        if self.clustering_uid in root_p[0].list_clustering_experiments():
             self._load_clusters(root_p[0])
         sample = Gating(experiment, sample_id, include_controls=False)
         transform = True
-        if not self.ce.transform_method:
+        if not self.transform_method:
             transform = False
-        self.data = sample.get_population_df(self.ce.root_population,
+        self.data = sample.get_population_df(self.root_population,
                                              transform=transform,
-                                             transform_method=self.ce.transform_method)
-        if not self.ce.features:
-            self.data = self.data[self.ce.features]
+                                             transform_method=self.transform_method)
+        if not self.features:
+            self.data = self.data[self.features]
         pt = Patient.objects(files__contains=sample.mongo_id)
         self.data['pt_id'] = None
         if pt:
@@ -442,7 +465,7 @@ class SingleClustering(Clustering):
         associated to the root population of chosen sample.
         :param root_p: root population Population object
         """
-        clusters = root_p.pull_clusters(self.ce.clustering_uid)
+        clusters = root_p.pull_clusters(self.clustering_uid)
         for c in clusters:
             self.clusters[c.cluster_id] = dict(n_events=c.n_events,
                                                prop_of_root=c.prop_of_root,
@@ -466,13 +489,13 @@ class SingleClustering(Clustering):
         # Is the given UID unique?
         self._has_data()
         fg = self.experiment.pull_sample(self.sample_id)
-        root_p = [p for p in fg.populations if p.population_name == self.ce.root_population][0]
-        if self.ce.clustering_uid in root_p.list_clustering_experiments():
+        root_p = [p for p in fg.populations if p.population_name == self.root_population][0]
+        if self.clustering_uid in root_p.list_clustering_experiments():
             if overwrite:
-                root_p.delete_clusters(self.ce.clustering_uid)
+                root_p.delete_clusters(self.clustering_uid)
             else:
-                raise ValueError(f'Error: a clustering experiment with UID {self.ce.clustering_uid} '
-                                      f'has already been associated to the root population {self.ce.root_population}')
+                raise ValueError(f'Error: a clustering experiment with UID {self.clustering_uid} '
+                                      f'has already been associated to the root population {self.root_population}')
         for name, cluster_data in self.clusters.items():
             c = Cluster(cluster_id=name,
                         n_events=cluster_data['n_events'],
@@ -494,9 +517,9 @@ class SingleClustering(Clustering):
         Perform clustering as described by the clustering definition.
         """
         outcome = super().cluster()
-        if self.ce.method == 'PhenoGraph':
+        if self.method == 'PhenoGraph':
             self._phenograph(outcome)
-        elif self.ce.method == 'FlowSOM':
+        elif self.method == 'FlowSOM':
             self._flowsom(outcome)
 
     def _flowsom(self, outcome):
@@ -524,14 +547,12 @@ class SingleClustering(Clustering):
         return Explorer(data=data)
 
 
-class GlobalCluster(Clustering):
+class GlobalClustering(Clustering):
     """
     Sample data from all (or some) samples in an FCS Experiment and perform clustering on the concatenated dataset.
     """
     def __init__(self,  **kwargs):
         super().__init__(**kwargs)
-        if self.ce.meta_clustering:
-            raise ValueError('Error: definition is for meta-clustering, not single clustering')
 
     def load_data(self, experiment: FCSExperiment, samples: list or str = 'all', sample_n: int or None = 1000):
         """
@@ -545,15 +566,15 @@ class GlobalCluster(Clustering):
         for sid in progress_bar(samples):
             # Pull root population from file and transform
             g = Gating(experiment, sid, include_controls=False)
-            if self.ce.transform_method is not None:
-                fdata = g.get_population_df(population_name=self.ce.root_population,
+            if self.transform_method is not None:
+                fdata = g.get_population_df(population_name=self.root_population,
                                             transform=True,
-                                            transform_method=self.ce.transform_method)
+                                            transform_method=self.transform_method)
             else:
-                fdata = g.get_population_df(population_name=self.ce.root_population)
+                fdata = g.get_population_df(population_name=self.root_population)
 
             if fdata is None:
-                raise ValueError(f'Population {self.ce.root_population} does not exist for {sid}')
+                raise ValueError(f'Population {self.root_population} does not exist for {sid}')
 
             # Downsample
             if sample_n is not None:
@@ -561,7 +582,7 @@ class GlobalCluster(Clustering):
                     fdata = fdata.sample(n=sample_n)
 
             # Label each single cell (row) with
-            fdata = self.__population_labels(fdata, g.populations[self.ce.root_population])
+            fdata = self.__population_labels(fdata, g.populations[self.root_population])
             fdata = fdata.reset_index()
             fdata = fdata.rename({'index': 'original_index'}, axis=1)
             pt = Patient.objects(files__contains=g.mongo_id)
@@ -592,13 +613,13 @@ class GlobalCluster(Clustering):
             return d
 
         data = data.copy()
-        data['population_label'] = self.ce.root_population
+        data['population_label'] = self.root_population
         data = recursive_label(data, root_node)
         return data
 
     def cluster(self):
         outcome = super().cluster()
-        if self.ce.method == 'PhenoGraph':
+        if self.method == 'PhenoGraph':
             self.data['cluster_id'] = outcome[0]
 
     def explorer(self) -> Explorer:
@@ -608,8 +629,6 @@ class GlobalCluster(Clustering):
 class MetaClustering(Clustering):
     def __init__(self, experiment: FCSExperiment, samples: str or list = 'all', **kwargs):
         super().__init__(**kwargs)
-        if not self.ce.meta_clustering:
-            raise ValueError('Error: definition is not for meta-clustering')
         self.experiment = experiment
         if samples == 'all':
             samples = experiment.list_samples()
@@ -619,14 +638,14 @@ class MetaClustering(Clustering):
         print('--------- Meta Clustering: Loading data ---------')
         print('Each sample will be fetched from the database and a summary matrix created. Each row of this summary '
               'matrix will be a vector describing the centroid (the median of each channel/marker) of each cluster. ')
-        columns = self.ce.features + ['sample_id', 'cluster_id']
+        columns = self.features + ['sample_id', 'cluster_id']
         clusters = pd.DataFrame(columns=columns)
         for s in progress_bar(samples):
             clustering = SingleClustering(clustering_definition=self.ce)
             clustering.load_data(experiment=self.experiment, sample_id=s)
             pt_id = clustering.data['pt_id'].values[0]
             if len(clustering.clusters.keys()) == 0:
-                print(f'No clusters found for clustering UID {self.ce.clustering_uid} and sample {s}')
+                print(f'No clusters found for clustering UID {self.clustering_uid} and sample {s}')
             for c_name in clustering.clusters.keys():
                 c_data = clusters.get_cluster_dataframe(c_name)
                 n = c_data.shape[0]
@@ -638,7 +657,7 @@ class MetaClustering(Clustering):
 
     def cluster(self, **kwargs):
         outcome = super().cluster()
-        if self.ce.method == 'PhenoGraph':
+        if self.method == 'PhenoGraph':
             self.data['meta_cluster_id'] = outcome[0]
 
     def explorer(self) -> Explorer:
