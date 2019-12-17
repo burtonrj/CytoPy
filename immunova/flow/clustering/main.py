@@ -630,9 +630,6 @@ class MetaClustering(Clustering):
             clustering = SingleClustering(method=single_clustering_method,
                                           parameters=single_clustering_params,
                                           features=single_clustering_features)
-            method: str, parameters: dict,
-            features: list, transform_method: str = 'logicle',
-            root_population: str = 'root', cluster_prefix: str or None = None
             clustering.load_data(experiment=self.experiment, sample_id=s)
             pt_id = clustering.data['pt_id'].values[0]
             if len(clustering.clusters.keys()) == 0:
