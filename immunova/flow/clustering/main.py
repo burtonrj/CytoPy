@@ -6,12 +6,15 @@ from immunova.flow.dim_reduction import dimensionality_reduction
 from immunova.flow.gating.actions import Gating
 from immunova.flow.utilities import progress_bar
 from anytree import Node
+from matplotlib.colors import LogNorm
+from sklearn import preprocessing
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
 import phenograph
 import scprep
+np.random.seed(42)
 
 
 def meta_dict_lookup(key: str):
@@ -32,6 +35,9 @@ class Explorer:
         if 'pt_id' not in self.data.columns:
             raise ValueError('Error: please ensure that dataframe is populated with the patient ID prior to '
                              'object construction')
+
+    def drop_data(self, mask):
+        self.data = self.data[mask]
 
     def info(self):
         print('---- Reference column info ----')
@@ -205,11 +211,9 @@ class Explorer:
         if all([x in self.data.columns for x in embedding_cols]) and not overwrite:
             print(f'Embeddings for {method} already exist, change arg "overwrite" to True to overwrite existing')
             return
-        embeddings = dimensionality_reduction(self.data, features, method,
-                                              n_components, return_embeddings_only=True,
-                                              **kwargs)
-        for d, e in zip(embeddings, embedding_cols):
-            self.data[e] = d
+        self.data = dimensionality_reduction(self.data, features, method,
+                                             n_components, return_embeddings_only=False,
+                                             **kwargs)
 
     def _plotting_labels(self, label: str, populations: list or None):
         if label == 'population_label':
@@ -219,9 +223,16 @@ class Explorer:
         else:
             return self.data[label].values
 
-    def scatter_plot(self, primary_label: str, features: list, discrete: bool, secondary_label: str or None = None,
+    def meta_cluster_plot(self):
+        if 'meta_cluster_id' not in self.data.columns:
+            raise ValueError('Error: only valid for dataframe from meta clustering')
+
+
+
+    def scatter_plot(self, primary_label: str, features: list, discrete: bool,
+                     secondary_label: str or None = None,
                      populations: list or None = None, n_components: int = 2,
-                     dim_reduction_method: str = 'UMAP', **kwargs) -> plt.Axes:
+                     dim_reduction_method: str = 'UMAP', mask: pd.DataFrame or None = None, **kwargs) -> plt.Axes:
         """
         Generate a 2D/3D scatter plot (dimensions depends on the number of components chosen for dimensionality
         reduction. Each data point is labelled according to the option provided to the label arguments. If a value
@@ -248,7 +259,7 @@ class Explorer:
             raise ValueError('n_components must have a value of 2 or 3')
 
         # Dimensionality reduction
-        self.dimenionality_reduction(dim_reduction_method=dim_reduction_method,
+        self.dimenionality_reduction(method=dim_reduction_method,
                                      features=features, n_components=n_components, **kwargs)
         embedding_cols = [f'{dim_reduction_method}_{i}' for i in range(n_components)]
         # Label and plotting
@@ -259,33 +270,39 @@ class Explorer:
                                      f'{self.data.columns.tolist()}')
 
         plabel = self._plotting_labels(primary_label, populations)
-
+        data = self.data
+        if mask is not None:
+            data = data[mask]
+            plabel = plabel[data.index]
         if secondary_label is not None:
             slabel = self._plotting_labels(secondary_label, populations)
+            if mask is not None:
+                slabel = slabel[data.index]
             if n_components == 2:
-                ax = scprep.plot.scatter2d(self.data[embedding_cols], c=slabel, ticks=False,
+                ax = scprep.plot.scatter2d(data[embedding_cols], c=slabel, ticks=False,
                                            label_prefix=dim_reduction_method, ax=ax, s=100,
                                            discrete=discrete, legend_loc="lower left",
                                            legend_anchor=(1.04, 1), legend_title=secondary_label)
 
             else:
-                ax = scprep.plot.scatter3d(self.data[embedding_cols], c=slabel, ticks=False,
+                ax = scprep.plot.scatter3d(data[embedding_cols], c=slabel, ticks=False,
                                            label_prefix=dim_reduction_method, ax=ax, s=100,
                                            discrete=discrete, legend_loc="lower left",
                                            legend_anchor=(1.04, 1), legend_title=secondary_label)
         if n_components == 2:
-            ax = scprep.plot.scatter2d(self.data[embedding_cols], c=plabel, ticks=False,
+            ax = scprep.plot.scatter2d(data[embedding_cols], c=plabel, ticks=False,
                                        label_prefix=dim_reduction_method, ax=ax, s=1,
                                        discrete=discrete, legend_loc="lower left",
                                        legend_anchor=(1.04, 0), legend_title=primary_label)
         else:
-            ax = scprep.plot.scatter3d(self.data[embedding_cols], c=plabel, ticks=False,
+            ax = scprep.plot.scatter3d(data[embedding_cols], c=plabel, ticks=False,
                                        label_prefix=dim_reduction_method, ax=ax, s=1,
                                        discrete=discrete, legend_loc="lower left",
                                        legend_anchor=(1.04, 0), legend_title=primary_label)
         return ax
 
-    def heatmap(self, heatmap_var: str, features: list, clustermap: bool = False, populations: list or None = None):
+    def heatmap(self, heatmap_var: str, features: list,
+                clustermap: bool = False, mask: pd.DataFrame or None = None):
         """
         Generate a heatmap of marker expression for either global clusters or gated populations
         (indicated with 'heatmap_var' argument)
@@ -293,9 +310,12 @@ class Explorer:
         :param features: list of column names to use for generating heatmap
         :param clustermap: if True, rows (clusters/populations) are grouped by single linkage clustering
         """
-        heatmap_var = self._plotting_labels(heatmap_var, populations)
-        d = self.data[features + [heatmap_var]]
+        d = self.data
+        if mask is not None:
+            d = d[mask]
+        d = d[features + [heatmap_var]]
         d[features] = d[features].apply(pd.to_numeric)
+        d[features] = preprocessing.MinMaxScaler().fit_transform(d[features])
         d = d.groupby(by=heatmap_var).mean()
         if clustermap:
             ax = sns.clustermap(d, col_cluster=False, cmap='viridis', figsize=(16, 10))
@@ -305,7 +325,8 @@ class Explorer:
         ax.set_title('MFI (averaged over all patients) for PhenoGraph clusters')
         return ax
 
-    def plot_representation(self, x_variable: str, y_variable, discrete: bool = True):
+    def plot_representation(self, x_variable: str, y_variable, discrete: bool = True,
+                            mask: pd.DataFrame or None = None):
         """
         Present a breakdown of how a variable is represented in relation to a cluster/population/meta cluster
         :param x_variable: either cluster, population or meta cluster
@@ -313,20 +334,22 @@ class Explorer:
         :param discrete: if True, the variable is assumed to be discrete
         :return: matplotlib axes object
         """
+        d = self.data
+        if mask is not None:
+            d = self.data[mask]
         x_var_options = {'cluster': 'cluster_id', 'population': 'population_label', 'meta cluster': 'meta_cluster_id'}
         if x_variable not in x_var_options.keys():
             raise ValueError(f'x_variable must be one of {x_var_options.keys()}')
         x_variable = x_var_options[x_variable]
         if y_variable == 'patient':
-            x = self.data[[x_variable, 'pt_id']].groupby(x_variable)['pt_id'].nunique() / len(
-                self.data.pt_id.unique()) * 100
+            x = d[[x_variable, 'pt_id']].groupby(x_variable)['pt_id'].nunique() / len(d.pt_id.unique()) * 100
             fig, ax = plt.subplots(figsize=(12, 7))
             x.sort_values().plot(kind='bar', ax=ax)
             ax.set_ylabel('Patient representation (%)')
             ax.set_xlabel(x_variable)
             return ax
-        if y_variable in self.data.columns and discrete:
-            x = (self.data[[x_variable, y_variable]].groupby(x_variable)[y_variable]
+        if y_variable in d.columns and discrete:
+            x = (d[[x_variable, y_variable]].groupby(x_variable)[y_variable]
                  .value_counts(normalize=True)
                  .rename('percentage')
                  .mul(100)
@@ -338,11 +361,63 @@ class Explorer:
             ax.set_ylabel(f'% cells ({y_variable})')
             ax.set_xlabel(x_variable)
             return ax
-        if y_variable in self.data.columns and not discrete:
+        if y_variable in d.columns and not discrete:
             fig, ax = plt.subplots(figsize=(15, 5))
-            d = self.data.sample(10000)
+            d = d.sample(10000)
             ax = sns.swarmplot(x=x_variable, y=y_variable, data=d, ax=ax, s=3)
             return ax
+
+    def __plotting_column(self, primary_id, contrasting, meta):
+        pcol, scol = 'cluster_id', 'cluster_id'
+        if meta:
+            pcol, scol = 'meta_cluster_id', 'meta_cluster_id'
+        if primary_id in self.data.population_label.values:
+            pcol = 'population_label'
+        if contrasting in self.data.population_label.values:
+            scol = 'population_label'
+        if pcol not in self.data.columns:
+            raise KeyError(f'Error: {pcol} not in dataframe')
+        if contrasting:
+            if scol not in self.data.columns:
+                raise KeyError(f'Error: {scol} not in dataframe')
+        return pcol, scol
+
+    @staticmethod
+    def __no_such_pop_cluster(d, _id):
+        if d.shape[0] == 0:
+            raise ValueError(f'Error: unable to subset data on {_id}')
+
+    def plot_2d(self, primary_id: str, x: str, y: str, meta: bool = False,
+                        xlim: tuple or None = None, ylim: tuple or None = None,
+                        contrasting_id: str or None = None):
+        fig, ax = plt.subplots(figsize=(5, 5))
+        pcol, scol = self.__plotting_column(primary_id, contrasting_id, meta)
+        if not all([c in self.data.columns for c in [x, y]]):
+            raise KeyError('Error: invalid axis; must be an existing column in dataframe')
+
+        d = self.data[self.data[pcol] == primary_id]
+        self.__no_such_pop_cluster(d, primary_id)
+        d2 = None
+        if contrasting_id:
+            d2 = self.data[self.data[scol] == contrasting_id]
+            self.__no_such_pop_cluster(d2, contrasting_id)
+
+        if d.shape[0] < 1000:
+            ax.scatter(d[x], d[y], marker='o', s=1, c='b', alpha=0.8, label=primary_id)
+        else:
+            ax.hist2d(d[x], d[y], bins=500, norm=LogNorm(), label=primary_id)
+        if d2 is not None:
+            ax.scatter(d2[x], d2[y], marker='o', s=1, c='r', alpha=0.8, label=contrasting_id)
+
+        if xlim:
+            ax.set_xlim(xlim)
+        if ylim:
+            ax.set_ylim(ylim)
+        ax.set_xlabel(x)
+        ax.set_ylabel(y)
+        ax.legend(fontsize=11, bbox_to_anchor=(1.005, 1), loc=2, borderaxespad=0.,
+                  markerscale=6)
+        return ax
 
 
 class Clustering:
@@ -358,13 +433,22 @@ class Clustering:
             raise ValueError('Error: no sample is currently associated to this object, before proceeding first '
                              'associate a sample and its data using the `load_data` method')
 
+    def _check_null(self):
+        f = self.ce.features
+        null_cols = self.data[f].isnull().sum()[self.data[f].isnull().sum() > 0].index.values
+        if null_cols.size != 0:
+            print('Error: the following columns contain null values and will be excluded from clustering '
+                  f'analysis: {null_cols}')
+        return [x for x in self.ce.features if x not in null_cols]
+
     def cluster(self):
         self._has_data()
         if self.ce.method == 'PhenoGraph':
             params = {k: v for k, v in self.ce.parameters}
-            communities, graph, q = phenograph.cluster(self.data[self.ce.features], **params)
+            features = self._check_null()
+            communities, graph, q = phenograph.cluster(self.data[features], **params)
             if self.ce.cluster_prefix is not None:
-                communities = np.array(map(lambda x: f'{self.ce.cluster_prefix}_{x}', communities))
+                communities = np.array(list(map(lambda x: f'{self.ce.cluster_prefix}_{x}', communities)))
             return communities, graph, q
         elif self.ce.method == 'FlowSOM':
             print('FlowSOM is not implemented yet!')
@@ -413,6 +497,8 @@ class SingleClustering(Clustering):
         :param experiment: FCS experiment object
         :param sample_id: sample identifier
         """
+        self.experiment = experiment
+        self.sample_id = sample_id
         fg = experiment.pull_sample(sample_id)
         root_p = [p for p in fg.populations if p.population_name == self.ce.root_population]
         if not root_p:
@@ -484,7 +570,7 @@ class SingleClustering(Clustering):
         """
         Return a Pandas DataFrame of single cell data for a single cluster.
         """
-        return self.data[self.data.index.isin(self.clusters[cluster_id]['index'])]
+        return self.data.iloc[self.clusters[cluster_id]['index']]
 
     def cluster(self):
         """
@@ -521,7 +607,7 @@ class SingleClustering(Clustering):
         return Explorer(data=data)
 
 
-class GlobalCluster(Clustering):
+class GlobalClustering(Clustering):
     """
     Sample data from all (or some) samples in an FCS Experiment and perform clustering on the concatenated dataset.
     """
@@ -621,12 +707,13 @@ class MetaClustering(Clustering):
             if len(clustering.clusters.keys()) == 0:
                 print(f'No clusters found for clustering UID {self.ce.clustering_uid} and sample {s}')
             for c_name in clustering.clusters.keys():
-                c_data = clusters.get_cluster_dataframe(c_name)
+                c_data = clustering.get_cluster_dataframe(c_name)
                 n = c_data.shape[0]
+                relative_n = n/clustering.data.shape[0]
                 c_data = c_data.median()
                 c_data['cluster_id'], c_data['cluster_size'], c_data['pt_id'], c_data['sample_id'] = c_name, n, pt_id, s
                 clusters = clusters.append(c_data, ignore_index=True)
-        print('------------------------------------------------')
+        print('------------ Completed! ------------')
         return clusters
 
     def cluster(self, **kwargs):

@@ -36,9 +36,10 @@ class ClusteringDefinition(mongoengine.Document):
     root_population = mongoengine.StringField(required=True, default='root')
     cluster_prefix = mongoengine.StringField(required=True, default='cluster')
 
-    def delete(self, signal_kwargs=None, **write_concern):
-        FileGroup.objects().update(pull__populations__clustering__cluster_experiment=self.clustering_uid)
-        super().delete(signal_kwargs=signal_kwargs, **write_concern)
+    meta = {
+        'db_alias': 'core',
+        'collection': 'cluster_definitions'
+    }
 
 
 class Cluster(mongoengine.EmbeddedDocument):
@@ -52,7 +53,7 @@ class Cluster(mongoengine.EmbeddedDocument):
     cluster_id = mongoengine.StringField(required=True)
     index = mongoengine.FileField(db_alias='core', collection_name='cluster_indexes')
     n_events = mongoengine.IntField(required=True)
-    prop_of_root = mongoengine.StringField(required=True)
+    prop_of_root = mongoengine.FloatField(required=True)
     cluster_experiment = mongoengine.ReferenceField(ClusteringDefinition)
 
     def save_index(self, data: np.array) -> None:
