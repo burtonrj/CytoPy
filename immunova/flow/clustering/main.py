@@ -14,22 +14,6 @@ import phenograph
 import scprep
 
 
-class ClusteringDefinition:
-    def __init__(self, clustering_uid: str,
-                 method: str, parameters: dict,
-                 features: list, transform_method: str = 'logicle',
-                 root_population: str = 'root', cluster_prefix: str or None = None):
-        clustering_uid = clustering_uid
-        if method not in ['PhenoGraph', 'FlowSOM']:
-            raise ValueError('Method must be one of "PhenoGraph" or "FlowSOM"')
-        method = method
-        parameters = parameters
-        features = features
-        transform_method = transform_method
-        root_population = root_population
-        cluster_prefix = cluster_prefix
-
-
 def meta_dict_lookup(key: str):
     lookup = MetaDataDictionary.objects(key=key)
     if not lookup:
@@ -362,12 +346,10 @@ class Explorer:
 
 
 class Clustering:
-    def __init__(self, clustering_uid: str,
-                 method: str, parameters: dict,
+    def __init__(self, method: str, parameters: dict,
                  features: list, transform_method: str = 'logicle',
                  root_population: str = 'root', cluster_prefix: str or None = None):
         self.data = pd.DataFrame()
-        self.clustering_uid = clustering_uid
         if method not in ['PhenoGraph', 'FlowSOM']:
             raise ValueError('Method must be one of "PhenoGraph" or "FlowSOM"')
         self.method = method
@@ -387,13 +369,13 @@ class Clustering:
 
     def cluster(self):
         self._has_data()
-        if self.ce.method == 'PhenoGraph':
-            params = {k: v for k, v in self.ce.parameters}
-            communities, graph, q = phenograph.cluster(self.data[self.ce.features], **params)
-            if self.ce.cluster_prefix is not None:
-                communities = np.array(map(lambda x: f'{self.ce.cluster_prefix}_{x}', communities))
+        if self.method == 'PhenoGraph':
+            params = {k: v for k, v in self.parameters}
+            communities, graph, q = phenograph.cluster(self.data[self.features], **params)
+            if self.cluster_prefix is not None:
+                communities = np.array(map(lambda x: f'{self.cluster_prefix}_{x}', communities))
             return communities, graph, q
-        elif self.ce.method == 'FlowSOM':
+        elif self.method == 'FlowSOM':
             print('FlowSOM is not implemented yet!')
         else:
             raise ValueError('Valid clustering methods are: PhenoGraph and FlowSOM')
@@ -443,8 +425,10 @@ class SingleClustering(Clustering):
         root_p = [p for p in fg.populations if p.population_name == self.root_population]
         if not root_p:
             raise ValueError(f'Error: {self.root_population} does not exist for sample {sample_id}')
-        if self.clustering_uid in root_p[0].list_clustering_experiments():
+
+        if root_p[0].matched_clustering_method(self.method, self.parameters, self.features):
             self._load_clusters(root_p[0])
+
         sample = Gating(experiment, sample_id, include_controls=False)
         transform = True
         if not self.transform_method:
@@ -465,7 +449,7 @@ class SingleClustering(Clustering):
         associated to the root population of chosen sample.
         :param root_p: root population Population object
         """
-        clusters = root_p.pull_clusters(self.clustering_uid)
+        clusters = root_p.pull_clusters(self.method, self.parameters, self.features)
         for c in clusters:
             self.clusters[c.cluster_id] = dict(n_events=c.n_events,
                                                prop_of_root=c.prop_of_root,
@@ -490,17 +474,18 @@ class SingleClustering(Clustering):
         self._has_data()
         fg = self.experiment.pull_sample(self.sample_id)
         root_p = [p for p in fg.populations if p.population_name == self.root_population][0]
-        if self.clustering_uid in root_p.list_clustering_experiments():
+        if root_p.match_clustering_method(self.method, self.parameters, self.features):
             if overwrite:
-                root_p.delete_clusters(self.clustering_uid)
+                root_p.delete_clusters(self.method, self.parameters, self.features)
             else:
-                raise ValueError(f'Error: a clustering experiment with UID {self.clustering_uid} '
-                                      f'has already been associated to the root population {self.root_population}')
+                raise ValueError(f'Error: clusters with the same method and parameters already exist for '
+                                 f'the root population {self.root_population}')
         for name, cluster_data in self.clusters.items():
             c = Cluster(cluster_id=name,
                         n_events=cluster_data['n_events'],
                         prop_of_root=cluster_data['prop_of_root'],
-                        cluster_experiment=self.ce)
+                        method=self.method,
+                        parameters=[(k, v) for k, v in self.parameters.items()])
             c.save_index(cluster_data['index'])
             root_p.clustering.append(c)
         # Save the clusters
@@ -634,14 +619,20 @@ class MetaClustering(Clustering):
             samples = experiment.list_samples()
         self.data = self.load_clusters(samples)
 
-    def load_clusters(self, samples: list):
+    def load_clusters(self, samples: list, single_clustering_method: str, single_clustering_params: dict,
+                      single_clustering_features: list):
         print('--------- Meta Clustering: Loading data ---------')
         print('Each sample will be fetched from the database and a summary matrix created. Each row of this summary '
               'matrix will be a vector describing the centroid (the median of each channel/marker) of each cluster. ')
         columns = self.features + ['sample_id', 'cluster_id']
         clusters = pd.DataFrame(columns=columns)
         for s in progress_bar(samples):
-            clustering = SingleClustering(clustering_definition=self.ce)
+            clustering = SingleClustering(method=single_clustering_method,
+                                          parameters=single_clustering_params,
+                                          features=single_clustering_features)
+            method: str, parameters: dict,
+            features: list, transform_method: str = 'logicle',
+            root_population: str = 'root', cluster_prefix: str or None = None
             clustering.load_data(experiment=self.experiment, sample_id=s)
             pt_id = clustering.data['pt_id'].values[0]
             if len(clustering.clusters.keys()) == 0:
