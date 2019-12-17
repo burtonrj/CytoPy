@@ -1,8 +1,7 @@
 from mongoengine.base.datastructures import EmbeddedDocumentList
 from immunova.data.fcs_experiments import FCSExperiment
 from immunova.data.patient import Patient, Bug, MetaDataDictionary
-from immunova.data.fcs import Cluster, Population
-from immunova.data.clustering import ClusteringDefinition
+from immunova.data.fcs import Cluster, Population, ClusteringDefinition
 from immunova.flow.dim_reduction import dimensionality_reduction
 from immunova.flow.gating.actions import Gating
 from immunova.flow.utilities import progress_bar
@@ -396,8 +395,6 @@ class SingleClustering(Clustering):
         :param clustering_definition: ClusteringDefinition object (see data.clustering.ClusteringDefinition)
         """
         super().__init__(**kwargs)
-        if self.ce.meta_clustering:
-            raise ValueError('Error: definition is for meta-clustering, not single clustering')
         self.clusters = dict()
         self.data = None
         self.experiment = None
@@ -530,8 +527,6 @@ class GlobalCluster(Clustering):
     """
     def __init__(self,  **kwargs):
         super().__init__(**kwargs)
-        if self.ce.meta_clustering:
-            raise ValueError('Error: definition is for meta-clustering, not single clustering')
 
     def load_data(self, experiment: FCSExperiment, samples: list or str = 'all', sample_n: int or None = 1000):
         """
@@ -608,8 +603,6 @@ class GlobalCluster(Clustering):
 class MetaClustering(Clustering):
     def __init__(self, experiment: FCSExperiment, samples: str or list = 'all', **kwargs):
         super().__init__(**kwargs)
-        if not self.ce.meta_clustering:
-            raise ValueError('Error: definition is not for meta-clustering')
         self.experiment = experiment
         if samples == 'all':
             samples = experiment.list_samples()
