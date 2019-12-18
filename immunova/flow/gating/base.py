@@ -117,7 +117,7 @@ class Gate:
         neg_pop = self.data[self.data[self.x] < threshold]
         for x in [pos, neg]:
             self.child_populations.populations[x].update_geom(shape='threshold', x=self.x, y=self.y,
-                                                              method=method, threshold=threshold)
+                                                              method=method, threshold=float(threshold))
         self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options=merge_options)
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options=merge_options)
 
@@ -154,8 +154,8 @@ class Gate:
 
         for x in [negneg, negpos, posneg, pospos]:
             self.child_populations.populations[x].update_geom(shape='2d_threshold', x=self.x,
-                                                              y=self.y, method=method, threshold_x=x_threshold,
-                                                              threshold_y=y_threshold)
+                                                              y=self.y, method=method, threshold_x=float(x_threshold),
+                                                              threshold_y=float(y_threshold))
 
     def uniform_downsample(self, frac: float or None, sample_n: int or None = None, data: pd.DataFrame or None = None):
         """
