@@ -78,8 +78,5 @@
     <requires type="dynamic">
       <file>immunova_paper.bcf</file>
     </requires>
-    <requires type="editable">
-      <file>ref.bib</file>
-    </requires>
   </external>
 </requests>
