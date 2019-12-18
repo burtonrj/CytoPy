@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.18 (TeX Live 2017/Debian) (preloaded format=pdflatex 2019.9.3)  10 DEC 2019 14:10
+This is pdfTeX, Version 3.14159265-2.6-1.40.18 (TeX Live 2017/Debian) (preloaded format=pdflatex 2019.9.3)  18 DEC 2019 15:25
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -709,8 +709,8 @@ Package biblatex Info: Automatic encoding selection.
 \openout4 = `immunova_paper.bcf'.
 
 Package biblatex Info: Trying to load bibliographic data...
-Package biblatex Info: ... file 'immunova_paper.bbl' not found.
-No file immunova_paper.bbl.
+Package biblatex Info: ... file 'immunova_paper.bbl' found.
+(./immunova_paper.bbl)
 Package biblatex Info: Reference section=0 on input line 12.
 Package biblatex Info: Reference segment=0 on input line 12.
 LaTeX Font Info:    External font `cmex10' loaded for size
@@ -719,14 +719,11 @@ LaTeX Font Info:    External font `cmex10' loaded for size
 (Font)              <8> on input line 20.
 LaTeX Font Info:    External font `cmex10' loaded for size
 (Font)              <6> on input line 20.
-[1
+ [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}]
 
 LaTeX Warning: Citation 'opencyto' on page 1 undefined on input line 28.
-
-
-LaTeX Warning: Empty bibliography on input line 31.
 
 [1] (./immunova_paper.aux)
 
@@ -742,13 +739,13 @@ Package logreq Info: Writing requests to 'immunova_paper.run.xml'.
 
  ) 
 Here is how much of TeX's memory you used:
- 8499 strings out of 492982
- 146332 string characters out of 6134897
- 561304 words of memory out of 5000000
- 12009 multiletter control sequences out of 15000+600000
+ 8496 strings out of 492982
+ 146268 string characters out of 6134897
+ 561036 words of memory out of 5000000
+ 12004 multiletter control sequences out of 15000+600000
  7588 words of font info for 27 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 35i,6n,32p,827b,1559s stack positions out of 5000i,500n,10000p,200000b,80000s
+ 35i,6n,32p,820b,1559s stack positions out of 5000i,500n,10000p,200000b,80000s
 </usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></us
 r/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/shar
 e/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/share/texli

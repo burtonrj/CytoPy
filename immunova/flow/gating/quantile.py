@@ -1,6 +1,4 @@
-from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.base import Gate, GateError
-import pandas as pd
 
 
 class Quantile(Gate):
