@@ -77,8 +77,13 @@ class DensityThreshold(Gate):
                 highest_peak = np.where(probs_peaks == max(probs_peaks))[0][0]
                 if highest_peak < len(peaks):
                     peaks = peaks[:highest_peak + 1]
-            threshold = find_local_minima(probs, xx, peaks)
-            method = 'Local minima between pair of highest peaks'
+            # Merging of peaks if ignore_double_pos might result in one peak
+            if len(peaks) > 1:
+                threshold = find_local_minima(probs, xx, peaks)
+                method = 'Local minima between pair of highest peaks'
+            else:
+                threshold = data[self.x].quantile(0.95, interpolation='nearest')
+                method = 'Quantile'
         return threshold, method
 
     def __calc_threshold(self, data: pd.DataFrame, x: str) -> float and str:
