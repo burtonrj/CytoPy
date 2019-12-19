@@ -105,7 +105,7 @@ def pull_data_hashtable(sid, experiment, features, sample_n):
 
 
 def pull_data(sid, experiment, features, sample_n=None):
-    d = experiment.pull_sample_data(sample_id=sid, data_type='raw', include_controls=False,
+    d = experiment.pull_sample_data(sample_id=sid, include_controls=False,
                                     sample_size=sample_n)
     if d is None:
         return None
@@ -155,3 +155,4 @@ def calculate_reference_sample(experiment: FCSExperiment, exclude_samples: list,
     else:
         raise ValueError('Error: unable to calculate sample with minimum average distance. You must choose'
                          ' manually.')
+

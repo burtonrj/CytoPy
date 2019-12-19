@@ -4,6 +4,7 @@ from immunova.data.gating import GatingStrategy
 from immunova.data.utilities import data_from_file
 from immunova.data.panel import Panel, ChannelMap
 from immunova.flow.readwrite.read_fcs import FCSFile
+from immunova.flow.utilities import progress_bar
 from multiprocessing import Pool, cpu_count
 from functools import partial
 import mongoengine
@@ -42,6 +43,24 @@ class FCSExperiment(mongoengine.Document):
         'db_alias': 'core',
         'collection': 'fcs_experiments'
     }
+
+    def delete_all_populations(self, sample_id: str, remove_gates: bool = False):
+        for f in self.fcs_files:
+            if sample_id == 'all' or f.primary_id == sample_id:
+                f.populations = []
+                if remove_gates:
+                    f.gates = []
+                f.save()
+
+    def delete_gating_templates(self, template_name: str):
+        for g in self.gating_templates:
+            if template_name == 'all' or g.template_name == template_name:
+                g.delete()
+        if template_name == 'all':
+            self.gating_templates = []
+        else:
+            self.gating_templates = [g for g in self.gating_templates if g.template_name != template_name]
+        self.save()
 
     def __sample_exists(self, sample_id):
         if sample_id not in self.list_samples():

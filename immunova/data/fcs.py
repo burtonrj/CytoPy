@@ -242,4 +242,17 @@ class FileGroup(mongoengine.Document):
         'collection': 'fcs_files'
     }
 
+    def delete_populations(self, populations: list or str):
+        if populations == all:
+            self.populations = []
+        else:
+            self.populations = [p for p in self.populations if p.population_name not in populations]
+        self.save()
+
+    def delete_gates(self, gates: list or str):
+        if gates == all:
+            self.gates = []
+        else:
+            self.gates = [g for g in self.gates if g.gate_name not in gates]
+        self.save()
 
