@@ -1,5 +1,5 @@
 from immunova.flow.utilities import progress_bar
-from immunova.flow.clustering.meta_cluster import ConsensusCluster
+from immunova.flow.clustering.consensus import ConsensusCluster
 from sklearn.preprocessing import MinMaxScaler
 from minisom import MiniSom
 import pandas as pd
@@ -98,8 +98,7 @@ class FlowSOM:
         :param resample_proportion: within (0, 1), the proportion of re-sampling when computing clustering
         """
 
-        if self.map is None:
-            raise ValueError('Error: SOM must be trained prior to meta-clustering.')
+        assert self.map is not None, 'SOM must be trained prior to meta-clustering; call train before meta_cluster'
         # initialize cluster
         cluster_ = ConsensusCluster(cluster_class,
                                     min_n, max_n, iter_n,
@@ -118,8 +117,10 @@ class FlowSOM:
         Predict the cluster allocation for each cell in the associated dataset.
         (Requires that train and meta_cluster have been called previously)
         """
-        if self.map is None or self.meta_class is None:
-            raise ValueError('Error: SOM must be trained prior to predicting cell clustering allegation.')
+        err_msg = 'SOM must be trained prior to predicting cell clustering allegation; call train followed ' \
+                  'by meta_cluster'
+        assert self.map is not None, err_msg
+        assert self.meta_class is not None, err_msg
         labels = []
         print('---------- Predicting Labels ----------')
         for i in progress_bar(range(len(self.data))):
@@ -127,6 +128,7 @@ class FlowSOM:
             winner = self.map.winner(xx)  # make prediction, prediction = the closest entry location in the SOM
             c = self.meta_class[winner]  # from the location info get cluster info
             labels.append(c)
+        print('---------------------------------------')
         return labels
 
 
