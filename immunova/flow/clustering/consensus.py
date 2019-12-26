@@ -115,6 +115,5 @@ class ConsensusCluster:
           * data -> (examples,attributes) format
         """
         assert self.Mk is not None, "First run fit"
-        return self.cluster_(n_clusters=self.bestK).fit_predict(
-            data)
+        return self.cluster_(n_clusters=self.bestK).fit_predict(data)
 
