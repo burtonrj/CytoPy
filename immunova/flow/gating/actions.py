@@ -14,7 +14,7 @@ from immunova.flow.gating.mixturemodel import MixtureModel
 from immunova.flow.gating.transforms import apply_transform
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.plotting.static_plots import Plot
-from immunova.flow.gating.utilities import get_params
+from immunova.flow.gating.utilities import get_params, inside_ellipse
 # Housekeeping and other tools
 from anytree.exporter import DotExporter
 from anytree import Node, RenderTree
@@ -83,6 +83,14 @@ class Gating:
         except KeyError as e:
             print(f'WARNING: was unable to load populations due to missing parent populations: {e}')
             print('Continuing with blank Gating object. Check that populations have not been removed.')
+
+    def clear_gates(self):
+        self.gates = dict()
+
+    def population_size(self, population: str):
+        assert population in self.populations.keys(), f'Population invalid, valid population names: ' \
+                                                      f'{self.populations.keys()}'
+        return len(self.populations[population].index)
 
     def deserialise_gate(self, gate):
         kwargs = {k: v for k, v in gate.kwargs}
@@ -333,13 +341,20 @@ class Gating:
         analyst = klass(data=parent_population, **constructor_args)
         output = getattr(analyst, gatedoc.method)(**method_args)
         if feedback:
+            print(f'------ {gatedoc.gate_name} ------')
             if analyst.warnings:
                 for x in analyst.warnings:
                     print(x)
         self.update_populations(output, parent_df=parent_population,
                                 warnings=analyst.warnings, parent_name=gatedoc.parent)
+        if feedback:
+            for pop in output.populations.keys():
+                print(f'New population: {pop}')
+                print(f'...proportion of total events: {self.populations[pop].prop_of_total:.3f}')
+                print(f'...proportion of parent: {self.populations[pop].prop_of_parent:.3f}')
+            print('-----------------------')
 
-    def apply(self, gate_name: str, plot_output: bool = True, feedback: bool = True) -> None:
+    def apply(self, gate_name: str, plot_output: bool = True, feedback: bool = True, **kwargs) -> None:
         """
         Apply a gate to events data (must be generated with `create_gate` first)
         :param gate_name: Name of the gate to apply
@@ -349,12 +364,15 @@ class Gating:
         gatedoc = self.__apply_checks(gate_name)
         if gatedoc is None:
             return None
-        kwargs = {k: v for k, v in gatedoc.kwargs}
-        if 'fmo_x' in kwargs.keys():
-            kwargs['fmo_x'] = self.get_fmo_data(gatedoc.parent, kwargs['fmo_x'])
+        gkwargs = {k: v for k, v in gatedoc.kwargs}
+        # Alter kwargs if given
+        for k, v in kwargs.items():
+            gkwargs[k] = v
+        if 'fmo_x' in gkwargs.keys():
+            gkwargs['fmo_x'] = self.get_fmo_data(gatedoc.parent, gkwargs['fmo_x'])
         if 'fmo_y' in kwargs.keys():
-            kwargs['fmo_y'] = self.get_fmo_data(gatedoc.parent, kwargs['fmo_y'])
-        self.__construct_class_and_gate(gatedoc, kwargs, feedback)
+            gkwargs['fmo_y'] = self.get_fmo_data(gatedoc.parent, gkwargs['fmo_y'])
+        self.__construct_class_and_gate(gatedoc, gkwargs, feedback)
         if plot_output:
             self.plotting.plot_gate(gate_name=gate_name)
 
@@ -417,6 +435,68 @@ class Gating:
         if feedback:
             print('Complete!')
 
+    def __update_index(self, population_name: str, geom: dict):
+        assert population_name in self.populations.keys(), f'Population {population_name} does not exist'
+        parent_idx = self.populations[self.populations[population_name].parent.name].index
+        parent = self.data.loc[parent_idx]
+        if geom['shape'] == 'threshold':
+            assert 'threshold' in geom.keys(), 'Geom must contain a key "threshold" with a float value'
+            return parent[parent[geom['x']] >= geom['threshold']].index.values
+        if geom['shape'] == '2d_threshold':
+            assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), \
+                'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
+            x = parent[geom['x']] >= geom['threshold_x']
+            y = parent[geom['y']] >= geom['threshold_y']
+            return parent[x & y].index.values
+        if geom['shape'] == 'rect':
+            keys = ['x_min', 'x_max', 'y_min', 'y_max']
+            assert all([r in geom.keys() for r in keys]), \
+                f'Geom must contain keys {keys} both with a float value'
+            x = (parent[geom['x']] >= geom['x_min']) & (parent[geom['x']] <= geom['x_max'])
+            y = (parent[geom['y']] >= geom['y_min']) & (parent[geom['y']] <= geom['y_max'])
+            return parent[x & y].index.values
+        if geom['shape'] == 'ellipse':
+            keys = ['centroid', 'width', 'height', 'angle']
+            assert all([c in geom.keys() for c in keys]), \
+                f'Geom must contain keys {keys}; note, centroid must be a tuple and all others a float value'
+            channels = [geom['x'], geom['y']]
+            mask = inside_ellipse(parent[channels].values,
+                                  center=tuple(geom['centroid']),
+                                  width=geom['width'],
+                                  height=geom['height'],
+                                  angle=geom['angle'])
+            return parent[mask].index
+        raise ValueError('Gates producing polygon geoms (i.e. like density based clustering), substitution gates '
+                         'and supervised ML gates cannot be edited in the current build of Immunova.')
+
+    def edit_gate(self, gate_name: str, updated_geom: dict, delete=True):
+        """
+        Manually replace the outcome of a gate by updating the geom of it's child populations.
+        :param gate_name:
+        :param updated_geom:
+        :param propagate:
+        :return:
+        """
+        print(f'Editing gate: {gate_name}')
+        assert gate_name in self.gates.keys(), f'Invalid gate, existing gates are: {self.gates.keys()}'
+        children = self.gates[gate_name].children
+        effected_populations = list()
+        immediate_children = list()
+        for c in children:
+            print(f'Updating {c}')
+            assert c in updated_geom.keys(), f'Invalid child populations specified/missing child, gate {gate_name} ' \
+                                             f'has the following children: {children}'
+            self.populations[c].geom = updated_geom[c]
+            self.populations[c].index = self.__update_index(c, updated_geom[c])
+            effected_populations = effected_populations + self.find_dependencies(population=c)
+            immediate_children = immediate_children + [n.name for n in self.populations[c].children]
+        effected_gates = [name for name, gate in self.gates.items() if gate.parent in effected_populations]
+        print(f'The following gates are downstream of {gate_name} and will need to be applied again: {effected_gates}')
+        if delete:
+            for c in immediate_children:
+                self.remove_population(c)
+        print('Edit complete!')
+
     def find_dependencies(self, population: str = None) -> list or None:
         """
         For a given population find all dependencies
@@ -462,7 +542,10 @@ class Gating:
         # Remove affected gates and downstream populations
         effected_populations = []
         for child in gate.children:
-            effected_populations = effected_populations + self.find_dependencies(population=child)
+            dependencies = self.find_dependencies(population=child)
+            if dependencies is None:
+                continue
+            effected_populations = effected_populations + dependencies
             self.remove_population(child)
             effected_populations.append(child)
         effected_gates = [name for name, gate in self.gates.items() if gate.parent in effected_populations]
