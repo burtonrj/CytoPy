@@ -156,9 +156,12 @@ class EvaluateBatchEffects:
             raise CalibrationError(f'Error: unable to load data for population {root_population}')
         return data
 
-    def marker_variance(self, reference_id, root_population, marker):
+    def marker_variance(self, reference_id, root_population, marker, n: int or None = None):
         reference = self.__load_and_transform(reference_id, root_population).sample(500)[marker]
-        for sample in self.experiment.list_samples():
+        samples = self.experiment.list_samples()
+        if n:
+            samples = np.random.choice(samples, n, replace=False)
+        for sample in samples:
             try:
                 d = self.__load_and_transform(sample, root_population).sample(500)[marker]
                 ax = sns.kdeplot(d, color='b', shade=False, alpha=0.5)
