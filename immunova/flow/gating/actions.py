@@ -437,24 +437,43 @@ class Gating:
 
     def __update_index(self, population_name: str, geom: dict):
         assert population_name in self.populations.keys(), f'Population {population_name} does not exist'
+        assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
+                                            'if population is the "positive" or "negative"'
         parent_idx = self.populations[self.populations[population_name].parent.name].index
         parent = self.data.loc[parent_idx]
         if geom['shape'] == 'threshold':
             assert 'threshold' in geom.keys(), 'Geom must contain a key "threshold" with a float value'
-            return parent[parent[geom['x']] >= geom['threshold']].index.values
+            if geom['definition'] == '+':
+                return parent[parent[geom['x']] >= geom['threshold']].index.values
+            if geom['definition'] == '-':
+                return parent[parent[geom['x']] < geom['threshold']].index.values
+            raise ValueError('Definition must have a value of "+" or "-" for a 1D threshold gate')
         if geom['shape'] == '2d_threshold':
             assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), \
                 'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
             x = parent[geom['x']] >= geom['threshold_x']
             y = parent[geom['y']] >= geom['threshold_y']
-            return parent[x & y].index.values
+            if geom['definition'] == '++':
+                return parent[x & y].index.values
+            if geom['definition'] == '--':
+                return parent[~(x & y)].index.values
+            if geom['definition'] == '+-':
+                return parent[x & (~y)].index.values
+            if geom['definition'] == '-+':
+                return parent[(~x) & y].index.values
+            raise ValueError('Definition must have a value of "+-", "-+", "--", or "++" for a 2D threshold gate')
         if geom['shape'] == 'rect':
             keys = ['x_min', 'x_max', 'y_min', 'y_max']
             assert all([r in geom.keys() for r in keys]), \
                 f'Geom must contain keys {keys} both with a float value'
             x = (parent[geom['x']] >= geom['x_min']) & (parent[geom['x']] <= geom['x_max'])
             y = (parent[geom['y']] >= geom['y_min']) & (parent[geom['y']] <= geom['y_max'])
-            return parent[x & y].index.values
+            pos = parent[x & y]
+            if geom['definition'] == '+':
+                return pos.index.values
+            if geom['definition'] == '-':
+                return parent[~parent.index.isin(pos.index)].index.values
+            raise ValueError('Definition must have a value of "+" or "-" for a rectangular geom')
         if geom['shape'] == 'ellipse':
             keys = ['centroid', 'width', 'height', 'angle']
             assert all([c in geom.keys() for c in keys]), \
@@ -465,7 +484,12 @@ class Gating:
                                   width=geom['width'],
                                   height=geom['height'],
                                   angle=geom['angle'])
-            return parent[mask].index
+            pos = parent[mask]
+            if geom['definition'] == '+':
+                return pos.index
+            if geom['definition'] == '-':
+                return parent[~parent.index.isin(pos.index)].index.values
+            raise ValueError('Definition must have a value of "+" or "-" for a ellipse geom')
         raise ValueError('Gates producing polygon geoms (i.e. like density based clustering), substitution gates '
                          'and supervised ML gates cannot be edited in the current build of Immunova.')
 
@@ -474,7 +498,7 @@ class Gating:
         Manually replace the outcome of a gate by updating the geom of it's child populations.
         :param gate_name:
         :param updated_geom:
-        :param propagate:
+        :param delete:
         :return:
         """
         print(f'Editing gate: {gate_name}')
