@@ -22,6 +22,7 @@ from anytree.search import findall
 from datetime import datetime
 from copy import deepcopy
 import inspect
+import copy
 # Scipy
 from sklearn.neighbors import KNeighborsClassifier
 import pandas as pd
@@ -86,6 +87,11 @@ class Gating:
 
     def clear_gates(self):
         self.gates = dict()
+
+    def fetch_geom(self, population):
+        assert population in self.populations.keys(), f'Population invalid, valid population names: ' \
+                                                      f'{self.populations.keys()}'
+        return copy.deepcopy(self.populations[population].geom)
 
     def population_size(self, population: str):
         assert population in self.populations.keys(), f'Population invalid, valid population names: ' \
@@ -436,21 +442,30 @@ class Gating:
             print('Complete!')
 
     def __update_index(self, population_name: str, geom: dict):
+        def transform_x_y(d):
+            d = d.copy()
+            assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", the transform method for the x-axis AND ' \
+                                                                                    'a key "transform_y", the transform method for the y-axis'
+            d = apply_transform(d, transform_method=geom['transform_x'], features_to_transform=[geom['x']])
+            return apply_transform(d, transform_method=geom['transform_y'], features_to_transform=[geom['y']])
+
         assert population_name in self.populations.keys(), f'Population {population_name} does not exist'
         assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
                                             'if population is the "positive" or "negative"'
-        parent_idx = self.populations[self.populations[population_name].parent.name].index
-        parent = self.data.loc[parent_idx]
+        parent_name = self.populations[population_name].parent.name
+        parent = self.get_population_df(parent_name, transform=False)
         if geom['shape'] == 'threshold':
             assert 'threshold' in geom.keys(), 'Geom must contain a key "threshold" with a float value'
+            assert 'transform_x' in geom.keys(), 'Geom must contain a key "transform_x", the transform method for the x-axis'
+            parent = apply_transform(parent, transform_method=geom['transform_x'], features_to_transform=[geom['x']])
             if geom['definition'] == '+':
                 return parent[parent[geom['x']] >= geom['threshold']].index.values
             if geom['definition'] == '-':
                 return parent[parent[geom['x']] < geom['threshold']].index.values
             raise ValueError('Definition must have a value of "+" or "-" for a 1D threshold gate')
         if geom['shape'] == '2d_threshold':
-            assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), \
-                'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
+            assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), 'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
+            parent = transform_x_y(parent)
             x = parent[geom['x']] >= geom['threshold_x']
             y = parent[geom['y']] >= geom['threshold_y']
             if geom['definition'] == '++':
@@ -464,8 +479,8 @@ class Gating:
             raise ValueError('Definition must have a value of "+-", "-+", "--", or "++" for a 2D threshold gate')
         if geom['shape'] == 'rect':
             keys = ['x_min', 'x_max', 'y_min', 'y_max']
-            assert all([r in geom.keys() for r in keys]), \
-                f'Geom must contain keys {keys} both with a float value'
+            assert all([r in geom.keys() for r in keys]), f'Geom must contain keys {keys} both with a float value'
+            parent = transform_x_y(parent)
             x = (parent[geom['x']] >= geom['x_min']) & (parent[geom['x']] <= geom['x_max'])
             y = (parent[geom['y']] >= geom['y_min']) & (parent[geom['y']] <= geom['y_max'])
             pos = parent[x & y]
@@ -476,8 +491,8 @@ class Gating:
             raise ValueError('Definition must have a value of "+" or "-" for a rectangular geom')
         if geom['shape'] == 'ellipse':
             keys = ['centroid', 'width', 'height', 'angle']
-            assert all([c in geom.keys() for c in keys]), \
-                f'Geom must contain keys {keys}; note, centroid must be a tuple and all others a float value'
+            assert all([c in geom.keys() for c in keys]), f'Geom must contain keys {keys}; note, centroid must be a tuple and all others a float value'
+            parent = transform_x_y(parent)
             channels = [geom['x'], geom['y']]
             mask = inside_ellipse(parent[channels].values,
                                   center=tuple(geom['centroid']),
