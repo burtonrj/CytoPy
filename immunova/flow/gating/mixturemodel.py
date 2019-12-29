@@ -69,8 +69,9 @@ class MixtureModel(Gate):
         neg = self.child_populations.fetch_by_definition('-')
         pos = self.child_populations.fetch_by_definition('+')
         for x, definition in zip([pos, neg], ['+', '-']):
-            self.child_populations.populations[x].update_geom(shape='ellipse', x=self.x, y=self.y, definition=definition,
-                                                              **geom)
+            self.child_populations.populations[x].update_geom(shape='ellipse', x=self.x, y=self.y,
+                                                              definition=definition, transform_x=self.transform_x,
+                                                              transform_y=self.transform_y, **geom)
         self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options='overwrite')
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
         return self.child_populations

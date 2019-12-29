@@ -278,5 +278,7 @@ class DensityBasedClustering(Gate):
             else:
                 x, y = list(), list()
             self.child_populations.populations[population_id].update_geom(shape='poly', x=self.x, y=self.y,
-                                                                          cords=dict(x=x, y=y))
+                                                                          cords=dict(x=x, y=y),
+                                                                          transform_x=self.transform_x,
+                                                                          transform_y=self.transform_y)
         return self.child_populations
