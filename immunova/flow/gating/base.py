@@ -37,6 +37,8 @@ class Gate:
         self.data = data.copy()
         self.x = x
         self.y = y
+        self.transform_x = transform_x
+        self.transform_y = transform_y
         if transform_x is not None:
             self.data = apply_transform(self.data, features_to_transform=[self.x], transform_method=transform_x)
         if transform_y is not None and self.y is not None:
@@ -118,7 +120,7 @@ class Gate:
         for x, definition in zip([pos, neg], ['+', '-']):
             self.child_populations.populations[x].update_geom(shape='threshold', x=self.x, y=self.y,
                                                               method=method, threshold=float(threshold),
-                                                              definition=definition)
+                                                              definition=definition, transform_x=self.transform_x)
         self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options=merge_options)
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options=merge_options)
 
@@ -156,7 +158,8 @@ class Gate:
         for x, definition in zip([negneg, negpos, posneg, pospos], ['--', '-+', '+-', '++']):
             self.child_populations.populations[x].update_geom(shape='2d_threshold', x=self.x,
                                                               y=self.y, method=method, threshold_x=float(x_threshold),
-                                                              threshold_y=float(y_threshold), definition=definition)
+                                                              threshold_y=float(y_threshold), definition=definition,
+                                                              transform_x=self.transform_x, transform_y=self.transform_y)
 
     def uniform_downsample(self, frac: float or None, sample_n: int or None = None, data: pd.DataFrame or None = None):
         """
