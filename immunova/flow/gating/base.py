@@ -115,9 +115,10 @@ class Gate:
             GateError('Invalid ChildPopulationCollection; must contain definitions for - and + populations')
         pos_pop = self.data[self.data[self.x] > threshold]
         neg_pop = self.data[self.data[self.x] < threshold]
-        for x in [pos, neg]:
+        for x, definition in zip([pos, neg], ['+', '-']):
             self.child_populations.populations[x].update_geom(shape='threshold', x=self.x, y=self.y,
-                                                              method=method, threshold=float(threshold))
+                                                              method=method, threshold=float(threshold),
+                                                              definition=definition)
         self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options=merge_options)
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options=merge_options)
 
@@ -152,10 +153,10 @@ class Gate:
         pos_idx = np.intersect1d(xp_idx, yn_idx)
         self.child_populations.populations[posneg].update_index(idx=pos_idx, merge_options='merge')
 
-        for x in [negneg, negpos, posneg, pospos]:
+        for x, definition in zip([negneg, negpos, posneg, pospos], ['--', '-+', '+-', '++']):
             self.child_populations.populations[x].update_geom(shape='2d_threshold', x=self.x,
                                                               y=self.y, method=method, threshold_x=float(x_threshold),
-                                                              threshold_y=float(y_threshold))
+                                                              threshold_y=float(y_threshold), definition=definition)
 
     def uniform_downsample(self, frac: float or None, sample_n: int or None = None, data: pd.DataFrame or None = None):
         """
