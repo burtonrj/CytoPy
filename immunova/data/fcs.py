@@ -256,3 +256,10 @@ class FileGroup(mongoengine.Document):
             self.gates = [g for g in self.gates if g.gate_name not in gates]
         self.save()
 
+    def validity(self):
+        if self.flags is None:
+            return True
+        if 'invalid' in self.flags:
+            return False
+        return True
+

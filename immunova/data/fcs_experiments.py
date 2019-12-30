@@ -86,6 +86,9 @@ class FCSExperiment(mongoengine.Document):
         """
         return [f.primary_id for f in self.fcs_files]
 
+    def list_invalid(self):
+        return [f.primary_id for f in self.fcs_files if not f.validity()]
+
     def fetch_sample_mid(self, sample_id: str) -> str or None:
         """
         Given a sample ID (for a sample belonging to this experiment) return it's mongo ObjectID as a string

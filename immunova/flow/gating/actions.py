@@ -446,8 +446,11 @@ class Gating:
             d = d.copy()
             assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", the transform method for the x-axis AND ' \
                                                                                     'a key "transform_y", the transform method for the y-axis'
-            d = apply_transform(d, transform_method=geom['transform_x'], features_to_transform=[geom['x']])
-            return apply_transform(d, transform_method=geom['transform_y'], features_to_transform=[geom['y']])
+            if geom['transform_x'] is not None:
+                d = apply_transform(d, transform_method=geom['transform_x'], features_to_transform=[geom['x']])
+            if geom['transform_y'] is not None:
+                d = apply_transform(d, transform_method=geom['transform_y'], features_to_transform=[geom['y']])
+            return d
 
         assert population_name in self.populations.keys(), f'Population {population_name} does not exist'
         assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
@@ -457,7 +460,8 @@ class Gating:
         if geom['shape'] == 'threshold':
             assert 'threshold' in geom.keys(), 'Geom must contain a key "threshold" with a float value'
             assert 'transform_x' in geom.keys(), 'Geom must contain a key "transform_x", the transform method for the x-axis'
-            parent = apply_transform(parent, transform_method=geom['transform_x'], features_to_transform=[geom['x']])
+            if geom['transform_x'] is not None:
+                parent = apply_transform(parent, transform_method=geom['transform_x'], features_to_transform=[geom['x']])
             if geom['definition'] == '+':
                 return parent[parent[geom['x']] >= geom['threshold']].index.values
             if geom['definition'] == '-':
