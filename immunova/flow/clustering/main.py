@@ -35,7 +35,7 @@ def filter_dict(d: dict, keys: list):
 def meta_dict_lookup(key: str) -> str or None:
     """
     Lookup a value in the Meta Data dictionary; this collection contains a description of meta data variables and can
-    be used for guidance for the user
+    be used for guidance for the user, see data.patient.MetaDataDictionary
     :param key: value to lookup
     :return: Description of given variable or None if variable does not exist
     """
@@ -48,14 +48,34 @@ def meta_dict_lookup(key: str) -> str or None:
 class Explorer:
     """
     The Explorer class is used to visualise the results of a clustering analysis and explore the results in
-    contrast to patient meta-data.
+    contrast to patient meta-data. The user should provide a Pandas DataFrame derived from one of the clustering
+    objects SingleClustering, GlobalClustering, or MetaClustering. Alternatively the user can provide a path name for
+    a previously saved Explorer dataframe. At a minimum this dataframe (which contains single cell data or summary
+    single cell data if MetaClustering) should have a column called 'pt_id' which contains the patient ID for each cell.
 
     Arguments:
-        * data: a Pandas DataFrame generated from an object of one of the following classes: SingleClustering,
+        - data: a Pandas DataFrame generated from an object of one of the following classes: SingleClustering,
         GlobalClustering, or MetaClustering. This dataframe is expected to contain either single cell data or
         a summary of clustering on single cell data (e.g. centroids). As a minimum, the dataframe should contain
         a column called 'pt_id' (the patient identifier for each single cell/summary).
-        * path (optional): filepath for some csv file corresponding to data (can be used to retrieve saved results)
+        - path (optional): filepath for some csv file corresponding to data (can be used to retrieve saved results)
+    Methods:
+        - drop_data: given a valid Pandas DataFrame mask, filter and overwrite the dataframe
+        - info: print a description of the dataframe
+        - save: save the dataframe to a csv file
+        - load_meta: given a variable stored in the underlying patient meta-data, generate a new column that corresponds to the value
+        for that variable for each patient and each cell/summary
+        - load_infectious_data: for each patient, load information attaining to isolated microbiology; creates new columns for organism name, organism_type,
+        gram status, hmbpp status, and ribo_status
+        - load_biology_data: given the name of a pathology test, patient meta-data is searched on a per-patient basis and the results of the given test (where data exists)
+        is summarised and given in a new column named according to the test name
+        - dimensionality_reduction: performs dimensionality reduction producing a given number of embeddings as new columns
+        - scatter_plot: generate a scatter plot of embedded data, with colour labels according to either clusters, meta-data or gated population names.
+        - heatmap: generate a heatmap of marker expression for either clusters or gated populations
+        - plot_representaiton: present a breakdown of how a variable is represented in relation to a cluster/population/meta cluster
+        - plot_2d: plot two-dimensions as either a scatter plot or a 2D histogram (defaults to 2D histogram if number of
+        data-points exceeds 1000). This can be used for close inspection of populations in contrast to their clustering
+        assignments. Particularly useful for debugging or inspecting anomalies.
     """
     def __init__(self, data: pd.DataFrame or None = None, path: str or None = None):
         """
@@ -293,13 +313,6 @@ class Explorer:
         else:
             return list(self.data[label].values)
 
-    def meta_cluster_plot(self):
-        """
-        Check that dataframe is valid for meta clustering. Assertion error raised if invalid.
-        :return: None
-        """
-        assert 'meta_cluster_id' in self.data.columns, 'only valid for dataframe from meta clustering'
-
     def scatter_plot(self, primary_label: str, features: list, discrete: bool,
                      secondary_label: str or None = None,
                      populations: list or None = None, n_components: int = 2,
@@ -375,14 +388,14 @@ class Explorer:
     def heatmap(self, heatmap_var: str, features: list,
                 clustermap: bool = False, mask: pd.DataFrame or None = None):
         """
-        Generate a heatmap of marker expression for either global clusters or gated populations
+        Generate a heatmap of marker expression for either clusters or gated populations
         (indicated with 'heatmap_var' argument)
         :param heatmap_var: variable to use, either 'global clusters' or 'gated populations'
         :param features: list of column names to use for generating heatmap
         :param clustermap: if True, rows (clusters/populations) are grouped by single linkage clustering
         :param mask: a valid Pandas DataFrame mask to subset data prior to plotting (optional)
         """
-        d = self.data
+        d = self.data.copy(deep=True)
         if mask is not None:
             d = d[mask]
         d = d[features + [heatmap_var]]
@@ -520,10 +533,10 @@ class Clustering:
     this assignment is stored in a new column named 'cluster_id' (or 'meta_cluster_id'; see MetaClustering)
 
     Arguments:
-        * ce: A clustering definition; ClusteringDefinition object's are descriptions of a clustering method that can
+        - ce: A clustering definition; ClusteringDefinition object's are descriptions of a clustering method that can
         saved to the underlying database and reused across multiple projects/experiments etc; see data.fcs for
         details
-        * data: a Pandas DataFrame that is populated with clustering information can be passed onto the Explorer class
+        - data: a Pandas DataFrame that is populated with clustering information can be passed onto the Explorer class
         for visualisation
     """
     def __init__(self, clustering_definition: ClusteringDefinition):
@@ -538,7 +551,7 @@ class Clustering:
 
     def _has_data(self):
         """
-        Internal method. Check that self.data has been populated. If not raise an error.
+        Internal method. Check that self.data has been populated. If not raise an Assertion Error.
         """
         err_msg = 'Error: no sample is currently associated to this object, before proceeding first ' \
                   'associate a sample and its data using the `load_data` method'
@@ -580,7 +593,7 @@ class Clustering:
         """
         Perform clustering analysis as specified by the ClusteringDefinition. Valid methods currently include PhenoGraph
         and FlowSOM. Returns clustering assignments.
-        :return: None
+        :return: Numpy array of clustering assignments.
         """
         self._has_data()
         if self.ce.method == 'PhenoGraph':
@@ -622,9 +635,18 @@ class SingleClustering(Clustering):
     followed by 'save_clusters' with the 'overwrite' argument set to True.
 
     Arguments:
-        data - a Pandas DataFrame of FCS single cell data that clustering will be performed upon
-        ce - associated clustering definition
-        clusters - dictionary object of identified clusters
+        - data: a Pandas DataFrame of FCS single cell data that clustering will be performed upon
+        - ce: associated clustering definition
+        - clusters: dictionary object of identified clusters
+    Methods:
+        - delete_clusters: clears current cluster assignments
+        - load_data: given an experiment and sample ID, loads single cell data attaining to population given in clustering definition; if clustering
+        has been performed under the given definition previously, then existing clusters will be loaded into object
+        - save_clusters: saves cluster assignments to population in database; if clusters exist for the current definition, they will be overwritten if 'overwrite' is True
+        - get_cluster_dataframe: returns a Pandas DataFrame of single cell data for given cluster
+        - cluster: perform clustering as described in clustering definition
+        - explorer: generate an Explorer object for visualising results and exploring meta-data
+        -
     """
     def __init__(self, **kwargs):
         """
@@ -722,7 +744,8 @@ class SingleClustering(Clustering):
         """
         Return a Pandas DataFrame of single cell data for a single cluster.
         """
-        return self.data.iloc[self.clusters[cluster_id]['index']]
+        assert 'cluster_id' in self.clusters.keys(), f'Invalid cluster_id; {cluster_id} not recognised'
+        return self.data.iloc[self.clusters[cluster_id].get('index')]
 
     def cluster(self):
         """
@@ -750,6 +773,11 @@ class GlobalClustering(Clustering):
     """
     Sample data from all (or some) samples in an FCS Experiment and perform clustering on the concatenated dataset.
     This is useful when you want to look at some global change in immunological topology and batch effects are minimal.
+
+    Methods:
+        - load_data: given an experiment and a list of samples (or 'all' for all samples), load a uniform sample from each
+        - cluster: perform clustering as specified in the Clustering Definition
+        - explorer: generate an Explorer object for visualising clustering and exploring meta-data
     """
     def __init__(self,  **kwargs):
         super().__init__(**kwargs)
@@ -781,7 +809,7 @@ class GlobalClustering(Clustering):
                     fdata = fdata.sample(n=sample_n)
 
             # Label each single cell (row) with
-            fdata = self.__population_labels(fdata, g.populations[self.ce.root_population])
+            fdata = self._population_labels(fdata, g.populations[self.ce.root_population])
             fdata = fdata.reset_index()
             fdata = fdata.rename({'index': 'original_index'}, axis=1)
             pt = Patient.objects(files__contains=g.mongo_id)
@@ -793,7 +821,7 @@ class GlobalClustering(Clustering):
             self.data = pd.concat([self.data, fdata])
         print('------------ Completed! ------------')
 
-    def __population_labels(self, data: pd.DataFrame, root_node: Node) -> pd.DataFrame:
+    def _population_labels(self, data: pd.DataFrame, root_node: Node) -> pd.DataFrame:
         """
         Internal function. Called when loading data. Populates DataFrame column named 'population_label' with the
         name of the node associated with each event most downstream of the root population.
@@ -847,6 +875,11 @@ class MetaClustering(Clustering):
         experiment - This is the FCS Experiment that samples will be taken from
         samples - list of sample names to extract clusters from; if a value of 'all' is given, then all of the samples
         associated to that experiment will be used in the meta clustering
+    Methods:
+        load_clusters: loads the clustering allocations from each of the given samples in an experiment. Clusters are summarised
+        by finding their centroid (the median of each feature); resulting in each row of 'data' corresponding to a unique cluster/patient combination.
+        cluster: perform meta-clistering as defined by clustering definition
+        explorer: generate an Explorer object for visualising clustering and exploring meta-data
     """
     def __init__(self, experiment: FCSExperiment, samples: str or list = 'all', **kwargs):
         super().__init__(**kwargs)
@@ -897,7 +930,7 @@ class MetaClustering(Clustering):
                                                'n_resamples', 'resample_proportion'])
             clustering, init_params = self._fetch_clustering_class(init_params)
             consensus_clust = ConsensusCluster(cluster=clustering, **init_params)
-            consensus_clust.fit(self.data[features], verbose=True)
+            consensus_clust.fit(self.data[features])
             self.data['meta_cluster_id'] = consensus_clust.predict_data(self.data[features])
         elif self.ce.method == 'PhenoGraph':
             self.data['meta_cluster_id'] = super().cluster()
