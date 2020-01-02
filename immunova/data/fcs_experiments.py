@@ -62,7 +62,7 @@ class FCSExperiment(mongoengine.Document):
             self.gating_templates = [g for g in self.gating_templates if g.template_name != template_name]
         self.save()
 
-    def __sample_exists(self, sample_id):
+    def sample_exists(self, sample_id):
         if sample_id not in self.list_samples():
             print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
             return False
@@ -74,7 +74,7 @@ class FCSExperiment(mongoengine.Document):
         :param sample_id: sample ID for search
         :return: FileGroup object; if sample does not belong to experiment, returns Null
         """
-        if not self.__sample_exists(sample_id):
+        if not self.sample_exists(sample_id):
             return None
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
         return FileGroup.objects(id=file_grp.id).get()
@@ -95,7 +95,7 @@ class FCSExperiment(mongoengine.Document):
         :param sample_id: sample ID for sample of interest
         :return: string value for ObjectID
         """
-        if not self.__sample_exists(sample_id):
+        if not self.sample_exists(sample_id):
             return None
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
         return file_grp.id.__str__()
