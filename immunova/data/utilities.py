@@ -66,7 +66,7 @@ def data_from_file(file: File, sample_size: int, output_format: str = 'dataframe
     either 'marker' or 'channel' (default = 'marker')
     :return: Dictionary output {id: file_id, typ: file_type, data: dataframe/matrix}
     """
-    data = file.raw_data(sample=sample_size)
+    data = file.pull(sample=sample_size)
     if output_format == 'dataframe':
         data = as_dataframe(data, column_mappings=file.channel_mappings, columns_default=columns_default)
     return dict(id=file.file_id, typ=file.file_type, data=data)
