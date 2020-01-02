@@ -12,6 +12,7 @@ from matplotlib.colors import LogNorm
 from sklearn import preprocessing
 from sklearn.cluster import AgglomerativeClustering, KMeans
 import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
