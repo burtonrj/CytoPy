@@ -24,12 +24,17 @@ class FCSExperiment(mongoengine.Document):
         gating_templates - reference to gating templates associated to this experiment
     Methods:
         pull_sample_data - Given a sample ID, associated to this experiment, fetch the fcs data
+        pull_sample - Given a sample ID, returns the FileGroup object
         list_samples - Generate a list IDs of file groups associated to experiment
+        list_invalid - Lists all samples that have an 'invalid' flag
         remove_sample - Remove sample (FileGroup) from experiment.
         add_new_sample - Add a new sample (FileGroup) to this experiment
         fetch_sample_mid - Given a sample_id, return it's corresponding mongo ObjectID
         pull_sample_mappings - Given a sample ID, return a dictionary of channel/marker mappings for
         all associated fcs files
+        delete_all_popilations - deletes all population data associated to a given sample; value of 'all' will delete population data for every sample
+        delete_gating_templates - deletes a gating template associated to experiment; value of 'all' will delete all gating templates
+        sample_exists - checks if sample is associated to experiment
 
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
@@ -45,6 +50,12 @@ class FCSExperiment(mongoengine.Document):
     }
 
     def delete_all_populations(self, sample_id: str, remove_gates: bool = False):
+        """
+        Delete population data associated to experiment. Give a value of 'all' for sample_id to remove all population data for every sample.
+        :param sample_id: name of sample to remove populations from'; give a value of 'all' for sample_id to remove all population data for every sample.
+        :param remove_gates: If True, all stored gating information will also be removed
+        :return: None
+        """
         for f in self.fcs_files:
             if sample_id == 'all' or f.primary_id == sample_id:
                 f.populations = []
@@ -53,6 +64,11 @@ class FCSExperiment(mongoengine.Document):
                 f.save()
 
     def delete_gating_templates(self, template_name: str):
+        """
+        Remove association and delete gating template. If template_name is 'all', then all associated gating templates will be deleted and removed
+        :param template_name: name of template to remove; if 'all', then all associated gating templates will be deleted and removed
+        :return: None
+        """
         for g in self.gating_templates:
             if template_name == 'all' or g.template_name == template_name:
                 g.delete()
@@ -62,7 +78,12 @@ class FCSExperiment(mongoengine.Document):
             self.gating_templates = [g for g in self.gating_templates if g.template_name != template_name]
         self.save()
 
-    def sample_exists(self, sample_id):
+    def sample_exists(self, sample_id: str) -> bool:
+        """
+        Returns True if the given sample_id exists in FCSExperiment
+        :param sample_id: name of sample to search for
+        :return: True if exists, else False
+        """
         if sample_id not in self.list_samples():
             print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
             return False
@@ -86,7 +107,11 @@ class FCSExperiment(mongoengine.Document):
         """
         return [f.primary_id for f in self.fcs_files]
 
-    def list_invalid(self):
+    def list_invalid(self) -> list:
+        """
+        Generate list of sample IDs for samples that have the 'invalid' flag in their flag attribute
+        :return: List of sample IDs for invalid samples
+        """
         return [f.primary_id for f in self.fcs_files if not f.validity()]
 
     def fetch_sample_mid(self, sample_id: str) -> str or None:
@@ -164,9 +189,9 @@ class FCSExperiment(mongoengine.Document):
         self.save()
         return True
 
-    def __create_file_entry(self, path: str, file_id: str, comp_matrix: np.array,
-                            compensate: bool, catch_standardisation_errors: bool,
-                            control: bool = False) -> File or None:
+    def _create_file_entry(self, path: str, file_id: str, comp_matrix: np.array,
+                           compensate: bool, catch_standardisation_errors: bool,
+                           control: bool = False) -> File or None:
         """
         Internal method. Create a new File object.
         :param path: file path of the primary fcs file (e.g. the fcs file that is of primary interest such as the
@@ -232,18 +257,18 @@ class FCSExperiment(mongoengine.Document):
         if collection_datetime is not None:
             file_collection.collection_datetime = collection_datetime
         file_collection.primary_id = sample_id
-        primary_file = self.__create_file_entry(file_path, sample_id, comp_matrix=comp_matrix, compensate=compensate,
-                                                catch_standardisation_errors=catch_standardisation_errors)
+        primary_file = self._create_file_entry(file_path, sample_id, comp_matrix=comp_matrix, compensate=compensate,
+                                               catch_standardisation_errors=catch_standardisation_errors)
         if not primary_file:
             return None
         file_collection.files.append(primary_file)
         if feedback:
             print('Generating file entries for controls...')
         for c in controls:
-            control = self.__create_file_entry(c['path'], f"{sample_id}_{c['control_id']}",
-                                               comp_matrix=comp_matrix, compensate=compensate,
-                                               catch_standardisation_errors=catch_standardisation_errors,
-                                               control=True)
+            control = self._create_file_entry(c['path'], f"{sample_id}_{c['control_id']}",
+                                              comp_matrix=comp_matrix, compensate=compensate,
+                                              catch_standardisation_errors=catch_standardisation_errors,
+                                              control=True)
             if not control:
                 return None
             file_collection.files.append(control)
