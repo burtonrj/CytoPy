@@ -1,5 +1,6 @@
 from immunova.data.fcs_experiments import FCSExperiment
 from immunova.flow.gating.transforms import apply_transform
+from immunova.flow.utilities import progress_bar
 from multiprocessing import Pool, cpu_count
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from imblearn.over_sampling import RandomOverSampler
@@ -68,20 +69,25 @@ def predict_class(y_probs: np.array, threshold: float or None = None):
 
 
 def calculate_ref_sample_fast(experiment, exclude_samples, sample_n):
+    print('-------- Calculating Reference Sample (Multi-processing) --------')
     # Calculate common features
+    print('...match feature space between samples')
     features = find_common_features(experiment)
     # List samples
     all_samples = [x for x in experiment.list_samples() if x not in exclude_samples]
+    print('...pulling data')
     # Fetch data
     pool = Pool(cpu_count())
     f = partial(pull_data_hashtable, experiment=experiment, features=features, sample_n=sample_n)
     all_data_ = pool.map(f, all_samples)
+    print('...calculate covariance matrix for each sample')
     # Calculate covar for each
     all_data = dict()
     for d in all_data_:
         all_data.update(d)
     del all_data_
     all_data = {k: np.cov(v, rowvar=False) for k, v in all_data.items()}
+    print('...search for sample with smallest average euclidean distance to all other samples')
     # Make comparisons
     n = len(all_samples)
     norms = np.zeros(shape=[n, n])
@@ -111,7 +117,7 @@ def pull_data(sid, experiment, features, sample_n=None):
         return None
     d = [x for x in d if x['typ'] == 'complete'][0]['data'][features]
     d = d[[x for x in d.columns if x != 'Time']]
-    return apply_transform(d, transform_method='log_transform')
+    return apply_transform(d, transform_method='logicle')
 
 
 def calculate_reference_sample(experiment: FCSExperiment, exclude_samples: list, sample_n=1000) -> str:
