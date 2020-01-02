@@ -1,14 +1,11 @@
-from immunova.flow.supervised.evaluate import evaluate_model
 from immunova.flow.supervised.cell_classifier import CellClassifier, CellClassifierError
 from keras.models import Model
 from keras.layers import Input, Dense
 from keras.models import load_model
-from sklearn.model_selection import KFold
 from keras.regularizers import l2
 from keras import callbacks as cb
 from keras.callbacks import LearningRateScheduler
 import keras.optimizers
-import pandas as pd
 import numpy as np
 import math
 import os

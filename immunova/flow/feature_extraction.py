@@ -58,7 +58,7 @@ class Extract:
                 self.data[f'{pop_id}_{fmo_id}_ks_statistic'] = ks_stat
                 self.data[f'{pop_id}_{fmo_id}_ks_statistic_pval'] = p
                 self.data[f'{pop_id}_{fmo_id}_fold_change_MFI'] = ks_stat
-                self.data[f'{pop_id}_{fmo_id}_relative_entropy'] =
+                self.data[f'{pop_id}_{fmo_id}_relative_entropy'] = ''
 
     def centroid_euclidean_separation(self):
         pass
