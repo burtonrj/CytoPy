@@ -6,13 +6,6 @@ import mongoengine
 import pickle
 
 
-def generate_sample(data, n) -> np.array:
-    if n < data.shape[0]:
-        idx = np.random.randint(data.shape[0], size=n)
-        return data[idx, :]
-    return data
-
-
 class ClusteringDefinition(mongoengine.Document):
     """
     Defines the methodology and parameters of clustering to apply to an FCS File Group, or in the case of
@@ -143,8 +136,8 @@ class Normalisation(mongoengine.EmbeddedDocument):
         :return:  Numpy array of events data (normalised)
         """
         data = pickle.loads(self.data.read())
-        if sample:
-            return generate_sample(data, sample)
+        if sample and sample < data.shape[0]:
+            return data.sample(n=sample)
         return data
 
     def put(self, data: np.array, root_population: str, method: str) -> None:
@@ -197,8 +190,8 @@ class File(mongoengine.EmbeddedDocument):
         :return:  Numpy array of events data (raw)
         """
         data = pickle.loads(self.data.read())
-        if sample:
-            return generate_sample(data, sample)
+        if sample and sample < data.shape[0]:
+            return data.sample(n=sample)
         return data
 
     def put(self, data: np.array) -> None:
