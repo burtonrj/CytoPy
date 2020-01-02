@@ -5,13 +5,26 @@ import pandas as pd
 
 
 class InteractivePlotting:
+    """
+    Interactive plotting of Gating object using Plotly
+
+    Attributes:
+        gating: Gating object (see flow.gating.actions.Gating)
+    """
     def __init__(self, gating: Gating):
         self.gating = gating
 
-    def __get_data(self, population_name, fmo_x: str or None = None, fmo_y: str or None = None,
-                   fmo_z: str or None = None):
-        if population_name not in self.gating.populations.keys():
-            raise PlottingError(f'Invalid population name, must be one of {self.gating.populations.keys()}')
+    def _get_data(self, population_name, fmo_x: str or None = None, fmo_y: str or None = None,
+                  fmo_z: str or None = None) -> pd.DataFrame:
+        """
+        Fetch a Pandas DataFrame of single cell data for a given population
+        :param population_name: required population
+        :param fmo_x: name of FMO for x-axis dimension (optional)
+        :param fmo_y: name of FMO for y-axis dimension (optional)
+        :param fmo_z: name of FMO for z-axis dimension (optional)
+        :return: Pandas DataFrame of single cell data for given population
+        """
+        assert population_name in self.gating.populations.keys(), f'Invalid population name, must be one of {self.gating.populations.keys()}'
         data = dict(primary=self.gating.get_population_df(population_name, transform=False).copy())
         for fmo in [fmo_x, fmo_y, fmo_z]:
             if fmo:
@@ -42,7 +55,7 @@ class InteractivePlotting:
     def scatter_3d_fmo(self, population_name, x, y, z, transforms,
                        fmo_x: str or None = None, fmo_y: str or None = None,
                        fmo_z: str or None = None):
-        data = self.__get_data(population_name=population_name, fmo_x=fmo_x, fmo_y=fmo_y, fmo_z=fmo_z)
+        data = self._get_data(population_name=population_name, fmo_x=fmo_x, fmo_y=fmo_y, fmo_z=fmo_z)
         data = self.__transform_data(data=data, axes_vars={'x': x, 'y': y, 'z': z}, transforms=transforms)
         d = pd.DataFrame()
         for k, v in data.items():
