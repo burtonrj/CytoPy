@@ -1,29 +1,12 @@
 import mongoengine
 
-
-def global_init():
-    """
-    MongoDB setup for immunova database
-    :return:
-    """
-    mongoengine.register_connection(alias='core', name='immunova')
-
-
-def test_init():
-    """
-    MongoDB setup for immunova database
-    :return:
-    """
-    mongoengine.register_connection(alias='core', name='test_server')
-
-
-def pd_test_init():
-    """
-    MongoDB setup for immunova database
-    :return:
-    """
-    mongoengine.register_connection(alias='core', name='pd_test_server')
-
-
 def pd_init():
     mongoengine.register_connection(alias='core', name='pd_server')
+
+def global_init(database_name: str) -> None:
+    """
+    Global initializer for mongogengine ORM
+    :param database_name: name of database to establish connection with
+    :return:
+    """
+    mongoengine.register_connection(alias='core', name=database_name)
