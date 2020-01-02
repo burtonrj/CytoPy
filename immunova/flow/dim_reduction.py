@@ -1,6 +1,6 @@
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
-from umap import UMAP
+from umap. import UMAP
 import numpy as np
 import pandas as pd
 import phate
