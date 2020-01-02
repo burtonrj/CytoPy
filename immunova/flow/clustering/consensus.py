@@ -9,19 +9,19 @@ class ConsensusCluster:
       Implementation of Consensus clustering, following the paper
       https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf
       Args:
-        * cluster -> clustering class
+        - cluster -> clustering class
                     needs fit_predict method called with parameter n_clusters
-        * L -> smallest number of clusters to try
-        * K -> biggest number of clusters to try
-        * H -> number of resamplings for each cluster number
-        * resample_proportion -> percentage to sample
-        * Mk -> consensus matrices for each k (shape =(K,data.shape[0],data.shape[0]))
+        - L -> smallest number of clusters to try
+        - K -> biggest number of clusters to try
+        - H -> number of resamplings for each cluster number
+        - resample_proportion -> percentage to sample
+        - Mk -> consensus matrices for each k (shape =(K,data.shape[0],data.shape[0]))
                 (NOTE: every consensus matrix is retained, like specified in the paper)
-        * Ak -> area under CDF for each number of clusters
+        - Ak -> area under CDF for each number of clusters
                 (see paper: section 3.3.1. Consensus distribution.)
-        * deltaK -> changes in ares under CDF
+        - deltaK -> changes in ares under CDF
                 (see paper: section 3.3.1. Consensus distribution.)
-        * self.bestK -> number of clusters that was found to be best
+        - self.bestK -> number of clusters that was found to be best
       """
 
     def __init__(self, cluster, smallest_cluster_n, largest_cluster_n, n_resamples, resample_proportion=0.5):
@@ -47,7 +47,7 @@ class ConsensusCluster:
             range(data.shape[0]), size=int(data.shape[0]*proportion), replace=False)
         return resampled_indices, data[resampled_indices, :]
 
-    def fit(self, data, verbose=False):
+    def fit(self, data):
         """
         Fits a consensus matrix for each number of clusters
         Args:
@@ -56,13 +56,9 @@ class ConsensusCluster:
         """
         Mk = np.zeros((self.K_-self.L_, data.shape[0], data.shape[0]))
         Is = np.zeros((data.shape[0],)*2)
-        for k in range(self.L_, self.K_):  # for each number of clusters
+        for k in progress_bar(range(self.L_, self.K_)):  # for each number of clusters
             i_ = k-self.L_
-            if verbose:
-                print("At k = %d, aka. iteration = %d" % (k, i_))
             for h in range(self.H_):  # resample H times
-                if verbose:
-                    print("\tAt resampling h = %d, (k = %d)" % (h, k))
                 resampled_indices, resample_data = self._internal_resample(
                     data, self.resample_proportion_)
                 Mh = self.cluster_(n_clusters=k).fit_predict(resample_data)
