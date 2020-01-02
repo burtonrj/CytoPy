@@ -10,11 +10,18 @@ class FlowSOM:
     Python implementation of FlowSOM algorithm, adapted from https://github.com/Hatchin/FlowSOM
 
     Arguments:
-        * data: training data (Pandas DataFrame)
-        * features: list of columns to include
-        * neighborhood_function: name of distribution for initialising weights (default = 'gaussian')
-        * normalisation: if True, data is normalised prior to initialising weights (recommended if initialising
+        - data: training data (Pandas DataFrame)
+        - features: list of columns to include
+        - neighborhood_function: name of distribution for initialising weights (default = 'gaussian')
+        - normalisation: if True, data is normalised prior to initialising weights (recommended if initialising
         weights using PCA).
+
+    Methods:
+        - train: train nodes of self-organising map
+        - meta-cluster: using Consensus Clustering (see flow.clustering.consensus.ConsensusClustering) perform meta-clustering; finds the optimal number of
+        meta clusters in a given range
+        - predict: returns a list of clustering allocations where each row corresponds to the rows in the training data, predicted using the constructed SOM and
+        results of meta-clustering (requires that 'train' and 'meta-cluster' have been called prior)
     """
     def __init__(self, data: pd.DataFrame,
                  features: list,
