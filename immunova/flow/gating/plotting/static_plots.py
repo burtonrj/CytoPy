@@ -11,11 +11,6 @@ from itertools import cycle
 import pandas as pd
 import numpy as np
 
-
-class PlottingError(Exception):
-    pass
-
-
 def transform_axes(data: pd.DataFrame, axes_vars: dict, transforms: dict) -> pd.DataFrame:
     """
     Transform axes by either logicle, log, asinh, or hyperlog transformation
@@ -27,15 +22,13 @@ def transform_axes(data: pd.DataFrame, axes_vars: dict, transforms: dict) -> pd.
     :return: Transform dataframe
     """
     def check_vars(x):
-        if x not in data.columns:
-            raise PlottingError(f'Error: {x} is not a valid variable, must be one of: {data.columns}')
+        assert x in data.columns, f'Error: {x} is not a valid variable, must be one of: {data.columns}'
     data = data.copy()
     map(check_vars, axes_vars.values())
-    for ax in axes_vars.keys():
-        if ax in transforms.keys():
-            if transforms[ax] is None:
-                continue
-            data = apply_transform(data=data, transform_method=transforms[ax], features_to_transform=[axes_vars[ax]])
+    for ax, var in axes_vars.items():
+        if transforms.get(ax, None) is None:
+            continue
+        data = apply_transform(data=data, transform_method=transforms[ax], features_to_transform=[axes_vars[ax]])
     return data[axes_vars.values()]
 
 
