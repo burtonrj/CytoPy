@@ -11,7 +11,7 @@ Python libraries: \
 -numpy 1.18\
 -pandas\
 *Cytometry Stack*\
--FlowUtils\
+-FlowUtilsPandas\
 -FlowIO\
 *Machine Learning*\
 -scikit-learn\
