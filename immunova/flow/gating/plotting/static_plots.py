@@ -120,8 +120,7 @@ class Plot:
         the variable to plot (If None, defaults to logicle transform for every axis)
         :return: None
         """
-        if gate_name not in self.gating.gates.keys():
-            raise PlottingError(f'Error: could not find {gate_name} in attached gate object')
+        assert gate_name in self.gating.gates.keys(), f'Error: could not find {gate_name} in attached gate object'
         gate = self.gating.gates[gate_name]
         kwargs = {k: v for k, v in gate.kwargs}
 
@@ -138,7 +137,7 @@ class Plot:
 
         geoms = {c: self.gating.populations[c].geom for c in gate.children}
         data = {k: transform_axes(v, axes_vars, transforms) for k, v in self._get_gate_data(gate).items()}
-        xlim, ylim = self.__plot_axis_lims(data=data, x=axes_vars['x'], y=y, xlim=xlim, ylim=ylim)
+        xlim, ylim = plot_axis_lims(data=data, x=axes_vars['x'], y=y, xlim=xlim, ylim=ylim)
         num_axes = len(data.keys())
         fig, axes = plt.subplots(ncols=num_axes, figsize=(5, 5))
         self.__geom_plot(data=data, fig=fig, axes=axes,
@@ -178,7 +177,6 @@ class Plot:
         """
         Produce a plot of a gate that generates a geometric object
         :param data: pandas dataframe of events data to plot
-        :param gate: Gate object to plot
         :param xlim: custom x-axis limit (default = None)
         :param ylim: custom y-axis limit (default = None)
         :param ax: matplotlib axes object
@@ -274,7 +272,7 @@ class Plot:
             transforms = dict(x='logicle', y='logicle')
         data = transform_axes(data=data, axes_vars={'x':x, 'y':y}, transforms=transforms)
 
-        xlim, ylim = self.__plot_axis_lims(data={'primary': data}, x=x, y=y, xlim=xlim, ylim=ylim)
+        xlim, ylim = plot_axis_lims(data={'primary': data}, x=x, y=y, xlim=xlim, ylim=ylim)
         if data.shape[0] < 1000:
             ax.scatter(x=data[x], y=data[y], s=3)
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title=population_name)
@@ -301,14 +299,11 @@ class Plot:
         """
         # Check populations exist
         for p in [root_population] + populations:
-            if p not in self.gating.populations.keys():
-                raise PlottingError(f'Error: could not find {p} in associated gatting object')
+            assert p in self.gating.populations.keys(), f'Error: could not find {p} in associated gatting object'
         # Check root population is upstream
         for p in populations:
             dependencies = self.gating.find_dependencies(p)
-            if root_population in dependencies:
-                raise PlottingError(f'Error: population {p} is upstream from '
-                                    f'the chosen root population {root_population}')
+            assert root_population not in dependencies, f'Error: population {p} is upstream from the chosen root population {root_population}'
         # Establish axis vars and transforms
         axes_vars = {'x': x, 'y': y}
         if transforms is None:
