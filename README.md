@@ -20,6 +20,8 @@ Python libraries: \
 -umap\
 -hdbscan\
 -keras\
+-phenograph\
+-minisom\
 *Plotting*\
 -matplotlib\
 -seaborn\
