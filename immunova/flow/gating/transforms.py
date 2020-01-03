@@ -1,4 +1,4 @@
-from flowutils.transforms import logicle, hyperlog, log_transform, asinh
+from flowutilspd.transforms import logicle, hyperlog, log_transform, asinh
 import pandas as pd
 
 
