@@ -4,6 +4,7 @@ from shapely.geometry.polygon import Polygon
 from scipy.spatial import ConvexHull
 from sklearn.neighbors import KDTree
 from functools import partial
+from collections import defaultdict
 import pandas as pd
 import numpy as np
 
@@ -142,6 +143,9 @@ class Gate:
         pospos = self.child_populations.fetch_by_definition('++')
         posneg = self.child_populations.fetch_by_definition('+-')
         negpos = self.child_populations.fetch_by_definition('-+')
+        definitions = defaultdict(list)
+        for name, definition in zip([negneg, negpos, posneg, pospos], ['--', '-+', '+-', '++']):
+            definitions[name].append(definition)
 
         if any([x is None for x in [negneg, negpos, posneg, pospos]]):
             GateError('Invalid ChildPopulationCollection; must contain definitions for --, -+, +-, and ++ populations')
@@ -155,11 +159,13 @@ class Gate:
         pos_idx = np.intersect1d(xp_idx, yn_idx)
         self.child_populations.populations[posneg].update_index(idx=pos_idx, merge_options='merge')
 
-        for x, definition in zip([negneg, negpos, posneg, pospos], ['--', '-+', '+-', '++']):
-            self.child_populations.populations[x].update_geom(shape='2d_threshold', x=self.x,
-                                                              y=self.y, method=method, threshold_x=float(x_threshold),
-                                                              threshold_y=float(y_threshold), definition=definition,
-                                                              transform_x=self.transform_x, transform_y=self.transform_y)
+        for name, definition in definitions.items():
+            if len(definition) == 0:
+                definition = definition[0]
+            self.child_populations.populations[name].update_geom(shape='2d_threshold', x=self.x,
+                                                                 y=self.y, method=method, threshold_x=float(x_threshold),
+                                                                 threshold_y=float(y_threshold), definition=definition,
+                                                                 transform_x=self.transform_x, transform_y=self.transform_y)
 
     def uniform_downsample(self, frac: float or None, sample_n: int or None = None, data: pd.DataFrame or None = None):
         """
