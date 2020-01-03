@@ -31,10 +31,36 @@ def transform_axes(data: pd.DataFrame, axes_vars: dict, transforms: dict) -> pd.
         data = apply_transform(data=data, transform_method=transforms[ax], features_to_transform=[axes_vars[ax]])
     return data[axes_vars.values()]
 
+def plot_axis_lims(data: dict, x: str, y: str, xlim: tuple, ylim: tuple) -> tuple and tuple:
+    """
+    Establish axis limits
+    :param data: dictionary of single cell data where 'priamry' is the dataframe for the main single cell data,
+    and other keys correspond to FMO data
+    :param x: name of x axis
+    :param y: name of y axis
+    :param xlim: custom x-axis limit (default = None)
+    :param ylim: custom y-axis limit (default = None)
+    :return: x-axis limits, y-axis limits
+    """
+    is_fmo = any(['fmo' in k for k in data.keys()])
+
+    def update_lim(a, lim):
+        if not lim:
+            if any([a.find(c) != -1 for c in ['FSC', 'SSC']]):
+                return 0, 250000
+            if is_fmo:
+                return data['primary'][a].min(), data['primary'][a].max()
+        return lim
+    return update_lim(x, xlim), update_lim(y, ylim)
+
 
 class Plot:
     """
-    Class for producing facs plots
+    Class for producing FACs plots.
+
+    Attributes:
+        gating: Gating object to perform plotting from
+
     """
     def __init__(self, gating_object):
         """
@@ -44,7 +70,7 @@ class Plot:
         self.gating = gating_object
         self.colours = cycle(plt.get_cmap('tab20c').colors)
 
-    def __get_gate_data(self, gate: Gate) -> dict:
+    def _get_gate_data(self, gate: Gate) -> dict:
         """
         Given a gate, return all associated data that gate acts upon. Data is returned as raw with no transformations.
         :param gate: Gate document
@@ -58,26 +84,7 @@ class Plot:
                                                    fmo=kwargs[x])
         return data
 
-    @staticmethod
-    def __plot_axis_lims(data: dict, x: str, y: str, xlim: tuple, ylim: tuple) -> tuple and tuple:
-        """
-        Establish axis limits
-        :param x: name of x axis
-        :param y: name of y axis
-        :param xlim: custom x-axis limit (default = None)
-        :param ylim: custom y-axis limit (default = None)
-        :return: x-axis limits, y-axis limits
-        """
-        is_fmo = any(['fmo' in k for k in data.keys()])
 
-        def update_lim(a, lim):
-            if not lim:
-                if any([a.find(c) != -1 for c in ['FSC', 'SSC']]):
-                    return 0, 250000
-                if is_fmo:
-                    return data['primary'][a].min(), data['primary'][a].max()
-            return lim
-        return update_lim(x, xlim), update_lim(y, ylim)
 
     @staticmethod
     def __plot_asthetics(ax: matplotlib.pyplot.axes, x: str, y: str,
@@ -130,7 +137,7 @@ class Plot:
                     transforms[a] = None
 
         geoms = {c: self.gating.populations[c].geom for c in gate.children}
-        data = {k: transform_axes(v, axes_vars, transforms) for k, v in self.__get_gate_data(gate).items()}
+        data = {k: transform_axes(v, axes_vars, transforms) for k, v in self._get_gate_data(gate).items()}
         xlim, ylim = self.__plot_axis_lims(data=data, x=axes_vars['x'], y=y, xlim=xlim, ylim=ylim)
         num_axes = len(data.keys())
         fig, axes = plt.subplots(ncols=num_axes, figsize=(5, 5))
