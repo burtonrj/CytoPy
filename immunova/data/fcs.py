@@ -154,7 +154,8 @@ class Normalisation(mongoengine.EmbeddedDocument):
         """
         data = pickle.loads(self.data.read())
         if sample and sample < data.shape[0]:
-            return np.random.choice(data, size=sample)
+            idx = np.random.randint(0, data.shape[0], size=sample)
+            return data[idx, :]
         return data
 
     def put(self, data: np.array, root_population: str, method: str) -> None:
@@ -207,7 +208,8 @@ class File(mongoengine.EmbeddedDocument):
         """
         data = pickle.loads(self.data.read())
         if sample and sample < data.shape[0]:
-            return np.random.choice(data, size=sample)
+            idx = np.random.randint(0, data.shape[0], size=sample)
+            return data[idx, :]
         return data
 
     def put(self, data: np.array) -> None:
