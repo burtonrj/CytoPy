@@ -6,7 +6,7 @@ from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.supervised.utilities import standard_scale, norm_scale, find_common_features, \
     predict_class, random_oversampling
 from immunova.flow.gating.utilities import density_dependent_downsample, check_downstream_overlaps
-from immunova.flow.supervised.evaluate import evaluate_model
+from immunova.flow.supervised.evaluate import evaluate_model, report_card
 from immunova.flow.utilities import progress_bar
 from sklearn.model_selection import train_test_split, KFold
 from multiprocessing import Pool, cpu_count
@@ -382,7 +382,7 @@ class CellClassifier:
         test_performance['test_train'] = 'test'
         return pd.concat([train_performance, test_performance])
 
-    def train_holdout(self, holdout_frac: float = 0.3, **kwargs) -> pd.DataFrame:
+    def train_holdout(self, holdout_frac: float = 0.3, print_report_card: bool = False, **kwargs) -> pd.DataFrame:
         """
         Fit classifier to training data and evaluate on holdout data.
         :param holdout_frac: Proportion of data to keep as holdout
@@ -390,14 +390,19 @@ class CellClassifier:
         :return: Pandas DataFrame detailing performance
         """
         train_x, test_x, train_y, test_y = self.train_test_split(test_size=holdout_frac)
-        self.classifier.fit(train_x, train_y)
-        train_performance = evaluate_model(self.classifier, train_x, train_y, self.threshold)
-        train_performance['test_train'] = 'train'
-        test_performance = evaluate_model(self.classifier, test_x, test_y, self.threshold)
-        test_performance['test_train'] = 'test'
-        return pd.concat([test_performance, train_performance])
+        self.classifier.fit(train_x, train_y, **kwargs)
+        if not print_report_card:
+            train_performance = evaluate_model(self.classifier, train_x, train_y, self.threshold)
+            train_performance['test_train'] = 'train'
+            test_performance = evaluate_model(self.classifier, test_x, test_y, self.threshold)
+            test_performance['test_train'] = 'test'
+            return pd.concat([test_performance, train_performance])
+        print('TRAINING PERFORMANCE')
+        report_card(self.classifier, train_x, train_y, mappings=self.mappings, threshold=self.threshold)
+        print('HOLDOUT PERFORMANCE')
+        report_card(self.classifier, test_x, test_y, mappings=self.mappings, threshold=self.threshold)
 
-    def manual_validation(self, sample_id: str, return_probs: bool = False) -> pd.DataFrame or (pd.DataFrame and np.array):
+    def manual_validation(self, sample_id: str, return_probs: bool = False, print_report_card: bool = False) -> pd.DataFrame or (pd.DataFrame and np.array):
         """
         Perform manual validation of the classifier using a sample associated to the same experiment as the
         training data. Important: the sample given MUST be pre-gated with the same populations as the training dataset
@@ -408,19 +413,23 @@ class CellClassifier:
         """
         if self.classifier is None:
             raise CellClassifierError('Error: model must be trained prior to validation')
-        ref = Gating(self.experiment, sample_id)
+        ref = Gating(self.experiment, sample_id, include_controls=False)
         if self.multi_label:
             x, y, mappings = self.multiclass_labels(ref, self.features)
         else:
             x, y, mappings = self.singleclass_labels(ref, self.features)
-
+        assert mappings.keys() == self.mappings.keys(), f'Class mappings do not match training data: {mappings} != {self.mappings}'
+        assert all([np.array_equal(mappings[k], self.mappings[k]) for k in self.mappings.keys()]), f'Class mappings do not match training data: {mappings} != {self.mappings}'
         if self.preprocessor is not None:
             x = self.preprocessor.transform(x)
-
-        performance = evaluate_model(self.classifier, x, y, threshold=self.threshold)
+        if not print_report_card:
+            performance = evaluate_model(self.classifier, x, y, threshold=self.threshold)
+            if return_probs:
+                return self.classifier.predict_proba(x), performance
+            return performance
+        report_card(self.classifier, x, y, threshold=self.threshold, mappings=mappings)
         if return_probs:
-            return self.classifier.predict_proba(x), performance
-        return performance
+            return self.classifier.predict_proba(x)
 
     def balance_dataset(self, method: str = 'oversample', frac: float = 0.5,
                         **kwargs) -> (pd.DataFrame or np.array, np.array):
