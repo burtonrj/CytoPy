@@ -160,7 +160,7 @@ class Gate:
         self.child_populations.populations[posneg].update_index(idx=pos_idx, merge_options='merge')
 
         for name, definition in definitions.items():
-            if len(definition) == 0:
+            if len(definition) == 1:
                 definition = definition[0]
             self.child_populations.populations[name].update_geom(shape='2d_threshold', x=self.x,
                                                                  y=self.y, method=method, threshold_x=float(x_threshold),

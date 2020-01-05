@@ -161,7 +161,7 @@ class CellClassifier:
     Class for performing classification of cells by supervised machine learning.
     """
     def __init__(self, experiment: FCSExperiment, reference_sample: str, population_labels: list, features: list,
-                 multi_label: bool = True, transform: str = 'log_transform', root_population: str = 'root',
+                 multi_label: bool = True, transform: str = 'logicle', root_population: str = 'root',
                  threshold: float = 0.5, scale: str or None = 'Standardise',
                  balance_method: None or str or dict = None, frac: float or None = None,
                  **downsampling_kwargs):
@@ -267,6 +267,7 @@ class CellClassifier:
                   for a, i in labels.items()}
         pops = np.array(self.population_labels)
         mappings = {i: pops[np.where(np.array(x) == 1)] for i, x in labels.items()}
+        mappings = {k: v if len(v) > 0 else np.array(['None']) for k, v in mappings.items()}
         return train_X, train_y, mappings
 
     def singleclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array, dict):
@@ -362,7 +363,9 @@ class CellClassifier:
         train_performance = list()
         test_performance = list()
         print(f'----------- Cross Validation: {k} folds -----------')
-        for i, (train_index, test_index) in progress_bar(enumerate(kf.split(self.train_X))):
+        idx = kf.split(self.train_X)
+        for i in progress_bar(range(k)):
+            train_index, test_index = next(idx)
             train_x, test_x = self.train_X[train_index], self.train_X[test_index]
             train_y, test_y = self.train_y[train_index], self.train_y[test_index]
             self.classifier.fit(train_x, train_y, **kwargs)

@@ -12,9 +12,9 @@ import os
 
 
 def step_decay(epoch):
-    '''
-    Learning rate schedule.
-    '''
+    """
+    Learning rate scheduler.
+    """
     initial_lrate = 1e-3
     drop = 0.5
     epochs_drop = 50.0
