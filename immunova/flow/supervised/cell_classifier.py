@@ -245,7 +245,7 @@ class CellClassifier:
         for pop in self.population_labels:
             root[pop] = 0
             root.loc[ref.populations[pop].index, pop] = 1
-        return root[features], root[self.population_labels].values
+        return root[features].values, root[self.population_labels].values
 
     def multiclass_labels(self, ref: Gating, features: list) -> (pd.DataFrame, np.array, dict):
         """
@@ -319,38 +319,51 @@ class CellClassifier:
         target.update_populations(new_populations, parent, parent_name=self.root_population, warnings=[])
         return target
 
-    def __preprocess_target(self, sample_gates: Gating) -> pd.DataFrame:
-        """
-        Internal method. Transform and scale data from the given Gating object.
-        :param sample_gates: Gating object
-        :return: Transformed and scaled DataFrame.
-        """
-        data = sample_gates.get_population_df(self.root_population,
-                                              transform=True,
-                                              transform_method=self.transform)[self.features]
-        if self.preprocessor is None:
-            return data
-        transformed_data = pd.DataFrame(self.preprocessor.fit_transform(data.copy()),
-                                        columns=self.features, index=data.index)
-        return transformed_data
-
-    def predict(self, target_sample: str) -> Gating:
+    def predict(self, target_sample: str, return_gating: bool = True, return_data: bool = False) -> Gating or (np.array, np.array):
         """
         Given a sample ID, predict cell populations. Model must already be trained. Results are saved as new
         populations in a Gating object returned to the user.
         :param target_sample: Name of file for prediction. Must belong to experiment associated to CellClassifier obj.
         :return: Gating object containing new predicted populations.
         """
-        sample_gates = Gating(self.experiment, target_sample)
-        target_sample = self.__preprocess_target(sample_gates)
-        if self.classifier is None:
-            raise CellClassifierError('Error: cell classifier has not been trained, either '
-                                      'load an existing model using the `load_model` method or train '
-                                      'the classifier using the `train_classifier` method')
+        assert self.classifier is not None, 'Model must be trained prior to prediction'
 
-        y_probs = self.classifier.predict_proba(target_sample.values)
+        # Load the sample and prepare training data and labels
+        # Note: data is transformed when labels are extracted; transform method == self.transform
+        target = Gating(self.experiment, target_sample, include_controls=False)
+        if self.multi_label:
+            x, y, mappings = self.multiclass_labels(target, self.features)
+        else:
+            x, y, mappings = self.singleclass_labels(target, self.features)
+
+        # Check mappings match that expected from training data
+        assert len(mappings.keys()) == len(self.mappings.keys()), \
+            f'Class mappings do not match training data: {len(mappings.keys())} classes in validation data, but {len(self.mappings.keys())} classes in training data'
+        valm = set([np.array2string(x) for x in mappings.values()])
+        trainm = set([np.array2string(x) for x in self.mappings.values()])
+        assert valm == trainm,  f'Class mappings do not match training data: {valm} != {trainm}'
+
+        # Standardise/normalise if necessary
+        if self.preprocessor is not None:
+            x = self.preprocessor.transform(x)
+
+        # Make prediction
+        y_probs = self.classifier.predict_proba(x)
         y_hat = np.array(predict_class(y_probs, self.threshold))
-        return self.__save_gating(sample_gates, y_hat)
+        if return_gating:
+            return self.__save_gating(target, y_hat)
+        if return_data:
+            return x, y, mappings, y_probs, y_hat
+        return y_probs, y_hat
+
+    @staticmethod
+    def _exclude_class(x, y, mappings, exclude_class):
+        exclude_class = [np.array(x) for x in exclude_class]
+        mappings = {k: v for k, v in mappings.items() if not any([np.array2string(v) == np.array2string(x) for x in exclude_class])}
+        mask = [c in mappings.keys() for c in y]
+        y = y[mask]
+        x = x[mask]
+        return x, y, mappings
 
     def train_cv(self, k: int = 5, **kwargs) -> pd.DataFrame:
         """
@@ -382,6 +395,9 @@ class CellClassifier:
         test_performance['test_train'] = 'test'
         return pd.concat([train_performance, test_performance])
 
+    def train(self, **kwargs):
+        self.classifier.fit(self.train_X, self.train_y, **kwargs)
+
     def train_holdout(self, holdout_frac: float = 0.3, print_report_card: bool = False, **kwargs) -> pd.DataFrame:
         """
         Fit classifier to training data and evaluate on holdout data.
@@ -402,34 +418,26 @@ class CellClassifier:
         print('HOLDOUT PERFORMANCE')
         report_card(self.classifier, test_x, test_y, mappings=self.mappings, threshold=self.threshold)
 
-    def manual_validation(self, sample_id: str, return_probs: bool = False, print_report_card: bool = False) -> pd.DataFrame or (pd.DataFrame and np.array):
+    def manual_validation(self, sample_id: str, return_probs: bool = False,
+                          print_report_card: bool = False) -> pd.DataFrame or (pd.DataFrame and np.array):
         """
         Perform manual validation of the classifier using a sample associated to the same experiment as the
         training data. Important: the sample given MUST be pre-gated with the same populations as the training dataset
         :param sample_id: sample ID for file group to classify
         :param return_probs: if True, will return array (nrows, nclasses) of probability corresponding to each
         class prediction
+        :param print_report_card:
         :return: Pandas DataFrame of classification performance
         """
-        if self.classifier is None:
-            raise CellClassifierError('Error: model must be trained prior to validation')
-        ref = Gating(self.experiment, sample_id, include_controls=False)
-        if self.multi_label:
-            x, y, mappings = self.multiclass_labels(ref, self.features)
-        else:
-            x, y, mappings = self.singleclass_labels(ref, self.features)
-        assert mappings.keys() == self.mappings.keys(), f'Class mappings do not match training data: {mappings} != {self.mappings}'
-        assert all([np.array_equal(mappings[k], self.mappings[k]) for k in self.mappings.keys()]), f'Class mappings do not match training data: {mappings} != {self.mappings}'
-        if self.preprocessor is not None:
-            x = self.preprocessor.transform(x)
+        x, y, mappings, y_probs, y_hat = self.predict(sample_id, return_gating=False, return_data=True)
         if not print_report_card:
             performance = evaluate_model(self.classifier, x, y, threshold=self.threshold)
             if return_probs:
-                return self.classifier.predict_proba(x), performance
+                return y_probs, performance
             return performance
         report_card(self.classifier, x, y, threshold=self.threshold, mappings=mappings)
         if return_probs:
-            return self.classifier.predict_proba(x)
+            return y_probs
 
     def balance_dataset(self, method: str = 'oversample', frac: float = 0.5,
                         **kwargs) -> (pd.DataFrame or np.array, np.array):
