@@ -10,6 +10,7 @@ from matplotlib import cm
 from itertools import cycle
 import pandas as pd
 import numpy as np
+import random
 
 def transform_axes(data: pd.DataFrame, axes_vars: dict, transforms: dict) -> pd.DataFrame:
     """
@@ -250,7 +251,7 @@ class Plot:
 
     def plot_population(self, population_name: str, x: str, y: str,
                         xlim: tuple = None, ylim: tuple = None,
-                        transforms: dict or None = None):
+                        transforms: dict or None = None, sample: float or None = None):
         """
         Generate a static plot of a population
         :param population_name: name of population to plot
@@ -270,7 +271,9 @@ class Plot:
             return None
         if transforms is None:
             transforms = dict(x='logicle', y='logicle')
-        data = transform_axes(data=data, axes_vars={'x':x, 'y':y}, transforms=transforms)
+        data = transform_axes(data=data, axes_vars={'x': x, 'y': y}, transforms=transforms)
+        if sample is not None:
+            data = data.sample(frac=sample)
 
         xlim, ylim = plot_axis_lims(data={'primary': data}, x=x, y=y, xlim=xlim, ylim=ylim)
         if data.shape[0] < 1000:
@@ -283,7 +286,8 @@ class Plot:
 
     def backgate(self, root_population: str, x: str, y: str, populations: list,
                  xlim: tuple or None = None, ylim: tuple or None = None,
-                 transforms: dict or None = None, title: str or None = None) -> None:
+                 transforms: dict or None = None, title: str or None = None,
+                 plotting_mode: str = 'polygon') -> None:
         """
         This function allows for plotting of multiple populations on the backdrop of some population upstream of
         the given populations. Each population is highlighted by a polygon gate.
@@ -297,6 +301,7 @@ class Plot:
         :param title: title for plot (optional)
         :return: None
         """
+        assert plotting_mode in ['polygon', 'overlay'], 'plotting_mode must have a value of "polygon" or "overlay"'
         # Check populations exist
         for p in [root_population] + populations:
             assert p in self.gating.populations.keys(), f'Error: could not find {p} in associated gatting object'
@@ -312,18 +317,13 @@ class Plot:
                 if any([x in axes_vars[a] for x in ['FSC', 'SSC']]):
                     transforms[a] = None
 
-        # Collect data and build polygons
-        def poly_cords(pdata):
-            v = ConvexHull(pdata).vertices
-            return pdata[v, 0], pdata[v, 1]
-
         root_data = transform_axes(self.gating.get_population_df(root_population),
                                    transforms=transforms, axes_vars=axes_vars)
         pop_data = {p: transform_axes(self.gating.get_population_df(p),
-                                      axes_vars, transforms)
+                                      axes_vars, transforms)[[x, y]].values
                     for p in populations}
-        pop_hull = {p: poly_cords(d.values) for p, d in pop_data.items()}
-        pop_centroids = {p: centroid(d.values) for p, d in pop_data.items()}
+        pop_hull = {p: ConvexHull(d) for p, d in pop_data.items()}
+        pop_centroids = {p: centroid(d) for p, d in pop_data.items()}
 
         # Build plotting constructs
         if title is None:
@@ -331,10 +331,17 @@ class Plot:
         fig, ax = plt.subplots(figsize=(8,8))
         ax = self.__2dhist(ax=ax, data=root_data, x=x, y=y)
         ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
-        for p, c in zip(pop_data.keys(), cm.cmap_d['tab20'].colors):
-            ax.plot(pop_hull[p][0], pop_hull[p][1], '-k', c='r', label=p)
-            ax.scatter(x=pop_centroids[p][0], y=pop_centroids[p][0], s=25, c=[c],
-                       linewidth=1, edgecolors='black', label=p)
+        # colours = list(cm.cmap_d['tab20'].colors)
+        colours = ['black', 'gray', 'brown', 'red', 'orange', 'coral', 'peru', 'olive', 'magenta', 'crimson', 'orchid']
+        random.shuffle(colours)
+        for p, c in zip(pop_data.keys(), colours):
+            if plotting_mode == 'polygon':
+                for simplex in pop_hull[p].simplices:
+                    ax.plot(pop_data[p][simplex, 0], pop_data[p][simplex, 1], '-k', c=c)
+                ax.scatter(x=pop_centroids[p][0], y=pop_centroids[p][0], s=25, c=[c],
+                           linewidth=1, edgecolors='black', label=p)
+            else:
+                ax.scatter(x=pop_data[p][:, 0], y=pop_data[p][:, 1], s=10, c=[c], alpha=0.3, label=p)
         ax.legend()
 
 

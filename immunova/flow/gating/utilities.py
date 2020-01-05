@@ -123,11 +123,8 @@ def rectangular_filter(data: pd.DataFrame, x: str, y: str, definition: dict) -> 
 
 
 def centroid(data: np.array):
-    length = data.shape[0]
-    sum_x = np.sum(data[:, 0])
-    sum_y = np.sum(data[:, 1])
-    x = sum_x/length
-    y = sum_y/length
+    x = np.median(data[:, 0])
+    y = np.median(data[:, 1])
     return np.array([x, y])
 
 
