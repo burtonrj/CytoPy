@@ -468,15 +468,15 @@ class Gating:
                 return parent[parent[geom['x']] < geom['threshold']].index.values
             raise ValueError('Definition must have a value of "+" or "-" for a 1D threshold gate')
         if geom['shape'] == '2d_threshold':
-            def geom_bool(definition, parent, x, y):
-                if geom['definition'] == '++':
-                    return parent[x & y].index.values
-                if geom['definition'] == '--':
-                    return parent[~(x & y)].index.values
-                if geom['definition'] == '+-':
-                    return parent[x & (~y)].index.values
-                if geom['definition'] == '-+':
-                    return parent[(~x) & y].index.values
+            def geom_bool(definition, p, x_, y_):
+                if definition == '++':
+                    return p[x_ & y_].index.values
+                if definition == '--':
+                    return p[~(x_ & y_)].index.values
+                if definition == '+-':
+                    return p[x_ & (~y_)].index.values
+                if definition == '-+':
+                    return p[(~x_) & y_].index.values
                 raise ValueError('Definition must have a value of "+-", "-+", "--", or "++" for a 2D threshold gate')
 
             assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), 'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
@@ -484,7 +484,7 @@ class Gating:
             x = parent[geom['x']] >= geom['threshold_x']
             y = parent[geom['y']] >= geom['threshold_y']
             if type(geom['definition']) == list:
-                idx = list(map(lambda x: geom_bool(x, parent, x, y), geom['definition']))
+                idx = list(map(lambda d: geom_bool(d, parent, x, y), geom['definition']))
                 return [i for l in idx for i in l]
             else:
                 return geom_bool(geom['definition'], parent, x, y)
