@@ -284,10 +284,9 @@ class Plot:
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title=population_name)
         fig.show()
 
-    def backgate(self, root_population: str, x: str, y: str, populations: list,
+    def backgate(self, root_population: str, x: str, y: str, gated_populations: list, sml_populations: list,
                  xlim: tuple or None = None, ylim: tuple or None = None,
-                 transforms: dict or None = None, title: str or None = None,
-                 plotting_mode: str = 'polygon') -> None:
+                 transforms: dict or None = None, title: str or None = None) -> None:
         """
         This function allows for plotting of multiple populations on the backdrop of some population upstream of
         the given populations. Each population is highlighted by a polygon gate.
@@ -301,12 +300,11 @@ class Plot:
         :param title: title for plot (optional)
         :return: None
         """
-        assert plotting_mode in ['polygon', 'overlay'], 'plotting_mode must have a value of "polygon" or "overlay"'
         # Check populations exist
-        for p in [root_population] + populations:
+        for p in [root_population] + gated_populations + sml_populations:
             assert p in self.gating.populations.keys(), f'Error: could not find {p} in associated gatting object'
         # Check root population is upstream
-        for p in populations:
+        for p in gated_populations + sml_populations:
             dependencies = self.gating.find_dependencies(p)
             assert root_population not in dependencies, f'Error: population {p} is upstream from the chosen root population {root_population}'
         # Establish axis vars and transforms
@@ -316,14 +314,14 @@ class Plot:
             for a in ['x', 'y']:
                 if any([x in axes_vars[a] for x in ['FSC', 'SSC']]):
                     transforms[a] = None
-
+        populations = gated_populations + sml_populations
         root_data = transform_axes(self.gating.get_population_df(root_population),
                                    transforms=transforms, axes_vars=axes_vars)
         pop_data = {p: transform_axes(self.gating.get_population_df(p),
                                       axes_vars, transforms)[[x, y]].values
                     for p in populations}
-        pop_hull = {p: ConvexHull(d) for p, d in pop_data.items()}
-        pop_centroids = {p: centroid(d) for p, d in pop_data.items()}
+        pop_hull = {p: ConvexHull(d) for p, d in pop_data.items() if p in gated_populations}
+        pop_centroids = {p: centroid(d) for p, d in pop_data.items() if p in gated_populations}
 
         # Build plotting constructs
         if title is None:
@@ -331,17 +329,16 @@ class Plot:
         fig, ax = plt.subplots(figsize=(8,8))
         ax = self.__2dhist(ax=ax, data=root_data, x=x, y=y)
         ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
-        # colours = list(cm.cmap_d['tab20'].colors)
         colours = ['black', 'gray', 'brown', 'red', 'orange', 'coral', 'peru', 'olive', 'magenta', 'crimson', 'orchid']
         random.shuffle(colours)
         for p, c in zip(pop_data.keys(), colours):
-            if plotting_mode == 'polygon':
+            if p in gated_populations:
                 for simplex in pop_hull[p].simplices:
                     ax.plot(pop_data[p][simplex, 0], pop_data[p][simplex, 1], '-k', c=c)
                 ax.scatter(x=pop_centroids[p][0], y=pop_centroids[p][0], s=25, c=[c],
                            linewidth=1, edgecolors='black', label=p)
             else:
-                ax.scatter(x=pop_data[p][:, 0], y=pop_data[p][:, 1], s=10, c=[c], alpha=0.3, label=p)
+                ax.scatter(x=pop_data[p][:, 0], y=pop_data[p][:, 1], s=15, c=[c], alpha=1.0, label=p)
         ax.legend()
 
 
