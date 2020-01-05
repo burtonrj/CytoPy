@@ -32,8 +32,7 @@ class Gating:
     """
     Central class for performing gating on an FCS FileGroup of a single sample
     """
-    def __init__(self, experiment: FCSExperiment, sample_id: str,
-                 data_type='raw', sample: int or None = None,
+    def __init__(self, experiment: FCSExperiment, sample_id: str, sample: int or None = None,
                  include_controls=True):
         """
         Constructor for Gating
@@ -481,8 +480,8 @@ class Gating:
 
             assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), 'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
             parent = transform_x_y(parent)
-            x = parent[geom['x']] >= geom['threshold_x']
-            y = parent[geom['y']] >= geom['threshold_y']
+            x = parent[geom['x']].round(decimals=2) >= round(geom['threshold_x'], 2)
+            y = parent[geom['y']].round(decimals=2) >= round(geom['threshold_y'], 2)
             if type(geom['definition']) == list:
                 idx = list(map(lambda d: geom_bool(d, parent, x, y), geom['definition']))
                 return [i for l in idx for i in l]

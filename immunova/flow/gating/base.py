@@ -116,8 +116,8 @@ class Gate:
         pos = self.child_populations.fetch_by_definition('+')
         if neg is None or pos is None:
             GateError('Invalid ChildPopulationCollection; must contain definitions for - and + populations')
-        pos_pop = self.data[self.data[self.x] > threshold]
-        neg_pop = self.data[self.data[self.x] < threshold]
+        pos_pop = self.data[self.data[self.x].round(decimals=2) >= round(threshold, 2)]
+        neg_pop = self.data[self.data[self.x].round(decimals=2) < round(threshold, 2)]
         for x, definition in zip([pos, neg], ['+', '-']):
             self.child_populations.populations[x].update_geom(shape='threshold', x=self.x, y=self.y,
                                                               method=method, threshold=float(threshold),
@@ -134,10 +134,10 @@ class Gate:
         :param method: method used for generating threshold
         :return: None
         """
-        xp_idx = self.data[self.data[self.x] > x_threshold].index.values
-        yp_idx = self.data[self.data[self.y] > y_threshold].index.values
-        xn_idx = self.data[self.data[self.x] < x_threshold].index.values
-        yn_idx = self.data[self.data[self.y] < y_threshold].index.values
+        xp_idx = self.data[self.data[self.x].round(decimals=2) >= round(x_threshold, 2)].index.values
+        yp_idx = self.data[self.data[self.y].round(decimals=2) >= round(y_threshold, 2)].index.values
+        xn_idx = self.data[self.data[self.x].round(decimals=2) < round(x_threshold, 2)].index.values
+        yn_idx = self.data[self.data[self.y].round(decimals=2) < round(y_threshold, 2)].index.values
 
         negneg = self.child_populations.fetch_by_definition('--')
         pospos = self.child_populations.fetch_by_definition('++')
