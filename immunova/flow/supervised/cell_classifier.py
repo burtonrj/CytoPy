@@ -280,12 +280,12 @@ class CellClassifier:
         if check_downstream_overlaps(ref, self.root_population, self.population_labels):
             raise CellClassifierError('Error: one or more population dependency errors')
         root = ref.get_population_df(self.root_population, transform=True, transform_method=self.transform)[features]
-        y = np.zeros(root.shape[0])
+        y = np.zeros((root.shape[0], len(self.population_labels)))
         mappings = dict()
         for i, pop in enumerate(self.population_labels):
             pop_idx = ref.populations[pop].index
             np.put(y, pop_idx, i + 1)
-            mappings[i+1] = pop
+            mappings[i+1] = np.array([pop])
         return root, y, mappings
 
     def train_test_split(self, test_size=0.3) -> list:
