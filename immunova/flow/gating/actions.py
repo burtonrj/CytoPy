@@ -467,26 +467,28 @@ class Gating:
                 return parent[parent[geom['x']] < geom['threshold']].index.values
             raise ValueError('Definition must have a value of "+" or "-" for a 1D threshold gate')
         if geom['shape'] == '2d_threshold':
-            def geom_bool(definition, p, x_, y_):
+            def geom_bool(definition, p):
+                p = p.round(decimals=2)
+                x_, y_ = geom['x'], geom['y']
+                tx, ty = round(geom['threshold_x'], 2), round(geom['threshold_y'], 2)
                 if definition == '++':
-                    return p[x_ & y_].index.values
+                    return p[(p[x_] > tx) & (p[y_] > ty)].index.values
                 if definition == '--':
-                    return p[~(x_ & y_)].index.values
+                    return p[(p[x_] < tx) & (p[y_] < ty)].index.values
                 if definition == '+-':
-                    return p[x_ & (~y_)].index.values
+                    return p[(p[x_] > tx) & (p[y_] < ty)].index.values
                 if definition == '-+':
-                    return p[(~x_) & y_].index.values
+                    return p[(p[x_] < tx) & (p[y_] > ty)].index.values
                 raise ValueError('Definition must have a value of "+-", "-+", "--", or "++" for a 2D threshold gate')
 
-            assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), 'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
+            assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), \
+                'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
             parent = transform_x_y(parent)
-            x = parent[geom['x']].round(decimals=2) >= round(geom['threshold_x'], 2)
-            y = parent[geom['y']].round(decimals=2) >= round(geom['threshold_y'], 2)
             if type(geom['definition']) == list:
-                idx = list(map(lambda d: geom_bool(d, parent, x, y), geom['definition']))
+                idx = list(map(lambda d: geom_bool(d, parent), geom['definition']))
                 return [i for l in idx for i in l]
             else:
-                return geom_bool(geom['definition'], parent, x, y)
+                return geom_bool(geom['definition'], parent)
 
         if geom['shape'] == 'rect':
             keys = ['x_min', 'x_max', 'y_min', 'y_max']
