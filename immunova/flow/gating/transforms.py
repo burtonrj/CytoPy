@@ -1,5 +1,5 @@
 from flowutilspd.transforms import logicle, hyperlog, log_transform, asinh
-from sklearn.preprocessing import PowerTransformer
+from ..supervised.utilities import scaler
 import pandas as pd
 
 
@@ -58,6 +58,16 @@ def apply_transform(data: pd.DataFrame, features_to_transform: list or str = 'al
         return asinh(data, features_to_transform, prescale)
     if transform_method == 'percentile rank':
         return percentile_rank_transform(data, features_to_transform)
+    if transform_method == 'Yeo-Johnson':
+        return sklearn_scaler(data, features_to_transform, scale_method='power', method='yeo-johnson')
+    if transform_method == 'RobustScale':
+        return sklearn_scaler(data, features_to_transform, scale_method='robust')
     raise TransformError("Error: invalid transform_method, must be one of: 'logicle', 'hyperlog', 'log_transform',"
-                         " 'asinh', 'percentile rank")
+                         " 'asinh', 'percentile rank', 'Yeo-Johnson', 'RobustScale'")
 
+
+def sklearn_scaler(data, features_to_transform, scale_method, **kwargs):
+    data = data.copy()
+    transform, _ = scaler(data[features_to_transform], scale_method=scale_method, **kwargs)
+    data[features_to_transform] = transform
+    return data
