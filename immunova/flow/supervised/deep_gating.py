@@ -1,4 +1,4 @@
-from immunova.flow.supervised.cell_classifier import CellClassifier, CellClassifierError
+from immunova.flow.supervised.cell_classifier import CellClassifier
 from keras.models import Model
 from keras.layers import Input, Dense
 from keras.models import load_model
@@ -42,8 +42,7 @@ class DeepGating(CellClassifier):
             self.hidden_layer_sizes = hidden_layer_sizes
 
     def load_model(self, path: str):
-        if not os.path.isfile(path):
-            raise CellClassifierError(f'Error: invalid file name passed to load_model {path}')
+        assert os.path.isfile(path), f'Invalid file name passed to load_model {path}'
         self.classifier = load_model(path)
         print('Classifier loaded successfully!')
 
@@ -69,7 +68,7 @@ class DeepGating(CellClassifier):
         net.compile(optimizer=optimizer, loss=self.loss_func)
         self.classifier = net
 
-    def fit(self):
+    def _fit(self):
         lrate = LearningRateScheduler(step_decay)
         self.classifier.fit(self.train_X, self.train_y, nb_epoch=80, batch_size=128, shuffle=True,
                             validation_split=0.1, callbacks=[lrate, cb.EarlyStopping(monitor='val_loss',

@@ -252,7 +252,7 @@ def check_downstream_overlaps(ref, root_population: str, population_labels: list
     for pop_i in population_labels:
         dependencies = ref.find_dependencies(pop_i)
         if root_population in dependencies:
-            print(f'Error: population {pop_i} is upstream from the chosen root population {self.root_population}')
+            print(f'Error: population {pop_i} is upstream from the chosen root population {root_population}')
             downstream_overlaps = True
         for pop_j in population_labels:
             if pop_j == pop_i:
