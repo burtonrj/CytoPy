@@ -3,7 +3,7 @@ from immunova.data.fcs import FileGroup, File, ChannelMap, Population
 from immunova.data.panel import Panel
 from immunova.flow.gating.actions import Gating
 from immunova.flow.gating.defaults import ChildPopulationCollection
-from immunova.flow.supervised.utilities import standard_scale, norm_scale, find_common_features, \
+from immunova.flow.supervised.utilities import scaler, find_common_features, \
     predict_class, random_oversampling
 from immunova.flow.gating.utilities import density_dependent_downsample, check_downstream_overlaps
 from immunova.flow.supervised.evaluate import evaluate_model, report_card
@@ -12,7 +12,6 @@ from sklearn.model_selection import train_test_split, KFold
 from sklearn.decomposition import PCA
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PowerTransformer
 from umap import UMAP
 from phate import PHATE
 from multiprocessing import Pool, cpu_count
@@ -175,29 +174,15 @@ def create_reference_sample(experiment: FCSExperiment,
     print('-----------------------------------------------------------------')
 
 
-class BoxCox:
-    """
-    Wrapper to bypass transform call when BoxCox is chosen as scaling method
-    """
-    def __init__(self):
-        pass
-
-    @staticmethod
-    def transform(x):
-        x, _ = norm_scale(x, range=(0.1, 1.1))
-        pp = PowerTransformer(method='box-cox', standardize=False)
-        return pp.fit_transform(x)
-
-
 class CellClassifier:
     """
     Class for performing classification of cells by supervised machine learning.
     """
     def __init__(self, experiment: FCSExperiment, reference_sample: str, population_labels: list, features: list,
                  multi_label: bool = True, transform: str = 'logicle', root_population: str = 'root',
-                 threshold: float = 0.5, scale: str or None = 'Standardise',
+                 threshold: float = 0.5, scale: str or None = 'standard',
                  balance_method: None or str or dict = None, frac: float or None = None,
-                 **downsampling_kwargs):
+                 downsampling_kwargs: dict or None = None, scale_kwargs: dict or None = None):
         """
         Constructor for CellClassifier
         :param experiment: FCSExperiment for classification
@@ -243,20 +228,14 @@ class CellClassifier:
         else:
             self.train_X, self.train_y, self.mappings = self.singleclass_labels(ref, features, root_population)
         print('Scaling data...')
-        if scale == 'Standardise':
-            self.train_X, self.preprocessor = standard_scale(self.train_X)
-        elif scale == 'Normalise':
-            self.train_X, self.preprocessor = norm_scale(self.train_X)
-        elif scale == 'Box-Cox':
-            self.train_X, _ = norm_scale(self.train_X, range=(0.1, 1.1))
-            pp = PowerTransformer(method='box-cox', standardize=False)
-            self.train_X = pp.fit_transform(self.train_X)
-            self.preprocessor = BoxCox()
-        elif scale is None:
+        if scale is not None:
+            if scale_kwargs is not None:
+                self.train_X, self.preprocessor = scaler(self.train_X, scale_method=scale, **scale_kwargs)
+            else:
+                self.train_X, self.preprocessor = scaler(self.train_X, scale_method=scale)
+        else:
             print('Warning: it is recommended that data is scaled prior to training. Unscaled data can result '
                   'in some weights updating faster than others, having a negative effect on classifier performance')
-        else:
-            raise ValueError('Error: scale method not recognised, must be either `Standardise` or `Normalise`')
 
         if type(balance_method) == str:
             assert balance_method in ['density', 'oversample', 'auto_weights'], \
@@ -265,9 +244,9 @@ class CellClassifier:
             if balance_method in ['density', 'oversample']:
                 print('Balancing dataset by sampling...')
                 if frac:
-                    self.balance_dataset(method=balance_method, frac=frac, **downsampling_kwargs)
+                    self.balance_dataset(method=balance_method, frac=frac, downsampling_kwargs=downsampling_kwargs)
                 else:
-                    self.balance_dataset(method=balance_method, **downsampling_kwargs)
+                    self.balance_dataset(method=balance_method, downsampling_kwargs=downsampling_kwargs)
             else:
                 weights = compute_class_weight('balanced',
                                                classes=np.array(list(self.mappings.keys())),
@@ -415,7 +394,7 @@ class CellClassifier:
         :return:
         """
         assert self.classifier is not None, 'Must construct classifier prior to calling `fit` using the `build` method'
-        self.classifier._fit(x, y, **kwargs)
+        self.classifier.fit(x, y, **kwargs)
 
     def train_cv(self, k: int = 5, **kwargs) -> pd.DataFrame:
         """
@@ -509,7 +488,7 @@ class CellClassifier:
         report_card(self.classifier, x, y, threshold=self.threshold, mappings=mappings)
 
     def balance_dataset(self, method: str = 'oversample', frac: float = 0.5,
-                        **kwargs) -> (pd.DataFrame or np.array, np.array):
+                        downsampling_kwargs: dict or None = None) -> (pd.DataFrame or np.array, np.array):
         """
         Given an imbalanced dataset, generate a new dataset with class balance attenuated. Method can either be
         'oversample' whereby the RandomOverSampler class of Imbalance Learn is implemented to sample with replacement
@@ -530,7 +509,11 @@ class CellClassifier:
             if type(self.train_X) == np.array:
                 x = pd.DataFrame(self.train_X, columns=self.features)
             self.train_X['labels'] = self.train_y
-            x = density_dependent_downsample(data=self.train_X, features=self.features, frac=frac, **kwargs)
+            if downsampling_kwargs is None:
+                x = density_dependent_downsample(data=self.train_X, features=self.features, frac=frac)
+            else:
+                x = density_dependent_downsample(data=self.train_X, features=self.features, frac=frac,
+                                                 **downsampling_kwargs)
             return x[self.features], x['labels'].values
 
     def compare_to_training_set(self, sample_id: str, plot_umap: bool = False,
