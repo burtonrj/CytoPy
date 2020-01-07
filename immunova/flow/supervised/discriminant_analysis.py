@@ -1,4 +1,4 @@
-from immunova.flow.supervised.cell_classifier import CellClassifier, CellClassifierError
+from immunova.flow.supervised.cell_classifier import CellClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 
 
