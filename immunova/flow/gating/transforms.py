@@ -1,4 +1,5 @@
 from flowutilspd.transforms import logicle, hyperlog, log_transform, asinh
+from sklearn.preprocessing import PowerTransformer
 import pandas as pd
 
 
@@ -14,15 +15,11 @@ def percentile_rank_transform(data: pd.DataFrame, features_to_transform: list) -
     :param features_to_transform: features to perform transformation on
     :return: Transformed dataframe
     """
-    not_transform = [f for f in data.columns if f not in features_to_transform]
-    data_transform = data[features_to_transform]
-    if not_transform:
-        not_transform = data[not_transform]
-    data_transform = data_transform.rank(axis=1, method='average')
-    data_transform = (data_transform/data_transform.shape[0]) * 100
-    if type(not_transform) is not list:
-        return pd.concat([data_transform, not_transform])
-    return data_transform
+    data = data.copy()
+    transform = data[features_to_transform].rank(axis=0, method='average')
+    transform = (transform / transform.shape[0]) * 100
+    data[features_to_transform] = transform
+    return data
 
 
 def apply_transform(data: pd.DataFrame, features_to_transform: list or str = 'all',
@@ -62,4 +59,5 @@ def apply_transform(data: pd.DataFrame, features_to_transform: list or str = 'al
     if transform_method == 'percentile rank':
         return percentile_rank_transform(data, features_to_transform)
     raise TransformError("Error: invalid transform_method, must be one of: 'logicle', 'hyperlog', 'log_transform',"
-                         " 'asinh'")
+                         " 'asinh', 'percentile rank")
+
