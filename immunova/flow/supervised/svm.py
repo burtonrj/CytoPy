@@ -1,4 +1,4 @@
-from immunova.flow.supervised.cell_classifier import CellClassifier, CellClassifierError
+from immunova.flow.supervised.cell_classifier import CellClassifier
 from sklearn.svm import LinearSVC, SVC
 from sklearn.multiclass import OneVsOneClassifier
 
@@ -37,8 +37,8 @@ class SupportVectorMachine(CellClassifier):
         :return: None
         """
         if type(kernel) != callable:
-            if kernel not in ['poly', 'rbf', 'sigmoid']:
-                raise CellClassifierError("Error: unsupported kernel type, must be one of 'poly', 'rbf', or 'sigmoid'")
+            assert kernel in ['poly', 'rbf', 'sigmoid'], "unsupported kernel type, must be one of " \
+                                                         "'poly', 'rbf', or 'sigmoid'"
         if self.class_weights is None:
             self.classifier = OneVsOneClassifier(SVC(kernel=kernel, cache_size=cache_size, **kwargs))
         else:

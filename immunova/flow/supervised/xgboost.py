@@ -1,5 +1,5 @@
-from immunova.flow.supervised.cell_classifier import CellClassifier, CellClassifierError
-from xgboost import XGBClassifier, DMatrix
+from immunova.flow.supervised.cell_classifier import CellClassifier
+from xgboost import XGBClassifier
 
 
 class XGBoostClassifier(CellClassifier):
@@ -21,8 +21,6 @@ class XGBoostClassifier(CellClassifier):
         (see https://xgboost.readthedocs.io/en/latest/parameter.html)
         :return: None
         """
-        if self.class_weights is not None:
-            self._build_weighted_model(**kwargs)
         if self.multi_label:
             self.classifier = XGBClassifier(objective=self.objective,
                                             num_class=len(self.population_labels),
@@ -30,19 +28,9 @@ class XGBoostClassifier(CellClassifier):
         else:
             self.classifier = XGBClassifier(objective=self.objective, **kwargs)
 
-    def _build_weighted_model(self, **kwargs):
-        """
-        Internal use only. Converts train_X parameter to type DMatrix and associates weights based on given
-        class weights
-        :param kwargs: additional keyword arguments for XGBClassifier
-        (see https://xgboost.readthedocs.io/en/latest/parameter.html)
-        :return: None
-        """
-        weights = list(map(lambda x: self.class_weights[x], self.train_y))
-        self.train_X = DMatrix(self.train_X, weight=weights)
-        if self.multi_label:
-            self.classifier = XGBClassifier(objective=self.objective,
-                                            num_class=len(self.population_labels),
-                                            **kwargs)
+    def _fit(self, x, y, **kwargs):
+        assert self.classifier is not None, 'Must construct classifier prior to calling `fit` using the `build` method'
+        if self.class_weights is not None:
+            self.classifier.fit(x, y, sample_weight=self.class_weights, **kwargs)
         else:
-            self.classifier = XGBClassifier(objective=self.objective, **kwargs)
+            self.classifier.fit(x, y, **kwargs)

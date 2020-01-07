@@ -1,6 +1,5 @@
 from immunova.data.fcs_experiments import FCSExperiment
 from immunova.flow.gating.transforms import apply_transform
-from immunova.flow.utilities import progress_bar
 from multiprocessing import Pool, cpu_count
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from imblearn.over_sampling import RandomOverSampler
@@ -40,9 +39,9 @@ def standard_scale(data: np.array):
     return data, preprocessor
 
 
-def norm_scale(data: np.array):
+def norm_scale(data: np.array, range: tuple = (0, 1)):
     data = data.copy()
-    preprocessor = MinMaxScaler().fit(data)
+    preprocessor = MinMaxScaler(feature_range=range).fit(data)
     data = preprocessor.transform(data)
     return data, preprocessor
 
