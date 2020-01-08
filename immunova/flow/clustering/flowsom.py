@@ -110,7 +110,7 @@ class FlowSOM:
         cluster_ = ConsensusCluster(cluster_class,
                                     min_n, max_n, iter_n,
                                     resample_proportion=resample_proportion)
-        cluster_.fit(self.flatten_weights, verbose=True)  # fitting SOM weights into clustering algorithm
+        cluster_.fit(self.flatten_weights)  # fitting SOM weights into clustering algorithm
 
         self.meta_map = cluster_
         self.meta_bestk = cluster_.bestK  # the best number of clusters in range(min_n, max_n)
