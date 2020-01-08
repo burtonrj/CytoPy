@@ -168,7 +168,8 @@ class Explorer:
         True)
         """
         self.data['organism_name'] = 'Unknown'
-        self.data['organism_type'] = 'Unknown'
+        self.data['gram_status'] = 'Unknown'
+        self.data['organism_name_short'] = 'Unknown'
         self.data['hmbpp'] = 'Unknown'
         self.data['ribo'] = 'Unknown'
 
@@ -177,12 +178,25 @@ class Explorer:
                 continue
             p = Patient.objects(patient_id=pt_id).get()
             self.data.loc[self.data.pt_id == pt_id, 'organism_name'] = self.__bugs(patient=p, multi_org=multi_org)
-            self.data.loc[self.data.pt_id == pt_id, 'organism_type'] = self.__org_type(patient=p)
+            self.data.loc[self.data.pt_id == pt_id, 'organism_name_short'] = self.__bugs(patient=p, multi_org=multi_org,
+                                                                                         short_name=True)
             self.data.loc[self.data.pt_id == pt_id, 'hmbpp'] = self.__hmbpp_ribo(patient=p, field='hmbpp_status')
             self.data.loc[self.data.pt_id == pt_id, 'ribo'] = self.__hmbpp_ribo(patient=p, field='ribo_status')
+            self.data.loc[self.data.pt_id == pt_id, 'gram_status'] = self.__gram_status(patient=p)
 
     @staticmethod
-    def __bugs(patient: Patient, multi_org: str) -> str:
+    def __gram_status(patient: Patient):
+        if not patient.infection_data:
+            return 'Unknown'
+        orgs = [b.gram_status for b in patient.infection_data]
+        if not orgs:
+            return 'Unknown'
+        if len(orgs) == 1:
+            return orgs[0]
+        return 'mixed'
+
+    @staticmethod
+    def __bugs(patient: Patient, multi_org: str, short_name: bool = False) -> str:
         """
         Internal function. Fetch the name of isolated organisms for each patient.
         :param patient: Patient model object
@@ -193,7 +207,10 @@ class Explorer:
         """
         if not patient.infection_data:
             return 'Unknown'
-        orgs = [b.org_name for b in patient.infection_data if b.org_name]
+        if short_name:
+            orgs = [b.short_name for b in patient.infection_data]
+        else:
+            orgs = [b.org_name for b in patient.infection_data]
         if not orgs:
             return 'Unknown'
         if len(orgs) == 1:
@@ -555,7 +572,7 @@ class Clustering:
         """
         err_msg = 'Error: no sample is currently associated to this object, before proceeding first ' \
                   'associate a sample and its data using the `load_data` method'
-        assert self.data, err_msg
+        assert self.data.shape[0] > 0, err_msg
 
     def _check_null(self) -> list:
         """
@@ -801,7 +818,7 @@ class GlobalClustering(Clustering):
             else:
                 fdata = g.get_population_df(population_name=self.ce.root_population)
 
-            assert fdata, f'Population {self.ce.root_population} does not exist for {sid}'
+            assert fdata is not None, f'Population {self.ce.root_population} does not exist for {sid}'
 
             # Downsample
             if sample_n is not None:
