@@ -50,6 +50,7 @@ class Bug(mongoengine.EmbeddedDocument):
     hmbpp_status = mongoengine.StringField(required=False, choices=['P+ve', 'N-ve', 'Unknown'])
     ribo_status = mongoengine.StringField(required=False, choices=['P+ve', 'N-ve', 'Unknown'])
     org_name = mongoengine.StringField(required=False)
+    short_name = mongoengine.StringField(required=False)
     id_method = mongoengine.StringField(required=False)
     culture_source = mongoengine.StringField(required=False)
     organism_type = mongoengine.StringField(required=False, choices=['bacteria', 'fungi', 'virus'])
