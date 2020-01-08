@@ -341,13 +341,15 @@ class CellClassifier:
                                                     collection=ChildPopulationCollection(gate_type='sml'))
         return tree
 
-    def _create_populations(self, tree, branch, y_hat, target, root_pop, mappings):
+    def _create_populations(self, tree, branch, y_hat, target, root_pop, mappings, parent_idx=None):
         tree[branch.name].collection.add_population(name=branch.name)
         tree[branch.name].collection.populations[branch.name].update_geom(shape='sml', x=None, y=None)
-        i = [x[0] for x in mappings.items() if any([branch.name == l for l in x[1]])]
-        assert i, f'Population {branch.name} does not appear in mappings'
-        i = i[0]
-        idx = target.populations[root_pop].index[np.where(y_hat == i)]
+        labels = [x[0] for x in mappings.items() if any([branch.name == l for l in x[1]])]
+        assert labels, f'Population {branch.name} does not appear in mappings'
+        idx = np.array([])
+        for i in labels:
+            idx_ = target.populations[root_pop].index[np.where(y_hat == i)]
+            idx = np.unique(np.concatenate((idx_, idx)))
         tree[branch.name].collection.populations[branch.name].update_index(idx)
         for child in tree[branch.name].children:
             tree = self._create_populations(tree, child, y_hat, target, root_pop, mappings)
