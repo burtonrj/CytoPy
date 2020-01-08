@@ -306,7 +306,8 @@ class Plot:
         # Check root population is upstream
         for p in gated_populations + sml_populations:
             dependencies = self.gating.find_dependencies(p)
-            assert root_population not in dependencies, f'Error: population {p} is upstream from the chosen root population {root_population}'
+            assert root_population not in dependencies, f'Error: population {p} is upstream from ' \
+                                                        f'the chosen root population {root_population}'
         # Establish axis vars and transforms
         axes_vars = {'x': x, 'y': y}
         if transforms is None:

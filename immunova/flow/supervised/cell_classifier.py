@@ -17,6 +17,7 @@ from phate import PHATE
 from multiprocessing import Pool, cpu_count
 from seaborn import heatmap
 from functools import partial
+from anytree import Node
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -327,7 +328,32 @@ class CellClassifier:
         """
         return train_test_split(self.train_X, self.train_y, test_size=test_size, random_state=42)
 
-    def __save_gating(self, target: Gating, y_hat: np.array, root_pop: str) -> Gating:
+    def _build_tree(self, label, tree, root_pop):
+        if not tree.get(f'{self.prefix}_{label[0]}'):
+            tree[f'{self.prefix}_{label[0]}'] = Node(f'{self.prefix}_{label[0]}',
+                                                     parent=tree[root_pop],
+                                                     collection=ChildPopulationCollection(gate_type='sml'))
+        for i, pop in enumerate(label[1:]):
+            i += 1
+            if not tree.get(f'{self.prefix}_{pop}'):
+                tree[f'{self.prefix}_{pop}'] = Node(f'{self.prefix}_{pop}',
+                                                    parent=tree[f'{self.prefix}_{label[i - 1]}'],
+                                                    collection=ChildPopulationCollection(gate_type='sml'))
+        return tree
+
+    def _create_populations(self, tree, branch, y_hat, target, root_pop, mappings):
+        tree[branch.name].collection.add_population(name=branch.name)
+        tree[branch.name].collection.populations[branch.name].update_geom(shape='sml', x=None, y=None)
+        i = [x[0] for x in mappings.items() if any([branch.name == l for l in x[1]])]
+        assert i, f'Population {branch.name} does not appear in mappings'
+        i = i[0]
+        idx = target.populations[root_pop].index[np.where(y_hat == i)]
+        tree[branch.name].collection.populations[branch.name].update_index(idx)
+        for child in tree[branch.name].children:
+            tree = self._create_populations(tree, child, y_hat, target, root_pop, mappings)
+        return tree
+
+    def _save_gating(self, target: Gating, y_hat: np.array, root_pop: str) -> Gating:
         """
         Internal method. Given some Gating object of the target file for prediction and the predicted labels,
         generate new population objects and insert them into the Gating object
@@ -335,18 +361,19 @@ class CellClassifier:
         :param y_hat: array of predicted population labels
         :return: None
         """
-        parent = target.get_population_df(population_name=root_pop)
-        new_populations = ChildPopulationCollection(gate_type='sml')
-        for i, pops in self.mappings.items():
-            y_ = np.where(y_hat == i)
-            idx = target.populations[root_pop].index[y_]
-            for p in pops:
-                l = f'{self.prefix}_{p}'
-                if l not in new_populations.populations.keys():
-                    new_populations.add_population(name=l)
-                    new_populations.populations[l].update_geom(shape='sml', x=None, y=None)
-                new_populations.populations[l].update_index(idx)
-        target.update_populations(new_populations, parent, parent_name=root_pop, warnings=[])
+        tree = {root_pop: Node(root_pop)}
+        for pops in self.mappings.values():
+            tree = self._build_tree(pops, tree, root_pop=root_pop)
+        prefix_mappings = {k: [f'{self.prefix}_{x}' for x in v] for k, v in self.mappings.items()}
+        trunk = tree[root_pop].children
+        for branch in trunk:
+            tree = self._create_populations(tree, branch, y_hat, target, root_pop, prefix_mappings)
+        for node in tree.keys():
+            if node == root_pop:
+                continue
+            parent_name = tree[node].parent.name
+            parent = target.get_population_df(parent_name)
+            target.update_populations(tree[node].collection, parent, parent_name=parent_name, warnings=[])
         return target
 
     def predict(self, target_sample: str, return_gating: bool = True,
@@ -373,7 +400,7 @@ class CellClassifier:
         y_probs = self.classifier.predict_proba(x)
         y_hat = np.array(predict_class(y_probs, self.threshold))
         if return_gating:
-            return self.__save_gating(target, y_hat, root_pop)
+            return self._save_gating(target, y_hat, root_pop)
         return y_probs, y_hat
 
     @staticmethod
