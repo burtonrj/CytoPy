@@ -54,6 +54,7 @@ class ConsensusCluster:
           * data -> (examples,attributes) format
           * verbose -> should print or not
         """
+        # Init a connectivity matrix and an indicator matrix with zeros
         Mk = np.zeros((self.K_-self.L_, data.shape[0], data.shape[0]))
         Is = np.zeros((data.shape[0],)*2)
         for k in progress_bar(range(self.L_, self.K_)):  # for each number of clusters
@@ -67,6 +68,7 @@ class ConsensusCluster:
                 id_clusts = np.argsort(Mh)
                 sorted_ = Mh[id_clusts]
                 for i in range(k):  # for each cluster
+                    #
                     ia = bisect.bisect_left(sorted_, i)
                     ib = bisect.bisect_right(sorted_, i)
                     is_ = id_clusts[ia:ib]
