@@ -12,7 +12,6 @@ from matplotlib.colors import LogNorm
 from sklearn import preprocessing
 from sklearn.cluster import AgglomerativeClustering, KMeans
 import matplotlib.pyplot as plt
-import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
@@ -330,16 +329,23 @@ class Explorer:
         else:
             return list(self.data[label].values)
 
-    def scatter_plot(self, primary_label: str, features: list, discrete: bool,
-                     secondary_label: str or None = None,
+    def scatter_plot(self, label: str, features: list, discrete: bool,
                      populations: list or None = None, n_components: int = 2,
-                     dim_reduction_method: str = 'UMAP', mask: pd.DataFrame or None = None, **kwargs) -> plt.Axes:
+                     dim_reduction_method: str = 'UMAP',
+                     mask: pd.DataFrame or None = None, figsize: tuple = (12, 8),
+                     meta: bool = False, meta_scale_factor: int = 100,
+                     dim_reduction_kwargs: dict or None = None,
+                     matplotlib_kwargs: dict or None = None) -> plt.Axes:
         """
         Generate a 2D/3D scatter plot (dimensions depends on the number of components chosen for dimensionality
         reduction. Each data point is labelled according to the option provided to the label arguments. If a value
         is given to both primary and secondary label, the secondary label colours the background and the primary label
         colours the foreground of each datapoint.
-        :param primary_label: option for the primary label, must be one of the following:
+        :param matplotlib_kwargs:
+        :param meta_scale_factor:
+        :param meta:
+        :param figsize:
+        :param label: option for the primary label, must be one of the following:
         * A valid column name in Explorer attribute 'data' (check valid column names using Explorer.data.columns)
         * 'global clusters' - requires that phenograph_clustering method has been called prior to plotting. Each data
         point will be coloured according to cluster association.
@@ -347,7 +353,6 @@ class Explorer:
         :param features: list of column names used as feature space for dimensionality reduction
         :param discrete: Are the labels for this plot discrete or continuous? If True, labels will be treated as
         discrete, otherwise labels will be coloured using a gradient and a colourbar will be provided.
-        :param secondary_label: option for the secondary label, options same as primary_label (optional)
         :param populations: if primary/secondary label has value of 'gated populations', only populations in this
         list will be included (events with no population associated will be labelled 'None')
         :param n_components: number of components to produce from dimensionality reduction, valid values are 2 or 3
@@ -355,52 +360,64 @@ class Explorer:
         :param dim_reduction_method: method to use for dimensionality reduction, valid values are 'UMAP' or 'PHATE'
         (default = 'UMAP')
         :param mask: a valid Pandas DataFrame mask to subset data prior to plotting (optional)
-        :param kwargs: additional keyword arguments to pass to dimensionality reduction algorithm
+        :param dim_reduction_kwargs: additional keyword arguments to pass to dimensionality reduction algorithm
         :return: matplotlib subplot axes object
         """
-        fig, ax = plt.subplots(figsize=(12, 8))
         assert n_components in [2, 3], 'n_components must have a value of 2 or 3'
-
         # Dimensionality reduction
+        if dim_reduction_kwargs is None:
+            dim_reduction_kwargs = dict()
+        if matplotlib_kwargs is None:
+            matplotlib_kwargs = dict()
         self.dimenionality_reduction(method=dim_reduction_method,
-                                     features=features, n_components=n_components, **kwargs)
+                                     features=features,
+                                     n_components=n_components,
+                                     **dim_reduction_kwargs)
         embedding_cols = [f'{dim_reduction_method}_{i}' for i in range(n_components)]
         # Label and plotting
-        for label in [primary_label, secondary_label]:
-            if label:
-                assert label in self.data.columns, f'{label} is not a valid entry, valid labels include: ' \
-                                                   f'{self.data.columns.tolist()}'
-        plabel = self._plotting_labels(primary_label, populations)
+        assert label in self.data.columns, f'{label} is not a valid entry, valid labels include: ' \
+                                           f'{self.data.columns.tolist()}'
+        plabel = self._plotting_labels(label, populations)
         data = self.data
         if mask is not None:
             data = data[mask]
-            plabel = plabel[data.index]
-        if secondary_label is not None:
-            slabel = self._plotting_labels(secondary_label, populations)
-            if mask is not None:
-                slabel = slabel[data.index]
-            if n_components == 2:
-                ax = scprep.plot.scatter2d(data[embedding_cols], c=slabel, ticks=False,
-                                           label_prefix=dim_reduction_method, ax=ax, s=100,
-                                           discrete=discrete, legend_loc="lower left",
-                                           legend_anchor=(1.04, 1), legend_title=secondary_label)
+            plabel = np.array(plabel)[data.index.values]
 
-            else:
-                ax = scprep.plot.scatter3d(data[embedding_cols], c=slabel, ticks=False,
-                                           label_prefix=dim_reduction_method, ax=ax, s=100,
-                                           discrete=discrete, legend_loc="lower left",
-                                           legend_anchor=(1.04, 1), legend_title=secondary_label)
+        def check_meta():
+            assert all([x in self.data.columns for x in ['cluster_size', 'meta_cluster_id']]), \
+                "DataFrame should contain columns 'cluster_size' and 'meta_cluster_id', was the explorer object " \
+                "populated from MetaClustering?"
+
         if n_components == 2:
-            ax = scprep.plot.scatter2d(data[embedding_cols], c=plabel, ticks=False,
-                                       label_prefix=dim_reduction_method, ax=ax, s=1,
-                                       discrete=discrete, legend_loc="lower left",
-                                       legend_anchor=(1.04, 0), legend_title=primary_label)
+            if meta:
+                check_meta()
+                return scprep.plot.scatter2d(data[embedding_cols], c=plabel, ticks=False,
+                                             label_prefix=dim_reduction_method, s=data['cluster_size']*meta_scale_factor,
+                                             discrete=discrete, legend_loc="lower left",
+                                             legend_anchor=(1.04, 0), legend_title=label,
+                                             figsize=figsize, **matplotlib_kwargs)
+
+            return scprep.plot.scatter2d(data[embedding_cols], c=plabel, ticks=False,
+                                         label_prefix=dim_reduction_method, s=1,
+                                         discrete=discrete, legend_loc="lower left",
+                                         legend_anchor=(1.04, 0), legend_title=label,
+                                         figsize=figsize, **matplotlib_kwargs)
         else:
-            ax = scprep.plot.scatter3d(data[embedding_cols], c=plabel, ticks=False,
-                                       label_prefix=dim_reduction_method, ax=ax, s=1,
-                                       discrete=discrete, legend_loc="lower left",
-                                       legend_anchor=(1.04, 0), legend_title=primary_label)
-        return ax
+            if meta:
+                check_meta()
+                return scprep.plot.scatter3d(data[embedding_cols], c=plabel, ticks=False,
+                                             label_prefix=dim_reduction_method, s=data['cluster_size']*meta_scale_factor,
+                                             discrete=discrete, legend_loc="lower left",
+                                             legend_anchor=(1.04, 0), legend_title=label,
+                                             figsize=figsize, **matplotlib_kwargs)
+            return scprep.plot.scatter3d(data[embedding_cols], c=plabel, ticks=False,
+                                         label_prefix=dim_reduction_method, s=1,
+                                         discrete=discrete, legend_loc="lower left",
+                                         legend_anchor=(1.04, 0), legend_title=label,
+                                         figsize=figsize, **matplotlib_kwargs)
+
+    def layer_scatter_plot(self):
+        pass
 
     def heatmap(self, heatmap_var: str, features: list,
                 clustermap: bool = False, mask: pd.DataFrame or None = None):
@@ -469,35 +486,12 @@ class Explorer:
             ax = sns.swarmplot(x=x_variable, y=y_variable, data=d, ax=ax, s=3)
             return ax
 
-    def __plotting_column(self, primary_id: str, contrasting: bool, meta: bool) -> tuple:
-        """
-        Called by 2dhist. Provides valid value for column ID. If column ID does not exist for dataframe an
-        assertion error will be raised.
-        :param primary_id: primary data ID, by default this will be the column ID for cluster assignment or
-        if a population name is provided, will return 'population_label'
-        :param contrasting: True, if contrasting variables
-        :param meta: True if dataframe is from meta-clustering
-        :return: tuple of column IDs
-        """
-        pcol, scol = 'cluster_id', 'cluster_id'
-        if meta:
-            pcol, scol = 'meta_cluster_id', 'meta_cluster_id'
-        if primary_id in self.data.population_label.values:
-            pcol = 'population_label'
-        if contrasting in self.data.population_label.values:
-            scol = 'population_label'
-        assert pcol in self.data.columns, f'{pcol} not in dataframe'
-        if contrasting:
-            assert scol in self.data.columns, f'{scol} not in dataframe'
-        return pcol, scol
-
     @staticmethod
     def __no_such_pop_cluster(d, _id):
         assert d.shape[0] == 0, f'unable to subset data on {_id}'
 
-    def plot_2d(self, primary_id: str, x: str, y: str, meta: bool = False,
-                xlim: tuple or None = None, ylim: tuple or None = None,
-                contrasting_id: str or None = None) -> plt.Axes:
+    def plot_2d(self, primary_id: dict, x: str, y: str, secondary_id: dict or None = None,
+                xlim: tuple or None = None, ylim: tuple or None = None) -> plt.Axes:
         """
         Plots two-dimensions as either a scatter plot or a 2D histogram (defaults to 2D histogram if number of
         data-points exceeds 1000). This can be used for close inspection of populations in contrast to their clustering
@@ -507,30 +501,35 @@ class Explorer:
         a cluster or meta-cluster, then only data-points assigned to that cluster will be displayed.
         :param x: Name of variable to plot on the x-axis
         :param y: Name of variable to plot on the y-axis
-        :param meta: If True, then the dataframe is expected to have originated from meta-clustering (default = False)
         :param xlim: limit the x-axis to a given range (optional)
         :param ylim: limit the y-axis to a given range (optional)
-        :param contrasting_id: if a value is provided, then treated as the primary_id except an additional dataset is
-        plotted on the same axis with a different colour. This can be used to say, plot two populations on the same
-        axis for comparison, or perhaps a cluster and a population.
         :return: Matplotlib Axes object
         """
-        fig, ax = plt.subplots(figsize=(5, 5))
-        pcol, scol = self.__plotting_column(primary_id, contrasting_id, meta)
+        # Checks and balances
+        def check_id(id_dict, data):
+            e = 'Primary/Secondary ID should be a dictionary with keys: "column_name" and "value"'
+            assert all([x_ in id_dict.keys() for x_ in ['column_name', 'value']]), e
+            assert id_dict['column_name'] in data.columns, f'{id_dict["column_name"]} is not a valid column name'
+            assert id_dict['value'] in data[id_dict['column_name']].values, f'No such value {id_dict["value"]} in ' \
+                                                                            f'{id_dict["column_name"]}'
+        check_id(primary_id, self.data)
+        if secondary_id is not None:
+            check_id(secondary_id, self.data)
         assert all([c in self.data.columns for c in [x, y]]), 'Invalid axis; must be an existing column in dataframe'
-        d = self.data[self.data[pcol] == primary_id]
-        self.__no_such_pop_cluster(d, primary_id)
+
+        # Build plot
+        fig, ax = plt.subplots(figsize=(5, 5))
+        d = self.data[self.data[primary_id['column_name']] == primary_id['value']]
         d2 = None
-        if contrasting_id:
-            d2 = self.data[self.data[scol] == contrasting_id]
-            self.__no_such_pop_cluster(d2, contrasting_id)
+        if secondary_id is not None:
+            d2 = self.data[self.data[secondary_id['column_name']] == secondary_id['value']]
 
         if d.shape[0] < 1000:
-            ax.scatter(d[x], d[y], marker='o', s=1, c='b', alpha=0.8, label=primary_id)
+            ax.scatter(d[x], d[y], marker='o', s=1, c='b', alpha=0.8, label=primary_id['value'])
         else:
-            ax.hist2d(d[x], d[y], bins=500, norm=LogNorm(), label=primary_id)
+            ax.hist2d(d[x], d[y], bins=500, norm=LogNorm(), label=primary_id['value'])
         if d2 is not None:
-            ax.scatter(d2[x], d2[y], marker='o', s=1, c='r', alpha=0.8, label=contrasting_id)
+            ax.scatter(d2[x], d2[y], marker='o', s=1, c='r', alpha=0.8, label=secondary_id['value'])
 
         if xlim:
             ax.set_xlim(xlim)
@@ -597,14 +596,37 @@ class Clustering:
         e = 'No clustering class (or invalid) provided for meta-clustering, defaulting to agglomerative ' \
             'clustering; value should either be "agglomerative" or "kmeans"'
         if 'cluster_class' not in params.keys():
-            print(e)
+            raise ValueError(e)
         elif params['cluster_class'] not in ['agglomerative', 'kmeans']:
-            print(e)
-            params.pop('cluster_class')
+            raise ValueError(e)
         elif params['cluster_class'] == 'kmeans':
             clustering = KMeans
             params.pop('cluster_class')
+        params.pop('cluster_class')
         return clustering, params
+
+    def _population_labels(self, data: pd.DataFrame, root_node: Node) -> pd.DataFrame:
+        """
+        Internal function. Called when loading data. Populates DataFrame column named 'population_label' with the
+        name of the node associated with each event most downstream of the root population.
+        :param data: Pandas DataFrame of events corresponding to root population from single patient
+        :param root_node: anytree Node object of root population
+        :return: Pandas DataFrame with 'population_label' column
+        """
+
+        def recursive_label(d, n):
+            mask = d.index.isin(n.index)
+            d.loc[mask, 'population_label'] = n.name
+            if len(n.children) == 0:
+                return d
+            for c in n.children:
+                recursive_label(d, c)
+            return d
+
+        data = data.copy()
+        data['population_label'] = self.ce.root_population
+        data = recursive_label(data, root_node)
+        return data
 
     def cluster(self) -> np.array:
         """
@@ -682,7 +704,7 @@ class SingleClustering(Clustering):
         """
         self.clusters = dict()
 
-    def load_data(self, experiment: FCSExperiment, sample_id: str):
+    def load_data(self, experiment: FCSExperiment, sample_id: str, include_population_label: bool = True):
         """
         Given some FCS Experiment and the name of a sample associated to that experiment, populate the 'data'
         parameter with single cell data from the given sample and FCS experiment.
@@ -709,6 +731,8 @@ class SingleClustering(Clustering):
         self.data['pt_id'] = None
         if pt:
             self.data['pt_id'] = pt[0].patient_id
+        if include_population_label:
+            self.data = self._population_labels(self.data, sample.populations[self.ce.root_population])
 
     def _load_clusters(self, root_p: Population):
         """
@@ -722,15 +746,16 @@ class SingleClustering(Clustering):
                                                prop_of_root=c.prop_of_root,
                                                index=c.load_index())
 
-    def _add_cluster(self, name: str, indexes: np.array):
+    def _add_cluster(self, name: str, index_mask: np.array):
         """
         Internal method. Add new cluster to internal collection of clusters.
         :param name: Name of the cluster
-        :param indexes: Indexes corresponding to events in cluster
+        :param index_mask: Indexes corresponding to events in cluster
         """
-        self.clusters[name] = dict(index=indexes,
-                                   n_events=len(indexes),
-                                   prop_of_root=len(indexes)/self.data.shape[0])
+        index = self.data.index[index_mask]
+        self.clusters[name] = dict(index=index,
+                                   n_events=len(index),
+                                   prop_of_root=len(index)/self.data.shape[0])
 
     def save_clusters(self, overwrite: bool = False):
         """
@@ -761,8 +786,8 @@ class SingleClustering(Clustering):
         """
         Return a Pandas DataFrame of single cell data for a single cluster.
         """
-        assert 'cluster_id' in self.clusters.keys(), f'Invalid cluster_id; {cluster_id} not recognised'
-        return self.data.iloc[self.clusters[cluster_id].get('index')]
+        assert cluster_id in self.clusters.keys(), f'Invalid cluster_id; {cluster_id} not recognised'
+        return self.data.loc[self.clusters[cluster_id].get('index')]
 
     def cluster(self):
         """
@@ -770,8 +795,8 @@ class SingleClustering(Clustering):
         """
         cluster_assignments = super().cluster()
         for x in np.unique(cluster_assignments):
-            indices = np.where(cluster_assignments == x)[0]
-            self._add_cluster(x, indices)
+            mask = np.where(cluster_assignments == x)[0]
+            self._add_cluster(x, mask)
 
     def explorer(self) -> Explorer:
         """
@@ -838,29 +863,6 @@ class GlobalClustering(Clustering):
             self.data = pd.concat([self.data, fdata])
         print('------------ Completed! ------------')
 
-    def _population_labels(self, data: pd.DataFrame, root_node: Node) -> pd.DataFrame:
-        """
-        Internal function. Called when loading data. Populates DataFrame column named 'population_label' with the
-        name of the node associated with each event most downstream of the root population.
-        :param data: Pandas DataFrame of events corresponding to root population from single patient
-        :param root_node: anytree Node object of root population
-        :return: Pandas DataFrame with 'population_label' column
-        """
-
-        def recursive_label(d, n):
-            mask = d.index.isin(n.index)
-            d.loc[mask, 'population_label'] = n.name
-            if len(n.children) == 0:
-                return d
-            for c in n.children:
-                recursive_label(d, c)
-            return d
-
-        data = data.copy()
-        data['population_label'] = self.ce.root_population
-        data = recursive_label(data, root_node)
-        return data
-
     def cluster(self):
         """
         Perform clustering as specified in the Clustering Definition.
@@ -918,12 +920,14 @@ class MetaClustering(Clustering):
               'matrix will be a vector describing the centroid (the median of each channel/marker) of each cluster. ')
         columns = self.ce.features + ['sample_id', 'cluster_id']
         clusters = pd.DataFrame(columns=columns)
+        target_clustering_def = ClusteringDefinition.objects(clustering_uid=self.ce.meta_clustering_uid_target)
+        assert target_clustering_def, f'No such clustering definition {self.ce.meta_clustering_uid_target} to target'
         for s in progress_bar(samples):
-            clustering = SingleClustering(clustering_definition=self.ce)
+            clustering = SingleClustering(clustering_definition=target_clustering_def[0])
             clustering.load_data(experiment=self.experiment, sample_id=s)
             pt_id = clustering.data['pt_id'].values[0]
             if len(clustering.clusters.keys()) == 0:
-                print(f'No clusters found for clustering UID {self.ce.clustering_uid} and sample {s}')
+                print(f'No clusters found for clustering UID {target_clustering_def[0].clustering_uid} and sample {s}')
             for c_name in clustering.clusters.keys():
                 c_data = clustering.get_cluster_dataframe(c_name)
                 n = c_data.shape[0]
@@ -947,7 +951,7 @@ class MetaClustering(Clustering):
                                                'n_resamples', 'resample_proportion'])
             clustering, init_params = self._fetch_clustering_class(init_params)
             consensus_clust = ConsensusCluster(cluster=clustering, **init_params)
-            consensus_clust.fit(self.data[features])
+            consensus_clust.fit(self.data[features].values)
             self.data['meta_cluster_id'] = consensus_clust.predict_data(self.data[features])
         elif self.ce.method == 'PhenoGraph':
             self.data['meta_cluster_id'] = super().cluster()
