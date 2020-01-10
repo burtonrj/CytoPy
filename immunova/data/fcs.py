@@ -22,12 +22,14 @@ class ClusteringDefinition(mongoengine.Document):
         meta_clustering - refers to whether the clustering is 'meta-clustering'
     """
     clustering_uid = mongoengine.StringField(required=True, unique=True)
-    method = mongoengine.StringField(required=True, choices=['PhenoGraph', 'FlowSOM'])
+    method = mongoengine.StringField(required=True, choices=['PhenoGraph', 'FlowSOM', 'ConsensusClustering'])
     parameters = mongoengine.ListField(required=True)
     features = mongoengine.ListField(required=True)
     transform_method = mongoengine.StringField(required=False, default='logicle')
     root_population = mongoengine.StringField(required=True, default='root')
     cluster_prefix = mongoengine.StringField(required=True, default='cluster')
+    meta_method = mongoengine.BooleanField(required=True, default=False)
+    meta_clustering_uid_target = mongoengine.StringField(required=False)
 
     meta = {
         'db_alias': 'core',
