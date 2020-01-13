@@ -709,6 +709,8 @@ class SingleClustering(Clustering):
         Given some FCS Experiment and the name of a sample associated to that experiment, populate the 'data'
         parameter with single cell data from the given sample and FCS experiment.
         :param experiment: FCS experiment object
+        :param include_population_label: if True, data frame populated with population labels from gates
+        (default = True)
         :param sample_id: sample identifier
         """
         self.experiment = experiment
