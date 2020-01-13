@@ -103,8 +103,7 @@ class ConsensusCluster:
         Predicts on the consensus matrix, for best found cluster number
         """
         assert self.Mk is not None, "First run fit"
-        return self.cluster_(n_clusters=self.bestK).fit_predict(
-            1-self.Mk[self.bestK-self.L_])
+        return self.cluster_(n_clusters=self.bestK).fit_predict(1-self.Mk[self.bestK-self.L_])
 
     def predict_data(self, data):
         """
