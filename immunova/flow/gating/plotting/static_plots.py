@@ -6,11 +6,12 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib import patches
-from matplotlib import cm
+from anytree import Node
 from itertools import cycle
 import pandas as pd
 import numpy as np
 import random
+import math
 
 def transform_axes(data: pd.DataFrame, axes_vars: dict, transforms: dict) -> pd.DataFrame:
     """
@@ -174,7 +175,7 @@ class Plot:
         fig.show()
 
     def __build_geom_plot(self, data: pd.DataFrame, x: str, y: str or None, geoms: dict, ax: matplotlib.pyplot.axes,
-                          xlim: tuple, ylim: tuple, title: str) -> matplotlib.pyplot.axes or None:
+                          xlim: tuple or None, ylim: tuple or None, title: str) -> matplotlib.pyplot.axes or None:
         """
         Produce a plot of a gate that generates a geometric object
         :param data: pandas dataframe of events data to plot
@@ -342,6 +343,47 @@ class Plot:
                 ax.scatter(x=pop_data[p][:, 0], y=pop_data[p][:, 1], s=15, c=[c], alpha=1.0, label=p)
         ax.legend()
 
+    def _get_data_transform(self, node):
+        geom = node.geom
+        x, y = geom['x'], geom['y']
+        data = self.gating.get_population_df(node.name)[[x, y]]
+        transform_x = geom.get('transform_x')
+        transform_y = geom.get('transform_y')
+        if not transform_x and all([k in x for k in ['FSC', 'SSC']]):
+            transform_x = 'logicle'
+        if not transform_y and all([k in y for k in ['FSC', 'SSC']]):
+            transform_y = 'logicle'
+        return transform_axes(data, transforms={'x': transform_x, 'y': transform_y},
+                              axes_vars={'x': x, 'y': y})
+
+    def _plot_tree_recursion(self, fig: plt.figure, node: Node, i, sml_plotting):
+        geom = node.geom
+        if geom.get('shape') == 'sml':
+            geom = sml_plotting.get(node.name)
+        data = self._get_data_transform(node)
+        x, y = geom['x'], geom['y']
+        ax = fig.add_subplot(4, 3, i)
+        ax.scatter(data[x], data[y], c='black', alpha=1, s=1)
+        ax.set_title(f'{node.name}: {[c.name for c in node.children]}')
+        colours = ['blue', 'red', 'cyan', 'orange', 'pink', 'green', 'purple']
+        for cc, child in zip(colours, node.children):
+            cdata = self._get_data_transform(child)
+            ax.scatter(cdata[x], cdata[y], c=cc, alpha=0.5, s=1, label=child.name)
+        ax.legend()
+        i = i + 1
+        for child in node.children:
+            if child.children:
+                return self._plot_tree_recursion(fig, child, i, sml_plotting)
+        return fig
+
+    def plot_tree(self, sml_plotting: dict, figsize=(20, 20)):
+        assert all([p in self.gating.populations.keys() for p in sml_plotting.keys()]), 'Given Supervised ML derived ' \
+                                                                                        'populations do not exist'
+        root = self.gating.populations['root']
+        fig = plt.figure(figsize=figsize)
+        i = 1
+        fig = self._plot_tree_recursion(fig, root, i, sml_plotting)
+        fig.show()
 
 
 
