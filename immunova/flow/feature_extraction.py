@@ -37,13 +37,16 @@ class Extract:
             * {Cluster1}:{Cluster2}
 
     """
-    def __init__(self, sample_id: str, experiment: FCSExperiment, clustering_definition: ClusteringDefinition,
+    def __init__(self, sample_id: str, experiment: FCSExperiment,
+                 clustering_definition: ClusteringDefinition,
                  exclude_populations: list or None = None,
-                 exclude_clusters: list or None = None):
+                 exclude_clusters: list or None = None,
+                 verbose: bool = True):
         self.gating = Gating(experiment, sample_id)
         self.clustering = SingleClustering(clustering_definition=clustering_definition)
         self.clustering.load_data(experiment=experiment, sample_id=sample_id)
         self.data = pd.DataFrame({'sample_id': [self.gating.id], 'pt_id': self.clustering.data.pt_id.values[0]})
+        self.verbose = verbose
         if exclude_populations is not None:
             self.populations = {k: v for k, v in self.gating.populations.items() if k not in exclude_populations}
         else:
@@ -85,7 +88,8 @@ class Extract:
             * {Cluster1}:{Cluster2}
         :return: None
         """
-        print('-------- Calculating population ratios --------')
+        if self.verbose:
+            print('-------- Calculating population ratios --------')
         for pname1, pnode1 in progress_bar(self.populations.items()):
             for pname2, pnode2 in self.populations.items():
                 if pname1 == pname2:
@@ -93,7 +97,8 @@ class Extract:
                 self.data[f'{pname1}:{pname2}'] = len(pnode1.index)/len(pnode2.index)
             for c_name, c_data in self.clusters.clusters.items():
                 self.data[f'{pname1}:{c_name}'] = len(pnode1.index)/c_data['n_events']
-        print('-------- Calculating cluster ratios --------')
+        if self.verbose:
+            print('-------- Calculating cluster ratios --------')
         for cname1, cdata1 in progress_bar(self.clusters.clusters.items()):
             for cname2, cdata2 in self.clusters.clusters.items():
                 if cname1 == cname2:
@@ -103,22 +108,20 @@ class Extract:
     @staticmethod
     def _relative_fold_change(x: np.array, y: np.array, center='median') -> np.float:
         """
-        Given two populations, x and y, scale the values between 0 and 1 (essential due to negative values),
-        calculate the center for each (the median by default) and then return the fold change in x relative to y
+        Given two populations, x and y, calculate the center for each (the median by default) and then return the fold change in x relative to y
         :param x: first population
         :param y: second population
         :param center: how to calculate the center value, options = ['median', 'mean'] (default = 'median')
         :return: fold change in x relative to y
         """
-        x = MinMaxScaler().fit_transform(x.reshape(-1, 1))
-        y = MinMaxScaler().fit_transform(y.reshape(-1, 1))
         if center == 'median':
-            return np.median(x)/np.median(y)
-        return np.mean(x)/np.mean(y)
+            return np.median(x)-np.median(y)/np.median(x)
+        return np.mean(x)-np.mean(y)/np.mean(x)
 
     def fmo_stats_1d(self):
         for fmo_id in self.gating.fmo.keys():
-            print(f'-------- FMO Summary: {fmo_id} --------')
+            if self.verbose:
+                print(f'-------- FMO Summary: {fmo_id} --------')
             for pop_id in progress_bar(self.populations.keys()):
                 fmo_data = apply_transform(self.gating.get_fmo_data(pop_id, fmo_id))
                 whole_data = apply_transform(self.gating.get_population_df(pop_id))
@@ -130,10 +133,24 @@ class Extract:
                 w_probs, _ = kde(data=whole_data[fmo_id], x=fmo_id, kde_bw=0.01)
                 f_probs, _ = kde(data=fmo_data[fmo_id], x=fmo_id, kde_bw=0.01)
                 self.data[f'{pop_id}_{fmo_id}_kl_divergence'] = stats.entropy(pk=w_probs, qk=f_probs)
-        print('-------- Completed! --------')
+        if self.verbose:
+            print('-------- Completed! --------')
 
-    def centroid_euclidean_separation(self):
-        pass
+    def fmo_stats_multiple(self, fmo: list, population: str):
+        if not self.gating.fmo.keys():
+            if self.verbose:
+                print(f'{self.gating.id} has no associated FMOs, aborting')
+                return
+        assert all([x in self.gating.fmo.keys() for x in fmo]), f'Some/all requested FMOs missing, valid FMOs include {self.gating.fmo.keys()}'
+        assert population in self.gating.populations.keys(), f'Invalid population name, valid populations include: {self.gating.populations.keys()}'
+
+        whole_data = apply_transform(self.gating.get_population_df(population))
+        fmo_data = {name: apply_transform(self.gating.get_fmo_data(population, name)) for name in fmo}
+        centroids = {name: data[fmo].median() for name, data in fmo_data.items()}
+        euclidean_dist = {name: np.linalg.norm(whole_data[fmo].median - c) for name, c in centroids.items()}
+        for name in euclidean_dist.keys():
+            self.data[f'{name}_euclidean_dist'] = euclidean_dist[name]
+        self.data[f'{fmo}_avg_euclidean_dist'] = np.mean(euclidean_dist.values())
 
 
 class ExtractFromExperiment:

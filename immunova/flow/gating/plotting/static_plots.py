@@ -13,6 +13,7 @@ import numpy as np
 import random
 import math
 
+
 def transform_axes(data: pd.DataFrame, axes_vars: dict, transforms: dict) -> pd.DataFrame:
     """
     Transform axes by either logicle, log, asinh, or hyperlog transformation
@@ -32,6 +33,7 @@ def transform_axes(data: pd.DataFrame, axes_vars: dict, transforms: dict) -> pd.
             continue
         data = apply_transform(data=data, transform_method=transforms[ax], features_to_transform=[axes_vars[ax]])
     return data[axes_vars.values()]
+
 
 def plot_axis_lims(data: dict, x: str, y: str, xlim: tuple, ylim: tuple) -> tuple and tuple:
     """
@@ -85,8 +87,6 @@ class Plot:
                 data[x] = self.gating.get_fmo_data(target_population=gate.parent,
                                                    fmo=kwargs[x])
         return data
-
-
 
     @staticmethod
     def __plot_asthetics(ax: matplotlib.pyplot.axes, x: str, y: str,
@@ -287,7 +287,8 @@ class Plot:
 
     def backgate(self, root_population: str, x: str, y: str, gated_populations: list, sml_populations: list,
                  xlim: tuple or None = None, ylim: tuple or None = None,
-                 transforms: dict or None = None, title: str or None = None) -> None:
+                 transforms: dict or None = None, title: str or None = None,
+                 figsize: tuple = (8, 8)) -> None:
         """
         This function allows for plotting of multiple populations on the backdrop of some population upstream of
         the given populations. Each population is highlighted by a polygon gate.
@@ -328,7 +329,7 @@ class Plot:
         # Build plotting constructs
         if title is None:
             title = f'{root_population}: {populations}'
-        fig, ax = plt.subplots(figsize=(8,8))
+        fig, ax = plt.subplots(figsize=figsize)
         ax = self.__2dhist(ax=ax, data=root_data, x=x, y=y)
         ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
         colours = ['black', 'gray', 'brown', 'red', 'orange', 'coral', 'peru', 'olive', 'magenta', 'crimson', 'orchid']
@@ -343,9 +344,13 @@ class Plot:
                 ax.scatter(x=pop_data[p][:, 0], y=pop_data[p][:, 1], s=15, c=[c], alpha=1.0, label=p)
         ax.legend()
 
-    def _get_data_transform(self, node):
-        geom = node.geom
-        x, y = geom['x'], geom['y']
+    def _get_data_transform(self, node, geom):
+        """
+        Internal method. Fetch and transform data for grid plot
+        :param node:
+        :return:
+        """
+        x, y = geom['x'], geom['y'] or 'FSC-A'
         data = self.gating.get_population_df(node.name)[[x, y]]
         transform_x = geom.get('transform_x')
         transform_y = geom.get('transform_y')
@@ -353,30 +358,53 @@ class Plot:
             transform_x = 'logicle'
         if not transform_y and all([k in y for k in ['FSC', 'SSC']]):
             transform_y = 'logicle'
-        return transform_axes(data, transforms={'x': transform_x, 'y': transform_y},
-                              axes_vars={'x': x, 'y': y})
+        data = transform_axes(data, transforms={'x': transform_x, 'y': transform_y}, axes_vars={'x': x, 'y': y})
+        return data[(data[x] > data[x].quantile(0.01)) & (data[y] < data[y].quantile(0.99))]
 
     def _plot_tree_recursion(self, fig: plt.figure, node: Node, i, sml_plotting):
-        geom = node.geom
+        """
+        Internal method. Recursive generation of plots for grid
+        :param fig:
+        :param node:
+        :param i:
+        :param sml_plotting:
+        :return:
+        """
+        print(node.name)
+        if not node.children:
+            return fig
+
+        geom = node.children[0].geom
         if geom.get('shape') == 'sml':
             geom = sml_plotting.get(node.name)
-        data = self._get_data_transform(node)
-        x, y = geom['x'], geom['y']
+
+        x, y = geom['x'], geom['y'] or 'FSC-A'
+        data = self._get_data_transform(node, geom)
+
         ax = fig.add_subplot(4, 3, i)
-        ax.scatter(data[x], data[y], c='black', alpha=1, s=1)
+        ax = self.__2dhist(ax, data, x, y)
         ax.set_title(f'{node.name}: {[c.name for c in node.children]}')
-        colours = ['blue', 'red', 'cyan', 'orange', 'pink', 'green', 'purple']
+        colours = ['red', 'orange', 'pink', 'purple', 'cyan', 'black']
         for cc, child in zip(colours, node.children):
-            cdata = self._get_data_transform(child)
-            ax.scatter(cdata[x], cdata[y], c=cc, alpha=0.5, s=1, label=child.name)
+            cdata = self._get_data_transform(child, geom)
+            ax.scatter(cdata[x], cdata[y], c=cc, alpha=0.05, s=5, label=child.name)
         ax.legend()
-        i = i + 1
+        if any([fs in x for fs in ['SSC', 'FSC']]):
+            ax.set_xlim(left=0)
+        if any([fs in y for fs in ['SSC', 'FSC']]):
+            ax.set_ylim(bottom=0)
         for child in node.children:
-            if child.children:
-                return self._plot_tree_recursion(fig, child, i, sml_plotting)
+            i = i + 1
+            return self._plot_tree_recursion(fig, child, i, sml_plotting)
         return fig
 
-    def plot_tree(self, sml_plotting: dict, figsize=(20, 20)):
+    def grid_plot(self, sml_plotting: dict, figsize=(20, 20)):
+        """
+        Generate a grid of plots detailing the whole population tree.
+        :param sml_plotting:
+        :param figsize:
+        :return:
+        """
         assert all([p in self.gating.populations.keys() for p in sml_plotting.keys()]), 'Given Supervised ML derived ' \
                                                                                         'populations do not exist'
         root = self.gating.populations['root']
