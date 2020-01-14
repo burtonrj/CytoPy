@@ -7,6 +7,7 @@ from immunova.flow.clustering.flowsom import FlowSOM
 from immunova.flow.clustering.consensus import ConsensusCluster
 from immunova.flow.gating.actions import Gating
 from immunova.flow.utilities import progress_bar
+from immunova.flow.supervised.utilities import scaler
 from anytree import Node
 from matplotlib.colors import LogNorm
 from sklearn import preprocessing
@@ -420,7 +421,8 @@ class Explorer:
         pass
 
     def heatmap(self, heatmap_var: str, features: list,
-                clustermap: bool = False, mask: pd.DataFrame or None = None):
+                clustermap: bool = False, mask: pd.DataFrame or None = None,
+                normalise: bool = True):
         """
         Generate a heatmap of marker expression for either clusters or gated populations
         (indicated with 'heatmap_var' argument)
@@ -434,7 +436,8 @@ class Explorer:
             d = d[mask]
         d = d[features + [heatmap_var]]
         d[features] = d[features].apply(pd.to_numeric)
-        d[features] = preprocessing.MinMaxScaler().fit_transform(d[features])
+        if normalise:
+            d[features] = preprocessing.MinMaxScaler().fit_transform(d[features])
         d = d.groupby(by=heatmap_var).mean()
         if clustermap:
             ax = sns.clustermap(d, col_cluster=False, cmap='viridis', figsize=(16, 10))
@@ -934,6 +937,7 @@ class MetaClustering(Clustering):
                 c_data = clustering.get_cluster_dataframe(c_name)
                 n = c_data.shape[0]
                 relative_n = n/clustering.data.shape[0]
+                c_data[clustering.ce.features] = scaler(c_data[clustering.ce.features], scale_method='robust')
                 c_data = c_data.median()
                 c_data['cluster_id'], c_data['cluster_size'], \
                 c_data['pt_id'], c_data['sample_id'] = c_name, relative_n, pt_id, s
