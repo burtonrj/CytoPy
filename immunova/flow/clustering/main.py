@@ -422,7 +422,7 @@ class Explorer:
 
     def heatmap(self, heatmap_var: str, features: list,
                 clustermap: bool = False, mask: pd.DataFrame or None = None,
-                normalise: bool = True):
+                normalise: bool = True, figsize: tuple = (10, 5)):
         """
         Generate a heatmap of marker expression for either clusters or gated populations
         (indicated with 'heatmap_var' argument)
@@ -440,7 +440,7 @@ class Explorer:
             d[features] = preprocessing.MinMaxScaler().fit_transform(d[features])
         d = d.groupby(by=heatmap_var).mean()
         if clustermap:
-            ax = sns.clustermap(d, col_cluster=False, cmap='viridis', figsize=(16, 10))
+            ax = sns.clustermap(d, col_cluster=False, cmap='viridis', figsize=figsize)
             return ax
         fig, ax = plt.subplots(figsize=(16, 10))
         ax = sns.heatmap(d, linewidth=0.5, ax=ax, cmap='viridis')
@@ -448,7 +448,8 @@ class Explorer:
         return ax
 
     def plot_representation(self, x_variable: str, y_variable, discrete: bool = True,
-                            mask: pd.DataFrame or None = None):
+                            mask: pd.DataFrame or None = None, figsize: tuple = (6, 6),
+                            **kwargs):
         """
         Present a breakdown of how a variable is represented in relation to a cluster/population/meta cluster
         :param x_variable: either cluster, population or meta cluster
@@ -465,8 +466,8 @@ class Explorer:
         x_variable = x_var_options[x_variable]
         if y_variable == 'patient':
             x = d[[x_variable, 'pt_id']].groupby(x_variable)['pt_id'].nunique() / len(d.pt_id.unique()) * 100
-            fig, ax = plt.subplots(figsize=(12, 7))
-            x.sort_values().plot(kind='bar', ax=ax)
+            fig, ax = plt.subplots(figsize=figsize)
+            x.sort_values().plot(kind='bar', ax=ax, **kwargs)
             ax.set_ylabel('Patient representation (%)')
             ax.set_xlabel(x_variable)
             return ax
@@ -477,16 +478,16 @@ class Explorer:
                  .mul(100)
                  .reset_index()
                  .sort_values(y_variable))
-            fig, ax = plt.subplots(figsize=(12, 7))
-            p = sns.barplot(x=x_variable, y=f'percentage', hue=y_variable, data=x, ax=ax)
+            fig, ax = plt.subplots(figsize=figsize)
+            p = sns.barplot(x=x_variable, y=f'percentage', hue=y_variable, data=x, ax=ax, **kwargs)
             _ = plt.setp(p.get_xticklabels(), rotation=90)
             ax.set_ylabel(f'% cells ({y_variable})')
             ax.set_xlabel(x_variable)
             return ax
         if y_variable in d.columns and not discrete:
-            fig, ax = plt.subplots(figsize=(15, 5))
+            fig, ax = plt.subplots(figsize=figsize)
             d = d.sample(10000)
-            ax = sns.swarmplot(x=x_variable, y=y_variable, data=d, ax=ax, s=3)
+            ax = sns.swarmplot(x=x_variable, y=y_variable, data=d, ax=ax, s=3, **kwargs)
             return ax
 
     @staticmethod
@@ -707,13 +708,17 @@ class SingleClustering(Clustering):
         """
         self.clusters = dict()
 
-    def load_data(self, experiment: FCSExperiment, sample_id: str, include_population_label: bool = True):
+    def load_data(self, experiment: FCSExperiment,
+                  sample_id: str,
+                  include_population_label: bool = True,
+                  scale: str or None = None):
         """
         Given some FCS Experiment and the name of a sample associated to that experiment, populate the 'data'
         parameter with single cell data from the given sample and FCS experiment.
         :param experiment: FCS experiment object
         :param include_population_label: if True, data frame populated with population labels from gates
         (default = True)
+        :param scale: specify how to scale the data (optional)
         :param sample_id: sample identifier
         """
         self.experiment = experiment
@@ -730,6 +735,8 @@ class SingleClustering(Clustering):
         self.data = sample.get_population_df(self.ce.root_population,
                                              transform=transform,
                                              transform_method=self.ce.transform_method)
+        if scale is not None:
+            self.data[self.ce.features] = scaler(self.data[self.ce.features], scale_method=scale)[0]
         if not self.ce.features:
             self.data = self.data[self.ce.features]
         pt = Patient.objects(files__contains=sample.mongo_id)
@@ -776,7 +783,7 @@ class SingleClustering(Clustering):
                 root_p.delete_clusters(self.ce.clustering_uid)
             else:
                 raise ValueError(f'Error: a clustering experiment with UID {self.ce.clustering_uid} '
-                                      f'has already been associated to the root population {self.ce.root_population}')
+                                 f'has already been associated to the root population {self.ce.root_population}')
         for name, cluster_data in self.clusters.items():
             c = Cluster(cluster_id=name,
                         n_events=cluster_data['n_events'],
@@ -829,7 +836,9 @@ class GlobalClustering(Clustering):
     def __init__(self,  **kwargs):
         super().__init__(**kwargs)
 
-    def load_data(self, experiment: FCSExperiment, samples: list or str = 'all', sample_n: int or None = 1000):
+    def load_data(self, experiment: FCSExperiment,
+                  samples: list or str = 'all',
+                  sample_n: int or None = 1000):
         """
         Load fcs file data, including any associated gates or clusters
         :param experiment: FCSExperiment to load samples from
@@ -899,15 +908,21 @@ class MetaClustering(Clustering):
         experiment - This is the FCS Experiment that samples will be taken from
         samples - list of sample names to extract clusters from; if a value of 'all' is given, then all of the samples
         associated to that experiment will be used in the meta clustering
+        normalisation - how to normalise data prior to meta-clustering (normalisation is performed on a per-sample bases)
+
     Methods:
         load_clusters: loads the clustering allocations from each of the given samples in an experiment. Clusters are summarised
         by finding their centroid (the median of each feature); resulting in each row of 'data' corresponding to a unique cluster/patient combination.
         cluster: perform meta-clistering as defined by clustering definition
         explorer: generate an Explorer object for visualising clustering and exploring meta-data
     """
-    def __init__(self, experiment: FCSExperiment, samples: str or list = 'all', **kwargs):
+    def __init__(self, experiment: FCSExperiment,
+                 samples: str or list = 'all',
+                 scale: str or None = 'robust',
+                 **kwargs):
         super().__init__(**kwargs)
         self.experiment = experiment
+        self.scale = scale
         if samples == 'all':
             samples = experiment.list_samples()
         self.data = self.load_clusters(samples)
@@ -929,7 +944,10 @@ class MetaClustering(Clustering):
         assert target_clustering_def, f'No such clustering definition {self.ce.meta_clustering_uid_target} to target'
         for s in progress_bar(samples):
             clustering = SingleClustering(clustering_definition=target_clustering_def[0])
-            clustering.load_data(experiment=self.experiment, sample_id=s)
+            clustering.load_data(experiment=self.experiment,
+                                 sample_id=s,
+                                 scale=self.scale,
+                                 include_population_label=True)
             pt_id = clustering.data['pt_id'].values[0]
             if len(clustering.clusters.keys()) == 0:
                 print(f'No clusters found for clustering UID {target_clustering_def[0].clustering_uid} and sample {s}')
@@ -937,10 +955,11 @@ class MetaClustering(Clustering):
                 c_data = clustering.get_cluster_dataframe(c_name)
                 n = c_data.shape[0]
                 relative_n = n/clustering.data.shape[0]
-                c_data[clustering.ce.features] = scaler(c_data[clustering.ce.features], scale_method='robust')
+                pop_label = c_data['population_label'].mode()[0]
                 c_data = c_data.median()
-                c_data['cluster_id'], c_data['cluster_size'], \
-                c_data['pt_id'], c_data['sample_id'] = c_name, relative_n, pt_id, s
+                c_data['population_label'] = pop_label
+                c_data['cluster_id'], c_data['cluster_size'], c_data['cluster_n'], \
+                c_data['pt_id'], c_data['sample_id'] = c_name, relative_n, n, pt_id, s
                 clusters = clusters.append(c_data, ignore_index=True)
         print('------------ Completed! ------------')
         return clusters
