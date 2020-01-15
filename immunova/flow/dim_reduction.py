@@ -8,6 +8,7 @@ import phate
 
 def dimensionality_reduction(data: pd.DataFrame, features: list,
                              method: str, n_components: int, return_embeddings_only: bool = False,
+                             return_reducer: bool = False,
                              **kwargs) -> pd.DataFrame or np.array:
     """
     Perform dimensionality reduction using either UMAP, PCA, tSNE, or PHATE. PCA and tSNE are implemented using
@@ -41,4 +42,6 @@ def dimensionality_reduction(data: pd.DataFrame, features: list,
         return embeddings
     for i, e in enumerate(embeddings.T):
         data[f'{method}_{i}'] = e
+    if return_reducer:
+        return data, reducer
     return data
