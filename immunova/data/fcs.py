@@ -132,6 +132,11 @@ class Population(mongoengine.EmbeddedDocument):
             raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
         self.clustering = [c for c in self.clustering if c.cluster_experiment.clustering_uid != clustering_uid]
 
+    def replace_cluster_experiment(self, current_uid: str, new_cluster_definition: ClusteringDefinition):
+        for c in self.clustering:
+            if c.cluster_experiment.clustering_uid == current_uid:
+                c.cluster_experiment = new_cluster_definition
+
 
 class Normalisation(mongoengine.EmbeddedDocument):
     """
