@@ -2,12 +2,16 @@ from immunova.data.fcs_experiments import FCSExperiment
 from immunova.data.fcs import Normalisation
 from immunova.flow.gating.actions import Gating
 from immunova.flow.normalisation.MMDResNet import MMDNet
-from immunova.flow.supervised.utilities import calculate_reference_sample
+from immunova.flow.supervised.ref import calculate_reference_sample
+from immunova.flow.supervised.utilities import scaler
+from immunova.flow.utilities import progress_bar
+from immunova.flow.dim_reduction import dimensionality_reduction
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
+import math
 np.random.seed(42)
 
 
@@ -136,11 +140,11 @@ class Normalise:
 
 
 class EvaluateBatchEffects:
-    def __init__(self, experiment: FCSExperiment, transform='logicle'):
+    def __init__(self, experiment: FCSExperiment):
         self.experiment = experiment
-        self.transform = transform
 
-    def __load_and_transform(self, sample_id, root_population) -> pd.DataFrame:
+    def _load_and_transform(self, sample_id: str, root_population: str, transform: str,
+                            scale: str or None = None) -> pd.DataFrame:
         """
         Given a sample ID, retrieve the sample data and apply transformation
         :param sample_id: ID corresponding to sample for retrieval
@@ -150,33 +154,55 @@ class EvaluateBatchEffects:
         gating = Gating(experiment=self.experiment, sample_id=sample_id, include_controls=False)
         data = gating.get_population_df(root_population,
                                         transform=True,
-                                        transform_method=self.transform,
+                                        transform_method=transform,
                                         transform_features='all')
+        if scale is not None:
+            data = scaler(data, scale_method=scale)[0]
         if data is None:
             raise CalibrationError(f'Error: unable to load data for population {root_population}')
         return data
 
-    def marker_variance(self, reference_id, root_population, marker, n: int or None = None):
-        reference = self.__load_and_transform(reference_id, root_population).sample(500)[marker]
-        samples = self.experiment.list_samples()
-        if n:
-            samples = np.random.choice(samples, n, replace=False)
-        for sample in samples:
-            try:
-                d = self.__load_and_transform(sample, root_population).sample(500)[marker]
-                ax = sns.kdeplot(d, color='b', shade=False, alpha=0.5)
-            except ValueError:
-                print(f'{sample} has less than 500 events, this sample will not be included in the comparison')
-            except CalibrationError:
-                print(f'{sample} does not contain the population {root_population}, skipping')
-        ax = sns.kdeplot(reference, shade=True, color="r")
-        ax.set_title(f'Total variance in {marker}')
-        ax.get_legend().remove()
-        return ax
+    def _load_many(self, reference_id, root_population, transform, scale, comparison_samples):
+        reference = self._load_and_transform(reference_id, root_population, transform, scale)
+        if reference.shape[0] < 500:
+            raise ValueError('Reference sample contains less than 500 cells, consider different reference sample')
+        samples = [self._load_and_transform(s, root_population, transform, scale) for s in comparison_samples]
+        samples = [s for s in samples if s.shape[0] > 500]
+        if len(samples) != len(comparison_samples):
+            print(f'Not all comparison samples contain >500 cells, continuing with {len(samples)} comparisons')
+        return samples, reference
 
-    def pca(self, sample_id, reference_id, root_population, sample_n=1000):
-        reference = self.__load_and_transform(reference_id, root_population).sample(sample_n)
-        sample = self.__load_and_transform(sample_id, root_population).sample(sample_n)
+    def marker_variance(self, reference_id, root_population,
+                        markers: list, comparison_samples: list,
+                        transform: str = 'logicle',
+                        scale: str or None = None,
+                        figsize: tuple = (10, 10)):
+        fig = plt.figure(figsize=figsize)
+        nrows = math.ceil(len(markers)/3)
+        exp_samples = self.experiment.list_samples()
+        assert all([x in exp_samples for x in comparison_samples]), 'Invalid sample IDs provided'
+        print('Fetching data...')
+        samples, reference = self._load_many(reference_id, root_population, transform, scale, comparison_samples)
+        print('Plotting...')
+        i = 0
+        for marker in progress_bar(markers):
+            i += 1
+            if marker not in reference.columns:
+                print(f'{marker} absent from reference sample, skipping')
+            ax = fig.add_subplot(nrows, 3, i)
+            ax = sns.kdeplot(reference[marker], shade=True, color="r", ax=ax)
+            ax.set_title(f'Total variance in {marker}')
+            for d in samples:
+                if marker not in d.columns:
+                    continue
+                ax = sns.kdeplot(d[marker], color='b', shade=False, alpha=0.5, ax=ax)
+                ax.get_legend().remove()
+        fig.show()
+
+    def pca(self, sample_id, reference_id, root_population, sample_n=1000, transform: str = 'logicle',
+            scale: str or None = None):
+        reference = self._load_and_transform(reference_id, root_population, transform, scale).sample(sample_n)
+        sample = self._load_and_transform(sample_id, root_population, transform, scale).sample(sample_n)
         ref_features = set(reference.columns)
         features = ref_features.intersection(list(sample.columns))
         # project data onto PCs
@@ -188,11 +214,43 @@ class EvaluateBatchEffects:
         sample_pca = pd.DataFrame(reducer.transform(sample[features])[:, 0:2], columns=['PCA1', 'PCA2'])
         sample_pca['Label'] = 'Source before calibration'
         pca_df = pd.concat([ref_pca, sample_pca])
-
-        fig, ax = plt.subplots(figsize=(8, 8))
+        fig, ax = plt.subplots()
         ax.scatter(ref_pca['PCA1'], ref_pca['PCA2'], c='blue', s=4, alpha=0.4, label=f'Target: {reference_id}')
         ax.scatter(sample_pca['PCA1'], sample_pca['PCA2'], c='red', s=4, alpha=0.4, label=f'Sample: {sample_id}')
         ax.set_xlabel('PCA1')
         ax.set_ylabel('PCA2')
         ax.legend()
-        plt.show()
+        fig.show()
+
+    def dim_reduction_grid(self, reference_id, root_population, comparison_samples: list, features: list, sample_n=1000,
+                           transform: str = 'logicle', scale: str or None = None, figsize: tuple = (10, 10),
+                           method: str = 'PCA', kde: bool = False):
+        fig = plt.figure(figsize=figsize)
+        nrows = math.ceil(len(comparison_samples)/3)
+        exp_samples = self.experiment.list_samples()
+        assert all([x in exp_samples for x in comparison_samples]), 'Invalid sample IDs provided'
+        print('Fetching data...')
+        samples, reference = self._load_many(reference_id, root_population, transform, scale, comparison_samples)
+        print('Plotting...')
+        reference = reference.sample(sample_n)
+        reference['label'] = 'Target'
+        reference, reducer = dimensionality_reduction(reference,
+                                                      features=features,
+                                                      method=method,
+                                                      n_components=2,
+                                                      return_reducer=True)
+        i = 0
+        for s in progress_bar(samples):
+            i += 1
+            s['label'] = 'Comparison'
+            ax = fig.add_subplot(nrows, 3, i)
+            embeddings = reducer.transform(s[features].sample(sample_n))
+            x = f'{method}_0'
+            y = f'{method}_1'
+            ax.scatter(reference[x], reference[y], c='blue', s=4, alpha=0.2)
+            if kde:
+                sns.kdeplot(reference[x], reference[y], c='blue', n_levels=100, ax=ax, shade=False)
+            ax.scatter(embeddings[:, 0], embeddings[:, 1], c='red', s=4, alpha=0.1)
+            if kde:
+                sns.kdeplot(embeddings[:, 0], embeddings[:, 1], c='red', n_levels=100, ax=ax, shade=False)
+        fig.show()
