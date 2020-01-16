@@ -1,6 +1,7 @@
 from IPython import get_ipython
 from tqdm import tqdm_notebook, tqdm
-from sklearn.neighbors import BallTree
+from sklearn.neighbors import BallTree, KernelDensity
+from sklearn.model_selection import GridSearchCV
 import numpy as np
 
 
@@ -66,3 +67,18 @@ def hellinger_dot(p, q):
     """
     z = np.sqrt(p) - np.sqrt(q)
     return np.sqrt(z @ z / 2)
+
+
+def kde_multivariant(x: np.array, x_grid: np.array, bandwidth: str or float = 'cross_val', bandwidth_search: tuple = (0.01, 0.5), **kwargs):
+    assert x.shape[1] == x_grid.shape[1], 'x and x_grid must have equal dimensions'
+    if type(bandwidth) == str:
+        assert bandwidth == 'cross_val', 'Invalid input for bandwidth, must be either float or "cross_val"'
+        grid = GridSearchCV(KernelDensity(),
+                            {'bandwidth': np.linspace(bandwidth_search[0], bandwidth_search[1], 30)},
+                            cv=20)
+        grid.fit(x)
+        bandwidth = grid.best_estimator_.bandwidth
+    kde = KernelDensity(bandwidth=bandwidth, **kwargs)
+    kde.fit(x)
+    log_pdf = kde.score_samples(x_grid)
+    return np.exp(log_pdf)
