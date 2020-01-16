@@ -15,6 +15,10 @@ import math
 np.random.seed(42)
 
 
+def hellinger_divergence():
+    pass
+
+
 class CalibrationError(Exception):
     pass
 
