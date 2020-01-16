@@ -4,19 +4,14 @@ from immunova.flow.gating.actions import Gating
 from immunova.flow.normalisation.MMDResNet import MMDNet
 from immunova.flow.supervised.ref import calculate_reference_sample
 from immunova.flow.supervised.utilities import scaler
-from immunova.flow.utilities import progress_bar
+from immunova.flow.utilities import progress_bar, kde_multivariant, hellinger_dot
 from immunova.flow.dim_reduction import dimensionality_reduction
-from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
 import math
 np.random.seed(42)
-
-
-def hellinger_divergence():
-    pass
 
 
 class CalibrationError(Exception):
@@ -166,16 +161,6 @@ class EvaluateBatchEffects:
             raise CalibrationError(f'Error: unable to load data for population {root_population}')
         return data
 
-    def _load_many(self, reference_id, root_population, transform, scale, comparison_samples):
-        reference = self._load_and_transform(reference_id, root_population, transform, scale)
-        if reference.shape[0] < 500:
-            raise ValueError('Reference sample contains less than 500 cells, consider different reference sample')
-        samples = [self._load_and_transform(s, root_population, transform, scale) for s in comparison_samples]
-        samples = [s for s in samples if s.shape[0] > 500]
-        if len(samples) != len(comparison_samples):
-            print(f'Not all comparison samples contain >500 cells, continuing with {len(samples)} comparisons')
-        return samples, reference
-
     def marker_variance(self, reference_id, root_population,
                         markers: list, comparison_samples: list,
                         transform: str = 'logicle',
@@ -186,7 +171,9 @@ class EvaluateBatchEffects:
         exp_samples = self.experiment.list_samples()
         assert all([x in exp_samples for x in comparison_samples]), 'Invalid sample IDs provided'
         print('Fetching data...')
-        samples, reference = self._load_many(reference_id, root_population, transform, scale, comparison_samples)
+        reference = self._load_and_transform(reference_id, root_population, transform, scale)
+        samples = [self._load_and_transform(s, root_population, transform, scale) for s in comparison_samples]
+        samples = list(map(lambda s: s.sample(1000) if s.shape[0] > 1000 else s, samples))
         print('Plotting...')
         i = 0
         for marker in progress_bar(markers):
@@ -203,29 +190,6 @@ class EvaluateBatchEffects:
                 ax.get_legend().remove()
         fig.show()
 
-    def pca(self, sample_id, reference_id, root_population, sample_n=1000, transform: str = 'logicle',
-            scale: str or None = None):
-        reference = self._load_and_transform(reference_id, root_population, transform, scale).sample(sample_n)
-        sample = self._load_and_transform(sample_id, root_population, transform, scale).sample(sample_n)
-        ref_features = set(reference.columns)
-        features = ref_features.intersection(list(sample.columns))
-        # project data onto PCs
-        reducer = PCA()
-        reducer.fit(reference[features])
-
-        ref_pca = pd.DataFrame(reducer.transform(reference[features])[:, 0:2], columns=['PCA1', 'PCA2'])
-        ref_pca['Label'] = 'Target'
-        sample_pca = pd.DataFrame(reducer.transform(sample[features])[:, 0:2], columns=['PCA1', 'PCA2'])
-        sample_pca['Label'] = 'Source before calibration'
-        pca_df = pd.concat([ref_pca, sample_pca])
-        fig, ax = plt.subplots()
-        ax.scatter(ref_pca['PCA1'], ref_pca['PCA2'], c='blue', s=4, alpha=0.4, label=f'Target: {reference_id}')
-        ax.scatter(sample_pca['PCA1'], sample_pca['PCA2'], c='red', s=4, alpha=0.4, label=f'Sample: {sample_id}')
-        ax.set_xlabel('PCA1')
-        ax.set_ylabel('PCA2')
-        ax.legend()
-        fig.show()
-
     def dim_reduction_grid(self, reference_id, root_population, comparison_samples: list, features: list, sample_n=1000,
                            transform: str = 'logicle', scale: str or None = None, figsize: tuple = (10, 10),
                            method: str = 'PCA', kde: bool = False):
@@ -234,7 +198,9 @@ class EvaluateBatchEffects:
         exp_samples = self.experiment.list_samples()
         assert all([x in exp_samples for x in comparison_samples]), 'Invalid sample IDs provided'
         print('Fetching data...')
-        samples, reference = self._load_many(reference_id, root_population, transform, scale, comparison_samples)
+        reference = self._load_and_transform(reference_id, root_population, transform, scale)
+        samples = [self._load_and_transform(s, root_population, transform, scale) for s in comparison_samples]
+        samples = list(map(lambda s: s.sample(1000) if s.shape[0] > 1000 else s, samples))
         print('Plotting...')
         reference = reference.sample(sample_n)
         reference['label'] = 'Target'
@@ -258,3 +224,46 @@ class EvaluateBatchEffects:
             if kde:
                 sns.kdeplot(embeddings[:, 0], embeddings[:, 1], c='red', n_levels=100, ax=ax, shade=False)
         fig.show()
+
+    def plot_hellinger(self, target_id: str, root_population: str,
+                       sample_n: int = 10000, figsize: tuple = (8, 8)):
+        print('Fetching data...')
+        target = self._load_and_transform(target_id, root_population, transform='logicle', scale=None)
+        if target.shape[0] < sample_n:
+            print('Target sample size smaller than requested sample size, continuing with entire sample')
+            target = target.values
+        else:
+            target = target.sample(sample_n).values
+        samples = list()
+        for s in progress_bar(self.experiment.list_samples()):
+            try:
+                sample = self._load_and_transform(s, root_population, transform='logicle', scale=None)
+                if sample_n < sample.shape[0]:
+                    sample = sample.sample(sample_n)
+                samples.append((s, sample.values))
+            except CalibrationError:
+                continue
+
+        print('Calculating PDF for target...')
+        x_grid = np.array([np.linspace(np.amin(target), np.amax(target), 1000) for x in range(target.shape[1])]).T
+        p = kde_multivariant(target, x_grid, bandwidth='cross_val')
+        print('Calculate PDF for all other samples and calculate hellinger distance...')
+        fig, ax = plt.subplots(figsize=figsize)
+        hd = list()
+        for name, d in progress_bar(samples):
+            x_grid = np.array([np.linspace(np.amin(d), np.amax(d), 1000) for x in range(d.shape[1])]).T
+            q = kde_multivariant(d, x_grid, bandwidth='cross_val')
+            hd.append((name, hellinger_dot(p, q)))
+        print('Plotting...')
+        hd_ = {'sample_id': list(), 'hellinger_distance': list()}
+        for n, h in hd:
+            hd_['sample_id'].append(n)
+            hd_['hellinger_distance'].append(h)
+        hd = pd.DataFrame(hd_).sort_values(by='hellinger_distance', ascending=True)
+        sns.set_color_codes("pastel")
+        ax = sns.barplot(y='sample_id', x='hellinger_distance', data=hd, color='b', ax=ax)
+        ax.set_xlabel('Sample ID')
+        ax.set_ylabel('Hellinger Distance')
+        fig.show()
+
+

@@ -50,7 +50,7 @@ def find_local_minima(probs: np.array, xx: np.array, peaks: np.array) -> float:
 def kde(data: pd.DataFrame, x: str,
         kde_bw: float, kernel: str='gaussian') -> np.array:
     """
-    Generate a kernel density estimation using the scikit-learn implementation
+    Generate a 1D kernel density estimation using the scikit-learn implementation
     :param data: data for smoothing
     :param x: column name for density estimation
     :param kde_bw: bandwidth
