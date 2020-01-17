@@ -3,15 +3,21 @@ from immunova.data.fcs import Normalisation
 from immunova.flow.gating.actions import Gating
 from immunova.flow.normalisation.MMDResNet import MMDNet
 from immunova.flow.supervised.ref import calculate_reference_sample
-from immunova.flow.supervised.utilities import scaler
-from immunova.flow.utilities import progress_bar, kde_multivariant, hellinger_dot
+from immunova.flow.utilities import progress_bar, kde_multivariant, hellinger_dot, load_and_transform
 from immunova.flow.dim_reduction import dimensionality_reduction
+from multiprocessing import Pool, cpu_count
+from functools import partial
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
 import math
 np.random.seed(42)
+
+
+def ordered_kde(named_x, kde_f):
+    q = kde_f(named_x[1])
+    return named_x[0], q
 
 
 class CalibrationError(Exception):
@@ -142,25 +148,6 @@ class EvaluateBatchEffects:
     def __init__(self, experiment: FCSExperiment):
         self.experiment = experiment
 
-    def _load_and_transform(self, sample_id: str, root_population: str, transform: str,
-                            scale: str or None = None) -> pd.DataFrame:
-        """
-        Given a sample ID, retrieve the sample data and apply transformation
-        :param sample_id: ID corresponding to sample for retrieval
-        :return: transformed data as a list of dictionary objects:
-        {id: file id, typ: type of file (either 'complete' or 'control'), data: Pandas DataFrame}
-        """
-        gating = Gating(experiment=self.experiment, sample_id=sample_id, include_controls=False)
-        data = gating.get_population_df(root_population,
-                                        transform=True,
-                                        transform_method=transform,
-                                        transform_features='all')
-        if scale is not None:
-            data = scaler(data, scale_method=scale)[0]
-        if data is None:
-            raise CalibrationError(f'Error: unable to load data for population {root_population}')
-        return data
-
     def marker_variance(self, reference_id, root_population,
                         markers: list, comparison_samples: list,
                         transform: str = 'logicle',
@@ -171,8 +158,8 @@ class EvaluateBatchEffects:
         exp_samples = self.experiment.list_samples()
         assert all([x in exp_samples for x in comparison_samples]), 'Invalid sample IDs provided'
         print('Fetching data...')
-        reference = self._load_and_transform(reference_id, root_population, transform, scale)
-        samples = [self._load_and_transform(s, root_population, transform, scale) for s in comparison_samples]
+        reference = load_and_transform(reference_id, root_population, transform, scale)
+        samples = [load_and_transform(s, root_population, transform, scale) for s in comparison_samples]
         samples = list(map(lambda s: s.sample(1000) if s.shape[0] > 1000 else s, samples))
         print('Plotting...')
         i = 0
@@ -198,8 +185,8 @@ class EvaluateBatchEffects:
         exp_samples = self.experiment.list_samples()
         assert all([x in exp_samples for x in comparison_samples]), 'Invalid sample IDs provided'
         print('Fetching data...')
-        reference = self._load_and_transform(reference_id, root_population, transform, scale)
-        samples = [self._load_and_transform(s, root_population, transform, scale) for s in comparison_samples]
+        reference = load_and_transform(reference_id, root_population, transform, scale)
+        samples = [load_and_transform(s, root_population, transform, scale) for s in comparison_samples]
         samples = list(map(lambda s: s.sample(1000) if s.shape[0] > 1000 else s, samples))
         print('Plotting...')
         reference = reference.sample(sample_n)
@@ -225,45 +212,46 @@ class EvaluateBatchEffects:
                 sns.kdeplot(embeddings[:, 0], embeddings[:, 1], c='red', n_levels=100, ax=ax, shade=False)
         fig.show()
 
-    def plot_hellinger(self, target_id: str, root_population: str,
-                       sample_n: int = 10000, figsize: tuple = (8, 8)):
+    def divergence_barplot(self, target_id: str, root_population: str,
+                           sample_n: int = 10000, figsize: tuple = (8, 8),
+                           transform: str = 'logicle', scale: str or None = None,
+                           kde_kernel: str = 'gaussian', divergence_method: str = 'hellinger',
+                           **kwargs):
         print('Fetching data...')
-        target = self._load_and_transform(target_id, root_population, transform='logicle', scale=None)
-        if target.shape[0] < sample_n:
-            print('Target sample size smaller than requested sample size, continuing with entire sample')
-            target = target.values
-        else:
-            target = target.sample(sample_n).values
-        samples = list()
-        for s in progress_bar(self.experiment.list_samples()):
-            try:
-                sample = self._load_and_transform(s, root_population, transform='logicle', scale=None)
-                if sample_n < sample.shape[0]:
-                    sample = sample.sample(sample_n)
-                samples.append((s, sample.values))
-            except CalibrationError:
-                continue
+        lt = partial(load_and_transform,
+                     experiment=self.experiment,
+                     root_population=root_population,
+                     transform=transform,
+                     scale=scale,
+                     sample_n=sample_n)
+        # Fetch target data frame
+        target = lt(sample_id=target_id)
+        # Fetch data frame for all other samples
+        samples = [s for s in self.experiment.list_samples() if s != target_id]
+        pool = Pool(cpu_count())
+        samples_df = pool.map(lt, samples)
+        samples_df = [(name, s.values) for name, s in zip(samples, samples_df)]
 
+        # Calculate PDF for target
         print('Calculating PDF for target...')
-        x_grid = np.array([np.linspace(np.amin(target), np.amax(target), 1000) for x in range(target.shape[1])]).T
-        p = kde_multivariant(target, x_grid, bandwidth='cross_val')
-        print('Calculate PDF for all other samples and calculate hellinger distance...')
+        p = kde_multivariant(target, bandwidth='cross_val', kernel=kde_kernel)
+
+        # Calc PDF for other samples and calculate F-divergence
+        print(f'Calculate PDF for all other samples and calculate F-divergence metric: {divergence_method}...')
+        kde_f = partial(kde_multivariant, bandwidth='cross_val', kernel=kde_kernel)
+        kde_ordered_f = partial(ordered_kde, kde_f=kde_f)
+        q_ = pool.map(kde_ordered_f, samples_df)
+
+        # Plotting
         fig, ax = plt.subplots(figsize=figsize)
-        hd = list()
-        for name, d in progress_bar(samples):
-            x_grid = np.array([np.linspace(np.amin(d), np.amax(d), 1000) for x in range(d.shape[1])]).T
-            q = kde_multivariant(d, x_grid, bandwidth='cross_val')
-            hd.append((name, hellinger_dot(p, q)))
         print('Plotting...')
         hd_ = {'sample_id': list(), 'hellinger_distance': list()}
-        for n, h in hd:
+        for n, h in q_:
             hd_['sample_id'].append(n)
-            hd_['hellinger_distance'].append(h)
-        hd = pd.DataFrame(hd_).sort_values(by='hellinger_distance', ascending=True)
+            hd_[f'{divergence_method} distance'].append(h)
+        hd_ = pd.DataFrame(hd_).sort_values(by=f'{divergence_method} distance', ascending=True)
         sns.set_color_codes("pastel")
-        ax = sns.barplot(y='sample_id', x='hellinger_distance', data=hd, color='b', ax=ax)
-        ax.set_xlabel('Sample ID')
-        ax.set_ylabel('Hellinger Distance')
+        ax = sns.barplot(y='sample_id', x=f'{divergence_method} distance', data=hd_, color='b', ax=ax)
+        ax.set_xlabel(f'{divergence_method} distance')
+        ax.set_ylabel('Sample ID')
         fig.show()
-
-
