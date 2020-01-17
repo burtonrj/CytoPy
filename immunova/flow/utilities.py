@@ -5,6 +5,7 @@ from IPython import get_ipython
 from tqdm import tqdm_notebook, tqdm
 from sklearn.neighbors import BallTree, KernelDensity
 from sklearn.model_selection import GridSearchCV
+from scipy.stats import entropy as kl_divergence
 import pandas as pd
 import numpy as np
 
@@ -73,8 +74,20 @@ def hellinger_dot(p, q):
     return np.sqrt(z @ z / 2)
 
 
+def jsd_divergence(p, q):
+    """
+    Calculate the Jensen-Shannon Divergence between two PDFs
+    :param p:
+    :param q:
+    :return:
+    """
+    m = (p + q)/2
+    divergence = (kl_divergence(p, m) + kl_divergence(q, m)) / 2
+    return np.sqrt(divergence)
+
+
 def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
-                     bandwidth_search: tuple = (0.01, 0.5), x_grid_n: int or None = None, **kwargs):
+                     bandwidth_search: tuple = (0.01, 0.5), x_grid_n: int or None = 1000, **kwargs):
     if type(bandwidth) == str:
         assert bandwidth == 'cross_val', 'Invalid input for bandwidth, must be either float or "cross_val"'
         grid = GridSearchCV(KernelDensity(),
@@ -85,15 +98,15 @@ def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
     kde = KernelDensity(bandwidth=bandwidth, **kwargs)
     kde.fit(x)
     if x_grid_n is not None:
-        x_grid = np.array([np.linspace(np.amin(x), np.amax(x), 1000) for _ in range(x.shape[1])]).T
-        log_pdf = kde.score_samples(x_grid)
+        x_grid = np.array([np.linspace(np.amin(x), np.amax(x), x_grid_n) for _ in range(x.shape[1])])
+        log_pdf = kde.score_samples(x_grid.T)
     else:
         log_pdf = kde.score_samples(x)
     return np.exp(log_pdf)
 
 
 def load_and_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str,
-                       scale: str or None = None, sample_n: int or None = None) -> pd.DataFrame:
+                       scale: str or None = None, sample_n: int or None = None) -> pd.DataFrame or None:
     """
     Standard function for loading data from an experiment, transforming, scaling, and sampling.
     :param experiment:
@@ -112,10 +125,21 @@ def load_and_transform(sample_id: str, experiment: FCSExperiment, root_populatio
     if scale is not None:
         data = scaler(data, scale_method=scale)[0]
     if data is None:
-        raise ValueError(f'Error: unable to load data for population {root_population}')
+        raise KeyError(f'Error: unable to load data for population {root_population} for {sample_id}')
     if sample_n is not None:
         if data.shape[0] < sample_n:
             print(f'{sample_id} contains less rows than the specified sampling n {sample_n}, returning unsampled dataframe')
             return data
         return data.sample(sample_n)
     return data
+
+
+def ordered_load_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str,
+                           scale: str or None = None, sample_n: int or None = None):
+    try:
+        data = load_and_transform(sample_id, experiment, root_population, transform,
+                                  scale, sample_n)
+    except KeyError:
+        print(f'Sample {sample_id} missing root population {root_population}')
+        return sample_id, None
+    return sample_id, data
