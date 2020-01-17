@@ -1,7 +1,11 @@
+from immunova.data.fcs_experiments import FCSExperiment
+from immunova.flow.gating.actions import Gating
+from immunova.flow.supervised.utilities import scaler
 from IPython import get_ipython
 from tqdm import tqdm_notebook, tqdm
 from sklearn.neighbors import BallTree, KernelDensity
 from sklearn.model_selection import GridSearchCV
+import pandas as pd
 import numpy as np
 
 
@@ -69,8 +73,8 @@ def hellinger_dot(p, q):
     return np.sqrt(z @ z / 2)
 
 
-def kde_multivariant(x: np.array, x_grid: np.array, bandwidth: str or float = 'cross_val', bandwidth_search: tuple = (0.01, 0.5), **kwargs):
-    assert x.shape[1] == x_grid.shape[1], 'x and x_grid must have equal dimensions'
+def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
+                     bandwidth_search: tuple = (0.01, 0.5), x_grid_n: int or None = None, **kwargs):
     if type(bandwidth) == str:
         assert bandwidth == 'cross_val', 'Invalid input for bandwidth, must be either float or "cross_val"'
         grid = GridSearchCV(KernelDensity(),
@@ -80,5 +84,38 @@ def kde_multivariant(x: np.array, x_grid: np.array, bandwidth: str or float = 'c
         bandwidth = grid.best_estimator_.bandwidth
     kde = KernelDensity(bandwidth=bandwidth, **kwargs)
     kde.fit(x)
-    log_pdf = kde.score_samples(x_grid)
+    if x_grid_n is not None:
+        x_grid = np.array([np.linspace(np.amin(x), np.amax(x), 1000) for _ in range(x.shape[1])]).T
+        log_pdf = kde.score_samples(x_grid)
+    else:
+        log_pdf = kde.score_samples(x)
     return np.exp(log_pdf)
+
+
+def load_and_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str,
+                       scale: str or None = None, sample_n: int or None = None) -> pd.DataFrame:
+    """
+    Standard function for loading data from an experiment, transforming, scaling, and sampling.
+    :param experiment:
+    :param sample_id:
+    :param root_population:
+    :param transform:
+    :param scale:
+    :param sample_n:
+    :return:
+    """
+    gating = Gating(experiment=experiment, sample_id=sample_id, include_controls=False)
+    data = gating.get_population_df(root_population,
+                                    transform=True,
+                                    transform_method=transform,
+                                    transform_features='all')
+    if scale is not None:
+        data = scaler(data, scale_method=scale)[0]
+    if data is None:
+        raise ValueError(f'Error: unable to load data for population {root_population}')
+    if sample_n is not None:
+        if data.shape[0] < sample_n:
+            print(f'{sample_id} contains less rows than the specified sampling n {sample_n}, returning unsampled dataframe')
+            return data
+        return data.sample(sample_n)
+    return data
