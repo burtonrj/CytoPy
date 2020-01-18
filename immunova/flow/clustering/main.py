@@ -1,6 +1,6 @@
 from mongoengine.base.datastructures import EmbeddedDocumentList
 from immunova.data.fcs_experiments import FCSExperiment
-from immunova.data.patient import Patient, Bug, MetaDataDictionary
+from immunova.data.patient import Patient, Bug, MetaDataDictionary, gram_status, bugs, org_type, hmbpp_ribo, biology
 from immunova.data.fcs import Cluster, Population, ClusteringDefinition
 from immunova.flow.dim_reduction import dimensionality_reduction
 from immunova.flow.clustering.flowsom import FlowSOM
@@ -177,87 +177,12 @@ class Explorer:
             if pt_id is None:
                 continue
             p = Patient.objects(patient_id=pt_id).get()
-            self.data.loc[self.data.pt_id == pt_id, 'organism_name'] = self.__bugs(patient=p, multi_org=multi_org)
-            self.data.loc[self.data.pt_id == pt_id, 'organism_name_short'] = self.__bugs(patient=p, multi_org=multi_org,
+            self.data.loc[self.data.pt_id == pt_id, 'organism_name'] = bugs(patient=p, multi_org=multi_org)
+            self.data.loc[self.data.pt_id == pt_id, 'organism_name_short'] = bugs(patient=p, multi_org=multi_org,
                                                                                          short_name=True)
-            self.data.loc[self.data.pt_id == pt_id, 'hmbpp'] = self.__hmbpp_ribo(patient=p, field='hmbpp_status')
-            self.data.loc[self.data.pt_id == pt_id, 'ribo'] = self.__hmbpp_ribo(patient=p, field='ribo_status')
-            self.data.loc[self.data.pt_id == pt_id, 'gram_status'] = self.__gram_status(patient=p)
-
-    @staticmethod
-    def __gram_status(patient: Patient):
-        if not patient.infection_data:
-            return 'Unknown'
-        orgs = [b.gram_status for b in patient.infection_data]
-        if not orgs:
-            return 'Unknown'
-        if len(orgs) == 1:
-            return orgs[0]
-        return 'mixed'
-
-    @staticmethod
-    def __bugs(patient: Patient, multi_org: str, short_name: bool = False) -> str:
-        """
-        Internal function. Fetch the name of isolated organisms for each patient.
-        :param patient: Patient model object
-        :param multi_org: If 'multi_org' equals 'list' then multiple organisms will be stored as a comma separated list
-        without duplicates, whereas if the value is 'mixed' then multiple organisms will result in a value of 'mixed'.
-        :return: string of isolated organisms comma seperated, or 'mixed' if multi_org == 'mixed' and multiple organisms
-        listed for patient
-        """
-        if not patient.infection_data:
-            return 'Unknown'
-        if short_name:
-            orgs = [b.short_name for b in patient.infection_data]
-        else:
-            orgs = [b.org_name for b in patient.infection_data]
-        if not orgs:
-            return 'Unknown'
-        if len(orgs) == 1:
-            return orgs[0]
-        if multi_org == 'list':
-            return ','.join(orgs)
-        return 'mixed'
-
-    @staticmethod
-    def __org_type(patient: Patient) -> str:
-        """
-        Parse all infectious isolates for each patient and return the organism type isolated, one of either:
-        'gram positive', 'gram negative', 'virus', 'mixed' or 'fungal'
-        :param patient: Patient model object
-        :return: common organism type isolated for patient
-        """
-
-        def bug_type(b: Bug):
-            if not b.organism_type:
-                return 'Unknown'
-            if b.organism_type == 'bacteria':
-                return b.gram_status
-            return b.organism_type
-
-        bugs = list(set(map(bug_type, patient.infection_data)))
-        if len(bugs) == 0:
-            return 'Unknown'
-        if len(bugs) == 1:
-            return bugs[0]
-        return 'mixed'
-
-    @staticmethod
-    def __hmbpp_ribo(patient: Patient, field: str) -> str:
-        """
-        Given a value of either 'hmbpp' or 'ribo' for 'field' argument, return True if any Bug has a positive status
-        for the given patient ID.
-        :param patient: Patient model object
-        :param field: field name to search for; expecting either 'hmbpp_status' or 'ribo_status'
-        :return: common value of hmbpp_status/ribo_status
-        """
-        if all([b[field] is None for b in patient.infection_data]):
-            return 'Unknown'
-        if all([b[field] == 'P+ve' for b in patient.infection_data]):
-            return 'P+ve'
-        if all([b[field] == 'N-ve' for b in patient.infection_data]):
-            return 'N-ve'
-        return 'mixed'
+            self.data.loc[self.data.pt_id == pt_id, 'hmbpp'] = hmbpp_ribo(patient=p, field='hmbpp_status')
+            self.data.loc[self.data.pt_id == pt_id, 'ribo'] = hmbpp_ribo(patient=p, field='ribo_status')
+            self.data.loc[self.data.pt_id == pt_id, 'gram_status'] = gram_status(patient=p)
 
     def load_biology_data(self, test_name: str, summary_method: str = 'average'):
         """
@@ -269,30 +194,7 @@ class Explorer:
         * min - the minimum value is stored
         * median - the median test result is generated and stored
         """
-        self.data[test_name] = self.data['pt_id'].apply(lambda x: self.__biology(x, test_name, summary_method))
-
-    @staticmethod
-    def __biology(pt_id: str, test_name: str, method: str) -> np.float or None:
-        """
-        Given some test name, return a summary statistic of all results for a given patient ID
-        :param pt_id: patient identifier
-        :param test_name: name of test to search for
-        :param method: summary statistic to use
-        :return: Summary statistic (numpy float) or None if test does not exist
-        """
-        if pt_id is None:
-            return None
-        tests = Patient.objects(patient_id=pt_id).get().patient_biology
-        tests = [t.result for t in tests if t.test == test_name]
-        if not tests:
-            return None
-        if method == 'max':
-            return np.max(tests)
-        if method == 'min':
-            return np.min(tests)
-        if method == 'median':
-            return np.median(tests)
-        return np.average(tests)
+        self.data[test_name] = self.data['pt_id'].apply(lambda x: biology(x, test_name, summary_method))
 
     def dimenionality_reduction(self, method: str, features: list,
                                 n_components: int = 2, overwrite: bool = False,
@@ -756,7 +658,8 @@ class SingleClustering(Clustering):
         for c in clusters:
             self.clusters[c.cluster_id] = dict(n_events=c.n_events,
                                                prop_of_root=c.prop_of_root,
-                                               index=c.load_index())
+                                               index=c.load_index(),
+                                               meta_cluster_id=c.meta_cluster_id)
 
     def _add_cluster(self, name: str, index_mask: np.array):
         """
@@ -794,12 +697,16 @@ class SingleClustering(Clustering):
         # Save the clusters
         fg.save()
 
-    def get_cluster_dataframe(self, cluster_id: str) -> pd.DataFrame:
+    def get_cluster_dataframe(self, cluster_id: str, meta: bool = False) -> pd.DataFrame:
         """
         Return a Pandas DataFrame of single cell data for a single cluster.
         """
-        assert cluster_id in self.clusters.keys(), f'Invalid cluster_id; {cluster_id} not recognised'
-        return self.data.loc[self.clusters[cluster_id].get('index')]
+        if not meta:
+            assert cluster_id in self.clusters.keys(), f'Invalid cluster_id; {cluster_id} not recognised'
+            return self.data.loc[self.clusters[cluster_id].get('index')]
+        clusters_idx = [c.get('index') for c in self.clusters.values() if c.meta_cluster_id == cluster_id]
+        assert clusters_idx, f'No existing clusters associated with the meta-cluster ID {cluster_id}'
+        return self.data.loc[np.unique(np.concatenate(clusters_idx, 0), axis=0)]
 
     def cluster(self):
         """
@@ -983,6 +890,20 @@ class MetaClustering(Clustering):
         else:
             print('Invalid clustering method, must be: "PhenoGraph" or "ConsensusClustering"; '
                   'consensus clustering is recommended for cluster stability')
+
+    def save(self):
+        def _save(x):
+            fg = self.experiment.pull_sample(x.sample_id)
+            pop = [p for p in fg.populations if p.population_name == self.ce.root_population][0]
+            cluster = [c for c in pop.clustering if c.cluster_id == x.cluster_id][0]
+            cluster.meta_cluster_id = x.meta_cluster_id
+            pop.update_cluster(x.cluster_id, cluster)
+            fg.update_population(pop.population_name, pop)
+
+        assert 'meta_cluster_id' in self.data.columns, 'Must run meta-clustering prior to calling save'
+        self.data.apply(_save, axis=0)
+        self.experiment.meta_cluster_ids = self.data.meta_cluster_id.values
+        self.experiment.save()
 
     def explorer(self) -> Explorer:
         """
