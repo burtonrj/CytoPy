@@ -1,5 +1,6 @@
 from immunova.data.fcs import FileGroup
 import mongoengine
+import numpy as np
 
 
 class MetaDataDictionary(mongoengine.Document):
@@ -160,4 +161,101 @@ class Patient(mongoengine.DynamicDocument):
         'collection': 'patients'
     }
 
+
+def gram_status(patient: Patient):
+    if not patient.infection_data:
+        return 'Unknown'
+    orgs = [b.gram_status for b in patient.infection_data]
+    if not orgs:
+        return 'Unknown'
+    if len(orgs) == 1:
+        return orgs[0]
+    return 'mixed'
+
+
+def bugs(patient: Patient, multi_org: str, short_name: bool = False) -> str:
+    """
+    Internal function. Fetch the name of isolated organisms for each patient.
+    :param patient: Patient model object
+    :param multi_org: If 'multi_org' equals 'list' then multiple organisms will be stored as a comma separated list
+    without duplicates, whereas if the value is 'mixed' then multiple organisms will result in a value of 'mixed'.
+    :return: string of isolated organisms comma seperated, or 'mixed' if multi_org == 'mixed' and multiple organisms
+    listed for patient
+    """
+    if not patient.infection_data:
+        return 'Unknown'
+    if short_name:
+        orgs = [b.short_name for b in patient.infection_data]
+    else:
+        orgs = [b.org_name for b in patient.infection_data]
+    if not orgs:
+        return 'Unknown'
+    if len(orgs) == 1:
+        return orgs[0]
+    if multi_org == 'list':
+        return ','.join(orgs)
+    return 'mixed'
+
+
+def org_type(patient: Patient) -> str:
+    """
+    Parse all infectious isolates for each patient and return the organism type isolated, one of either:
+    'gram positive', 'gram negative', 'virus', 'mixed' or 'fungal'
+    :param patient: Patient model object
+    :return: common organism type isolated for patient
+    """
+
+    def bug_type(b: Bug):
+        if not b.organism_type:
+            return 'Unknown'
+        if b.organism_type == 'bacteria':
+            return b.gram_status
+        return b.organism_type
+
+    bugs = list(set(map(bug_type, patient.infection_data)))
+    if len(bugs) == 0:
+        return 'Unknown'
+    if len(bugs) == 1:
+        return bugs[0]
+    return 'mixed'
+
+
+def hmbpp_ribo(patient: Patient, field: str) -> str:
+    """
+    Given a value of either 'hmbpp' or 'ribo' for 'field' argument, return True if any Bug has a positive status
+    for the given patient ID.
+    :param patient: Patient model object
+    :param field: field name to search for; expecting either 'hmbpp_status' or 'ribo_status'
+    :return: common value of hmbpp_status/ribo_status
+    """
+    if all([b[field] is None for b in patient.infection_data]):
+        return 'Unknown'
+    if all([b[field] == 'P+ve' for b in patient.infection_data]):
+        return 'P+ve'
+    if all([b[field] == 'N-ve' for b in patient.infection_data]):
+        return 'N-ve'
+    return 'mixed'
+
+
+def biology(pt_id: str, test_name: str, method: str) -> np.float or None:
+    """
+    Given some test name, return a summary statistic of all results for a given patient ID
+    :param pt_id: patient identifier
+    :param test_name: name of test to search for
+    :param method: summary statistic to use
+    :return: Summary statistic (numpy float) or None if test does not exist
+    """
+    if pt_id is None:
+        return None
+    tests = Patient.objects(patient_id=pt_id).get().patient_biology
+    tests = [t.result for t in tests if t.test == test_name]
+    if not tests:
+        return None
+    if method == 'max':
+        return np.max(tests)
+    if method == 'min':
+        return np.min(tests)
+    if method == 'median':
+        return np.median(tests)
+    return np.average(tests)
 

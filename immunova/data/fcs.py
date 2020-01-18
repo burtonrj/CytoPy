@@ -54,6 +54,7 @@ class Cluster(mongoengine.EmbeddedDocument):
     n_events = mongoengine.IntField(required=True)
     prop_of_root = mongoengine.FloatField(required=True)
     cluster_experiment = mongoengine.ReferenceField(ClusteringDefinition)
+    meta_cluster_id = mongoengine.StringField(required=False)
 
     def save_index(self, data: np.array) -> None:
         if self.index:
@@ -136,6 +137,10 @@ class Population(mongoengine.EmbeddedDocument):
         for c in self.clustering:
             if c.cluster_experiment.clustering_uid == current_uid:
                 c.cluster_experiment = new_cluster_definition
+
+    def update_cluster(self, cluster_id: str, new_cluster: Cluster):
+        self.clustering = [c for c in self.clustering if c.cluster_id != cluster_id]
+        self.clustering.append(new_cluster)
 
 
 class Normalisation(mongoengine.EmbeddedDocument):
@@ -274,6 +279,11 @@ class FileGroup(mongoengine.Document):
             self.populations = []
         else:
             self.populations = [p for p in self.populations if p.population_name not in populations]
+        self.save()
+
+    def update_population(self, population_name: str, new_population: Population):
+        self.populations = [p for p in self.populations if p.population_name != population_name]
+        self.populations.append(new_population)
         self.save()
 
     def delete_gates(self, gates: list or str):
