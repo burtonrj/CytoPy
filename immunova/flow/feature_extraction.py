@@ -5,8 +5,10 @@ from ..data.fcs import ClusteringDefinition
 from ..flow.gating.actions import Gating
 from ..flow.clustering.main import SingleClustering
 from ..flow.gating.transforms import apply_transform
-from ..flow.gating.utilities import kde
+from ..flow.utilities import kde_multivariant, load_and_transform
 from ..flow.utilities import progress_bar
+from multiprocessing import Pool, cpu_count
+from functools import partial
 from yellowbrick.features import RadViz
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -79,12 +81,16 @@ class Extract:
             * {NAME}_pot = proportion of cells in population relative to total cells in sample
         :return: None
         """
+        if self.verbose:
+            print('...summarise populations')
         for pop_name, node in self.populations.items():
             self.data[f'{pop_name}_n'] = len(node.index)
             self.data[f'{pop_name}_pop'] = node.prop_of_parent
             self.data[f'{pop_name}_pot'] = node.prop_of_total
             if include_mfi:
                 mfi = self.summarise_mfi(population_name=pop_name, transform=transform)
+                if not mfi:
+                    continue
                 for marker, mfi_ in mfi.items():
                     self.data[f'{pop_name}_{marker}_MFI'] = mfi_
 
@@ -95,13 +101,11 @@ class Extract:
         if population_name is not None:
             data = self.gating.get_population_df(population_name, transform=True, transform_method=transform)
         elif cluster_name is not None:
-            if self.verbose:
-                print('Note: for clusters transform argument is ignored, data transformed according to clustering '
-                      'definition')
             data = self.clustering.get_cluster_dataframe(cluster_name, meta=True)
         else:
             raise ValueError('Must provide either name of a cluster or name of a population')
-
+        if data is None:
+            return None
         markers = [c for c in data.columns if all([fs not in c for fs in ['FSC', 'SSC']])]
         mfi = np.exp(np.log(data[markers].prod(axis=0))/data[markers].notna().sum(axis=0))
         return mfi.to_dict()
@@ -113,11 +117,15 @@ class Extract:
             * {NAME}_pot = proportion of cells in cluster relative to total cells in sample
         :return: None
         """
-        for c_name, c_data in self.clusters.clusters.items():
+        if self.verbose:
+            print('...summarise clusters')
+        for c_name, c_data in self.clusters.items():
             self.data[f'{c_name}_n'] = c_data['n_events']
-            self.data[f'{c_name}_pot'] = c_data['prop_of_total']
+            self.data[f'{c_name}_pot'] = c_data['prop_of_root']
             if include_mfi:
                 mfi = self.summarise_mfi(cluster_name=c_name)
+                if not mfi:
+                    continue
                 for marker, mfi_ in mfi.items():
                     self.data[f'{c_name}_{marker}_MFI'] = mfi_
 
@@ -130,16 +138,16 @@ class Extract:
         :return: None
         """
         if self.verbose:
-            print('-------- Calculating population ratios --------')
+            print('...calculating population ratios')
         for pname1, pnode1 in self.populations.items():
             for pname2, pnode2 in self.populations.items():
                 if pname1 == pname2:
                     continue
                 self.data[f'{pname1}:{pname2}'] = len(pnode1.index)/len(pnode2.index)
-            for c_name, c_data in self.clusters.clusters.items():
+            for c_name, c_data in self.clusters.items():
                 self.data[f'{pname1}:{c_name}'] = len(pnode1.index)/c_data['n_events']
         if self.verbose:
-            print('-------- Calculating cluster ratios --------')
+            print('...calculating cluster ratios')
         for cname1, cdata1 in self.clusters.items():
             for cname2, cdata2 in self.clusters.items():
                 if cname1 == cname2:
@@ -159,11 +167,15 @@ class Extract:
             return np.median(x)-np.median(y)/np.median(x)
         return np.mean(x)-np.mean(y)/np.mean(x)
 
-    def fmo_stats_1d(self, transform: str = 'logicle'):
+    def fmo_stats_1d(self, populations: list, transform: str = 'logicle'):
         for fmo_id in self.gating.fmo.keys():
             if self.verbose:
-                print(f'-------- FMO Summary: {fmo_id} --------')
-            for pop_id in progress_bar(self.populations.keys()):
+                print(f'...FMO Summary: {fmo_id}')
+            if self.verbose:
+                print('...performing KDE calculations')
+            pool = Pool(cpu_count())
+
+            for pop_id in progress_bar(populations):
                 fmo_data = apply_transform(self.gating.get_fmo_data(pop_id, fmo_id), transform_method=transform)
                 whole_data = apply_transform(self.gating.get_population_df(pop_id), transform_method=transform)
                 ks_stat, p = stats.ks_2samp(fmo_data[fmo_id].values, whole_data[fmo_id].values)
@@ -171,11 +183,15 @@ class Extract:
                 self.data[f'{pop_id}_{fmo_id}_ks_statistic_pval'] = p
                 self.data[f'{pop_id}_{fmo_id}_fold_change_MFI'] = self._relative_fold_change(whole_data[fmo_id].values,
                                                                                              fmo_data[fmo_id].values)
-                w_probs, _ = kde(data=whole_data[fmo_id], x=fmo_id, kde_bw=0.01)
-                f_probs, _ = kde(data=fmo_data[fmo_id], x=fmo_id, kde_bw=0.01)
+                if whole_data.shape[0] > 1000:
+                    whole_data = whole_data.sample(1000)
+                if fmo_data.shape[0] > 1000:
+                    fmo_data = whole_data.sample(1000)
+                w_probs = kde_multivariant(x=whole_data[fmo_id].values.reshape(-1, 1))
+                f_probs = kde_multivariant(x=fmo_data[fmo_id].values.reshape(-1, 1))
                 self.data[f'{pop_id}_{fmo_id}_kl_divergence'] = stats.entropy(pk=w_probs, qk=f_probs)
         if self.verbose:
-            print('-------- Completed! --------')
+            print('...Completed!')
 
     def fmo_stats_multiple(self, fmo: list, population: str, transform: str = 'logicle'):
         if not self.gating.fmo.keys():
@@ -187,7 +203,8 @@ class Extract:
         assert population in self.gating.populations.keys(), f'Invalid population name, ' \
                                                              f'valid populations include: ' \
                                                              f'{self.gating.populations.keys()}'
-
+        if self.verbose:
+            print('...calculating summary of multi-dimensional FMO topology')
         whole_data = apply_transform(self.gating.get_population_df(population),
                                      transform_method=transform)
         fmo_data = {name: apply_transform(self.gating.get_fmo_data(population, name),
@@ -198,6 +215,8 @@ class Extract:
         for name in euclidean_dist.keys():
             self.data[f'{name}_euclidean_dist'] = euclidean_dist[name]
         self.data[f'{fmo}_avg_euclidean_dist'] = np.mean(euclidean_dist.values())
+        if self.verbose:
+            print('...Completed!')
 
 
 class BuildFeatureSpace:
@@ -212,9 +231,10 @@ class BuildFeatureSpace:
     def add_experiment(self, experiment: FCSExperiment, meta_clustering_definition: ClusteringDefinition,
                        exclude_populations: list or None = None,
                        exclude_clusters: list or None = None,
-                       include_mfi: bool = False, include_fmos: bool = False,
-                       multi_dim_fmo_comparisons: list or None = None):
-        target_ce = ClusteringDefinition.objects(clustering_uid=meta_clustering_definition.meta_clustering_uid_target)
+                       include_mfi: bool = False, fmo1d_populations: list or None = None,
+                       multi_dim_fmo_comparisons: list or None = None,
+                       prefix: str or None = None):
+        target_ce = ClusteringDefinition.objects(clustering_uid=meta_clustering_definition.meta_clustering_uid_target).get()
         samples = experiment.list_samples()
         if self.exclude_samples is not None:
             samples = [s for s in samples if s not in self.exclude_samples]
@@ -226,17 +246,22 @@ class BuildFeatureSpace:
             extraction.cluster_summary(include_mfi)
             extraction.population_summary(include_mfi, transform=self.population_transform)
             extraction.ratios()
-            if include_fmos:
-                extraction.fmo_stats_1d(self.population_transform)
-                if multi_dim_fmo_comparisons is not None:
-                    for fmo in multi_dim_fmo_comparisons:
-                        assert all([x in fmo.keys() for x in ['comparisons', 'population']]), \
-                            'multi_dim_fmo_comparisons should be a list of dictionary objects, each with a key ' \
-                            '"comparisons", being a list of FMOs to compare, and "population", ' \
-                            'the name of the population for which the comparison is relevant'
-                        extraction.fmo_stats_multiple(fmo=fmo.get('comparisons'), population=fmo.get('population'))
+            if fmo1d_populations is not None:
+                extraction.fmo_stats_1d(fmo1d_populations, self.population_transform)
+            if multi_dim_fmo_comparisons is not None:
+                for fmo in multi_dim_fmo_comparisons:
+                    assert all([x in fmo.keys() for x in ['comparisons', 'population']]), \
+                        'multi_dim_fmo_comparisons should be a list of dictionary objects, each with a key ' \
+                        '"comparisons", being a list of FMOs to compare, and "population", ' \
+                        'the name of the population for which the comparison is relevant'
+                    extraction.fmo_stats_multiple(fmo=fmo.get('comparisons'), population=fmo.get('population'))
             data = pd.concat([data, extraction.data])
+        if prefix is not None:
+            names = {c: f'{prefix}_{c}' for c in data.columns if c not in ['sample_id', 'pt_id']}
+            data = data.rename(columns=names)
         self.data = self.data.merge(data)
+        if self.verbose:
+            print(f'------------- Summary Complete! -------------')
 
     def new_ratio(self, column_one: str, column_two: str):
         for c in [column_one, column_two]:
