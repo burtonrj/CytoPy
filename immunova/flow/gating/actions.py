@@ -66,23 +66,28 @@ class Gating:
             for g in fg.gates:
                 self.deserialise_gate(g)
 
-        try:
+        self.populations = dict()
+        if not fg.populations:
+            root = Node(name='root', prop_of_parent=1.0, prop_of_total=1.0,
+                        warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values,
+                        parent=None)
+            self.populations['root'] = root
+        else:
+            # Reconstruct tree
+            parents = [p.parent for p in fg.populations]
+            assert 'root' in parents, 'Root population missing!'
+            pops = [p.to_python() for p in fg.populations]
+            structured = dict()
+            for parent in parents:
+                structured[parent] = [p for p in pops if p.get('parent') == parent]
             self.populations = dict()
-            if fg.populations:
-                for p in fg.populations:
-                    p = p.to_python()
-                    parent = p.pop('parent')
-                    if parent is not None:
-                        parent = self.populations[parent]
-                    self.populations[p['name']] = Node(**p, parent=parent)
-            else:
-                root = Node(name='root', prop_of_parent=1.0, prop_of_total=1.0,
-                            warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values,
-                            parent=None)
-                self.populations['root'] = root
-        except KeyError as e:
-            print(f'WARNING: was unable to load populations due to missing parent populations: {e}')
-            print('Continuing with blank Gating object. Check that populations have not been removed.')
+            for name, pops in structured.items():
+                for p in pops:
+                    parent = p.pop('parent', None)
+                    if not parent:
+                        self.populations[p.get('name')] = Node(**p)
+                    else:
+                        self.populations[p.get('name')] = Node(**p, parent=self.populations.get(parent))
 
     def clear_gates(self):
         self.gates = dict()
@@ -172,6 +177,25 @@ class Gating:
         if target_population in self.fmo_search_cache[fmo].keys():
             return self.fmo_search_cache[fmo][target_population]
         return None
+
+    def get_fmo_data_classifier(self):
+        from sklearn.utils.class_weight import compute_class_weight
+        from xgboost import XGBClassifier
+        import numpy as np
+        # Get whole data as a labelled dataframe
+        x = self.data.copy()
+        x['label'] = 'None'
+        for p in self.populations.keys():
+            idx = self.populations.get(p).index
+            x.loc[idx, 'label'] = p
+        y = list(x['label'].values)
+        classes = np.unique(y)
+        x = x[[c for c in x.columns if c != 'label']]
+        weights = compute_class_weight('balanced',
+                                       classes=classes,
+                                       y=y)
+        class_weights = {k: w for k, w in zip(classes, weights)}
+
 
     def get_fmo_data(self, target_population, fmo):
         """

@@ -42,7 +42,7 @@ class FCSExperiment(mongoengine.Document):
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
     gating_templates = mongoengine.ListField(mongoengine.ReferenceField(GatingStrategy, reverse_delete_rule=4))
-    meta_cluster_ids = mongoengine.StringField(required=False)
+    meta_cluster_ids = mongoengine.ListField()
 
     meta = {
         'db_alias': 'core',
