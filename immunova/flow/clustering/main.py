@@ -697,16 +697,17 @@ class SingleClustering(Clustering):
         # Save the clusters
         fg.save()
 
-    def get_cluster_dataframe(self, cluster_id: str, meta: bool = False) -> pd.DataFrame:
+    def get_cluster_dataframe(self, cluster_id: str, meta: bool = False) -> pd.DataFrame or None:
         """
         Return a Pandas DataFrame of single cell data for a single cluster.
         """
         if not meta:
             assert cluster_id in self.clusters.keys(), f'Invalid cluster_id; {cluster_id} not recognised'
             return self.data.loc[self.clusters[cluster_id].get('index')]
-        clusters_idx = [c.get('index') for c in self.clusters.values() if c.meta_cluster_id == cluster_id]
-        assert clusters_idx, f'No existing clusters associated with the meta-cluster ID {cluster_id}'
-        return self.data.loc[np.unique(np.concatenate(clusters_idx, 0), axis=0)]
+        clusters_idx = [c.get('index') for c in self.clusters.values() if c.get('meta_cluster_id') == cluster_id]
+        if clusters_idx:
+            return self.data.loc[np.unique(np.concatenate(clusters_idx, 0), axis=0)]
+        return None
 
     def cluster(self):
         """
@@ -901,8 +902,8 @@ class MetaClustering(Clustering):
             fg.update_population(pop.population_name, pop)
 
         assert 'meta_cluster_id' in self.data.columns, 'Must run meta-clustering prior to calling save'
-        self.data.apply(_save, axis=0)
-        self.experiment.meta_cluster_ids = self.data.meta_cluster_id.values
+        self.data.apply(_save, axis=1)
+        self.experiment.meta_cluster_ids = list(self.data.meta_cluster_id.values)
         self.experiment.save()
 
     def explorer(self) -> Explorer:
