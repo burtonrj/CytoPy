@@ -7,7 +7,11 @@ from ..flow.clustering.main import SingleClustering
 from ..flow.gating.transforms import apply_transform
 from ..flow.utilities import kde_multivariant, load_and_transform
 from ..flow.utilities import progress_bar
+from sklearn.feature_selection import f_classif
+from sklearn.svm import LinearSVC
+from sklearn.utils import check_random_state
 from multiprocessing import Pool, cpu_count
+from itertools import combinations
 from functools import partial
 from yellowbrick.features import RadViz
 import matplotlib.pyplot as plt
@@ -48,30 +52,32 @@ class Extract:
                  clustering_definition: ClusteringDefinition,
                  exclude_populations: list or None = None,
                  exclude_clusters: list or None = None,
-                 verbose: bool = True):
-        self.gating = Gating(experiment, sample_id)
+                 verbose: bool = True, sml_profiles: dict or None = None,
+                 include_controls: bool = False):
+        self.include_controls = include_controls
+        self.gating = Gating(experiment, sample_id, include_controls=include_controls)
         self.clustering = SingleClustering(clustering_definition=clustering_definition)
         self.clustering.load_data(experiment=experiment, sample_id=sample_id)
         self.data = pd.DataFrame({'sample_id': [self.gating.id], 'pt_id': self.clustering.data.pt_id.values[0]})
         self.verbose = verbose
+        self.sml_profiles = sml_profiles
         if exclude_populations is not None:
             self.populations = {k: v for k, v in self.gating.populations.items() if k not in exclude_populations}
         else:
             self.populations = self.gating.populations
-        if exclude_clusters is not None:
-            meta_cluster_ids = experiment.meta_cluster_ids
-            self.clusters = {_id: {'n_events': 0,
-                                   'prop_of_root': 0.0,
-                                   'index': np.array([])}
-                             for _id in meta_cluster_ids}
-            for k, v in self.clustering.clusters.items():
-                mid = v.meta_cluster_id
-                self.clusters[mid]['n_events'] = self.clusters[mid].get('n_events', 0) + v.get('index', 0)
-                self.clusters[mid]['prop_of_root'] = self.clusters[mid].get('prop_of_root', 0) + v.get('prop_of_root', 0)
-                self.clusters[mid]['index'] = np.unique(np.concatenate(self.clusters[mid].get('index', 0),
-                                                                       v.get('index', 0), axis=0), axis=0)
-        else:
-            self.clusters = self.clustering.clusters
+        if exclude_clusters is None:
+            exclude_clusters = list()
+        meta_cluster_ids = experiment.meta_cluster_ids
+        self.clusters = {_id: {'n_events': 0,
+                               'prop_of_root': 0.0,
+                               'index': np.array([])}
+                         for _id in meta_cluster_ids if _id not in exclude_clusters}
+        for k, v in self.clustering.clusters.items():
+            mid = v.get('meta_cluster_id')
+            self.clusters[mid]['n_events'] = self.clusters[mid].get('n_events', 0) + len(v.get('index', []))
+            self.clusters[mid]['prop_of_root'] = self.clusters[mid].get('prop_of_root', 0) + v.get('prop_of_root', 0)
+            self.clusters[mid]['index'] = np.unique(np.concatenate((self.clusters[mid].get('index', []),
+                                                                    v.get('index', [])), axis=0), axis=0)
 
     def population_summary(self, include_mfi: bool = True, transform: str = 'logicle') -> None:
         """
@@ -106,9 +112,8 @@ class Extract:
             raise ValueError('Must provide either name of a cluster or name of a population')
         if data is None:
             return None
-        markers = [c for c in data.columns if all([fs not in c for fs in ['FSC', 'SSC']])]
-        mfi = np.exp(np.log(data[markers].prod(axis=0))/data[markers].notna().sum(axis=0))
-        return mfi.to_dict()
+        markers = [c for c in data.columns if all([fs not in c for fs in ['FSC', 'SSC', 'Time']])]
+        return data[markers].mean().to_dict()
 
     def cluster_summary(self, include_mfi: bool = False) -> None:
         """
@@ -139,20 +144,25 @@ class Extract:
         """
         if self.verbose:
             print('...calculating population ratios')
-        for pname1, pnode1 in self.populations.items():
-            for pname2, pnode2 in self.populations.items():
-                if pname1 == pname2:
+        combos = list(combinations(list(self.populations.keys()), 2))
+        for p1, p2 in combos:
+            pn1, pn2 = self.populations.get(p1), self.populations.get(p2)
+            if len(pn1.index) == 0 or len(pn2.index) == 0:
+                continue
+            self.data[f'{p1}:{p2}'] = len(pn1.index) / len(pn2.index)
+        for p, pnode in self.populations.items():
+            for c, cdata in self.clusters.items():
+                if len(pnode.index) == 0 or cdata.get('n_events') == 0:
                     continue
-                self.data[f'{pname1}:{pname2}'] = len(pnode1.index)/len(pnode2.index)
-            for c_name, c_data in self.clusters.items():
-                self.data[f'{pname1}:{c_name}'] = len(pnode1.index)/c_data['n_events']
+                self.data[f'{p}:{c}'] = len(pnode.index) / cdata.get('n_events')
         if self.verbose:
             print('...calculating cluster ratios')
-        for cname1, cdata1 in self.clusters.items():
-            for cname2, cdata2 in self.clusters.items():
-                if cname1 == cname2:
-                    continue
-                self.data[f'{cname1}:{cname2}'] = cdata1['n_events'] / cdata2['n_events']
+        combos = list(combinations(list(self.clusters.keys()), 2))
+        for c1, c2 in combos:
+            cd1, cd2 = self.clusters.get(c1), self.clusters.get(c2)
+            if cd1.get('n_events') == 0 or cd2.get('n_events') == 0:
+                continue
+            self.data[f'{c1}:{c2}'] = cd1['n_events'] / cd2['n_events']
 
     @staticmethod
     def _relative_fold_change(x: np.array, y: np.array, center='median') -> np.float:
@@ -168,15 +178,17 @@ class Extract:
         return np.mean(x)-np.mean(y)/np.mean(x)
 
     def fmo_stats_1d(self, populations: list, transform: str = 'logicle'):
+        assert self.include_controls, 'include_controls currently set to False, reinitialise object with argument ' \
+                                      'set to True to include FMO data'
         for fmo_id in self.gating.fmo.keys():
             if self.verbose:
                 print(f'...FMO Summary: {fmo_id}')
             if self.verbose:
                 print('...performing KDE calculations')
-            pool = Pool(cpu_count())
 
             for pop_id in progress_bar(populations):
-                fmo_data = apply_transform(self.gating.get_fmo_data(pop_id, fmo_id), transform_method=transform)
+                fmo_data = apply_transform(self.gating.get_fmo_data(pop_id, fmo_id, self.sml_profiles),
+                                           transform_method=transform)
                 whole_data = apply_transform(self.gating.get_population_df(pop_id), transform_method=transform)
                 ks_stat, p = stats.ks_2samp(fmo_data[fmo_id].values, whole_data[fmo_id].values)
                 self.data[f'{pop_id}_{fmo_id}_ks_statistic'] = ks_stat
@@ -194,6 +206,8 @@ class Extract:
             print('...Completed!')
 
     def fmo_stats_multiple(self, fmo: list, population: str, transform: str = 'logicle'):
+        assert self.include_controls, 'include_controls currently set to False, reinitialise object with argument ' \
+                                      'set to True to include FMO data'
         if not self.gating.fmo.keys():
             if self.verbose:
                 print(f'{self.gating.id} has no associated FMOs, aborting')
@@ -219,49 +233,87 @@ class Extract:
             print('...Completed!')
 
 
+def _fetch_experiment_data(sample_id: str, experiment: FCSExperiment, target_ce: ClusteringDefinition,
+                           exclude_populations: list or None = None, exclude_clusters: list or None = None,
+                           include_mfi: bool = False, fmo1d_populations: dict or None = None,
+                           multi_dim_fmo_comparisons: dict or None = None, transform: str = 'logicle',
+                           sml_profiles: dict or None = None):
+    data = pd.DataFrame()
+    include_controls = False
+    if fmo1d_populations is not None or multi_dim_fmo_comparisons is not None:
+        include_controls = True
+    extraction = Extract(sample_id=sample_id,
+                         experiment=experiment,
+                         clustering_definition=target_ce,
+                         exclude_populations=exclude_populations,
+                         exclude_clusters=exclude_clusters, verbose=False,
+                         sml_profiles=sml_profiles,
+                         include_controls=include_controls)
+    extraction.cluster_summary(include_mfi)
+    extraction.population_summary(include_mfi, transform=transform)
+    extraction.ratios()
+    if fmo1d_populations is not None:
+        extraction.fmo_stats_1d(fmo1d_populations, transform)
+    if multi_dim_fmo_comparisons is not None:
+        for fmo in multi_dim_fmo_comparisons:
+            assert all([x in fmo.keys() for x in ['comparisons', 'population']]), \
+                'multi_dim_fmo_comparisons should be a list of dictionary objects, each with a key ' \
+                '"comparisons", being a list of FMOs to compare, and "population", ' \
+                'the name of the population for which the comparison is relevant'
+            extraction.fmo_stats_multiple(fmo=fmo.get('comparisons'), population=fmo.get('population'))
+    data = pd.concat([data, extraction.data])
+    return data
+
+
 class BuildFeatureSpace:
     def __init__(self, exclude_samples: list or None = None, exclude_patients: list or None = None,
-                 population_transform: str = 'logicle', verbose: bool = False):
+                 population_transform: str = 'logicle', include_mfi: bool = False):
         self.exclude_samples = exclude_samples
         self.exclude_patients = exclude_patients
         self.population_transform = population_transform
-        self.verbose = verbose
-        self.data = pd.DataFrame()
+        self.include_mfi = include_mfi
+        self.data = None
 
-    def add_experiment(self, experiment: FCSExperiment, meta_clustering_definition: ClusteringDefinition,
+    def add_experiment(self, experiment: FCSExperiment,
+                       meta_clustering_definition: ClusteringDefinition,
                        exclude_populations: list or None = None,
                        exclude_clusters: list or None = None,
-                       include_mfi: bool = False, fmo1d_populations: list or None = None,
+                       fmo1d_populations: list or None = None,
                        multi_dim_fmo_comparisons: list or None = None,
-                       prefix: str or None = None):
+                       prefix: str or None = None,
+                       sml_profiles: dict or None = None):
+
         target_ce = ClusteringDefinition.objects(clustering_uid=meta_clustering_definition.meta_clustering_uid_target).get()
         samples = experiment.list_samples()
         if self.exclude_samples is not None:
             samples = [s for s in samples if s not in self.exclude_samples]
-        data = pd.DataFrame()
-        for s in samples:
-            if self.verbose:
-                print(f'------------- {s} -------------')
-            extraction = Extract(s, experiment, target_ce, exclude_populations, exclude_clusters, self.verbose)
-            extraction.cluster_summary(include_mfi)
-            extraction.population_summary(include_mfi, transform=self.population_transform)
-            extraction.ratios()
-            if fmo1d_populations is not None:
-                extraction.fmo_stats_1d(fmo1d_populations, self.population_transform)
-            if multi_dim_fmo_comparisons is not None:
-                for fmo in multi_dim_fmo_comparisons:
-                    assert all([x in fmo.keys() for x in ['comparisons', 'population']]), \
-                        'multi_dim_fmo_comparisons should be a list of dictionary objects, each with a key ' \
-                        '"comparisons", being a list of FMOs to compare, and "population", ' \
-                        'the name of the population for which the comparison is relevant'
-                    extraction.fmo_stats_multiple(fmo=fmo.get('comparisons'), population=fmo.get('population'))
-            data = pd.concat([data, extraction.data])
+        include_controls = False
+        if fmo1d_populations is not None or multi_dim_fmo_comparisons is not None:
+            include_controls = True
+        fetch = partial(_fetch_experiment_data, experiment=experiment,
+                        target_ce=target_ce, exclude_populations=exclude_populations,
+                        exclude_clusters=exclude_clusters, include_mfi=self.include_mfi,
+                        fmo1d_populations=fmo1d_populations, multi_dim_fmo_comparisons=multi_dim_fmo_comparisons,
+                        transform=self.population_transform, sml_profiles=sml_profiles)
+        if not include_controls:
+            pool = Pool(cpu_count())
+            data = pd.concat(progress_bar(pool.imap(fetch, samples), total=len(samples)))
+            pool.close()
+            pool.join()
+        else:
+            print('Warning: unable to use high-level multi-processing when summarising FMO data, therefore this '
+                  'process could take some time')
+            data = list()
+            for s in progress_bar(samples):
+                data.append(fetch(s))
+            data = pd.concat(data)
         if prefix is not None:
             names = {c: f'{prefix}_{c}' for c in data.columns if c not in ['sample_id', 'pt_id']}
             data = data.rename(columns=names)
-        self.data = self.data.merge(data)
-        if self.verbose:
-            print(f'------------- Summary Complete! -------------')
+        if self.data is None:
+            self.data = data
+        else:
+            self.data = self.data.merge(data)
 
     def new_ratio(self, column_one: str, column_two: str):
         for c in [column_one, column_two]:
@@ -275,7 +327,7 @@ class BuildFeatureSpace:
         labels = list()
         for p in self.data.pt_id.values:
             pt = Patient.objects(patient_id=p).get()
-            if embedding:
+            if embedding is None:
                 if variable not in dir(pt):
                     print(f'{variable} not in properties for {p}; is the variable embedded in infection_data, biology, '
                           f'or drug data? Label will be null for now.')
@@ -298,14 +350,16 @@ class BuildFeatureSpace:
                                  'infectious data.')
         self.data['label'] = labels
 
-    def missing_data(self):
-        missing = pd.DataFrame(self.data.isna().sum() / len(self.data),
-                               columns=['Missing (%)']).reset_index()
-        sns.set(style="whitegrid")
-        sns.set_color_codes("pastel")
-        ax = sns.barplot(x="Missing (%)", y="index", data=missing, color="b")
-        ax.set_ylabe('')
-        return ax
+    def is_missing(self, threshold):
+        missing = self.data.isna().sum()[self.data.isna().sum() / self.data.shape[0] > threshold].index.values
+        print(f'A total of {len(missing)} columns have missing data exceeding the given threshold')
+        return list(missing)
+
+    def drop_missing(self, threshold):
+        missing = self.is_missing(threshold)
+        print('Dropping columns...')
+        self.data = self.data[[c for c in self.data.columns if c not in missing]]
+        print('Done!')
 
     def _is_data(self):
         assert self.data.shape[0] > 0, 'DataFrame empty, have you populated the feature space yet?'
@@ -314,48 +368,85 @@ class BuildFeatureSpace:
         numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
         return self.data.select_dtypes(include=numerics)
 
-    def multicollinearity_matrix(self, exclude_columns: list or None, method='pearson', plot: bool = True,
-                                 cmap='vlag', linewidths=.75, figsize: tuple = (10, 10), **kwargs):
+    def multicollinearity_matrix(self, exclude_columns: list or None = None, method='pearson', plot: bool = True,
+                                 cmap='vlag', figsize: tuple = (10, 10), **kwargs):
         self._is_data()
         feature_space = self._get_numeric()
         if exclude_columns:
             feature_space = feature_space[[c for c in feature_space.columns if c not in exclude_columns]]
         corr_matrix = feature_space.corr(method=method)
         if plot:
-            return sns.clustermap(corr_matrix, cmap=cmap, linewidths=linewidths, figsize=figsize, **kwargs)
+            return sns.clustermap(corr_matrix, cmap=cmap, figsize=figsize, **kwargs)
         return corr_matrix
+
+    def drop_high_multicollinearity(self, corr_threshold: float = 0.5, method: str = 'pearson'):
+        self._is_data()
+        feature_space = self._get_numeric()
+        corr_matrix = feature_space.corr(method=method)
+        drop_columns = set()
+        for c in corr_matrix.columns:
+            high_mc = corr_matrix[c][corr_matrix[c] > corr_threshold]
+            keep = np.argmax(feature_space[high_mc.index].var())
+            drop = set(v for v in high_mc if v != keep)
+            drop_columns = drop_columns.union(drop)
+        self.data = self.data[[c for c in self.data.columns if c not in drop_columns]]
 
     def anova_one_way(self):
         self._is_data()
-        from sklearn.feature_selection import f_classif
-        feature_space = self._get_numeric()
-        x = feature_space[[c for c in feature_space.columns if c != 'label']].values
-        y = feature_space['label'].values
-        return f_classif(x, y)
+        assert 'label' in self.data.columns, 'Dataset is not labelled!'
+        features = [c for c in self.data.columns if c not in ['label', 'sample_id', 'pt_id']]
+        data = self._handle_null_label()
+        x = data[features].values
+        y = data['label'].values
+        f, pval = f_classif(x, y)
+        return pd.DataFrame({'Feature': features, 'F-value': f, 'p-value': pval})
 
-    def plot_variance(self, n: int = 100):
+    def plot_variance(self, n: int = 100, figsize=(20, 8), **kwargs):
+        var = self.rank_variance(n=n)
+        var['Variance'] = np.log(var['Variance'])
+        sns.set(style="whitegrid")
+        sns.set_color_codes("pastel")
+        fig, ax = plt.subplots(figsize=figsize)
+        ax = sns.barplot(x="Variance", y="index", data=var, color="b", ax=ax, **kwargs)
+        ax.set_ylabel('')
+        ax.set_xlabel('log(Variance)')
+        return ax
+
+    def rank_variance(self, n: int = 100):
         self._is_data()
         feature_space = self._get_numeric()
         var = pd.DataFrame(feature_space.var().sort_values(ascending=False)[0:n], columns=['Variance']).reset_index()
-        sns.set(style="whitegrid")
-        sns.set_color_codes("pastel")
-        ax = sns.barplot(x="Variance", y="index", data=var, color="b")
-        ax.set_ylabe('')
-        return ax
+        return var
 
-    def violin_plot(self, features: list, **kwargs):
+    def violin_plot(self, feature: str, figsize=(5, 5), **kwargs):
         self._is_data()
-        feature_space = self._get_numeric()
-        x = feature_space[features]
-        x['label'] = feature_space['label']
-        x = x.melt(id_vars='label', var_name='Feature', value_name='Value')
-        g = sns.FacetGrid(x, col='Features')
-        g = g.map(sns.violinplot, 'label', 'Value', **kwargs)
-        return g
+        assert 'label' in self.data.columns, 'Dataset is not labelled!'
+        data = self._handle_null_label()
+        x = data[feature]
+        x['label'] = data['label']
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.boxplot(x=feature, y='label', data=x, palette='vlag', ax=ax)
+        sns.swarmplot(x=feature, y='label', data=x, size=2, color='.5', linewidth=0, ax=ax)
+        ax.set_ylabel('Label')
+        ax.set_ylabel(feature)
+        fig.show()
+
+    def swarmplot(self, features: list, figsize=(6, 6), **kwargs):
+        sns.set(style="ticks")
+        self._is_data()
+        assert 'label' in self.data.columns, 'Dataset is not labelled!'
+        features = features + ['label']
+        data = pd.melt(self.data[features], "label", var_name="Feature")
+        fig, ax = plt.subplots(figsize=figsize)
+        ax = sns.swarmplot(x="Feature", y="value", hue="label",
+                           palette=["r", "c", "y"], data=data, ax=ax, **kwargs)
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+        fig.legend(bbox_to_anchor=(0, 1), loc='upper left', ncol=1)
+        fig.show()
 
     def l1_SVM(self, features: list, reg_search_space: tuple = (-2, 0, 50)):
-        from sklearn.svm import LinearSVC
-        from sklearn.utils import check_random_state
         check_random_state(42)
         feature_space = self._get_numeric()
         x = feature_space[features].values
@@ -366,7 +457,7 @@ class BuildFeatureSpace:
         coefs = []
         for c in cs:
             clf = LinearSVC(C=c, penalty='l1', loss='squared_hinge', dual=False, tol=1e-3)
-            clf.fit(feature_space, y)
+            clf.fit(x, y)
             coefs.append(list(clf.coef_[0]))
         coefs = np.array(coefs)
         plt.figure(figsize=(10, 5))
@@ -379,9 +470,6 @@ class BuildFeatureSpace:
         plt.legend(bbox_to_anchor=(0, 1), loc='upper left', ncol=1)
         plt.show()
 
-    def volcano_plot(self):
-        pass
-
     def radial_visualiser(self, features: list, **kwargs):
         self._is_data()
         feature_space = self._get_numeric()
@@ -392,29 +480,38 @@ class BuildFeatureSpace:
         viz.transform(x)
         viz.show()
 
+    def _handle_null_label(self, data: pd.DataFrame or None = None):
+        if data is None:
+            data = self.data.copy()
+        missing_labels = list(data.loc[data['label'].isnull()]['sample_id'].values)
+        if missing_labels:
+            print(f'The following samples have missing labels and will be omitted: {missing_labels}')
+        return data.loc[~data['label'].isnull()]
+
     def dim_reduction_scatterplot(self, method: str = 'UMAP', n_components: int = 2, figsize: tuple = (10, 10),
-                                  features: list or None = None, dim_reduction_kwargs: dict or None = None,
+                                  dim_reduction_kwargs: dict or None = None, features: list or None = None,
                                   matplotlib_kwargs: dict or None = None):
         self._is_data()
+        assert 'label' in self.data.columns, 'Dataset is not labelled!'
         assert n_components in [2, 3], 'n_components must have a value of 2 or 3'
-        feature_space = self._get_numeric()
-        if features is not None:
-            feature_space = feature_space[features]
+        data = self._handle_null_label()
         if dim_reduction_kwargs is None:
             dim_reduction_kwargs = dict()
         if matplotlib_kwargs is None:
             matplotlib_kwargs = dict()
-        embeddings = dimensionality_reduction(feature_space, features, method,
-                                              n_components, return_embeddings_only=False,
+        if features is None:
+            features = [c for c in data.columns if c not in ['sample_id', 'pt_id', 'label']]
+        embeddings = dimensionality_reduction(data, features, method,
+                                              n_components, return_embeddings_only=True,
                                               **dim_reduction_kwargs)
 
         if n_components == 2:
-            return scprep.plot.scatter2d(embeddings, c=self.data['label'].values, ticks=False,
+            return scprep.plot.scatter2d(embeddings, c=data['label'].values, ticks=False,
                                          label_prefix=method, discrete=True, legend_loc="lower left",
                                          legend_anchor=(1.04, 0), legend_title='Label',
                                          figsize=figsize, **matplotlib_kwargs)
         else:
-            return scprep.plot.scatter3d(embeddings, c=self.data['label'].values, ticks=False,
+            return scprep.plot.scatter3d(embeddings, c=data['label'].values, ticks=False,
                                          label_prefix=method, discrete=True, legend_loc="lower left",
                                          legend_anchor=(1.04, 0), legend_title='Label',
                                          figsize=figsize, **matplotlib_kwargs)
