@@ -196,12 +196,12 @@ class Gating:
                                        y=y)
         class_weights = {k: w for k, w in zip(classes, weights)}
 
-
-    def get_fmo_data(self, target_population, fmo):
+    def get_fmo_data(self, target_population, fmo, sml_profiles: dict):
         """
         Calculate population of fmo data using supervised machine learning and primary data as training set
         :param target_population:
         :param fmo:
+        :param sml_profiles:
         :return:
         """
         # Check cache if this population has been derived previously
@@ -229,6 +229,13 @@ class Gating:
             # Train KNN from whole panel data
             x = self.populations[pop].geom['x']
             y = self.populations[pop].geom['y'] or 'FSC-A'
+
+            # Check if SML gate, if so, check sml_profiles
+            if self.populations[pop].geom['shape'] == 'sml':
+                assert sml_profiles, f'No SML profiles provide yet population {pop} is sml defined'
+                assert pop in sml_profiles.keys(), f'SML defined {pop} missing from sml_profiles'
+                geom = sml_profiles.get(pop)
+                x, y = geom.get('x'), geom.get('y')
 
             parent = self.populations[pop].parent.name
             train = self.get_population_df(parent)[[x, y]].copy()
