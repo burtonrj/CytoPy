@@ -906,6 +906,12 @@ class MetaClustering(Clustering):
         self.experiment.meta_cluster_ids = list(self.data.meta_cluster_id.values)
         self.experiment.save()
 
+    def label_cluster(self, meta_cluster_id: str, new_id: str, prefix: str or None = 'cluster'):
+        assert meta_cluster_id in self.data.meta_cluster_id.values, 'Invalid meta cluster ID provided'
+        if prefix is not None:
+            new_id = f'{prefix}_{new_id}'
+        self.data.loc[self.data.meta_cluster_id == meta_cluster_id, 'meta_cluster_id'] = new_id
+
     def explorer(self) -> Explorer:
         """
         Returns an Explorer object with the single cell data and clusters, for plotting and exploring meta-data.
