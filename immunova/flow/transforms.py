@@ -1,5 +1,5 @@
 from flowutilspd.transforms import logicle, hyperlog, log_transform, asinh
-from ..supervised.utilities import scaler
+from immunova.flow.supervised.utilities import scaler
 import pandas as pd
 
 

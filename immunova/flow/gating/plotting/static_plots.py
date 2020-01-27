@@ -1,6 +1,6 @@
-from immunova.data.gating import Gate
-from immunova.flow.gating.transforms import apply_transform
-from immunova.flow.gating.utilities import centroid
+from ....data.gating import Gate
+from ...transforms import apply_transform
+from ..utilities import centroid
 from scipy.spatial import ConvexHull
 import matplotlib
 import matplotlib.pyplot as plt
@@ -59,11 +59,10 @@ def plot_axis_lims(data: dict, x: str, y: str, xlim: tuple, ylim: tuple) -> tupl
 
 class Plot:
     """
-    Class for producing FACs plots.
+    Class for producing static FACs plots.
 
     Attributes:
         gating: Gating object to perform plotting from
-
     """
     def __init__(self, gating_object):
         """
@@ -261,6 +260,7 @@ class Plot:
         :param ylim: tuple of y-axis limits
         :param transforms: dictionary object, key corresponds to one of 3 possible axes (x, y or z) and value
         the variable to plot (If None, defaults to logicle transform for every axis)
+        :param sample: if a float value is provided, given proportion of data is sampled prior to plotting (optional)
         :return: None
         """
         fig, ax = plt.subplots(figsize=(5, 5))
@@ -294,11 +294,13 @@ class Plot:
         :param root_population: upstream population to form the backdrop of plot
         :param x: name of the x-axis variable
         :param y: name of the y-axis variable
-        :param populations: list of populations to highlight within the root population
+        :param gated_populations: list of population gates to show on provided population
+        :param sml_populations: list of populations generated from supervised methods to display
         :param xlim: x-axis limits (optional)
         :param ylim: y-axis limit (optional)
         :param transforms: dictionary of transformations to be applied to axis {'x' or 'y': transform method}
         :param title: title for plot (optional)
+        :param figsize: tuple of figure size to pass to matplotlib call
         :return: None
         """
         # Check populations exist
@@ -343,11 +345,12 @@ class Plot:
                 ax.scatter(x=pop_data[p][:, 0], y=pop_data[p][:, 1], s=15, c=[c], alpha=1.0, label=p)
         ax.legend()
 
-    def _get_data_transform(self, node, geom):
+    def _get_data_transform(self, node: Node, geom: dict) -> pd.DataFrame:
         """
         Internal method. Fetch and transform data for grid plot
-        :param node:
-        :return:
+        :param node: population Node
+        :param geom: gate geom
+        :return: transformed dataframe
         """
         x, y = geom['x'], geom['y'] or 'FSC-A'
         data = self.gating.get_population_df(node.name)[[x, y]]
@@ -362,7 +365,8 @@ class Plot:
 
     def _plot_tree_recursion(self, fig: plt.figure, node: Node, i, sml_plotting):
         """
-        Internal method. Recursive generation of plots for grid
+        EXPERIMENTAL FUNCTION
+        Internal method. Recursive generation of plots for grid.
         :param fig:
         :param node:
         :param i:
@@ -399,6 +403,7 @@ class Plot:
 
     def grid_plot(self, sml_plotting: dict, figsize=(20, 20)):
         """
+        EXPERIMENTAL FUNCTION
         Generate a grid of plots detailing the whole population tree.
         :param sml_plotting:
         :param figsize:
