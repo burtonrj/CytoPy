@@ -1,7 +1,7 @@
 import mongoengine
 import datetime
-from immunova.data.patient import Patient
-from immunova.data.fcs_experiments import FCSExperiment, Panel
+from .patient import Patient
+from .fcs_experiments import FCSExperiment, Panel
 
 
 class Project(mongoengine.Document):
