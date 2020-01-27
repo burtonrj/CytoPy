@@ -313,7 +313,7 @@ class BuildFeatureSpace:
         if self.data is None:
             self.data = data
         else:
-            self.data = self.data.merge(data)
+            self.data = self.data.merge(data, how='left')
 
     def new_ratio(self, column_one: str, column_two: str):
         for c in [column_one, column_two]:
@@ -448,9 +448,8 @@ class BuildFeatureSpace:
 
     def l1_SVM(self, features: list, reg_search_space: tuple = (-2, 0, 50)):
         check_random_state(42)
-        feature_space = self._get_numeric()
-        x = feature_space[features].values
-        y = feature_space['label'].values
+        x = self.data[features].values
+        y = self.data['label'].values
         self._is_data()
 
         cs = np.logspace(*reg_search_space)
