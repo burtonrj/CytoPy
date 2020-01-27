@@ -11,7 +11,7 @@ from immunova.flow.gating.density import DensityThreshold
 from immunova.flow.gating.dbscan import DensityBasedClustering
 from immunova.flow.gating.quantile import Quantile
 from immunova.flow.gating.mixturemodel import MixtureModel
-from immunova.flow.gating.transforms import apply_transform
+from immunova.flow.transforms import apply_transform
 from immunova.flow.gating.defaults import ChildPopulationCollection
 from immunova.flow.gating.plotting.static_plots import Plot
 from immunova.flow.gating.utilities import get_params, inside_ellipse
@@ -180,7 +180,6 @@ class Gating:
 
     def get_fmo_data_classifier(self):
         from sklearn.utils.class_weight import compute_class_weight
-        from xgboost import XGBClassifier
         import numpy as np
         # Get whole data as a labelled dataframe
         x = self.data.copy()

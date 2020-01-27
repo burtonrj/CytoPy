@@ -1,11 +1,11 @@
 from ..data.fcs_experiments import FCSExperiment
-from ..data.patient import Patient, gram_status, bugs, biology, hmbpp_ribo, org_type
+from ..data.patient import Patient, gram_status, bugs, hmbpp_ribo, org_type
 from immunova.flow.dim_reduction import dimensionality_reduction
 from ..data.fcs import ClusteringDefinition
 from ..flow.gating.actions import Gating
 from ..flow.clustering.main import SingleClustering
-from ..flow.gating.transforms import apply_transform
-from ..flow.utilities import kde_multivariant, load_and_transform
+from immunova.flow.transforms import apply_transform
+from ..flow.utilities import kde_multivariant
 from ..flow.utilities import progress_bar
 from sklearn.feature_selection import f_classif
 from sklearn.svm import LinearSVC
