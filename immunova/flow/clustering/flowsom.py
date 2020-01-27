@@ -1,5 +1,5 @@
-from immunova.flow.utilities import progress_bar
-from immunova.flow.clustering.consensus import ConsensusCluster
+from ..utilities import progress_bar
+from .consensus import ConsensusCluster
 from sklearn.preprocessing import MinMaxScaler
 from minisom import MiniSom
 import pandas as pd
