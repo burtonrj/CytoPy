@@ -1,13 +1,13 @@
 from mongoengine.base.datastructures import EmbeddedDocumentList
 from immunova.data.fcs_experiments import FCSExperiment
-from immunova.data.patient import Patient, Bug, MetaDataDictionary, gram_status, bugs, org_type, hmbpp_ribo, biology
+from immunova.data.patient import Patient, MetaDataDictionary, gram_status, bugs, hmbpp_ribo, biology
 from immunova.data.fcs import Cluster, Population, ClusteringDefinition
-from immunova.flow.dim_reduction import dimensionality_reduction
-from immunova.flow.clustering.flowsom import FlowSOM
-from immunova.flow.clustering.consensus import ConsensusCluster
-from immunova.flow.gating.actions import Gating
-from immunova.flow.utilities import progress_bar
-from immunova.flow.supervised.utilities import scaler
+from ..supervised.utilities import scaler
+from ..gating.actions import Gating
+from ..utilities import progress_bar
+from ..dim_reduction import dimensionality_reduction
+from .flowsom import FlowSOM
+from .consensus import ConsensusCluster
 from anytree import Node
 from matplotlib.colors import LogNorm
 from sklearn import preprocessing
@@ -21,7 +21,7 @@ import scprep
 np.random.seed(42)
 
 
-def filter_dict(d: dict, keys: list):
+def filter_dict(d: dict, keys: list) -> dict:
     """
     Given a dictionary, filter the contents and return a new dictionary containing the given keys
     :param d: dictionary to filter
@@ -43,6 +43,26 @@ def meta_dict_lookup(key: str) -> str or None:
     if not lookup:
         return None
     return lookup[0].desc
+
+
+def _fetch_clustering_class(params) -> (callable, dict):
+    """
+    Provides a Sklearn clustering object for Consensus Clustering.
+    :param params: dictionary of parameters
+    :return: Sklearn clustering object and updated parameters dictionary
+    """
+    clustering = AgglomerativeClustering
+    e = 'No clustering class (or invalid) provided for meta-clustering, defaulting to agglomerative ' \
+        'clustering; value should either be "agglomerative" or "kmeans"'
+    if 'cluster_class' not in params.keys():
+        raise ValueError(e)
+    elif params['cluster_class'] not in ['agglomerative', 'kmeans']:
+        raise ValueError(e)
+    elif params['cluster_class'] == 'kmeans':
+        clustering = KMeans
+        params.pop('cluster_class')
+    params.pop('cluster_class')
+    return clustering, params
 
 
 class Explorer:
@@ -72,7 +92,7 @@ class Explorer:
         - dimensionality_reduction: performs dimensionality reduction producing a given number of embeddings as new columns
         - scatter_plot: generate a scatter plot of embedded data, with colour labels according to either clusters, meta-data or gated population names.
         - heatmap: generate a heatmap of marker expression for either clusters or gated populations
-        - plot_representaiton: present a breakdown of how a variable is represented in relation to a cluster/population/meta cluster
+        - plot_representation: present a breakdown of how a variable is represented in relation to a cluster/population/meta cluster
         - plot_2d: plot two-dimensions as either a scatter plot or a 2D histogram (defaults to 2D histogram if number of
         data-points exceeds 1000). This can be used for close inspection of populations in contrast to their clustering
         assignments. Particularly useful for debugging or inspecting anomalies.
@@ -201,7 +221,7 @@ class Explorer:
                                 **kwargs) -> None:
         """
         Performs dimensionality reduction and saves the result to the contained dataframe. Resulting embeddings
-        are saved to collumns named as follows: {method}_{n} where n is an integer in range 0 to n_components
+        are saved to columns named as follows: {method}_{n} where n is an integer in range 0 to n_components
         :param method: method to use for dimensionality reduction; valid methods are 'tSNE', 'UMAP', 'PHATE' or 'PCA'
         :param features: list of features to use for dimensionality reduction
         :param n_components: number of components to generate (default = 2)
@@ -244,10 +264,11 @@ class Explorer:
         reduction. Each data point is labelled according to the option provided to the label arguments. If a value
         is given to both primary and secondary label, the secondary label colours the background and the primary label
         colours the foreground of each datapoint.
-        :param matplotlib_kwargs:
-        :param meta_scale_factor:
-        :param meta:
-        :param figsize:
+        :param matplotlib_kwargs: additional keyword arguments to pass to matplotlib call
+        :param meta_scale_factor: if meta is True, scale factor defines the size of datapoints;
+        size = meta_scale_factor * proportion of events in cluster relative to root population
+        :param meta: if True, data is assumed to come from meta-clustering
+        :param figsize: tuple of figure size to pass to matplotlib call
         :param label: option for the primary label, must be one of the following:
         * A valid column name in Explorer attribute 'data' (check valid column names using Explorer.data.columns)
         * 'global clusters' - requires that phenograph_clustering method has been called prior to plotting. Each data
@@ -319,9 +340,6 @@ class Explorer:
                                          legend_anchor=(1.04, 0), legend_title=label,
                                          figsize=figsize, **matplotlib_kwargs)
 
-    def layer_scatter_plot(self):
-        pass
-
     def heatmap(self, heatmap_var: str, features: list,
                 clustermap: bool = False, mask: pd.DataFrame or None = None,
                 normalise: bool = True, figsize: tuple = (10, 5)):
@@ -332,6 +350,9 @@ class Explorer:
         :param features: list of column names to use for generating heatmap
         :param clustermap: if True, rows (clusters/populations) are grouped by single linkage clustering
         :param mask: a valid Pandas DataFrame mask to subset data prior to plotting (optional)
+        :param normalise: if True, data is normalised prior to plotting (normalised using Sklean's MinMaxScaler function)
+        :param figsize: tuple defining figure size passed to matplotlib call
+        :return instance of matplotlib axes
         """
         d = self.data.copy(deep=True)
         if mask is not None:
@@ -358,6 +379,7 @@ class Explorer:
         :param y_variable: variable for comparison (give a value of 'patient' for patient represenation
         :param discrete: if True, the variable is assumed to be discrete
         :param mask: a valid Pandas DataFrame mask to subset data prior to plotting (optional)
+        :param figsize: tuple defining figure size passed to matplotlib call
         :return: matplotlib axes object
         """
         d = self.data
@@ -405,6 +427,7 @@ class Explorer:
         :param primary_id: variable for selection of primary dataset to plot, e.g. if primary ID is a population name,
         then only data-points belonging to that gated population will be displayed. Alternatively if it is the name of
         a cluster or meta-cluster, then only data-points assigned to that cluster will be displayed.
+        :param secondary_id: variable for selection of secondary dataset, plotted over the top of the primary dataset for comparison
         :param x: Name of variable to plot on the x-axis
         :param y: Name of variable to plot on the y-axis
         :param xlim: limit the x-axis to a given range (optional)
@@ -456,10 +479,13 @@ class Clustering:
 
     Arguments:
         - ce: A clustering definition; ClusteringDefinition object's are descriptions of a clustering method that can
-        saved to the underlying database and reused across multiple projects/experiments etc; see data.fcs for
-        details
+        saved to the underlying database and reused across multiple projects/experiments etc; see data.fcs for details
         - data: a Pandas DataFrame that is populated with clustering information can be passed onto the Explorer class
         for visualisation
+
+    Methods:
+        cluster: Perform clustering analysis as specified by the ClusteringDefinition. Valid methods currently include PhenoGraph
+        and FlowSOM. Returns clustering assignments.
     """
     def __init__(self, clustering_definition: ClusteringDefinition):
         """
@@ -491,25 +517,6 @@ class Clustering:
             print('Warning: the following columns contain null values and will be excluded from clustering '
                   f'analysis: {null_cols}')
         return [x for x in self.ce.features if x not in null_cols]
-
-    def _fetch_clustering_class(self, params) -> (callable, dict):
-        """
-        Internal method. Provides a Sklearn clustering object for Consensus Clustering.
-        :param params: dictionary of parameters
-        :return: Sklearn clustering object and updated parameters dictionary
-        """
-        clustering = AgglomerativeClustering
-        e = 'No clustering class (or invalid) provided for meta-clustering, defaulting to agglomerative ' \
-            'clustering; value should either be "agglomerative" or "kmeans"'
-        if 'cluster_class' not in params.keys():
-            raise ValueError(e)
-        elif params['cluster_class'] not in ['agglomerative', 'kmeans']:
-            raise ValueError(e)
-        elif params['cluster_class'] == 'kmeans':
-            clustering = KMeans
-            params.pop('cluster_class')
-        params.pop('cluster_class')
-        return clustering, params
 
     def _population_labels(self, data: pd.DataFrame, root_node: Node) -> pd.DataFrame:
         """
@@ -557,7 +564,7 @@ class Clustering:
             train_params = filter_dict(params, ['som_dim', 'sigma', 'learning_rate', 'batch_size',
                                                 'seed', 'weight_init'])
             meta_params = filter_dict(params, ['cluster_class', 'min_n', 'max_n', 'iter_n', 'resample_proportion'])
-            clustering, meta_params = self._fetch_clustering_class(meta_params)
+            clustering, meta_params = _fetch_clustering_class(meta_params)
             som = FlowSOM(data=self.data, features=features, **init_params)
             som.train(**train_params)
             som.meta_cluster(cluster_class=clustering, **meta_params)
@@ -700,6 +707,9 @@ class SingleClustering(Clustering):
     def get_cluster_dataframe(self, cluster_id: str, meta: bool = False) -> pd.DataFrame or None:
         """
         Return a Pandas DataFrame of single cell data for a single cluster.
+        :param cluster_id: name of cluster to retrieve
+        :param meta: if True, fetch cluster by meta_cluster_id (default = False)
+        :return DataFrame of events in cluster (Data returned untransformed)
         """
         if not meta:
             assert cluster_id in self.clusters.keys(), f'Invalid cluster_id; {cluster_id} not recognised'
@@ -711,7 +721,7 @@ class SingleClustering(Clustering):
 
     def cluster(self):
         """
-        Perform clustering as described by the clustering definition.
+        Perform clustering as described by the clustering definition. Results saved to internal attribute 'clusters'.
         """
         cluster_assignments = super().cluster()
         for x in np.unique(cluster_assignments):
@@ -823,6 +833,7 @@ class MetaClustering(Clustering):
         by finding their centroid (the median of each feature); resulting in each row of 'data' corresponding to a unique cluster/patient combination.
         cluster: perform meta-clistering as defined by clustering definition
         explorer: generate an Explorer object for visualising clustering and exploring meta-data
+        save: save results of meta-clustering to database
     """
     def __init__(self, experiment: FCSExperiment,
                  samples: str or list = 'all',
@@ -882,7 +893,7 @@ class MetaClustering(Clustering):
             features = self._check_null()
             init_params = filter_dict(params, ['cluster_class', 'smallest_cluster_n', 'largest_cluster_n',
                                                'n_resamples', 'resample_proportion'])
-            clustering, init_params = self._fetch_clustering_class(init_params)
+            clustering, init_params = _fetch_clustering_class(init_params)
             consensus_clust = ConsensusCluster(cluster=clustering, **init_params)
             consensus_clust.fit(self.data[features].values)
             self.data['meta_cluster_id'] = consensus_clust.predict_data(self.data[features])
@@ -893,6 +904,9 @@ class MetaClustering(Clustering):
                   'consensus clustering is recommended for cluster stability')
 
     def save(self):
+        """
+        Save results of meta-clustering to underlying database
+        """
         def _save(x):
             fg = self.experiment.pull_sample(x.sample_id)
             pop = [p for p in fg.populations if p.population_name == self.ce.root_population][0]
@@ -907,6 +921,12 @@ class MetaClustering(Clustering):
         self.experiment.save()
 
     def label_cluster(self, meta_cluster_id: str, new_id: str, prefix: str or None = 'cluster'):
+        """
+        Given an existing meta cluster ID and a new replacement ID, update meta clustering IDs
+        :param meta_cluster_id: meta cluster ID to be replaced
+        :param new_id: new ID to use
+        :param prefix: optional prefix to append to new ID (default = "cluster")
+        """
         assert meta_cluster_id in self.data.meta_cluster_id.values, 'Invalid meta cluster ID provided'
         if prefix is not None:
             new_id = f'{prefix}_{new_id}'
