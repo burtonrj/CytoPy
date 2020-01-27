@@ -1,7 +1,5 @@
 import mongoengine
 
-def pd_init():
-    mongoengine.register_connection(alias='core', name='pd_server')
 
 def global_init(database_name: str) -> None:
     """

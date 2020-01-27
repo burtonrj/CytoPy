@@ -30,7 +30,7 @@ class Project(mongoengine.Document):
         'collection': 'projects'
     }
 
-    def list_fcs_experiments(self):
+    def list_fcs_experiments(self) -> list:
         """
         Generate a list of associated flow cytometry experiments
         :return: list of experiment IDs
@@ -50,7 +50,7 @@ class Project(mongoengine.Document):
         e = [e for e in self.fcs_experiments if e.experiment_id == experiment_id][0]
         return e
 
-    def add_experiment(self, experiment_id, panel_name):
+    def add_experiment(self, experiment_id: str, panel_name: str) -> None or FCSExperiment:
         """
         Add new experiment to project
         :param experiment_id: experiment name
