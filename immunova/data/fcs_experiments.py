@@ -21,6 +21,7 @@ class FCSExperiment(mongoengine.Document):
         flags - warnings associated to experiment
         notes - additional free text comments
         gating_templates - reference to gating templates associated to this experiment
+        meta_cluster_ids - list of IDs for meta clusters belonging to this experiment
     Methods:
         pull_sample_data - Given a sample ID, associated to this experiment, fetch the fcs data
         pull_sample - Given a sample ID, returns the FileGroup object
@@ -31,7 +32,7 @@ class FCSExperiment(mongoengine.Document):
         fetch_sample_mid - Given a sample_id, return it's corresponding mongo ObjectID
         pull_sample_mappings - Given a sample ID, return a dictionary of channel/marker mappings for
         all associated fcs files
-        delete_all_popilations - deletes all population data associated to a given sample; value of 'all' will delete population data for every sample
+        delete_all_populations - deletes all population data associated to a given sample; value of 'all' will delete population data for every sample
         delete_gating_templates - deletes a gating template associated to experiment; value of 'all' will delete all gating templates
         sample_exists - checks if sample is associated to experiment
 
@@ -146,7 +147,6 @@ class FCSExperiment(mongoengine.Document):
         :param sample_id: ID of sample to fetch data for
         :param sample_size: if provided with an integer value, a sample of data of given size will be returned
         (sample drawn from a uniform distribution)
-        :param data_type: type of data to retrieve; either 'raw' or 'norm' normalised
         :param include_controls: if True (default) then control files associated to sample are included in the result
         :param output_format: preferred format of output; can either be 'dataframe' for a pandas dataframe, or 'matrix'
         for a numpy array
