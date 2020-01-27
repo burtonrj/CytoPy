@@ -1,9 +1,9 @@
-from immunova.data.fcs import FileGroup, File
-from immunova.data.patient import Patient
-from immunova.data.gating import GatingStrategy
-from immunova.data.utilities import data_from_file
-from immunova.data.panel import Panel, ChannelMap
-from immunova.flow.readwrite.read_fcs import FCSFile
+from .fcs import FileGroup, File
+from .patient import Patient
+from .gating import GatingStrategy
+from .utilities import data_from_file
+from .panel import Panel, ChannelMap
+from ..flow.readwrite.read_fcs import FCSFile
 from multiprocessing import Pool, cpu_count
 from functools import partial
 import mongoengine
