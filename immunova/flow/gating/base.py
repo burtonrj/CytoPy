@@ -1,5 +1,5 @@
 from immunova.flow.gating.defaults import ChildPopulationCollection
-from immunova.flow.gating.transforms import apply_transform
+from immunova.flow.transforms import apply_transform
 from shapely.geometry.polygon import Polygon
 from scipy.spatial import ConvexHull
 from sklearn.neighbors import KDTree

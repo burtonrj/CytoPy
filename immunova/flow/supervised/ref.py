@@ -1,5 +1,5 @@
 from immunova.data.fcs_experiments import FCSExperiment
-from ..gating.transforms import apply_transform
+from immunova.flow.transforms import apply_transform
 from .utilities import find_common_features
 from multiprocessing import Pool, cpu_count
 from functools import partial
