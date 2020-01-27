@@ -1,5 +1,5 @@
-# Immunova: reproducible cytometry analysis pipeline
-
+# CytoDragon: reproducible cytometry analysis pipeline for Python
+![Logo](./logo.png)
 ## Requirements
 Python 3x \
 MongoDB 

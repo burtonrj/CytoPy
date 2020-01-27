@@ -11,7 +11,6 @@ from itertools import cycle
 import pandas as pd
 import numpy as np
 import random
-import math
 
 
 def transform_axes(data: pd.DataFrame, axes_vars: dict, transforms: dict) -> pd.DataFrame:
