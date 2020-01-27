@@ -1,5 +1,5 @@
 # CytoDragon: reproducible cytometry analysis pipeline for Python
-![Logo](./logo.png)
+![Logo](./logo_sm.png)
 ## Requirements
 Python 3x \
 MongoDB 
