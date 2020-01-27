@@ -1,4 +1,4 @@
-from immunova.data.fcs import File
+from .fcs import File
 import pandas as pd
 import numpy as np
 import os
