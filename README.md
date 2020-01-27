@@ -60,7 +60,7 @@ Or, download source code and run the following from the source directory:
 
 ## Tutorials and examples
 
-* Analysing a novel Sepsis dataset
+* Analysing a novel Sepsis dataset [Manuscript: ####]
 * Reproducing results from FlowCAP Challenges
 * Reproducing results from ...
 * Detailed tutorials:
