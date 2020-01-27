@@ -1,5 +1,5 @@
-from immunova.data.panel import ChannelMap
-from immunova.data.gating import Gate
+from .panel import ChannelMap
+from .gating import Gate
 from bson.binary import Binary
 import numpy as np
 import mongoengine

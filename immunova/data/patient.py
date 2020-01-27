@@ -1,4 +1,4 @@
-from immunova.data.fcs import FileGroup
+from .fcs import FileGroup
 import mongoengine
 import numpy as np
 
