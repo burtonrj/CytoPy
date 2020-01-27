@@ -56,9 +56,8 @@ def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_c
 def data_from_file(file: File, sample_size: int, output_format: str = 'dataframe',
                    columns_default: str = 'marker') -> None or dict:
     """
-    Pull data from a given file document
+    Pull data from a given file document (Used for multi-process pull)
     :param file: File object
-    :param data_type: data type to retrieve; either 'raw' or 'norm' (normalised)
     :param sample_size: return a sample of given integer size
     :param output_format: preferred format of output; can either be 'dataframe' for a pandas dataframe, or 'matrix'
     for a numpy array
@@ -75,6 +74,7 @@ def data_from_file(file: File, sample_size: int, output_format: str = 'dataframe
 def as_dataframe(matrix: np.array, column_mappings, columns_default: str = 'marker'):
     """
     Generate a pandas dataframe using a given numpy multi-dim array with specified column defaults
+    (Used for multi-process pull)
     :param matrix: numpy matrix to convert to dataframe
     :param column_mappings: Channel/marker mappings for each columns in matrix
     :param columns_default: how to name columns; either 'marker' or 'channel' (default = 'marker')

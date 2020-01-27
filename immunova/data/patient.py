@@ -162,7 +162,13 @@ class Patient(mongoengine.DynamicDocument):
     }
 
 
-def gram_status(patient: Patient):
+def gram_status(patient: Patient) -> str:
+    """
+    Given an instance of Patient, return the gram status of isolated organisms.
+    Where multiple organisms are found, if gram status differs amongst orgs, returns 'mixed'
+    :param patient:
+    :return: String (P+ve, N+ve, Unknown, or Mixed)
+    """
     if not patient.infection_data:
         return 'Unknown'
     orgs = [b.gram_status for b in patient.infection_data]
@@ -170,12 +176,13 @@ def gram_status(patient: Patient):
         return 'Unknown'
     if len(orgs) == 1:
         return orgs[0]
-    return 'mixed'
+    return 'Mixed'
 
 
 def bugs(patient: Patient, multi_org: str, short_name: bool = False) -> str:
     """
-    Internal function. Fetch the name of isolated organisms for each patient.
+    Fetch the name of isolated organisms for each patient.
+    :param short_name: If True, the shortened name rather than whole latin name is returned
     :param patient: Patient model object
     :param multi_org: If 'multi_org' equals 'list' then multiple organisms will be stored as a comma separated list
     without duplicates, whereas if the value is 'mixed' then multiple organisms will result in a value of 'mixed'.

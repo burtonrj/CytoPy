@@ -13,11 +13,10 @@ class Gate(mongoengine.EmbeddedDocument):
         gate_name - unique identifier for this gate (within the scope of a GatingStrategy)
         children - list of population names; populations derived from application of this gate
         parent - name of parent population; the population this gate acts upon
-        x_feature - the name of the X dimension
-        y_feature - the name of the Y dimension (optional)
-        func - the function used to generate this gate
-        func_args - list of key value pairs (tuple; (key, value)) forming the kwargs for func
-
+        class_ - name of gating class used to generate gate (see flow.gating.actions)
+        method - name of class method used to generate gate (see flow.gating.actions)
+        kwargs - list of keyword arguments (list of tuples; first element = key, second element = value) passed to
+        class/method to generate gate
     Methods:
         to_python - convert gate document to a Python dictionary
     """
