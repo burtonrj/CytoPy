@@ -1,20 +1,20 @@
 # Dependencies
 # Immunova.data
-from immunova.data.gating import Gate as DataGate, GatingStrategy
-from immunova.data.fcs import FileGroup, Population
-from immunova.data.fcs_experiments import FCSExperiment
+from ...data.gating import Gate as DataGate, GatingStrategy
+from ...data.fcs import FileGroup, Population
+from ...data.fcs_experiments import FCSExperiment
 # Immunova.flow
-from immunova.flow.gating.base import GateError
-from immunova.flow.gating.static import Static
-from immunova.flow.gating.fmo import FMOGate
-from immunova.flow.gating.density import DensityThreshold
-from immunova.flow.gating.dbscan import DensityBasedClustering
-from immunova.flow.gating.quantile import Quantile
-from immunova.flow.gating.mixturemodel import MixtureModel
-from immunova.flow.transforms import apply_transform
-from immunova.flow.gating.defaults import ChildPopulationCollection
-from immunova.flow.gating.plotting.static_plots import Plot
-from immunova.flow.gating.utilities import get_params, inside_ellipse
+from ..transforms import apply_transform
+from .base import GateError
+from .static import Static
+from .fmo import FMOGate
+from .density import DensityThreshold
+from .dbscan import DensityBasedClustering
+from .quantile import Quantile
+from .mixturemodel import MixtureModel
+from .defaults import ChildPopulationCollection
+from .plotting.static_plots import Plot
+from .utilities import get_params, inside_ellipse
 # Housekeeping and other tools
 from anytree.exporter import DotExporter
 from anytree import Node, RenderTree
@@ -30,7 +30,28 @@ import pandas as pd
 
 class Gating:
     """
-    Central class for performing gating on an FCS FileGroup of a single sample
+    Central class for performing semi-automated gating and storing gating information on an FCS FileGroup of a single sample.
+
+    Arguments:
+        experiment - FCSExperiment you're currently working on
+        sample_id - name of the sample to analyse (must belong to experiment)
+        sample - number of events to sample from FCS file(s) (optional)
+        include_controls - if True and FMOs are inclued for specified samples, the FMO data will also be loaded into
+        the Gating object
+
+    Attributes:
+        id - the sample ID
+        mongo_id - the document ID for the loaded sample
+        experiment - an instance of the associated FCSExperiment
+        plotting - instance of Plot object (seeo gating.plotting.static_plots)
+        fmo_search_cache - dictionary of cached index of populations in FMO data (see method 'get_fmo_data')
+        filegroup - instance of FileGroup object for associated sample
+        gates - dictionary of Gate objects; contains all gate information
+        populations dictionary of population Nodes (anytree.Node); contains all population information
+
+    Methods:
+        clear_gates - removes all existing gates
+        
     """
     def __init__(self, experiment: FCSExperiment, sample_id: str, sample: int or None = None,
                  include_controls=True):
@@ -38,7 +59,6 @@ class Gating:
         Constructor for Gating
         :param experiment: FCSExperiment currently being processed
         :param sample_id: Identifier of sample of interest
-        :param data_type: type of data to load for gating (either 'raw' or 'norm'). Default = 'raw'.
         :param sample: if an integer value is supplied then data will be sampled to this size. Optional (default = None)
         """
         try:
@@ -90,6 +110,9 @@ class Gating:
                         self.populations[p.get('name')] = Node(**p, parent=self.populations.get(parent))
 
     def clear_gates(self):
+        """
+        Remove all currently associated gates.
+        """
         self.gates = dict()
 
     def fetch_geom(self, population):
@@ -177,23 +200,6 @@ class Gating:
         if target_population in self.fmo_search_cache[fmo].keys():
             return self.fmo_search_cache[fmo][target_population]
         return None
-
-    def get_fmo_data_classifier(self):
-        from sklearn.utils.class_weight import compute_class_weight
-        import numpy as np
-        # Get whole data as a labelled dataframe
-        x = self.data.copy()
-        x['label'] = 'None'
-        for p in self.populations.keys():
-            idx = self.populations.get(p).index
-            x.loc[idx, 'label'] = p
-        y = list(x['label'].values)
-        classes = np.unique(y)
-        x = x[[c for c in x.columns if c != 'label']]
-        weights = compute_class_weight('balanced',
-                                       classes=classes,
-                                       y=y)
-        class_weights = {k: w for k, w in zip(classes, weights)}
 
     def get_fmo_data(self, target_population, fmo, sml_profiles: dict):
         """
