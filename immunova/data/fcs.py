@@ -109,6 +109,7 @@ class Population(mongoengine.EmbeddedDocument):
     warnings = mongoengine.ListField()
     geom = mongoengine.ListField()
     clustering = mongoengine.EmbeddedDocumentListField(Cluster)
+    clusters = mongoengine.ListField() # NEEDS REMOVING
 
     def save_index(self, data: np.array) -> None:
         if self.index:

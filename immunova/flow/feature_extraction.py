@@ -11,7 +11,7 @@ from sklearn.feature_selection import f_classif
 from sklearn.svm import LinearSVC
 from sklearn.utils import check_random_state
 from multiprocessing import Pool, cpu_count
-from itertools import combinations
+from itertools import combinations, product
 from functools import partial
 from yellowbrick.features import RadViz
 import matplotlib.pyplot as plt
@@ -46,40 +46,60 @@ class Extract:
             * {Population1}:{Population2}
             * {Population}:{Cluster}
             * {Cluster1}:{Cluster2}
+        - summarise_mfi: given a population or cluster name, subset data to contain just this population/cluster
+        and return the mean fluorescence intensity for each fluorochrome as a dictionary where the key is the
+        fluorochrome and the value is the MFI
+        - fmo_stats_1d: given a target population, for each FMO that exists for the associated sample, calculate the
+        following descriptives:
+            * Kolmogorov–Smirnov test statistic and p-value: quantifies the distance between the EDF of the sample
+            data and the CDF of the FMO; this provides a statistical comparison between the populations and indicates
+            if the removal of the fluorochrome significantly changes the distribution
+            * Fold change in MFI: the fold change in MFI in the FMO data relative to the sample data
+            * KL Divergence: the
+
 
     """
     def __init__(self, sample_id: str, experiment: FCSExperiment,
                  clustering_definition: ClusteringDefinition,
-                 exclude_populations: list or None = None,
-                 exclude_clusters: list or None = None,
+                 include_populations: list or None = None,
+                 include_clusters: list or None = None,
                  verbose: bool = True, sml_profiles: dict or None = None,
-                 include_controls: bool = False):
+                 include_controls: bool = False,
+                 transform: str or None = 'logicle'):
+        # Other attributes
         self.include_controls = include_controls
-        self.gating = Gating(experiment, sample_id, include_controls=include_controls)
-        self.clustering = SingleClustering(clustering_definition=clustering_definition)
-        self.clustering.load_data(experiment=experiment, sample_id=sample_id)
-        self.data = pd.DataFrame({'sample_id': [self.gating.id], 'pt_id': self.clustering.data.pt_id.values[0]})
         self.verbose = verbose
         self.sml_profiles = sml_profiles
-        if exclude_populations is not None:
-            self.populations = {k: v for k, v in self.gating.populations.items() if k not in exclude_populations}
-        else:
-            self.populations = self.gating.populations
-        if exclude_clusters is None:
-            exclude_clusters = list()
+        self.transform = transform
+        # Load data
+        self.gating = Gating(experiment, sample_id, include_controls=include_controls)
+        clustering = SingleClustering(clustering_definition=clustering_definition)
+        clustering.load_data(experiment=experiment, sample_id=sample_id)
+        self.raw_data = self.gating.data.copy()
+        if transform is not None:
+            self.raw_data = apply_transform(data=self.raw_data, transform_method=transform)
+        self.fluorochromes = [c for c in self.raw_data.columns if all([fs not in c for fs in ['FSC', 'SSC', 'Time']])]
+        # Init data-frame
+        self.data = pd.DataFrame({'pt_id': [clustering.data.pt_id.values[0]]})
+        # Collect gated populations and clusters
+        if include_populations is None:
+            include_populations = self.gating.populations.keys()
+        self.gated_populations = {k: v for k, v in self.gating.populations.items() if k in include_populations}
+        if include_clusters is None:
+            include_clusters = experiment.meta_cluster_ids
         meta_cluster_ids = experiment.meta_cluster_ids
         self.clusters = {_id: {'n_events': 0,
                                'prop_of_root': 0.0,
                                'index': np.array([])}
-                         for _id in meta_cluster_ids if _id not in exclude_clusters}
-        for k, v in self.clustering.clusters.items():
+                         for _id in meta_cluster_ids if _id in include_clusters}
+        for k, v in clustering.clusters.items():
             mid = v.get('meta_cluster_id')
             self.clusters[mid]['n_events'] = self.clusters[mid].get('n_events', 0) + len(v.get('index', []))
             self.clusters[mid]['prop_of_root'] = self.clusters[mid].get('prop_of_root', 0) + v.get('prop_of_root', 0)
             self.clusters[mid]['index'] = np.unique(np.concatenate((self.clusters[mid].get('index', []),
                                                                     v.get('index', [])), axis=0), axis=0)
 
-    def population_summary(self, include_mfi: bool = True, transform: str = 'logicle') -> None:
+    def population_summary(self, include_mfi: bool = True) -> None:
         """
         Generates new columns for each population as follows:
             * {NAME}_n = number of cells in populations
@@ -89,31 +109,33 @@ class Extract:
         """
         if self.verbose:
             print('...summarise populations')
-        for pop_name, node in self.populations.items():
+        for pop_name, node in self.gated_populations.items():
             self.data[f'{pop_name}_n'] = len(node.index)
             self.data[f'{pop_name}_pop'] = node.prop_of_parent
             self.data[f'{pop_name}_pot'] = node.prop_of_total
             if include_mfi:
-                mfi = self.summarise_mfi(population_name=pop_name, transform=transform)
+                mfi = self.summarise_mfi(population_name=pop_name)
                 if not mfi:
                     continue
                 for marker, mfi_ in mfi.items():
                     self.data[f'{pop_name}_{marker}_MFI'] = mfi_
 
-    def summarise_mfi(self, population_name: str or None = None, cluster_name: str or None = None,
-                      transform: str = 'logicle'):
+    def summarise_mfi(self, population_name: str or None = None, cluster_name: str or None = None):
+        """
+        Return a dictionary of MFI values for each fluorochrome for the given population/cluster.
+        Expects either a population name or a cluster name, not both. Raises ValueError is None provided for both, or
+        a value is given for both arguments.
+        :param population_name: name of population to summarise
+        :param cluster_name: name of cluster to summarise
+        :return: Dictionary of MFI values
+        """
         if population_name is not None and cluster_name is not None:
             raise ValueError('Provide the name of a population OR the name of a cluster, not both')
         if population_name is not None:
-            data = self.gating.get_population_df(population_name, transform=True, transform_method=transform)
-        elif cluster_name is not None:
-            data = self.clustering.get_cluster_dataframe(cluster_name, meta=True)
-        else:
-            raise ValueError('Must provide either name of a cluster or name of a population')
-        if data is None:
-            return None
-        markers = [c for c in data.columns if all([fs not in c for fs in ['FSC', 'SSC', 'Time']])]
-        return data[markers].mean().to_dict()
+            return self.raw_data.loc[self.gated_populations[population_name].index, self.fluorochromes].mean().to_dict()
+        if cluster_name is not None:
+            return self.raw_data.loc[self.clusters[cluster_name]['index'], self.fluorochromes].mean().to_dict()
+        raise ValueError('Must provide either name of a cluster or name of a population')
 
     def cluster_summary(self, include_mfi: bool = False) -> None:
         """
@@ -144,17 +166,19 @@ class Extract:
         """
         if self.verbose:
             print('...calculating population ratios')
-        combos = list(combinations(list(self.populations.keys()), 2))
+        combos = list(combinations(list(self.gated_populations.keys()), 2))
         for p1, p2 in combos:
-            pn1, pn2 = self.populations.get(p1), self.populations.get(p2)
+            pn1, pn2 = self.gated_populations.get(p1), self.gated_populations.get(p2)
             if len(pn1.index) == 0 or len(pn2.index) == 0:
                 continue
             self.data[f'{p1}:{p2}'] = len(pn1.index) / len(pn2.index)
-        for p, pnode in self.populations.items():
-            for c, cdata in self.clusters.items():
-                if len(pnode.index) == 0 or cdata.get('n_events') == 0:
-                    continue
-                self.data[f'{p}:{c}'] = len(pnode.index) / cdata.get('n_events')
+        combos = list(product(self.gated_populations.keys(), self.clusters.keys()))
+        for p, c in combos:
+            pn, cd = self.gated_populations.get(p), self.clusters.get(c)
+            if len(pn.index) == 0 or len(cd.get('index')) == 0:
+                continue
+            self.data[f'{p}:{c}'] = len(pn.index) / cd.get('n_events')
+
         if self.verbose:
             print('...calculating cluster ratios')
         combos = list(combinations(list(self.clusters.keys()), 2))
@@ -177,7 +201,7 @@ class Extract:
             return np.median(x)-np.median(y)/np.median(x)
         return np.mean(x)-np.mean(y)/np.mean(x)
 
-    def fmo_stats_1d(self, populations: list, transform: str = 'logicle'):
+    def fmo_stats_1d(self, populations: list):
         assert self.include_controls, 'include_controls currently set to False, reinitialise object with argument ' \
                                       'set to True to include FMO data'
         for fmo_id in self.gating.fmo.keys():
@@ -188,8 +212,8 @@ class Extract:
 
             for pop_id in progress_bar(populations):
                 fmo_data = apply_transform(self.gating.get_fmo_data(pop_id, fmo_id, self.sml_profiles),
-                                           transform_method=transform)
-                whole_data = apply_transform(self.gating.get_population_df(pop_id), transform_method=transform)
+                                           transform_method=self.transform)
+                whole_data = self.raw_data.loc[self.gated_populations.get(pop_id).index, :]
                 ks_stat, p = stats.ks_2samp(fmo_data[fmo_id].values, whole_data[fmo_id].values)
                 self.data[f'{pop_id}_{fmo_id}_ks_statistic'] = ks_stat
                 self.data[f'{pop_id}_{fmo_id}_ks_statistic_pval'] = p
@@ -219,9 +243,8 @@ class Extract:
                                                              f'{self.gating.populations.keys()}'
         if self.verbose:
             print('...calculating summary of multi-dimensional FMO topology')
-        whole_data = apply_transform(self.gating.get_population_df(population),
-                                     transform_method=transform)
-        fmo_data = {name: apply_transform(self.gating.get_fmo_data(population, name),
+        whole_data = self.raw_data.loc[self.gated_populations.get(population).index, :]
+        fmo_data = {name: apply_transform(self.gating.get_fmo_data(population, name, self.sml_profiles),
                                           transform_method=transform)
                     for name in fmo}
         centroids = {name: data[fmo].median() for name, data in fmo_data.items()}
@@ -234,7 +257,7 @@ class Extract:
 
 
 def _fetch_experiment_data(sample_id: str, experiment: FCSExperiment, target_ce: ClusteringDefinition,
-                           exclude_populations: list or None = None, exclude_clusters: list or None = None,
+                           include_populations: list or None = None, include_clusters: list or None = None,
                            include_mfi: bool = False, fmo1d_populations: dict or None = None,
                            multi_dim_fmo_comparisons: dict or None = None, transform: str = 'logicle',
                            sml_profiles: dict or None = None):
@@ -245,15 +268,16 @@ def _fetch_experiment_data(sample_id: str, experiment: FCSExperiment, target_ce:
     extraction = Extract(sample_id=sample_id,
                          experiment=experiment,
                          clustering_definition=target_ce,
-                         exclude_populations=exclude_populations,
-                         exclude_clusters=exclude_clusters, verbose=False,
+                         include_populations=include_populations,
+                         include_clusters=include_clusters, verbose=False,
                          sml_profiles=sml_profiles,
-                         include_controls=include_controls)
+                         include_controls=include_controls,
+                         transform=transform)
     extraction.cluster_summary(include_mfi)
-    extraction.population_summary(include_mfi, transform=transform)
+    extraction.population_summary(include_mfi)
     extraction.ratios()
     if fmo1d_populations is not None:
-        extraction.fmo_stats_1d(fmo1d_populations, transform)
+        extraction.fmo_stats_1d(fmo1d_populations)
     if multi_dim_fmo_comparisons is not None:
         for fmo in multi_dim_fmo_comparisons:
             assert all([x in fmo.keys() for x in ['comparisons', 'population']]), \
@@ -267,17 +291,19 @@ def _fetch_experiment_data(sample_id: str, experiment: FCSExperiment, target_ce:
 
 class BuildFeatureSpace:
     def __init__(self, exclude_samples: list or None = None, exclude_patients: list or None = None,
-                 population_transform: str = 'logicle', include_mfi: bool = False):
+                 population_transform: str = 'logicle', include_mfi: bool = False, path: str or None = None):
         self.exclude_samples = exclude_samples
         self.exclude_patients = exclude_patients
         self.population_transform = population_transform
         self.include_mfi = include_mfi
         self.data = None
+        if path is not None:
+            self.data = pd.read_csv(path)
 
     def add_experiment(self, experiment: FCSExperiment,
                        meta_clustering_definition: ClusteringDefinition,
-                       exclude_populations: list or None = None,
-                       exclude_clusters: list or None = None,
+                       include_populations: list or None = None,
+                       include_clusters: list or None = None,
                        fmo1d_populations: list or None = None,
                        multi_dim_fmo_comparisons: list or None = None,
                        prefix: str or None = None,
@@ -291,8 +317,8 @@ class BuildFeatureSpace:
         if fmo1d_populations is not None or multi_dim_fmo_comparisons is not None:
             include_controls = True
         fetch = partial(_fetch_experiment_data, experiment=experiment,
-                        target_ce=target_ce, exclude_populations=exclude_populations,
-                        exclude_clusters=exclude_clusters, include_mfi=self.include_mfi,
+                        target_ce=target_ce, include_populations=include_populations,
+                        include_clusters=include_clusters, include_mfi=self.include_mfi,
                         fmo1d_populations=fmo1d_populations, multi_dim_fmo_comparisons=multi_dim_fmo_comparisons,
                         transform=self.population_transform, sml_profiles=sml_profiles)
         if not include_controls:
@@ -308,12 +334,12 @@ class BuildFeatureSpace:
                 data.append(fetch(s))
             data = pd.concat(data)
         if prefix is not None:
-            names = {c: f'{prefix}_{c}' for c in data.columns if c not in ['sample_id', 'pt_id']}
+            names = {c: f'{prefix}_{c}' for c in data.columns if c != 'pt_id'}
             data = data.rename(columns=names)
         if self.data is None:
             self.data = data
         else:
-            self.data = self.data.merge(data, how='left')
+            self.data = self.data.merge(data, how='outer', on='pt_id')
 
     def new_ratio(self, column_one: str, column_two: str):
         for c in [column_one, column_two]:
@@ -355,6 +381,12 @@ class BuildFeatureSpace:
         print(f'A total of {len(missing)} columns have missing data exceeding the given threshold')
         return list(missing)
 
+    def plot_missing(self):
+        fig, ax = plt.subplots(figsize=(15, 10))
+        sns.heatmap(self.data.isna(), ax=ax, cbar=False)
+        ax.set_xticks([])
+        fig.show()
+
     def drop_missing(self, threshold):
         missing = self.is_missing(threshold)
         print('Dropping columns...')
@@ -394,7 +426,7 @@ class BuildFeatureSpace:
     def anova_one_way(self):
         self._is_data()
         assert 'label' in self.data.columns, 'Dataset is not labelled!'
-        features = [c for c in self.data.columns if c not in ['label', 'sample_id', 'pt_id']]
+        features = [c for c in self.data.columns if c not in ['label', 'pt_id']]
         data = self._handle_null_label()
         x = data[features].values
         y = data['label'].values
@@ -418,31 +450,40 @@ class BuildFeatureSpace:
         var = pd.DataFrame(feature_space.var().sort_values(ascending=False)[0:n], columns=['Variance']).reset_index()
         return var
 
-    def violin_plot(self, feature: str, figsize=(5, 5), **kwargs):
+    def violin_plot(self, feature: str, figsize=(5, 5), palette='vlag', point_size=5, point_linewidth=0.5,
+                    point_color='.5', y_label=None, x_label=None, style='white', font_scale=1.2):
+        sns.set(font_scale=font_scale)
+        sns.set_style(style)
         self._is_data()
         assert 'label' in self.data.columns, 'Dataset is not labelled!'
         data = self._handle_null_label()
-        x = data[feature]
-        x['label'] = data['label']
         fig, ax = plt.subplots(figsize=figsize)
-        sns.boxplot(x=feature, y='label', data=x, palette='vlag', ax=ax)
-        sns.swarmplot(x=feature, y='label', data=x, size=2, color='.5', linewidth=0, ax=ax)
-        ax.set_ylabel('Label')
-        ax.set_ylabel(feature)
+        sns.boxplot(x=feature, y='label', data=data, palette=palette, ax=ax)
+        sns.swarmplot(x=feature, y='label', data=data, size=point_size,
+                      color=point_color, linewidth=point_linewidth, ax=ax)
+        if y_label is not None:
+            ax.set_ylabel(y_label)
+        if x_label is not None:
+            ax.set_xlabel(x_label)
         fig.show()
 
-    def swarmplot(self, features: list, figsize=(6, 6), **kwargs):
-        sns.set(style="ticks")
+    def swarmplot(self, features: list, figsize=(6, 6), xlabel=None, ylabel=None,
+                  style='white', font_scale=1.2, **kwargs):
+        sns.set(font_scale=font_scale)
+        sns.set(style=style)
         self._is_data()
         assert 'label' in self.data.columns, 'Dataset is not labelled!'
         features = features + ['label']
         data = pd.melt(self.data[features], "label", var_name="Feature")
         fig, ax = plt.subplots(figsize=figsize)
-        ax = sns.swarmplot(x="Feature", y="value", hue="label",
-                           palette=["r", "c", "y"], data=data, ax=ax, **kwargs)
+        ax = sns.swarmplot(x="Feature", y="value", hue="label", data=data, ax=ax, **kwargs)
         ax.set_xticklabels(ax.get_xticklabels(), rotation=45)
         ax.set_xlabel('')
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
         ax.set_ylabel('')
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
         fig.legend(bbox_to_anchor=(0, 1), loc='upper left', ncol=1)
         fig.show()
 
@@ -482,9 +523,9 @@ class BuildFeatureSpace:
     def _handle_null_label(self, data: pd.DataFrame or None = None):
         if data is None:
             data = self.data.copy()
-        missing_labels = list(data.loc[data['label'].isnull()]['sample_id'].values)
+        missing_labels = list(data.loc[data['label'].isnull()]['pt_id'].values)
         if missing_labels:
-            print(f'The following samples have missing labels and will be omitted: {missing_labels}')
+            print(f'The following patients have missing labels and will be omitted: {missing_labels}')
         return data.loc[~data['label'].isnull()]
 
     def dim_reduction_scatterplot(self, method: str = 'UMAP', n_components: int = 2, figsize: tuple = (10, 10),
@@ -499,7 +540,7 @@ class BuildFeatureSpace:
         if matplotlib_kwargs is None:
             matplotlib_kwargs = dict()
         if features is None:
-            features = [c for c in data.columns if c not in ['sample_id', 'pt_id', 'label']]
+            features = [c for c in data.columns if c not in ['pt_id', 'label']]
         embeddings = dimensionality_reduction(data, features, method,
                                               n_components, return_embeddings_only=True,
                                               **dim_reduction_kwargs)
