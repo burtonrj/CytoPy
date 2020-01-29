@@ -48,10 +48,14 @@ class Gating:
         filegroup - instance of FileGroup object for associated sample
         gates - dictionary of Gate objects; contains all gate information
         populations dictionary of population Nodes (anytree.Node); contains all population information
+        gating_classes - dictionary of available gating classes
 
     Methods:
         clear_gates - removes all existing gates
-        
+        fetch_geom - retrieve the geom that defined a given population
+        population_size - returns in integer count for the number of events in a given population
+        get_population_df - retrieve a population as a pandas dataframe
+        valid_populations - given a list of populations, check validity and return list of valid populations
     """
     def __init__(self, experiment: FCSExperiment, sample_id: str, sample: int or None = None,
                  include_controls=True):
@@ -84,7 +88,7 @@ class Gating:
         self.gates = dict()
         if fg.gates:
             for g in fg.gates:
-                self.deserialise_gate(g)
+                self._deserialise_gate(g)
 
         self.populations = dict()
         if not fg.populations:
@@ -115,24 +119,44 @@ class Gating:
         """
         self.gates = dict()
 
-    def fetch_geom(self, population):
+    def fetch_geom(self, population: str) -> dict:
+        """
+        Given the name of a population, retrieve the geom that defined this population
+        :param population: name of population to be fetched
+        :return: Population geom (dictionary)
+        """
         assert population in self.populations.keys(), f'Population invalid, valid population names: ' \
                                                       f'{self.populations.keys()}'
         return copy.deepcopy(self.populations[population].geom)
 
     def population_size(self, population: str):
+        """
+        Returns in integer count for the number of events in a given population
+        :param population: population name
+        :return: event count
+        """
         assert population in self.populations.keys(), f'Population invalid, valid population names: ' \
                                                       f'{self.populations.keys()}'
         return len(self.populations[population].index)
 
-    def deserialise_gate(self, gate):
+    def _deserialise_gate(self, gate):
+        """
+        Given some Gate document from the database, deserialise for use; re-instantiate ChildPopulationCollection
+        :param gate: Gate object to deserialise
+        :return: None
+        """
         kwargs = {k: v for k, v in gate.kwargs}
         kwargs['child_populations'] = ChildPopulationCollection(json_dict=kwargs['child_populations'])
         gate.kwargs = [[k, v] for k, v in kwargs.items()]
         self.gates[gate.gate_name] = gate
 
     @staticmethod
-    def serailise_gate(gate):
+    def _serailise_gate(gate):
+        """
+        Given some Gate document, serialise so that it can be saved to the database
+        :param gate: Gate object to serialise
+        :return: New 'database friendly' Gate
+        """
         gate = deepcopy(gate)
         kwargs = {k: v for k, v in gate.kwargs}
         kwargs['child_populations'] = kwargs['child_populations'].serialise()
@@ -171,17 +195,33 @@ class Gating:
             return apply_transform(data, features_to_transform=transform_features, transform_method=transform_method)
         return data
 
-    def valid_populations(self, populations: list):
+    def valid_populations(self, populations: list, verbose: bool = True) -> list:
+        """
+        Given a list of populations, check validity and return list of valid populations
+        :param populations: list of populations to check
+        :param verbose: if True, prints invalid population
+        :return: Valid populations
+        """
         valid = list()
         for pop in populations:
             if pop not in self.populations.keys():
-                print(f'Error: {pop} is not a valid population')
+                if verbose:
+                    print(f'{pop} is not a valid population')
             else:
                 valid.append(pop)
         return valid
 
-    def labelled_data(self, root_population, labels, transform=False, transform_method: str = 'logicle',
-                      transform_features: list or str = 'all'):
+    def labelled_data(self, root_population: str, labels: list, transform: bool = False,
+                      transform_method: str = 'logicle', transform_features: list or str = 'all'):
+        """
+
+        :param root_population:
+        :param labels:
+        :param transform:
+        :param transform_method:
+        :param transform_features:
+        :return:
+        """
         data = self.get_population_df(root_population, transform=transform, transform_method=transform_method,
                                       transform_features=transform_features)
         data['label'] = 'None'
@@ -722,7 +762,7 @@ class Gating:
         for name in self.populations.keys():
             FileGroup.objects(id=self.mongo_id).update(push__populations=self.population_to_mongo(name))
         for _, gate in self.gates.items():
-            gate = self.serailise_gate(gate)
+            gate = self._serailise_gate(gate)
             FileGroup.objects(id=self.mongo_id).update(push__gates=gate)
         print('Saved successfully!')
         return True
@@ -747,7 +787,7 @@ class Template(Gating):
                 return False
             print(f'Overwriting existing gating template {template_name}')
             gating_strategy = gating_strategy[0]
-            gating_strategy.gates = [self.serailise_gate(gate) for gate in list(self.gates.values())]
+            gating_strategy.gates = [self._serailise_gate(gate) for gate in list(self.gates.values())]
             gating_strategy.last_edit = datetime.now()
             gating_strategy.save()
             templates = [x for x in self.experiment.gating_templates
@@ -762,7 +802,7 @@ class Template(Gating):
             gating_strategy.template_name = template_name
             gating_strategy.creation_date = datetime.now()
             gating_strategy.last_edit = datetime.now()
-            gating_strategy.gates = [self.serailise_gate(gate) for gate in list(self.gates.values())]
+            gating_strategy.gates = [self._serailise_gate(gate) for gate in list(self.gates.values())]
             gating_strategy.save()
             self.experiment.gating_templates.append(gating_strategy)
             self.experiment.save()
@@ -777,7 +817,7 @@ class Template(Gating):
         gating_strategy = GatingStrategy.objects(template_name=template_name)
         if gating_strategy:
             for gate in gating_strategy[0].gates:
-                self.deserialise_gate(gate)
+                self._deserialise_gate(gate)
             return True
         else:
             print(f'No template with name {template_name}')
