@@ -837,7 +837,7 @@ class MetaClustering(Clustering):
     """
     def __init__(self, experiment: FCSExperiment,
                  samples: str or list = 'all',
-                 scale: str or None = 'robust',
+                 scale: str or None = 'norm',
                  **kwargs):
         super().__init__(**kwargs)
         self.experiment = experiment
@@ -902,6 +902,10 @@ class MetaClustering(Clustering):
         else:
             print('Invalid clustering method, must be: "PhenoGraph" or "ConsensusClustering"; '
                   'consensus clustering is recommended for cluster stability')
+
+    def inspect_heatmap(self):
+        d = self.data.copy()
+        d = d.set_index('pt_id')
 
     def save(self):
         """
