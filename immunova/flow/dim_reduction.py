@@ -1,5 +1,5 @@
 from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, KernelPCA
 from umap import UMAP
 import numpy as np
 import pandas as pd
@@ -34,9 +34,11 @@ def dimensionality_reduction(data: pd.DataFrame, features: list,
         reducer = TSNE(random_state=42, n_components=n_components, **kwargs)
     elif method == 'PHATE':
         reducer = phate.PHATE(random_state=42, n_jobs=-2, n_components=n_components, **kwargs)
+    elif method == 'KernelPCA':
+        reducer = KernelPCA(random_state=42, n_components=n_components, **kwargs)
     else:
         raise ValueError("Error: invalid method given for plot clusters, "
-                         "must be one of: 'UMAP', 'tSNE', 'PCA', 'PHATE'")
+                         "must be one of: 'UMAP', 'tSNE', 'PCA', 'PHATE', 'KernelPCA'")
     embeddings = reducer.fit_transform(data[features])
     if return_embeddings_only:
         return embeddings
