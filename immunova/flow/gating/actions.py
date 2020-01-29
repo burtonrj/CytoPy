@@ -56,6 +56,27 @@ class Gating:
         population_size - returns in integer count for the number of events in a given population
         get_population_df - retrieve a population as a pandas dataframe
         valid_populations - given a list of populations, check validity and return list of valid populations
+        search_fmo_cache - given the name of some desired population and an FMO of interest,
+        check the FMO cache to determine if this population has been estimated for the FMO previously,
+        if so, return the cached index.
+        get_fmo_gate - given some target population that has already been defined in the primary data, predict the same
+        population in a given FMO control. Following the gating strategy, each population from the root until the
+        target population is predicted using a KNN model trained on the primary data (the FMO is assumed to have
+        been collected under the same experimental conditions and therefore should not significantly deviate).
+        A dynamic programming methodology is taken where by predictions are cached for future use.
+        Note: currently fmo cache is not saved to the database and must be re-calculated for each instance of Gating,
+        future releases will offer the ability to save FMO cache
+        subtraction - given a target population and a parent population, generate a new population by subtraction of the
+        target population from the parent
+        create_gate - define a new gate to be used using 'apply' method
+        apply - given the name of an existing gate previously defined, apply the gate and store result internally
+        apply_many - apply multiple existing gates sequentially
+        update_populations - given some ChildPopulationCollection object generated from a gate, update saved populations
+        edit_gate - manually replace the outcome of a gate by updating the geom of it's child populations.
+        find_dependencies - for a given population return a list of populations downstream
+        remove_population - remove given population from population tree
+        remove_gate - remove gate from Gating object
+        print_population_tree - print the population tree in a hierarchical format
     """
     def __init__(self, experiment: FCSExperiment, sample_id: str, sample: int or None = None,
                  include_controls=True):
@@ -211,18 +232,36 @@ class Gating:
                 valid.append(pop)
         return valid
 
-    def search_fmo_cache(self, target_population, fmo):
+    def search_fmo_cache(self, target_population: str, fmo: str) -> list or None:
+        """
+        Given the name of some desired population and an FMO of interest, check the FMO cache to determine
+        if this population has been estimated for the FMO previously, if so, return the cached index.
+        :param target_population: name of desired population
+        :param fmo: name of FMO of interest
+        :return: FMO population index or None if non-existing
+        """
         if target_population in self.fmo_search_cache[fmo].keys():
             return self.fmo_search_cache[fmo][target_population]
         return None
 
-    def get_fmo_data(self, target_population, fmo, sml_profiles: dict):
+    def get_fmo_data(self, target_population: str, fmo: str, sml_profiles: dict) -> pd.DataFrame:
         """
-        Calculate population of fmo data using supervised machine learning and primary data as training set
-        :param target_population:
-        :param fmo:
-        :param sml_profiles:
-        :return:
+        Given some target population that has already been defined in the primary data, predict the same population
+        in a given FMO control. Following the gating strategy, each population from the root until the target population
+        is predicted using a KNN model trained on the primary data (the FMO is assumed to have been collected under
+        the same experimental conditions and therefore should not significantly deviate).
+        A dynamic programming methodology is taken where by predictions are cached for future use.
+        Note: currently fmo cache is not saved to the database and must be re-calculated for each instance of Gating,
+        future releases will offer the ability to save FMO cache
+        :param target_population: name of target population to predict in FMO data (all upstream populations will also
+        be predicted and cached)
+        :param fmo: name of target FMO control
+        :param sml_profiles: if one or more populations were derived using supervised machine learning methods in the
+        primary data, you must provide a dictionary where each population is associated with geometric information
+        defining what dimensions to isolate the population in e.g. {'XGBoost_CD4+Tcells': {'x': 'CD4', 'y': 'CD8'}}
+        the KNN model would be trained using CD4 and CD8 as input features with the target being the CD4+Tcell
+        population.
+        :return: Pandas DataFrame for target population in FMO data
         """
         # Check cache if this population has been derived previously
         cache_idx = self.search_fmo_cache(target_population, fmo)
@@ -336,7 +375,7 @@ class Gating:
     def create_gate(self, gate_name: str, parent: str, class_: str, method: str, kwargs: dict,
                     child_populations: ChildPopulationCollection) -> bool:
         """
-        Create a gate
+        Define a new gate to be used using 'apply' method
         :param gate_name: Name of the gate
         :param parent: Name of parent population gate is applied to
         :param class_: Name of a valid gating class
@@ -415,6 +454,7 @@ class Gating:
         Apply a gate to events data (must be generated with `create_gate` first)
         :param gate_name: Name of the gate to apply
         :param plot_output: If True, resulting gates will be printed to screen
+        :param feedback: If True, print feedback
         :return: None
         """
         gatedoc = self.__apply_checks(gate_name)
@@ -433,14 +473,14 @@ class Gating:
             self.plotting.plot_gate(gate_name=gate_name)
 
     def update_populations(self, output: ChildPopulationCollection, parent_df: pd.DataFrame, warnings: list,
-                           parent_name: str):
+                           parent_name: str) -> ChildPopulationCollection:
         """
         Given some ChildPopulationCollection object generated from a gate, update saved populations
         :param output: ChildPopulationCollection object generated from a gate
         :param parent_df: pandas dataframe of events data from parent population
         :param warnings: list of warnings generated from gate
         :param parent_name: name of the parent population
-        :return:
+        :return: output
         """
         for name, population in output.populations.items():
             n = len(population.index)
@@ -460,7 +500,8 @@ class Gating:
                                           parent=self.populations[parent_name])
         return output
 
-    def apply_many(self, gates: list = None, apply_all=False, plot_outcome=False, feedback=True):
+    def apply_many(self, gates: list = None, apply_all: bool = False,
+                   plot_outcome: bool = False, feedback: bool = True) -> None:
         """
         Apply multiple existing gates sequentially
         :param gates: Name of gates to apply (NOTE: Gates must be provided in sequential order!)
@@ -492,6 +533,12 @@ class Gating:
             print('Complete!')
 
     def __update_index(self, population_name: str, geom: dict):
+        """
+        Given some new gating geom and the name of a population to update, update the population index
+        :param population_name: name of population to update
+        :param geom: valid dictionary describing geom
+        :return: None
+        """
         def transform_x_y(d):
             d = d.copy()
             assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", the transform method for the x-axis AND ' \
@@ -572,13 +619,14 @@ class Gating:
         raise ValueError('Gates producing polygon geoms (i.e. like density based clustering), substitution gates '
                          'and supervised ML gates cannot be edited in the current build of Immunova.')
 
-    def edit_gate(self, gate_name: str, updated_geom: dict, delete=True):
+    def edit_gate(self, gate_name: str, updated_geom: dict, delete: bool = True):
         """
         Manually replace the outcome of a gate by updating the geom of it's child populations.
-        :param gate_name:
-        :param updated_geom:
-        :param delete:
-        :return:
+        :param gate_name: name of gate to update
+        :param updated_geom: new geom as valid dictionary
+        :param delete: if True, all populations downstream of immediate children will be removed. This is recommended
+        as edit_gate does not update the index of populations downstream of the immediate children.
+        :return: None
         """
         print(f'Editing gate: {gate_name}')
         assert gate_name in self.gates.keys(), f'Invalid gate, existing gates are: {self.gates.keys()}'
@@ -673,7 +721,7 @@ class Gating:
         for pre, fill, node in RenderTree(root):
             print('%s%s' % (pre, node.name))
 
-    def population_to_mongo(self, population_name: str) -> Population:
+    def _population_to_mongo(self, population_name: str) -> Population:
         """
         Convert a population into a mongoengine Population document
         :param population_name: Name of population to convert
@@ -698,6 +746,13 @@ class Gating:
         return pop_mongo
 
     def clean(self, population: str, qt: float = 0.999, qb: float = 0.001):
+        """
+
+        :param population:
+        :param qt:
+        :param qb:
+        :return:
+        """
         if population not in self.populations.keys():
             raise KeyError(f'No such population {population}')
         data = self.get_population_df(population, transform=True)
@@ -735,7 +790,7 @@ class Gating:
             fg.gates = []
             fg.save()
         for name in self.populations.keys():
-            FileGroup.objects(id=self.mongo_id).update(push__populations=self.population_to_mongo(name))
+            FileGroup.objects(id=self.mongo_id).update(push__populations=self._population_to_mongo(name))
         for _, gate in self.gates.items():
             gate = self._serailise_gate(gate)
             FileGroup.objects(id=self.mongo_id).update(push__gates=gate)
