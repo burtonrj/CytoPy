@@ -211,31 +211,6 @@ class Gating:
                 valid.append(pop)
         return valid
 
-    def labelled_data(self, root_population: str, labels: list, transform: bool = False,
-                      transform_method: str = 'logicle', transform_features: list or str = 'all'):
-        """
-
-        :param root_population:
-        :param labels:
-        :param transform:
-        :param transform_method:
-        :param transform_features:
-        :return:
-        """
-        data = self.get_population_df(root_population, transform=transform, transform_method=transform_method,
-                                      transform_features=transform_features)
-        data['label'] = 'None'
-        for x in labels:
-            if x in data.columns:
-                c = f'{x}_population'
-            else:
-                c = x
-            try:
-                data['label'] = data['label'].mask(data.index.isin(self.populations[x].index), c)
-            except KeyError:
-                print(f'Error: {x} is not a recognised population name')
-        return data
-
     def search_fmo_cache(self, target_population, fmo):
         if target_population in self.fmo_search_cache[fmo].keys():
             return self.fmo_search_cache[fmo][target_population]
