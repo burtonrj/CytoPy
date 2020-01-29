@@ -26,6 +26,7 @@ import copy
 # Scipy
 from sklearn.neighbors import KNeighborsClassifier
 import pandas as pd
+import numpy as np
 
 
 class Gating:
@@ -770,6 +771,20 @@ class Gating:
             FileGroup.objects(id=self.mongo_id).update(push__gates=gate)
         print('Saved successfully!')
         return True
+
+    def _cluster_idx(self, cluster_id: str, clustering_root: str, meta: bool = True):
+        """
+        Fetch the index of a given cluster/meta-cluster in associated sample
+        :param cluster_id: name of cluster if interest
+        :param clustering_root: name of root population for cluster of interest
+        :param meta: if True, search for a meta-cluster if False, treat cluster_id as unique clustering ID
+        :return: numpy array for index of events contained in cluster
+        """
+        assert clustering_root in self.populations.keys(), f'Invalid root name, must be one of {self.populations.keys()}'
+        fg = FileGroup.objects(id=self.mongo_id).get()
+        croot_pop = [p for p in fg.populations if p.population_name == clustering_root][0]
+        _, idx = croot_pop.pull_cluster(cluster_id=cluster_id, meta=meta)
+        return idx
 
 
 class Template(Gating):

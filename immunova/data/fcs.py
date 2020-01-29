@@ -151,6 +151,23 @@ class Population(mongoengine.EmbeddedDocument):
         self.clustering = [c for c in self.clustering if c.cluster_id != cluster_id]
         self.clustering.append(new_cluster)
 
+    def list_clusters(self, meta: bool = True):
+        if meta:
+            return set([c.meta_cluster_id for c in self.clustering])
+        return set([c.cluster_id for c in self.clustering])
+
+    def pull_cluster(self, cluster_id: str, meta: bool = True):
+        if meta:
+            clusters = [c for c in self.clustering if c.meta_cluster_id == cluster_id]
+            assert clusters, f'No such cluster(s) with meta clustering ID {cluster_id}'
+            idx = [c.load_index() for c in clusters]
+            idx = np.unique(np.concatenate(idx, axis=0), axis=0)
+            return clusters, idx
+        clusters = [c for c in self.clustering if c.cluster_id == cluster_id]
+        assert clusters, f'No such cluster with clustering ID {cluster_id}'
+        assert len(clusters) == 1, f'Multiple clusters with ID {cluster_id}'
+        return clusters[0], clusters[0].load_index()
+
 
 class Normalisation(mongoengine.EmbeddedDocument):
     """
@@ -326,4 +343,9 @@ class FileGroup(mongoengine.Document):
         if 'invalid' in self.flags:
             return False
         return True
+
+    def pull_population(self, population_name: str) -> Population:
+        p = [p for p in self.populations if p.population_name == population_name]
+        assert p, f'Population {population_name} does not exist'
+        return p[0]
 
