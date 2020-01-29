@@ -77,6 +77,7 @@ class Gating:
         remove_population - remove given population from population tree
         remove_gate - remove gate from Gating object
         print_population_tree - print the population tree in a hierarchical format
+        save - save all gates and population's to mongoDB
     """
     def __init__(self, experiment: FCSExperiment, sample_id: str, sample: int or None = None,
                  include_controls=True):
@@ -774,10 +775,14 @@ class Gating:
 class Template(Gating):
     """
     Generate a reusable template for gating. Inherits all functionality of Gating class.
+
+    Methods:
+        save_new_template - save all gates as a GatingStrategy document to database for later use
+        load_template - retrieve gates from a GatingStrategy and populate Template object
     """
     def save_new_template(self, template_name: str, overwrite: bool = True) -> bool:
         """
-        Save template structure
+        Save template structure as a GatingStrategy
         :param template_name: name of the template
         :param overwrite: If True, any existing template with the same name will be overwritten
         :return: True if successful, else False
@@ -813,7 +818,7 @@ class Template(Gating):
 
     def load_template(self, template_name: str) -> bool:
         """
-        Load gates from a template
+        Load gates from a template GatingStrategy
         :param template_name: name of template to load
         :return: True if successful, else False
         """
