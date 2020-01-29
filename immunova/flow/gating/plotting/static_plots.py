@@ -1,4 +1,5 @@
 from ....data.gating import Gate
+from ....data.fcs import FileGroup
 from ...transforms import apply_transform
 from ..utilities import centroid
 from scipy.spatial import ConvexHull
@@ -289,7 +290,9 @@ class Plot:
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title=population_name)
         fig.show()
 
-    def backgate(self, root_population: str, x: str, y: str, geoms: list, overlay: list,
+    def backgate(self, base_population: str, x: str, y: str, pgeoms: list or None = None, poverlay: list or None = None,
+                 cgeoms: list or None = None, coverlay: list or None = None,
+                 cluster_root_population: str or None = None, meta_clusters: bool = True,
                  xlim: tuple or None = None, ylim: tuple or None = None,
                  transforms: dict or None = None, title: str or None = None,
                  figsize: tuple = (8, 8)) -> None:
@@ -297,11 +300,11 @@ class Plot:
         This function allows for plotting of multiple populations on the backdrop of some population upstream of
         the given populations. Each population is highlighted by either a polygon gate (for population names listed
         in 'geoms') or a scatter plot (for population names listed in 'overlay')
-        :param root_population: upstream population to form the backdrop of plot
+        :param base_population: upstream population to form the backdrop of plot
         :param x: name of the x-axis variable
         :param y: name of the y-axis variable
-        :param geoms: list of populations to display as a polygon 'gate'
-        :param overlay: list of populations to display as a scatter plot
+        :param pgeoms: list of populations to display as a polygon 'gate'
+        :param poverlay: list of populations to display as a scatter plot
         :param xlim: x-axis limits (optional)
         :param ylim: y-axis limit (optional)
         :param transforms: dictionary of transformations to be applied to axis {'x' or 'y': transform method}
@@ -309,14 +312,27 @@ class Plot:
         :param figsize: tuple of figure size to pass to matplotlib call
         :return: None
         """
+        def _default(x):
+            if x is None:
+                return []
+            return x
+        pgeoms, poverlay, cgeoms, coverlay = _default(pgeoms), _default(poverlay), _default(cgeoms), _default(coverlay)
         # Check populations exist
-        for p in [root_population] + geoms + overlay:
-            assert p in self.gating.populations.keys(), f'Error: could not find {p} in associated gatting object'
+        fg = FileGroup.objects(id=self.gating.mongo_id).get()
+        if cluster_root_population is None:
+            all_clusters = []
+        else:
+            all_clusters = list(fg.pull_population(cluster_root_population).list_clusters(meta=meta_clusters))
+        for p in [base_population] + pgeoms + poverlay:
+            assert p in self.gating.populations.keys(), f'Error: could not find {p}, valid populations include: ' \
+                                                        f'{self.gating.populations.keys()}'
+        for c in cgeoms + coverlay:
+            assert c in all_clusters, f'Error: could not find {c}, valid clusters include: {all_clusters}'
         # Check root population is upstream
-        for p in geoms + overlay:
+        for p in pgeoms + poverlay:
             dependencies = self.gating.find_dependencies(p)
-            assert root_population not in dependencies, f'Error: population {p} is upstream from ' \
-                                                        f'the chosen root population {root_population}'
+            assert base_population not in dependencies, f'Error: population {p} is upstream from ' \
+                                                        f'the chosen root population {base_population}'
         # Establish axis vars and transforms
         axes_vars = {'x': x, 'y': y}
         if transforms is None:
@@ -324,31 +340,61 @@ class Plot:
             for a in ['x', 'y']:
                 if any([x in axes_vars[a] for x in ['FSC', 'SSC']]):
                     transforms[a] = None
-        populations = geoms + overlay
-        root_data = transform_axes(self.gating.get_population_df(root_population),
+        populations = pgeoms + poverlay
+
+        # Get root data
+        root_data = transform_axes(self.gating.get_population_df(base_population),
                                    transforms=transforms, axes_vars=axes_vars)
-        pop_data = {p: transform_axes(self.gating.get_population_df(p),
-                                      axes_vars, transforms)[[x, y]].values
+        # Get population data
+        pop_data = {p: root_data.loc[self.gating.populations[p].index][[x, y]].values
                     for p in populations}
-        pop_hull = {p: ConvexHull(d) for p, d in pop_data.items() if p in geoms}
-        pop_centroids = {p: centroid(d) for p, d in pop_data.items() if p in geoms}
+        # Establish convex hull and centroids for populations
+        pop_hull = {p: ConvexHull(d) for p, d in pop_data.items() if p in pgeoms}
+        pop_centroids = {p: centroid(d) for p, d in pop_data.items() if p in pgeoms}
+
+        # Get cluster data
+        c_hull = dict()
+        c_centroids = dict()
+        cgeoms = [(c, self.gating._cluster_idx(c, clustering_root=cluster_root_population, meta=meta_clusters))
+                  for c in cgeoms]
+        coverlay = [(c, self.gating._cluster_idx(c, clustering_root=cluster_root_population, meta=meta_clusters))
+                    for c in coverlay]
+        if cgeoms:
+            c_hull = {c: ConvexHull(root_data.loc[idx][[x, y]].values) for c, idx in cgeoms}
+            c_centroids = {c: centroid(root_data.loc[idx][[x, y]].values) for c, idx in cgeoms}
 
         # Build plotting constructs
         if title is None:
-            title = f'{root_population}: {populations}'
+            title = f'{base_population}: {populations}'
         fig, ax = plt.subplots(figsize=figsize)
         ax = self.__2dhist(ax=ax, data=root_data, x=x, y=y)
         ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title)
-        colours = ['black', 'gray', 'brown', 'red', 'orange', 'coral', 'peru', 'olive', 'magenta', 'crimson', 'orchid']
+        colours = ['black', 'gray', 'brown', 'red', 'orange',
+                   'coral', 'peru', 'olive', 'magenta', 'crimson',
+                   'orchid']
         random.shuffle(colours)
-        for p, c in zip(pop_data.keys(), colours):
-            if p in geoms:
+        colours = cycle(colours)
+        for p in pop_data.keys():
+            c = next(colours)
+            if p in pgeoms:
                 for simplex in pop_hull[p].simplices:
                     ax.plot(pop_data[p][simplex, 0], pop_data[p][simplex, 1], '-k', c=c)
                 ax.scatter(x=pop_centroids[p][0], y=pop_centroids[p][0], s=25, c=[c],
                            linewidth=1, edgecolors='black', label=p)
             else:
-                ax.scatter(x=pop_data[p][:, 0], y=pop_data[p][:, 1], s=15, c=[c], alpha=1.0, label=p)
+                ax.scatter(x=pop_data[p][:, 0], y=pop_data[p][:, 1], s=15, c=[c], alpha=0.8, label=p,
+                           linewidth=0.4, edgecolors='black')
+        for c, idx in coverlay:
+            col = next(colours)
+            cd = root_data.loc[idx][[x, y]].values
+            ax.scatter(x=cd[:, 0], y=cd[:, 1], s=15, alpha=0.8, label=c, c=[col], linewidth=0.4, edgecolors='black')
+        for c, idx in cgeoms:
+            col = next(colours)
+            cd = root_data.loc[idx][[x, y]].values
+            for simplex in c_hull[c].simplices:
+                ax.plot(cd[simplex, 0], cd[simplex, 1], '-k', c=col)
+            ax.scatter(x=c_centroids[c][0], y=c_centroids[c][0], s=25, c=[col],
+                       linewidth=1, edgecolors='black', label=c)
         ax.legend()
 
     def _get_data_transform(self, node: Node, geom: dict) -> pd.DataFrame:
