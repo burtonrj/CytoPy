@@ -59,10 +59,15 @@ def plot_axis_lims(data: dict, x: str, y: str, xlim: tuple, ylim: tuple) -> tupl
 
 class Plot:
     """
-    Class for producing static FACs plots.
+    Class for producing static FACs plots. Must be associated to a Gating object.
 
     Attributes:
         gating: Gating object to perform plotting from
+    Methods:
+        plot_gate: given the name of an existing gate, plot the parent population and associated geoms
+        plot_population: given the name of an existing population, generate a static 2D histogram
+        backgate: overlay populations on some given 'parent' population. The parent is shown as a 2D histogram and
+        overlaying population can be displayed as either a scatter plot or a geometric object (a 'gate')
     """
     def __init__(self, gating_object):
         """
@@ -90,7 +95,7 @@ class Plot:
     def __plot_asthetics(ax: matplotlib.pyplot.axes, x: str, y: str,
                          xlim: tuple or None, ylim: tuple or None, title: str) -> matplotlib.pyplot.axes:
         """
-        Customise axes asthetics
+        Customise axes aesthetics
         :param ax: matplotlib axes object
         :param x: name of x-axis
         :param y: name of y-axis
@@ -284,18 +289,19 @@ class Plot:
             ax = self.__plot_asthetics(ax, x, y, xlim, ylim, title=population_name)
         fig.show()
 
-    def backgate(self, root_population: str, x: str, y: str, gated_populations: list, sml_populations: list,
+    def backgate(self, root_population: str, x: str, y: str, geoms: list, overlay: list,
                  xlim: tuple or None = None, ylim: tuple or None = None,
                  transforms: dict or None = None, title: str or None = None,
                  figsize: tuple = (8, 8)) -> None:
         """
         This function allows for plotting of multiple populations on the backdrop of some population upstream of
-        the given populations. Each population is highlighted by a polygon gate.
+        the given populations. Each population is highlighted by either a polygon gate (for population names listed
+        in 'geoms') or a scatter plot (for population names listed in 'overlay')
         :param root_population: upstream population to form the backdrop of plot
         :param x: name of the x-axis variable
         :param y: name of the y-axis variable
-        :param gated_populations: list of population gates to show on provided population
-        :param sml_populations: list of populations generated from supervised methods to display
+        :param geoms: list of populations to display as a polygon 'gate'
+        :param overlay: list of populations to display as a scatter plot
         :param xlim: x-axis limits (optional)
         :param ylim: y-axis limit (optional)
         :param transforms: dictionary of transformations to be applied to axis {'x' or 'y': transform method}
@@ -304,10 +310,10 @@ class Plot:
         :return: None
         """
         # Check populations exist
-        for p in [root_population] + gated_populations + sml_populations:
+        for p in [root_population] + geoms + overlay:
             assert p in self.gating.populations.keys(), f'Error: could not find {p} in associated gatting object'
         # Check root population is upstream
-        for p in gated_populations + sml_populations:
+        for p in geoms + overlay:
             dependencies = self.gating.find_dependencies(p)
             assert root_population not in dependencies, f'Error: population {p} is upstream from ' \
                                                         f'the chosen root population {root_population}'
@@ -318,14 +324,14 @@ class Plot:
             for a in ['x', 'y']:
                 if any([x in axes_vars[a] for x in ['FSC', 'SSC']]):
                     transforms[a] = None
-        populations = gated_populations + sml_populations
+        populations = geoms + overlay
         root_data = transform_axes(self.gating.get_population_df(root_population),
                                    transforms=transforms, axes_vars=axes_vars)
         pop_data = {p: transform_axes(self.gating.get_population_df(p),
                                       axes_vars, transforms)[[x, y]].values
                     for p in populations}
-        pop_hull = {p: ConvexHull(d) for p, d in pop_data.items() if p in gated_populations}
-        pop_centroids = {p: centroid(d) for p, d in pop_data.items() if p in gated_populations}
+        pop_hull = {p: ConvexHull(d) for p, d in pop_data.items() if p in geoms}
+        pop_centroids = {p: centroid(d) for p, d in pop_data.items() if p in geoms}
 
         # Build plotting constructs
         if title is None:
@@ -336,7 +342,7 @@ class Plot:
         colours = ['black', 'gray', 'brown', 'red', 'orange', 'coral', 'peru', 'olive', 'magenta', 'crimson', 'orchid']
         random.shuffle(colours)
         for p, c in zip(pop_data.keys(), colours):
-            if p in gated_populations:
+            if p in geoms:
                 for simplex in pop_hull[p].simplices:
                     ax.plot(pop_data[p][simplex, 0], pop_data[p][simplex, 1], '-k', c=c)
                 ax.scatter(x=pop_centroids[p][0], y=pop_centroids[p][0], s=25, c=[c],
