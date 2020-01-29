@@ -745,33 +745,6 @@ class Gating:
         pop_mongo.save_index(pop_node.index)
         return pop_mongo
 
-    def clean(self, population: str, qt: float = 0.999, qb: float = 0.001):
-        """
-
-        :param population:
-        :param qt:
-        :param qb:
-        :return:
-        """
-        if population not in self.populations.keys():
-            raise KeyError(f'No such population {population}')
-        data = self.get_population_df(population, transform=True)
-        qt = data.apply(lambda x: x <= x.quantile(qt), axis=0)
-        qb = data.apply(lambda x: x >= x.quantile(qb), axis=0)
-        clean = data[qt].dropna()[qb].dropna()
-        geom = {'method': 'Clean',
-                'x': '',
-                'y': ''}
-        prop_of_parent = clean.shape[0]/data.shape[0]
-        prop_of_total = len(self.populations['root'].index) / data.shape[0]
-        self.populations[f'{population}_cleaned'] = Node(name=f'{population}_cleaned',
-                                                         population_name=f'{population}_cleaned',
-                                                         index=clean.index,
-                                                         prop_of_parent=prop_of_parent,
-                                                         prop_of_total=prop_of_total,
-                                                         geom=geom, warnings=[],
-                                                         parent=self.populations[population])
-
     def save(self, overwrite=False) -> bool:
         """
         Save all gates and population's to mongoDB
