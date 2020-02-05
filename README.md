@@ -1,4 +1,4 @@
-# CAPP: Cytometry Analysis Pipeline for Python
+# CytoPy: a cytometry analysis framework for Python
 ![Logo](./logo_sm.png)
 
 In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community.
@@ -8,7 +8,7 @@ Although exciting, this can be daunting to those from a traditional immunology b
 that are new to programming. Additionally, current tools have a loose structure in the steps taken in analysis, 
 resulting in large custom scripts, poor reproducibility, and insufficient data management.
 
-CAPPy was created to address these issues. It was created with the general philosophy that given some 
+CytoPy was created to address these issues. It was created with the general philosophy that given some 
 cytometry data and a clinical/experimental endpoint, we wish to find what properties seperate groups (e.g. what cell populations
 are important for identifying a disease? What phenotypes are changing in response to a stimulus? etc). 
 The pipeline itself is centered around a MongoDB database, built in  the Python programming language, 
@@ -26,7 +26,7 @@ in just a few lines of code:
 You will notice that we perform both supervised cell classification and high-dimensional clustering.
 Supervised classification being training samples, gated according to some 'gating strategy', being used
 to train a classifier. Alternatively high-dimensional clustering (by PhenoGraph or FlowSOM) involves clustering 
-cells in a completely unbiased fashion. CAPP provides access to both methodologies as we observe 
+cells in a completely unbiased fashion. CytoPy provides access to both methodologies as we observe 
 that both have benefits and failings.
 
 Alternatively, after step 3 the user can choose to perform 'cell level association'. 
@@ -64,7 +64,7 @@ Or, download source code and run the following from the source directory:
 * Reproducing results from FlowCAP Challenges
 * Reproducing results from ...
 * Detailed tutorials:
-    1. Loading data into CAPP
+    1. Loading data into CytoPy
     2. Pre-processing steps
     3. Visualising and quantifying batch effect
     4. Selecting training data
