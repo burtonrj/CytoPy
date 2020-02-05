@@ -342,7 +342,7 @@ class Explorer:
 
     def heatmap(self, heatmap_var: str, features: list,
                 clustermap: bool = False, mask: pd.DataFrame or None = None,
-                normalise: bool = True, figsize: tuple = (10, 5)):
+                normalise: bool = True, figsize: tuple = (10, 5), title: str or None = None):
         """
         Generate a heatmap of marker expression for either clusters or gated populations
         (indicated with 'heatmap_var' argument)
@@ -367,7 +367,8 @@ class Explorer:
             return ax
         fig, ax = plt.subplots(figsize=(16, 10))
         ax = sns.heatmap(d, linewidth=0.5, ax=ax, cmap='viridis')
-        ax.set_title('MFI (averaged over all patients) for PhenoGraph clusters')
+        if title is not None:
+            ax.set_title(title)
         return ax
 
     def plot_representation(self, x_variable: str, y_variable, discrete: bool = True,
@@ -878,7 +879,7 @@ class MetaClustering(Clustering):
                 c_data = c_data.median()
                 c_data['population_label'] = pop_label
                 c_data['cluster_id'], c_data['cluster_size'], c_data['cluster_n'], \
-                c_data['pt_id'], c_data['sample_id'] = c_name, relative_n, n, pt_id, s
+                    c_data['pt_id'], c_data['sample_id'] = c_name, relative_n, n, pt_id, s
                 clusters = clusters.append(c_data, ignore_index=True)
         print('------------ Completed! ------------')
         return clusters
@@ -903,9 +904,15 @@ class MetaClustering(Clustering):
             print('Invalid clustering method, must be: "PhenoGraph" or "ConsensusClustering"; '
                   'consensus clustering is recommended for cluster stability')
 
-    def inspect_heatmap(self):
-        d = self.data.copy()
-        d = d.set_index('pt_id')
+    def inspect_heatmap(self, figsize=(10, 10), **kwargs):
+        data = self.data.copy()
+        data = data.set_index('pt_id')
+        palette = sns.husl_palette(len(data.population_label.unique()), s=.45)
+        palette_mappings = dict(zip(data.population_label.unique(), palette))
+        pop_label_colours = pd.Series(data.index.get_label_values('population_labels'),
+                                      index=data.index).map(palette_mappings)
+        return sns.clustermap(data[self.ce.features], row_colors=pop_label_colours, figsize=figsize)
+
 
     def save(self):
         """
