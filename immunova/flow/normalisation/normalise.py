@@ -8,8 +8,8 @@ from immunova.flow.utilities import progress_bar, kde_multivariant, hellinger_do
 from immunova.flow.dim_reduction import dimensionality_reduction
 from multiprocessing import Pool, cpu_count
 from functools import partial
-from scipy.stats import entropy as kl_divergence
-from scipy.spatial.distance import jensenshannon as jsd_divergence
+from scipy.stats import entropy as kl
+from scipy.spatial.distance import jensenshannon as jsd
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -17,6 +17,20 @@ import pandas as pd
 import numpy as np
 import math
 np.random.seed(42)
+
+
+def jsd_divergence(x, y):
+    div = jsd(x, y)
+    assert div is not None, 'JSD is null'
+    if div in [np.inf, -np.inf]:
+        return 1
+    return div
+
+
+def kl_divergence(x, y):
+    div = kl(x, y)
+    assert div is not None, 'KL divergence is Null'
+    return div
 
 
 def indexed_kde(named_x: tuple, kde_f: callable):
