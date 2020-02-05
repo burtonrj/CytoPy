@@ -1,4 +1,4 @@
-# CAPPy: Cytometry Analysis Pipeline for Python
+# CAPP: Cytometry Analysis Pipeline for Python
 ![Logo](./logo_sm.png)
 
 In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community.
@@ -26,7 +26,7 @@ in just a few lines of code:
 You will notice that we perform both supervised cell classification and high-dimensional clustering.
 Supervised classification being training samples, gated according to some 'gating strategy', being used
 to train a classifier. Alternatively high-dimensional clustering (by PhenoGraph or FlowSOM) involves clustering 
-cells in a completely unbiased fashion. CAPPy provides access to both methodologies as we observe 
+cells in a completely unbiased fashion. CAPP provides access to both methodologies as we observe 
 that both have benefits and failings.
 
 Alternatively, after step 3 the user can choose to perform 'cell level association'. 
@@ -64,7 +64,7 @@ Or, download source code and run the following from the source directory:
 * Reproducing results from FlowCAP Challenges
 * Reproducing results from ...
 * Detailed tutorials:
-    1. Loading data into CAPPy
+    1. Loading data into CAPP
     2. Pre-processing steps
     3. Visualising and quantifying batch effect
     4. Selecting training data
