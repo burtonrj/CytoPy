@@ -263,6 +263,7 @@ class Panel(mongoengine.Document):
         :param x:
         :return: True if duplicates are found, else False
         """
+        x = [i if i else None for i in x]
         duplicates = [item for item, count in Counter(x).items() if count > 1 and item is not None]
         if duplicates:
             print(f'Duplicate channel/markers identified: {duplicates}')
@@ -281,7 +282,10 @@ class Panel(mongoengine.Document):
         for channel, marker in column_mappings:
             # Normalise channel
             if channel:
-                channel, err = self.__query(channel, self.channels, err)
+                if channel.isspace():
+                    channel = None
+                else:
+                    channel, err = self.__query(channel, self.channels, err)
             # Normalise marker
             if marker:
                 marker, err = self.__query(marker, self.markers, err)
@@ -300,10 +304,11 @@ class Panel(mongoengine.Document):
                 err = True
             new_column_mappings.append((channel, marker))
         # Check for duplicate channels/markers
-        channels = [c for c, _ in column_mappings]
+        channels = [c for c, _ in new_column_mappings]
         if self.__check_duplication(channels):
             err = True
-        if self.__check_duplication([m for _, m in column_mappings]):
+        markers = [m for _, m in new_column_mappings]
+        if self.__check_duplication(markers):
             err = True
         # Check for missing channels
         for x in self.channels:
@@ -321,7 +326,7 @@ class Panel(mongoengine.Document):
         """
         # Standardise the names
         # channel_marker -> channel_marker: [channel, marker]
-        column_mappings = [[_ if _ != "" else None for _ in x.split('_')] for x in data.columns]
+        column_mappings = [[_ if not _.isspace() else None for _ in x.split('_')] for x in data.columns]
         column_mappings, err = self.standardise_names(column_mappings)
         if err and catch_standardisation_errors:
             return None
