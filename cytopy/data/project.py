@@ -1,6 +1,6 @@
 import mongoengine
 import datetime
-from .patient import Patient
+from .subject import Subject
 from .fcs_experiments import FCSExperiment, Panel
 
 
@@ -20,7 +20,7 @@ class Project(mongoengine.Document):
         list_fcs_experiments - generate a list of IDs for fcs experiments associated to this project
     """
     project_id = mongoengine.StringField(required=True, unique=True)
-    patients = mongoengine.ListField(mongoengine.ReferenceField(Patient, reverse_delete_rule=4))
+    patients = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
     start_date = mongoengine.DateTimeField(default=datetime.datetime.now)
     owner = mongoengine.StringField(requred=True)
     fcs_experiments = mongoengine.ListField(mongoengine.ReferenceField(FCSExperiment, reverse_delete_rule=4))
@@ -73,3 +73,18 @@ class Project(mongoengine.Document):
         self.save()
         return exp
 
+    def add_subject(self, subject_id: str,
+                    drug_data: list or None = None,
+                    infection_data: list or None = None,
+                    patient_biology: list or None = None,
+                    **kwargs):
+        new_subject = Subject(subject_id=subject_id, **kwargs)
+        if drug_data is not None:
+            new_subject.drug_data = drug_data
+        if infection_data is not None:
+            new_subject.infection_data = infection_data
+        if patient_biology is not None:
+            new_subject.patient_biology = patient_biology
+        new_subject.save()
+        self.patients.append(new_subject)
+        self.save()

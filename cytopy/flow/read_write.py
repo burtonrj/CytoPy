@@ -51,34 +51,41 @@ class FCSFile:
     """
     def __init__(self, filepath, comp_matrix=None):
         fcs = flowio.FlowData(filepath)
-        self.filename = fcs.text['fil']
-        self.sys = fcs.text['sys']
-        self.total_events = int(fcs.text['tot'])
-        self.creator = fcs.text['creator']
-        self.tube_name = fcs.text['tube name']
-        self.exp_name = fcs.text['experiment name']
-        self.processing_date = date_parser.parse(fcs.text['date'] +
-                                                 ' ' + fcs.text['etim']).isoformat()
-        try:
-            self.cytometer = fcs.text['cyt']
-        except KeyError:
-            self.cytometer = 'Unknown'
-        self.operator = fcs.text['export user name']
+        self.filename = fcs.text.get('fil', 'Unknown_filename')
+        self.sys = fcs.text.get('sys', 'Unknown_system')
+        self.total_events = int(fcs.text.get('tot', 0))
+        self.tube_name = fcs.text.get('tube name', 'Unknown')
+        self.exp_name = fcs.text.get('experiment name', 'Unknown')
+        self.cytometer = fcs.text.get('cyt', 'Unknown')
+        self.creator = fcs.text.get('creator', 'Unknown')
+        self.operator = fcs.text.get('export user name', 'Unknown')
         self.fluoro_mappings = self.__get_fluoro_mapping(fcs.channels)
-        if comp_matrix:
+        self.cst_pass = False
+        self.data = fcs.events
+        self.event_data = np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count))
+        if 'threshold' in fcs.text.keys():
+            self.threshold = [{'channel': c, 'threshold': v} for c, v in chunks(fcs.text["threshold"].split(','), 2)]
+        else:
+            self.threshold = 'Unknown'
+        try:
+            self.processing_date = date_parser.parse(fcs.text['date'] +
+                                                     ' ' + fcs.text['etim']).isoformat()
+        except KeyError:
+            self.processing_date = 'Unknown'
+        if comp_matrix is not None:
             self.spill = pd.read_csv(comp_matrix)
         else:
-            if(len(fcs.text['spill'])) < 1:
-                raise KeyError("""Error: no spillover matrix found, please provide
-                path to relevant csv file with 'comp_matrix' argument""")
-            self.spill = self.__get_spill_matrix(fcs.text['spill'])
-        self.threshold = [{'channel': c, 'threshold': v} for c, v in chunks(fcs.text["threshold"].split(','), 2)]
-        self.cst_pass = False
+            try:
+                assert 'spill' in fcs.text.keys()
+                if(len(fcs.text['spill'])) < 1:
+                    raise KeyError("""Error: no spillover matrix found, please provide
+                    path to relevant csv file with 'comp_matrix' argument""")
+                self.spill = self.__get_spill_matrix(fcs.text['spill'])
+            except AssertionError:
+                self.spill = None
         if 'cst_setup_status' in fcs.text:
             if fcs.text['cst setup status'] == 'SUCCESS':
                 self.cst_pass = True
-        self.data = fcs.events
-        self.event_data = np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count))
 
     @property
     def dataframe(self):
@@ -134,9 +141,10 @@ class FCSFile:
         :return: None
         """
         # Remove FSC, SSC, and Time data for compensation
+        assert self.spill is not None, f'Unable to locate spillover matrix, please provide a compensation matrix'
         channels = [x['channel'] for x in self.fluoro_mappings]
         channel_idx = [i for i, x in enumerate(channels) if not any([x.find(s) != -1 for
-                                                                     s in ['FSC', 'SSC', 'Time']])]
+                                                                     s in ['FSC', 'SSC', 'Time', 'FS', 'SS']])]
         comp_data = self.event_data[:, channel_idx]
         comp_data = np.linalg.solve(self.spill.values.T, comp_data.T).T
         self.event_data[:, channel_idx] = comp_data
