@@ -1,6 +1,6 @@
 from cytopy.data.fcs_experiments import FCSExperiment
 from cytopy.data.fcs import Normalisation
-from cytopy.data.patient import Patient
+from cytopy.data.subject import Subject
 from cytopy.flow.gating.actions import Gating
 from cytopy.flow.normalisation.MMDResNet import MMDNet
 from cytopy.flow.supervised.ref import calculate_reference_sample

@@ -1,9 +1,9 @@
 from .fcs import FileGroup, File
-from .patient import Patient
+from .subject import Subject
 from .gating import GatingStrategy
 from .utilities import data_from_file
 from .panel import Panel, ChannelMap
-from ..flow.readwrite.read_fcs import FCSFile
+from cytopy.flow.read_write import FCSFile
 from multiprocessing import Pool, cpu_count
 from functools import partial
 import mongoengine
@@ -189,7 +189,7 @@ class FCSExperiment(mongoengine.Document):
         self.save()
         return True
 
-    def _create_file_entry(self, path: str, file_id: str, comp_matrix: np.array,
+    def _create_file_entry(self, path: str, file_id: str, comp_matrix: str or None,
                            compensate: bool, catch_standardisation_errors: bool,
                            control: bool = False) -> File or None:
         """
@@ -221,15 +221,15 @@ class FCSExperiment(mongoengine.Document):
         new_file.channel_mappings = [ChannelMap(channel=c, marker=m) for c, m in column_mappings]
         return new_file
 
-    def add_new_sample(self, sample_id: str, file_path: str, controls: list, patient_id: str or None = None,
-                       comp_matrix: np.array or None = None, compensate: bool = True,
+    def add_new_sample(self, sample_id: str, file_path: str, controls: list, subject_id: str or None = None,
+                       comp_matrix: str or None = None, compensate: bool = True,
                        feedback: bool = True, catch_standardisation_errors: bool = False,
                        processing_datetime: str or None = None,
                        collection_datetime: str or None = None) -> None or str:
         """
         Add a new sample (FileGroup) to this experiment
         :param sample_id: primary ID for identification of sample (FileGroup.primary_id)
-        :param patient_id: ID for patient to associate sample too
+        :param subject_id: ID for patient to associate sample too
         :param file_path: file path of the primary fcs file (e.g. the fcs file that is of primary interest such as the
         file with complete staining)
         :param controls: list of file paths for control files e.g. a list of file paths for associated FMO controls
@@ -274,10 +274,10 @@ class FCSExperiment(mongoengine.Document):
             file_collection.files.append(control)
         file_collection.save()
         self.fcs_files.append(file_collection)
-        if patient_id is not None:
-            p = Patient.objects(patient_id=patient_id)
+        if subject_id is not None:
+            p = Subject.objects(subject_id=subject_id)
             if len(p) == 0:
-                print(f'Error: no such patient {patient_id}, continuing without association.')
+                print(f'Error: no such patient {subject_id}, continuing without association.')
             else:
                 p = p[0]
                 p.files.append(file_collection)
