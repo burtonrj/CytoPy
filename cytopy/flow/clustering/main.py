@@ -1,6 +1,6 @@
 from mongoengine.base.datastructures import EmbeddedDocumentList
 from cytopy.data.fcs_experiments import FCSExperiment
-from cytopy.data.patient import Patient, MetaDataDictionary, gram_status, bugs, hmbpp_ribo, biology
+from cytopy.data.subject import Subject, MetaDataDictionary, gram_status, bugs, hmbpp_ribo, biology
 from cytopy.data.fcs import Cluster, Population, ClusteringDefinition
 from ..supervised.utilities import scaler
 from ..gating.actions import Gating
@@ -171,7 +171,7 @@ class Explorer:
         for pt_id in progress_bar(self.data.pt_id.unique()):
             if pt_id is None:
                 continue
-            p = Patient.objects(patient_id=pt_id).get()
+            p = Subject.objects(patient_id=pt_id).get()
             assert type(p[variable]) != EmbeddedDocumentList, 'Chosen variable is an embedded document.'
             self.data.loc[self.data.pt_id == pt_id, variable] = p[variable]
 
@@ -196,7 +196,7 @@ class Explorer:
         for pt_id in progress_bar(self.data.pt_id.unique()):
             if pt_id is None:
                 continue
-            p = Patient.objects(patient_id=pt_id).get()
+            p = Subject.objects(patient_id=pt_id).get()
             self.data.loc[self.data.pt_id == pt_id, 'organism_name'] = bugs(patient=p, multi_org=multi_org)
             self.data.loc[self.data.pt_id == pt_id, 'organism_name_short'] = bugs(patient=p, multi_org=multi_org,
                                                                                          short_name=True)
@@ -649,7 +649,7 @@ class SingleClustering(Clustering):
             self.data[self.ce.features] = scaler(self.data[self.ce.features], scale_method=scale)[0]
         if not self.ce.features:
             self.data = self.data[self.ce.features]
-        pt = Patient.objects(files__contains=sample.mongo_id)
+        pt = Subject.objects(files__contains=sample.mongo_id)
         self.data['pt_id'] = None
         if pt:
             self.data['pt_id'] = pt[0].patient_id
@@ -787,7 +787,7 @@ class GlobalClustering(Clustering):
             fdata = self._population_labels(fdata, g.populations[self.ce.root_population])
             fdata = fdata.reset_index()
             fdata = fdata.rename({'index': 'original_index'}, axis=1)
-            pt = Patient.objects(files__contains=g.mongo_id)
+            pt = Subject.objects(files__contains=g.mongo_id)
             if pt:
                 fdata['pt_id'] = pt[0].patient_id
             else:

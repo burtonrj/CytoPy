@@ -80,11 +80,11 @@ class Biology(mongoengine.EmbeddedDocument):
     test_category = mongoengine.StringField()
 
 
-class Patient(mongoengine.DynamicDocument):
+class Subject(mongoengine.DynamicDocument):
     """
     Document based representation of patient meta-data
     """
-    patient_id = mongoengine.StringField(required=True, unique=True)
+    subject_id = mongoengine.StringField(required=True, unique=True)
     age = mongoengine.IntField(required=False)
     dob = mongoengine.DateField(required=False)
     gender = mongoengine.IntField(required=False)
@@ -162,7 +162,7 @@ class Patient(mongoengine.DynamicDocument):
     }
 
 
-def gram_status(patient: Patient) -> str:
+def gram_status(patient: Subject) -> str:
     """
     Given an instance of Patient, return the gram status of isolated organisms.
     Where multiple organisms are found, if gram status differs amongst orgs, returns 'mixed'
@@ -179,7 +179,7 @@ def gram_status(patient: Patient) -> str:
     return 'Mixed'
 
 
-def bugs(patient: Patient, multi_org: str, short_name: bool = False) -> str:
+def bugs(patient: Subject, multi_org: str, short_name: bool = False) -> str:
     """
     Fetch the name of isolated organisms for each patient.
     :param short_name: If True, the shortened name rather than whole latin name is returned
@@ -204,7 +204,7 @@ def bugs(patient: Patient, multi_org: str, short_name: bool = False) -> str:
     return 'mixed'
 
 
-def org_type(patient: Patient) -> str:
+def org_type(patient: Subject) -> str:
     """
     Parse all infectious isolates for each patient and return the organism type isolated, one of either:
     'gram positive', 'gram negative', 'virus', 'mixed' or 'fungal'
@@ -227,7 +227,7 @@ def org_type(patient: Patient) -> str:
     return 'mixed'
 
 
-def hmbpp_ribo(patient: Patient, field: str) -> str:
+def hmbpp_ribo(patient: Subject, field: str) -> str:
     """
     Given a value of either 'hmbpp' or 'ribo' for 'field' argument, return True if any Bug has a positive status
     for the given patient ID.
@@ -254,7 +254,7 @@ def biology(pt_id: str, test_name: str, method: str) -> np.float or None:
     """
     if pt_id is None:
         return None
-    tests = Patient.objects(patient_id=pt_id).get().patient_biology
+    tests = Subject.objects(patient_id=pt_id).get().patient_biology
     tests = [t.result for t in tests if t.test == test_name]
     if not tests:
         return None

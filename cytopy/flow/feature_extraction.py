@@ -1,5 +1,5 @@
 from ..data.fcs_experiments import FCSExperiment
-from ..data.patient import Patient, gram_status, bugs, hmbpp_ribo, org_type
+from ..data.subject import Subject, gram_status, bugs, hmbpp_ribo, org_type
 from cytopy.flow.dim_reduction import dimensionality_reduction
 from ..data.fcs import ClusteringDefinition
 from ..flow.gating.actions import Gating
@@ -352,7 +352,7 @@ class BuildFeatureSpace:
                                                                   "['infection', 'biology', 'drug']"
         labels = list()
         for p in self.data.pt_id.values:
-            pt = Patient.objects(patient_id=p).get()
+            pt = Subject.objects(patient_id=p).get()
             if embedding is None:
                 if variable not in dir(pt):
                     print(f'{variable} not in properties for {p}; is the variable embedded in infection_data, biology, '
