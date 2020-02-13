@@ -19,6 +19,8 @@ from .utilities import get_params, inside_ellipse
 from anytree.exporter import DotExporter
 from anytree import Node, RenderTree
 from anytree.search import findall
+from scipy.spatial import ConvexHull
+from shapely.geometry.polygon import Polygon
 from datetime import datetime
 from copy import deepcopy
 import inspect
@@ -81,7 +83,7 @@ class Gating:
         save - save all gates and population's to mongoDB
     """
     def __init__(self, experiment: FCSExperiment, sample_id: str, sample: int or None = None,
-                 include_controls=True):
+                 include_controls=True, default_axis='FSC-A'):
         """
         Constructor for Gating
         :param experiment: FCSExperiment currently being processed
@@ -103,7 +105,7 @@ class Gating:
         self.id = sample_id
         self.mongo_id = experiment.fetch_sample_mid(sample_id)
         self.experiment = experiment
-        self.plotting = Plot(self)
+        self.plotting = Plot(self, default_axis)
         self.fmo_search_cache = {_id: dict(root=data.index.values) for _id, data in self.fmo.items()}
         del data
         fg = experiment.pull_sample(sample_id)
@@ -114,15 +116,15 @@ class Gating:
                 self._deserialise_gate(g)
 
         self.populations = dict()
-        if not fg.populations:
+        if not fg.populations or len(fg.populations) == 1:
             root = Node(name='root', prop_of_parent=1.0, prop_of_total=1.0,
                         warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values,
                         parent=None)
             self.populations['root'] = root
         else:
             # Reconstruct tree
+            assert 'root' in [p.population_name for p in fg.populations], 'Root population missing!'
             parents = [p.parent for p in fg.populations]
-            assert 'root' in parents, 'Root population missing!'
             pops = [p.to_python() for p in fg.populations]
             structured = dict()
             for parent in parents:
@@ -246,7 +248,7 @@ class Gating:
             return self.fmo_search_cache[fmo][target_population]
         return None
 
-    def get_fmo_data(self, target_population: str, fmo: str, sml_profiles: dict) -> pd.DataFrame:
+    def get_fmo_data(self, target_population: str, fmo: str, sml_profiles: dict or None) -> pd.DataFrame:
         """
         Given some target population that has already been defined in the primary data, predict the same population
         in a given FMO control. Following the gating strategy, each population from the root until the target population
@@ -348,6 +350,38 @@ class Gating:
         except AttributeError:
             print(f'Error: {method} is not a valid method for class {klass.__name__}')
             return False
+
+    def merge(self, population_left: str, population_right: str, new_population_name: str):
+        assert new_population_name not in self.populations.keys(), f'{new_population_name} already exists!'
+        assert population_left in self.populations.keys(), f'{population_left} not recognised!'
+        assert population_right in self.populations.keys(), f'{population_right} not recognised!'
+        population_left_parent = self.populations[population_left].parent.name
+        population_right_parent = self.populations[population_right].parent.name
+        assert population_left_parent == population_right_parent, 'Population parent must match for merging ' \
+                                                                  'populations ' \
+                                                                  f'left parent = {population_left_parent}, ' \
+                                                                  f'right parent = {population_right_parent}'
+        parent = self.populations[population_left_parent]
+        x, y = self.populations[population_left].geom['x'], self.populations[population_left].geom['y']
+        left_idx, right_idx = self.populations[population_left].index, self.populations[population_right].index
+        index = np.unique(np.concatenate((left_idx, right_idx)))
+        new_population = ChildPopulationCollection(gate_type='merge')
+        new_population.add_population(new_population_name)
+        parent_df = self.get_population_df(parent.name)
+        d = parent_df.loc[index][[x, y]]
+        hull = ConvexHull(d)
+        polygon = Polygon([(d.values[v, 0], d.values[v, 1]) for v in hull.vertices])
+        cords = dict(x=polygon.exterior.xy[0], y=polygon.exterior.xy[1])
+        new_population.populations[new_population_name].update_geom(x=x, y=y, shape='poly', cords=cords)
+        new_population.populations[new_population_name].update_index(index)
+        self.update_populations(output=new_population, parent_df=parent_df,
+                                parent_name=parent.name, warnings=[])
+        name = f'merge_{population_left}_{population_right}'
+        kwargs = [('left', population_left), ('right', population_right), ('name', new_population_name),
+                  ('x', x), ('y', y), ('child_populations', new_population)]
+        new_gate = DataGate(gate_name=name, children=list(new_population.populations.keys()), parent=parent.name,
+                            method='merge', kwargs=kwargs, class_='merge')
+        self.gates[name] = new_gate
 
     def subtraction(self, target: str, parent: str, new_population_name: str) -> bool:
         """
@@ -463,14 +497,18 @@ class Gating:
         if gatedoc is None:
             return None
         gkwargs = {k: v for k, v in gatedoc.kwargs}
-        # Alter kwargs if given
+        # Add kwargs if given
         for k, v in kwargs.items():
             gkwargs[k] = v
         if 'fmo_x' in gkwargs.keys():
-            gkwargs['fmo_x'] = self.get_fmo_data(gatedoc.parent, gkwargs['fmo_x'])
+            gkwargs['fmo_x'] = self.get_fmo_data(gatedoc.parent, gkwargs['fmo_x'], sml_profiles=None)
         if 'fmo_y' in kwargs.keys():
-            gkwargs['fmo_y'] = self.get_fmo_data(gatedoc.parent, gkwargs['fmo_y'])
-        self.__construct_class_and_gate(gatedoc, gkwargs, feedback)
+            gkwargs['fmo_y'] = self.get_fmo_data(gatedoc.parent, gkwargs['fmo_y'], sml_profiles=None)
+        if gatedoc.class_ == 'merge':
+            self.merge(population_left=gkwargs.get('left'), population_right=gkwargs.get('right'),
+                       new_population_name=gkwargs.get('name'))
+        else:
+            self.__construct_class_and_gate(gatedoc, gkwargs, feedback)
         if plot_output:
             self.plotting.plot_gate(gate_name=gate_name)
 
@@ -530,7 +568,7 @@ class Gating:
         for gate_name in gates_to_apply:
             if feedback:
                 print(f'Applying {gate_name}...')
-            self.apply(gate_name, plot_output=plot_outcome)
+            self.apply(gate_name, plot_output=plot_outcome, feedback=feedback)
         if feedback:
             print('Complete!')
 
@@ -747,7 +785,7 @@ class Gating:
         pop_mongo.save_index(pop_node.index)
         return pop_mongo
 
-    def save(self, overwrite=False) -> bool:
+    def save(self, overwrite: bool = False, feedback: bool = True) -> bool:
         """
         Save all gates and population's to mongoDB
         :param overwrite: If True, existing populations/gates for sample will be overwritten
@@ -769,7 +807,8 @@ class Gating:
         for _, gate in self.gates.items():
             gate = self._serailise_gate(gate)
             FileGroup.objects(id=self.mongo_id).update(push__gates=gate)
-        print('Saved successfully!')
+        if feedback:
+            print('Saved successfully!')
         return True
 
     def _cluster_idx(self, cluster_id: str, clustering_root: str, meta: bool = True):

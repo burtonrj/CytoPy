@@ -30,11 +30,12 @@ class ChildPopulationCollection:
         if json_dict is not None:
             self.deserialise(json_dict)
         else:
+            valid = ['threshold_1d', 'threshold_2d', 'cluster', 'geom', 'sml', 'sub', 'merge', None]
             try:
-                assert gate_type in ['threshold_1d', 'threshold_2d', 'cluster', 'geom', 'sml', 'sub', None]
+                assert gate_type in valid
                 self.gate_type = gate_type
             except AssertionError:
-                print('Invalid gate type, must be one of: threshold_1d, threshold_2d, cluster, deep_gate, geom')
+                print(f'Invalid gate type, must be one of: {valid}')
 
     def serialise(self):
         serialised = dict(gate_type=self.gate_type, populations=list())

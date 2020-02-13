@@ -237,6 +237,7 @@ class File(mongoengine.EmbeddedDocument):
     norm = mongoengine.EmbeddedDocumentField(Normalisation)
     compensated = mongoengine.BooleanField(default=False)
     channel_mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
+    batch = mongoengine.StringField(required=False)
 
     def pull(self, sample: int or None = None) -> np.array:
         """
