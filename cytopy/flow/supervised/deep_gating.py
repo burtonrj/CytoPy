@@ -1,5 +1,5 @@
 from cytopy.flow.supervised.cell_classifier import CellClassifier
-from keras.models import Model
+from keras.models import Sequential
 from keras.layers import Input, Dense
 from keras.models import load_model
 from keras.regularizers import l2
@@ -49,28 +49,27 @@ class DeepGating(CellClassifier):
     def build_model(self):
         # Expand labels, to work with sparse categorical cross entropy.
         if self.loss_func == 'sparse_categorical_crossentropy':
-            train_y = np.expand_dims(self.train_y, -1)
+            self.train_y = np.expand_dims(self.train_y, -1)
 
+        model = Sequential()
         # Construct a feed-forward neural network.
-        input_layer = Input(shape=(self.train_X.shape[1],))
-        hidden1 = Dense(self.hidden_layer_sizes[0], activation=self.activation_func,
-                        W_regularizer=l2(self.l2_penalty))(input_layer)
-        hidden2 = Dense(self.hidden_layer_sizes[1], activation=self.activation_func,
-                        W_regularizer=l2(self.l2_penalty))(hidden1)
-        hidden3 = Dense(self.hidden_layer_sizes[2], activation=self.activation_func,
-                        W_regularizer=l2(self.l2_penalty))(hidden2)
+        model.add(Input(shape=(self.train_X.shape[1],)))
+        model.add(Dense(self.hidden_layer_sizes[0], activation=self.activation_func,
+                        W_regularizer=l2(self.l2_penalty)))
+        model.add(Dense(self.hidden_layer_sizes[1], activation=self.activation_func,
+                        W_regularizer=l2(self.l2_penalty)))
+        model.add(Dense(self.hidden_layer_sizes[2], activation=self.activation_func,
+                        W_regularizer=l2(self.l2_penalty)))
         num_classes = len(np.unique(self.train_y)) - 1
-        output_layer = Dense(num_classes, activation=self.output_activation_func)(hidden3)
-
-        net = Model(input=input_layer, output=output_layer)
+        model.add(Dense(num_classes, activation=self.output_activation_func))
         optimizer = keras.optimizers.rmsprop(lr=0.0)
 
-        net.compile(optimizer=optimizer, loss=self.loss_func)
-        self.classifier = net
+        model.compile(optimizer=optimizer, loss=self.loss_func)
+        self.classifier = model
 
-    def _fit(self):
+    def _fit(self, x, y, **kwargs):
         lrate = LearningRateScheduler(step_decay)
-        self.classifier.fit(self.train_X, self.train_y, nb_epoch=80, batch_size=128, shuffle=True,
+        self.classifier.fit(x, y, nb_epoch=80, batch_size=128, shuffle=True,
                             validation_split=0.1, callbacks=[lrate, cb.EarlyStopping(monitor='val_loss',
                                                                                      patience=25, mode='auto')])
 
