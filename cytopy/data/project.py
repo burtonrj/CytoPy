@@ -89,6 +89,13 @@ class Project(mongoengine.Document):
         self.patients.append(new_subject)
         self.save()
 
+    def list_subjects(self):
+        return [p.subject_id for p in self.patients]
+
+    def pull_subject(self, subject_id):
+        assert subject_id in self.list_subjects(), f'Invalid subject ID, valid subjects: {self.list_subjects()}'
+        return [p for p in self.patients if p.subject_id == subject_id]
+
     def delete(self, *args, **kwargs):
         experiments = [self.load_experiment(e) for e in self.list_fcs_experiments()]
         for e in experiments:
@@ -96,4 +103,6 @@ class Project(mongoengine.Document):
             for s in samples:
                 e.remove_sample(s)
             e.delete()
+        for p in self.patients:
+            p.delete()
         super().delete(*args, **kwargs)

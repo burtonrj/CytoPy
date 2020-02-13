@@ -1,6 +1,8 @@
 from cytopy.data.fcs_experiments import FCSExperiment
+from cytopy.flow.read_write import FCSFile
 from cytopy.flow.gating.actions import Gating
 from cytopy.flow.supervised.utilities import scaler
+from multiprocessing import Pool, cpu_count
 from IPython import get_ipython
 from tqdm import tqdm_notebook, tqdm
 from sklearn.neighbors import BallTree, KernelDensity
@@ -8,6 +10,32 @@ from sklearn.model_selection import GridSearchCV
 from scipy.stats import entropy as kl_divergence
 import pandas as pd
 import numpy as np
+import os
+
+
+def fetch_mappings(path):
+    try:
+        fo = FCSFile(path)
+    except ValueError as e:
+        print(f'Failed to load file {path}; {e}')
+        return None
+    return fo.fluoro_mappings
+
+
+def inspect_channel_mappings(file_paths: list):
+    """
+    Given a list of file paths attaining to fcs files for inspection, return all permutations of
+    channel/marker mappings
+    Arguments:
+        - file_paths: list of valid file paths for fcs files
+    """
+    file_paths = [x for x in file_paths if os.path.splitext(x)[1] == '.fcs']
+    file_paths = [x for x in file_paths if os.path.isfile(x)]
+    pool = Pool(cpu_count())
+    mappings = pool.map(fetch_mappings, file_paths)
+    pool.close()
+    pool.join()
+    return [m for m in mappings if m]
 
 
 def which_environment():
