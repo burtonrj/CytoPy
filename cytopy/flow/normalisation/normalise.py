@@ -413,7 +413,8 @@ class EvaluateBatchEffects:
         if verbose:
             print('Calculating PDF for target...')
         if target_id not in self.kde_cache.keys():
-            target = self.data[target_id].values
+            target = self.data[target_id]
+            target = target.select_dtypes(include=['int16', 'int32', 'int64', 'float16', 'float32', 'float64']).values
             self.kde_cache[target_id] = kde_multivariant(target, bandwidth='cross_val', kernel=kde_kernel)
 
         # Calc PDF for other samples and calculate F-divergence
