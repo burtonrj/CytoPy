@@ -6,7 +6,9 @@ from functools import partial
 import numpy as np
 
 
-def calculate_ref_sample_fast(experiment, exclude_samples, sample_n):
+def calculate_ref_sample_fast(experiment, exclude_samples: list or None = None, sample_n=1000):
+    if exclude_samples is None:
+        exclude_samples = []
     print('-------- Calculating Reference Sample (Multi-processing) --------')
     # Calculate common features
     print('...match feature space between samples')
