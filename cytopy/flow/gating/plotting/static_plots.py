@@ -70,12 +70,13 @@ class Plot:
         backgate: overlay populations on some given 'parent' population. The parent is shown as a 2D histogram and
         overlaying population can be displayed as either a scatter plot or a geometric object (a 'gate')
     """
-    def __init__(self, gating_object):
+    def __init__(self, gating_object, default_axis):
         """
         Constructor for plotting class
         :param gating_object: Gating object to generate plots from
         """
         self.gating = gating_object
+        self.default_axis = default_axis
         self.colours = cycle(plt.get_cmap('tab20c').colors)
 
     def _get_gate_data(self, gate: Gate) -> dict:
@@ -130,13 +131,15 @@ class Plot:
         gate = self.gating.gates[gate_name]
         kwargs = {k: v for k, v in gate.kwargs}
 
-        y = 'FSC-A'
+        y = self.default_axis
         if 'y' in kwargs.keys():
             y = kwargs['y']
         axes_vars = {'x': kwargs['x'], 'y': y}
 
         if transforms is None:
-            transforms = dict(x='logicle', y='logicle')
+            xt = kwargs.get('transform_x', None)
+            yt = kwargs.get('transform_y', None)
+            transforms = dict(x=xt, y=yt)
             for a in ['x', 'y']:
                 if any([x in axes_vars[a] for x in ['FSC', 'SSC']]):
                     transforms[a] = None
@@ -404,7 +407,7 @@ class Plot:
         :param geom: gate geom
         :return: transformed dataframe
         """
-        x, y = geom['x'], geom['y'] or 'FSC-A'
+        x, y = geom['x'], geom['y'] or self.default_axis
         data = self.gating.get_population_df(node.name)[[x, y]]
         transform_x = geom.get('transform_x')
         transform_y = geom.get('transform_y')
@@ -433,7 +436,7 @@ class Plot:
         if geom.get('shape') == 'sml':
             geom = sml_plotting.get(node.name)
 
-        x, y = geom['x'], geom['y'] or 'FSC-A'
+        x, y = geom['x'], geom['y'] or self.default_axis
         data = self._get_data_transform(node, geom)
 
         ax = fig.add_subplot(4, 3, i)
