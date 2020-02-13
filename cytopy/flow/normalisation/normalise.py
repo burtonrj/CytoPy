@@ -1,6 +1,5 @@
 from cytopy.data.fcs_experiments import FCSExperiment
 from cytopy.data.fcs import Normalisation
-from cytopy.data.subject import Subject
 from cytopy.flow.gating.actions import Gating
 from cytopy.flow.normalisation.MMDResNet import MMDNet
 from cytopy.flow.supervised.ref import calculate_reference_sample
@@ -10,6 +9,8 @@ from multiprocessing import Pool, cpu_count
 from functools import partial
 from scipy.stats import entropy as kl
 from scipy.spatial.distance import jensenshannon as jsd
+from scipy.cluster import hierarchy
+from scipy.spatial import distance
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -204,8 +205,7 @@ class EvaluateBatchEffects:
         pool.join()
         return samples
 
-    def marker_variance(self, reference_id: str,
-                        markers: list, comparison_samples: list,
+    def marker_variance(self, reference_id: str, comparison_samples: list, markers: list or None = None,
                         figsize: tuple = (10, 10)):
         """
         For a given reference sample and a list of markers of interest, create a grid of KDE plots with the reference
@@ -217,13 +217,16 @@ class EvaluateBatchEffects:
         :return: Matplotlib figure
         """
         fig = plt.figure(figsize=figsize)
-        nrows = math.ceil(len(markers)/3)
         assert reference_id in self.sample_ids, 'Invalid reference ID for experiment currently loaded'
         assert all([x in self.sample_ids for x in comparison_samples]), 'Invalid sample IDs for experiment currently ' \
                                                                         'loaded'
         reference = self.data[reference_id]
         print('Plotting...')
         i = 0
+        if markers is None:
+            markers = reference.columns.tolist()
+        nrows = math.ceil(len(markers) / 3)
+        fig.suptitle(f'Per-channel KDE, Reference: {reference_id}', y=1.05)
         for marker in progress_bar(markers):
             i += 1
             if marker not in reference.columns:
@@ -231,12 +234,15 @@ class EvaluateBatchEffects:
             ax = fig.add_subplot(nrows, 3, i)
             ax = sns.kdeplot(reference[marker], shade=True, color="r", ax=ax)
             ax.set_title(f'Total variance in {marker}')
+            ax.set_xlim((0, max(reference[marker])))
             for d in comparison_samples:
                 d = self.data[d]
                 if marker not in d.columns:
                     continue
                 ax = sns.kdeplot(d[marker], color='b', shade=False, alpha=0.5, ax=ax)
                 ax.get_legend().remove()
+            ax.set(aspect='auto')
+        fig.tight_layout()
         fig.show()
 
     def dim_reduction_grid(self, reference_id, comparison_samples: list, features: list, figsize: tuple = (10, 10),
@@ -267,6 +273,7 @@ class EvaluateBatchEffects:
                                                       n_components=2,
                                                       return_reducer=True)
         i = 0
+        fig.suptitle(f'{method}, Reference: {reference_id}', y=1.05)
         for s in progress_bar(comparison_samples):
             i += 1
             df = self.data[s]
@@ -284,12 +291,16 @@ class EvaluateBatchEffects:
             ax.scatter(embeddings[:, 0], embeddings[:, 1], c='red', s=4, alpha=0.1)
             if kde:
                 sns.kdeplot(embeddings[:, 0], embeddings[:, 1], c='red', n_levels=100, ax=ax, shade=False)
+            ax.set_title(s)
+            ax.set_yticklabels([])
+            ax.set_xticklabels([])
+            ax.set(aspect='auto')
+        fig.tight_layout()
         fig.show()
 
-    def divergence_barplot(self, target_id: str, comparisons: list, root_population: str,
-                           sample_n: int = 10000, figsize: tuple = (8, 8),
-                           transform: str = 'logicle', scale: str or None = None,
-                           kde_kernel: str = 'gaussian', divergence_method: str = 'hellinger',
+    def divergence_barplot(self, target_id: str, comparisons: list,
+                           figsize: tuple = (8, 8),kde_kernel: str = 'gaussian',
+                           divergence_method: str = 'hellinger',
                            verbose: bool = False,
                            **kwargs):
         divergence = self.calc_divergence(target_id=target_id,
@@ -315,10 +326,12 @@ class EvaluateBatchEffects:
 
     def divergence_matrix(self, exclude: list or None = None, figsize: tuple = (12, 12),
                           kde_kernel: str = 'gaussian', divergence_method: str = 'jsd',
-                          **kwargs):
+                          clustering_method: str = 'average', **kwargs):
         """
         Generate a clustered heatmap of pairwise statistical distance comparisons. This can be used to find
         samples of high similarity and conversely demonstrates samples that greatly differ.
+        Returns a linkage matrix that can be given to scipy.cluster.hierarchy.cut_tree to subset samples.
+        Also returns Seaborn ClusterGrid instance.
         :param exclude: list of sample IDs to be omitted from plot
         :param figsize: size of resulting Seaborn clusterplot figure
         :param kde_kernel: name of kernel to use for density estimation (default = 'gaussian')
@@ -326,15 +339,16 @@ class EvaluateBatchEffects:
             *jsd: squared Jensen-Shannon Divergence (default)
             *kl: Kullback–Leibler divergence (relative entropy); warning, asymmetrical
             *hellinger: squared Hellinger Divergence
+        :param clustering_method: method for hierarchical clustering, see scipy.cluster.hierarchy.linkage for details
         :param kwargs: additional keyword arguments to be passed to Seaborn ClusterPlot
         (seaborn.pydata.org/generated/seaborn.clustermap.html#seaborn.clustermap)
-        :return: Seaborn ClusterGrid instance
+        :return: (hierarchical clustering encoded as a linkage matrix, array of sample IDs, Seaborn ClusterGrid instance)
         """
         samples = self.sample_ids
         if exclude is not None:
             samples = [s for s in samples if s not in exclude]
         divergence_df = pd.DataFrame()
-
+        # Generate divergence matrix
         for s in progress_bar(samples):
             divergence = self.calc_divergence(target_id=s,
                                               kde_kernel=kde_kernel,
@@ -348,13 +362,26 @@ class EvaluateBatchEffects:
             hd_['sample_id'] = s
             divergence_df = pd.concat([divergence_df, hd_])
 
+        # Perform hierarchical clustering
+        r = divergence_df.drop('sample_id', axis=1).values
+        c = divergence_df.drop('sample_id', axis=1).T.values
+        row_linkage = hierarchy.linkage(distance.pdist(r), method=clustering_method)
+        col_linkage = hierarchy.linkage(distance.pdist(c), method=clustering_method)
+
         if divergence_method == 'jsd':
             center = 0.5
         else:
             center = 0
-        return sns.clustermap(divergence_df.set_index('sample_id'),
-                              center=center, cmap="vlag", linewidths=.75,
-                              figsize=figsize, **kwargs)
+        g = sns.clustermap(divergence_df.set_index('sample_id'),
+                           row_linkage=row_linkage, col_linkage=col_linkage,
+                           method=clustering_method,
+                           center=center, cmap="vlag",
+                           figsize=figsize, xticklabels=False,
+                           yticklabels=False, **kwargs)
+        ax = g.ax_heatmap
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+        return row_linkage, divergence_df.sample_id.values, g
 
     def calc_divergence(self, target_id: str, comparisons: list, kde_kernel: str = 'gaussian',
                         divergence_method: str = 'jsd', verbose: bool = False) -> np.array:

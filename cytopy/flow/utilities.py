@@ -87,9 +87,13 @@ def jsd_divergence(p, q):
 
 
 def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
-                     bandwidth_search: tuple = (0.01, 0.5), x_grid_n: int or None = 1000, **kwargs):
+                     bandwidth_search: list or None = None, x_grid_n: int or None = 1000, **kwargs):
     if type(bandwidth) == str:
         assert bandwidth == 'cross_val', 'Invalid input for bandwidth, must be either float or "cross_val"'
+        if bandwidth_search is None:
+            bandwidth_search = [np.quantile(x, 0.05), np.quantile(x, 0.95)]
+            if bandwidth_search == 0:
+                bandwidth_search[0] = 0.01
         grid = GridSearchCV(KernelDensity(),
                             {'bandwidth': np.linspace(bandwidth_search[0], bandwidth_search[1], 30)},
                             cv=20)
@@ -105,7 +109,7 @@ def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
     return np.exp(log_pdf)
 
 
-def load_and_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str,
+def load_and_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str or None,
                        scale: str or None = None, sample_n: int or None = None) -> pd.DataFrame or None:
     """
     Standard function for loading data from an experiment, transforming, scaling, and sampling.
@@ -118,10 +122,15 @@ def load_and_transform(sample_id: str, experiment: FCSExperiment, root_populatio
     :return:
     """
     gating = Gating(experiment=experiment, sample_id=sample_id, include_controls=False)
-    data = gating.get_population_df(root_population,
-                                    transform=True,
-                                    transform_method=transform,
-                                    transform_features='all')
+    if transform is None:
+        data = gating.get_population_df(root_population,
+                                        transform=False,
+                                        transform_features='all')
+    else:
+        data = gating.get_population_df(root_population,
+                                        transform=True,
+                                        transform_method=transform,
+                                        transform_features='all')
     if scale is not None:
         data = scaler(data, scale_method=scale)[0]
     if data is None:
