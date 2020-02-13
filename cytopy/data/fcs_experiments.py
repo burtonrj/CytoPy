@@ -7,7 +7,6 @@ from cytopy.flow.read_write import FCSFile
 from multiprocessing import Pool, cpu_count
 from functools import partial
 import mongoengine
-import numpy as np
 
 
 class FCSExperiment(mongoengine.Document):
@@ -204,7 +203,11 @@ class FCSExperiment(mongoengine.Document):
         :param control: if True, File will be created as file type 'control'
         :return: File Object
         """
-        fcs = FCSFile(path, comp_matrix=comp_matrix)
+        try:
+            fcs = FCSFile(path, comp_matrix=comp_matrix)
+        except ValueError as e:
+            print(f'Unable to load data from {path}; encountered the following exception: {e}')
+            return None
         new_file = File()
         new_file.file_id = file_id
         if compensate:
