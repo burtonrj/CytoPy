@@ -88,3 +88,12 @@ class Project(mongoengine.Document):
         new_subject.save()
         self.patients.append(new_subject)
         self.save()
+
+    def delete(self, *args, **kwargs):
+        experiments = [self.load_experiment(e) for e in self.list_fcs_experiments()]
+        for e in experiments:
+            samples = e.list_samples()
+            for s in samples:
+                e.remove_sample(s)
+            e.delete()
+        super().delete(*args, **kwargs)
