@@ -107,7 +107,8 @@ def create_reference_sample(experiment: FCSExperiment,
                             new_file_name: str or None = None,
                             sampling_method: str = 'uniform',
                             sample_n: int = 1000,
-                            sample_frac: float or None = None) -> None:
+                            sample_frac: float or None = None,
+                            include_population_labels: bool = False) -> None:
     """
     Given some experiment and a root population that is common to all fcs file groups within this experiment, take
     a sample from each and create a new file group from the concatenation of these data. New file group will be created
@@ -144,13 +145,15 @@ def create_reference_sample(experiment: FCSExperiment,
                                           experiment.panel)
     files = [f for f in experiment.list_samples() if f not in exclude]
     data = pd.DataFrame()
+    if include_population_labels:
+        features.append('label')
     for f in files:
         print(f'Sampling {f}...')
         g = Gating(experiment, f, include_controls=False)
         if root_population not in g.populations.keys():
             print(f'Skipping {f} as {root_population} is absent from gated populations')
             continue
-        df = g.get_population_df(root_population)[features]
+        df = g.get_population_df(root_population, label=include_population_labels)[features]
         data = pd.concat([data, sample(df)])
     data = data.reset_index(drop=True)
     print('Sampling complete!')
@@ -160,13 +163,24 @@ def create_reference_sample(experiment: FCSExperiment,
                     compensated=True,
                     channel_mappings=channel_mappings)
     print('Inserting sampled data to database...')
-    new_file.put(data.values)
+    new_file.put(data[[f for f in features if f != 'label']].values)
     new_filegroup.files.append(new_file)
     root_p = Population(population_name='root',
                         prop_of_parent=1.0, prop_of_total=1.0,
                         warnings=[], geom=[['shape', None], ['x', 'FSC-A'], ['y', 'SSC-A']])
     root_p.save_index(data.index.values)
     new_filegroup.populations.append(root_p)
+    if include_population_labels:
+        print('Warning: new concatenated sample will inherit population labels but NOT gates or '
+              'population hierarchy')
+        for pop in data.label.unique():
+            idx = data[data.label == pop].index.values
+            n = len(idx)
+            p = Population(population_name=pop, prop_of_parent=n/data.shape[0],
+                           prop_of_total=n/data.shape[0], warnings=[], parent='root',
+                           geom=[['shape', None], ['x', 'FSC-A'], ['y', 'SSC-A']])
+            p.save_index(idx)
+            new_filegroup.populations.append(p)
     print('Saving changes...')
     mid = new_filegroup.save()
     experiment.fcs_files.append(new_filegroup)
