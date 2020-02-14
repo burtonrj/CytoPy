@@ -376,8 +376,7 @@ class EvaluateBatchEffects:
                            row_linkage=row_linkage, col_linkage=col_linkage,
                            method=clustering_method,
                            center=center, cmap="vlag",
-                           figsize=figsize, xticklabels=False,
-                           yticklabels=False, **kwargs)
+                           figsize=figsize, **kwargs)
         ax = g.ax_heatmap
         ax.set_xlabel('')
         ax.set_ylabel('')
