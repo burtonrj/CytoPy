@@ -199,7 +199,8 @@ class Gating:
 
     def get_population_df(self, population_name: str, transform: bool = False,
                           transform_method: str = 'logicle',
-                          transform_features: list or str = 'all') -> pd.DataFrame or None:
+                          transform_features: list or str = 'all',
+                          label: bool =False) -> pd.DataFrame or None:
         """
         Retrieve a population as a pandas dataframe
         :param population_name: name of population to retrieve
@@ -216,6 +217,11 @@ class Gating:
             return None
         idx = self.populations[population_name].index
         data = self.data.loc[idx]
+        if label:
+            data['label'] = None
+            dependencies = self.find_dependencies(population_name)
+            for pop in dependencies:
+                data.loc[self.populations[pop].index, 'label'] = pop
         if transform:
             return apply_transform(data, features_to_transform=transform_features, transform_method=transform_method)
         return data
