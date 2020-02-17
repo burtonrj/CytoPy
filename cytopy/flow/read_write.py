@@ -19,7 +19,7 @@ def chunks(df_list: list, n: int) -> pd.DataFrame:
         yield df_list[i:i + n]
 
 
-def fcs_mappings(path:str) -> list or None:
+def fcs_mappings(path: str) -> list or None:
     """
     Fetch channel mappings from fcs file.
     :param path: path to fcs file
@@ -50,11 +50,29 @@ def explore_channel_mappings(fcs_dir: str, exclude_comps: bool = True) -> list:
 
 class FCSFile:
     """
-    Utilising FlowIO generate an object for representing an FCS file
-    :param filepath: location of fcs file to parse
-    :param: comp_matrix: csv file containing compensation matrix (optional, not required if a
-    spillover matrix is already linked to the file)
-    :return: FCSfile object
+    Utilising FlowIO to generate an object for representing an FCS file
+    Arguments:
+        - filepath: location of fcs file to parse
+        - comp_matrix: csv file containing compensation matrix (optional, not required if a
+        spillover matrix is already linked to the file)
+    Attributes:
+        filename - embedded filenae
+        sys - name of system data acquired on
+        total_events - total events measured
+        tube_name - name of tube during acquisition
+        exp_name - name of experiment during acquisition
+        cytometer - name of Cytometer
+        creator - name of user that generated fcs file
+        fluoro_mappings - list of channel:marker mappings (list of dictionary objects)
+        cst_pass - True is CS&T registered as successful on day of acquisition
+        data - raw events data
+        event_data - numpy array of events data
+        dataframe - Pandas DataFrame of events data
+        threshold - threshold applied to each channel (list of dictionary {channel : threshold})
+        processing date - date data was acquired
+        spill - Pandas DataFrame corresponding to spillover matrix
+    Methods:
+        compensate - using embedded spillover matrix or provided spillover matrix, compensate the data
     """
     def __init__(self, filepath, comp_matrix=None):
         fcs = flowio.FlowData(filepath)
@@ -66,7 +84,7 @@ class FCSFile:
         self.cytometer = fcs.text.get('cyt', 'Unknown')
         self.creator = fcs.text.get('creator', 'Unknown')
         self.operator = fcs.text.get('export user name', 'Unknown')
-        self.fluoro_mappings = self.__get_fluoro_mapping(fcs.channels)
+        self.fluoro_mappings = self._get_fluoro_mapping(fcs.channels)
         self.cst_pass = False
         self.data = fcs.events
         self.event_data = np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count))
@@ -87,7 +105,7 @@ class FCSFile:
                 if(len(fcs.text['spill'])) < 1:
                     raise KeyError("""Error: no spillover matrix found, please provide
                     path to relevant csv file with 'comp_matrix' argument""")
-                self.spill = self.__get_spill_matrix(fcs.text['spill'])
+                self.spill = self._get_spill_matrix(fcs.text['spill'])
             except AssertionError:
                 self.spill = None
         if 'cst_setup_status' in fcs.text:
@@ -100,7 +118,7 @@ class FCSFile:
         return pd.DataFrame(self.event_data, columns=columns)
 
     @staticmethod
-    def __get_fluoro_mapping(fluoro_dict):
+    def _get_fluoro_mapping(fluoro_dict: dict) -> list:
         """
         Generates a list of dictionary objects that describe the fluorochrome mappings in this FCS file
         :param fluoro_dict: dictionary object from the channels param of the fcs file
@@ -119,7 +137,7 @@ class FCSFile:
         return mappings
 
     @staticmethod
-    def __get_spill_matrix(matrix_string: str) -> pd.DataFrame:
+    def _get_spill_matrix(matrix_string: str) -> pd.DataFrame:
         """
         Generate pandas dataframe for the fluorochrome spillover matrix used for compensation calc
         :param matrix_string: string value extracted from the 'spill' parameter of the FCS file
