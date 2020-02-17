@@ -11,3 +11,4 @@ temp_data
 build
 deepcytof_local
 BatchEffectRemoval_Local
+*.bin
