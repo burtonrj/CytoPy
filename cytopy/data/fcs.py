@@ -20,7 +20,7 @@ class ClusteringDefinition(mongoengine.Document):
         root_population [str] - population that clustering is performed on (default = 'root')
         cluster_prefix [str] - a prefix to add to the name of each resulting cluster
         meta_method [bool] - refers to whether the clustering is 'meta-clustering'
-        meta_clustering_uid_target - clustering_uid for clustering definition that meta-clustering should target
+        meta_clustering_uid_target [str] - clustering_uid for clustering definition that meta-clustering should target
         in each sample
     """
     clustering_uid = mongoengine.StringField(required=True, unique=True)
@@ -63,6 +63,11 @@ class Cluster(mongoengine.EmbeddedDocument):
     meta_cluster_id = mongoengine.StringField(required=False)
 
     def save_index(self, data: np.array) -> None:
+        """
+        Save the index of data that corresponds to cells belonging to this cluster
+        :param data: Numpy array of single cell events data
+        :return: None
+        """
         if self.index:
             self.index.replace(Binary(pickle.dumps(data, protocol=2)))
         else:
@@ -71,6 +76,10 @@ class Cluster(mongoengine.EmbeddedDocument):
             self.index.close()
 
     def load_index(self) -> np.array:
+        """
+        Load the index of data that corresponds to cells belonging to this cluster
+        :return: Numpy array of single cell events data
+        """
         return pickle.loads(bytes(self.index.read()))
 
 
@@ -112,6 +121,11 @@ class Population(mongoengine.EmbeddedDocument):
     clusters = mongoengine.ListField() # NEEDS REMOVING
 
     def save_index(self, data: np.array) -> None:
+        """
+        Given a new numpy array of index values, serialise and commit data to database
+        :param data: numpy array of index values
+        :return: None
+        """
         if self.index:
             self.index.replace(Binary(pickle.dumps(data, protocol=2)))
         else:
@@ -120,43 +134,89 @@ class Population(mongoengine.EmbeddedDocument):
             self.index.close()
 
     def load_index(self) -> np.array:
+        """
+        Retrieve the index values for the given population
+        :return: Numpy array of index values
+        """
         return pickle.loads(bytes(self.index.read()))
 
     def to_python(self) -> dict:
+        """
+        Generate a python dictionary object for this population
+        :return: Dictionary representation of population document
+        """
         geom = {k: v for k, v in self.geom}
         population = dict(name=self.population_name, prop_of_parent=self.prop_of_parent,
                           prop_of_total=self.prop_of_total, warnings=self.warnings, geom=geom,
                           parent=self.parent, index=self.load_index())
         return population
 
-    def list_clustering_experiments(self):
+    def list_clustering_experiments(self) -> list:
+        """
+        Generate a list of clustering experiment UIDs
+        :return: List of clustering experiment UIDs
+        """
         return [c.cluster_experiment.clustering_uid for c in self.clustering]
 
-    def pull_clusters(self, clustering_uid: str):
+    def pull_clusters(self, clustering_uid: str) -> list:
+        """
+        Given a clustering UID return the associated clusters
+        :param clustering_uid: UID for clusters to fetch
+        :return: List of cluster documents
+        """
         if clustering_uid not in self.list_clustering_experiments():
             raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
         return [c for c in self.clustering if c.cluster_experiment.clustering_uid == clustering_uid]
 
-    def delete_clusters(self, clustering_uid: str):
+    def delete_clusters(self, clustering_uid: str) -> None:
+        """
+        Given a clustering UID, remove associated clusters
+        :param clustering_uid: UID for clusters to be removed
+        :return: None
+        """
         if clustering_uid not in self.list_clustering_experiments():
             raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
         self.clustering = [c for c in self.clustering if c.cluster_experiment.clustering_uid != clustering_uid]
 
-    def replace_cluster_experiment(self, current_uid: str, new_cluster_definition: ClusteringDefinition):
+    def replace_cluster_experiment(self, current_uid: str, new_cluster_definition: ClusteringDefinition) -> None:
+        """
+        Given a clustering UID and new clustering definition, replace the clustering definition
+        for all associated clusters
+        :param current_uid: UID for clusters to be updated
+        :param new_cluster_definition: New clustering definition
+        :return: None
+        """
         for c in self.clustering:
             if c.cluster_experiment.clustering_uid == current_uid:
                 c.cluster_experiment = new_cluster_definition
 
-    def update_cluster(self, cluster_id: str, new_cluster: Cluster):
+    def update_cluster(self, cluster_id: str, new_cluster: Cluster) -> None:
+        """
+        Given the ID for a specific cluster, replace the cluster with a new Cluster document
+        :param cluster_id: Cluster ID for cluster to replace
+        :param new_cluster: Cluster document to use for updating cluster
+        :return: None
+        """
         self.clustering = [c for c in self.clustering if c.cluster_id != cluster_id]
         self.clustering.append(new_cluster)
 
-    def list_clusters(self, meta: bool = True):
+    def list_clusters(self, meta: bool = True) -> set:
+        """
+        Returns a set of all existing clusters.
+        :param meta: If True, search is isolated to meta-clusters
+        :return: Set of cluster IDs
+        """
         if meta:
             return set([c.meta_cluster_id for c in self.clustering])
         return set([c.cluster_id for c in self.clustering])
 
-    def pull_cluster(self, cluster_id: str, meta: bool = True):
+    def pull_cluster(self, cluster_id: str, meta: bool = True) -> (Cluster, np.array):
+        """
+        Given a cluster ID return the Cluster document and Array of index values
+        :param cluster_id: ID for cluster to pull from database
+        :param meta: If True, search will be isolated to clusters associated to a meta cluster ID
+        :return: Cluster Document, Array of index values
+        """
         if meta:
             clusters = [c for c in self.clustering if c.meta_cluster_id == cluster_id]
             assert clusters, f'No such cluster(s) with meta clustering ID {cluster_id}'
@@ -255,7 +315,6 @@ class File(mongoengine.EmbeddedDocument):
         """
         Save events data to database
         :param data: numpy array of events data
-        :param typ: type of data; either `data` (raw) or `norm` (normalised)
         :return: None
         """
         if self.data:
@@ -285,6 +344,7 @@ class FileGroup(mongoengine.Document):
         update_population - update an existing population with a new Population document
         delete_gates - delete gates
         validity - search flags for the 'invalid', returns False if found
+        pull_population - retrieve a population document from database
     """
     primary_id = mongoengine.StringField(required=True)
     files = mongoengine.EmbeddedDocumentListField(File)
@@ -346,6 +406,11 @@ class FileGroup(mongoengine.Document):
         return True
 
     def pull_population(self, population_name: str) -> Population:
+        """
+        Retrieve a population from the database
+        :param population_name: name of population to pull
+        :return: Population document
+        """
         p = [p for p in self.populations if p.population_name == population_name]
         assert p, f'Population {population_name} does not exist'
         return p[0]
