@@ -18,9 +18,13 @@ class Project(mongoengine.Document):
         add_experiment - create new experiment and associate to project
         load_experiment - For a given experiment in project, return the experiment object
         list_fcs_experiments - generate a list of IDs for fcs experiments associated to this project
+        add_subject - create a new subject and associated to project
+        list_subjects - generate a list of subject ID for all subjects associated to project
+        pull_subject -given a subject ID, pull the subject document for corresponding subject
+        delete - delete project (wraps parent call to delete, see mongoengine.Document.delete)
     """
     project_id = mongoengine.StringField(required=True, unique=True)
-    patients = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
+    subjects = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
     start_date = mongoengine.DateTimeField(default=datetime.datetime.now)
     owner = mongoengine.StringField(requred=True)
     fcs_experiments = mongoengine.ListField(mongoengine.ReferenceField(FCSExperiment, reverse_delete_rule=4))
@@ -77,7 +81,17 @@ class Project(mongoengine.Document):
                     drug_data: list or None = None,
                     infection_data: list or None = None,
                     patient_biology: list or None = None,
-                    **kwargs):
+                    **kwargs) -> None:
+        """
+        Create a new subject and associated to project; a subject is an individual element of a study
+        e.g. a patient or a mouse
+        :param subject_id: subject ID for the new subject
+        :param drug_data: list of Drug documents to associated to subject (see cytopy.data.subject.Drug)
+        :param infection_data: list of Bug documents to associated to subject (see cytopy.data.subject.Bug)
+        :param patient_biology: list of Biology documents to associated to subject (see cytopy.data.subject.Biology)
+        :param kwargs: addiitonal keyword arguments to pass to Subject initialisation (see cytopy.data.subject.Subject)
+        :return: None
+        """
         new_subject = Subject(subject_id=subject_id, **kwargs)
         if drug_data is not None:
             new_subject.drug_data = drug_data
@@ -86,23 +100,38 @@ class Project(mongoengine.Document):
         if patient_biology is not None:
             new_subject.patient_biology = patient_biology
         new_subject.save()
-        self.patients.append(new_subject)
+        self.subjects.append(new_subject)
         self.save()
 
-    def list_subjects(self):
-        return [p.subject_id for p in self.patients]
+    def list_subjects(self) -> list:
+        """
+        Generate a list of subject ID for subjects associated to this project
+        :return: List of subject IDs
+        """
+        return [p.subject_id for p in self.subjects]
 
-    def pull_subject(self, subject_id):
+    def pull_subject(self, subject_id: str) -> Subject:
+        """
+        Given a subject ID associated to Project, return the Subject document
+        :param subject_id: subject ID to pull
+        :return: Subject document
+        """
         assert subject_id in self.list_subjects(), f'Invalid subject ID, valid subjects: {self.list_subjects()}'
-        return [p for p in self.patients if p.subject_id == subject_id]
+        return [p for p in self.subjects if p.subject_id == subject_id][0]
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args, **kwargs) -> None:
+        """
+        Delete project (wrapper function of mongoengine.Document.delete)
+        :param args: positional arguments to pass to parent call (see mongoengine.Document.delete)
+        :param kwargs: keyword arguments to pass to parent call (see mongoengine.Document.delete)
+        :return: None
+        """
         experiments = [self.load_experiment(e) for e in self.list_fcs_experiments()]
         for e in experiments:
             samples = e.list_samples()
             for s in samples:
                 e.remove_sample(s)
             e.delete()
-        for p in self.patients:
+        for p in self.subjects:
             p.delete()
         super().delete(*args, **kwargs)
