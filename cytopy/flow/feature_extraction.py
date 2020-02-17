@@ -55,9 +55,8 @@ class Extract:
             data and the CDF of the FMO; this provides a statistical comparison between the populations and indicates
             if the removal of the fluorochrome significantly changes the distribution
             * Fold change in MFI: the fold change in MFI in the FMO data relative to the sample data
-            * KL Divergence: the
-
-
+            * KL Divergence: using the KL statistical distance measure, calculate the 'distance' between the PDF of
+            the FMO and the primary PDF
     """
     def __init__(self, sample_id: str, experiment: FCSExperiment,
                  clustering_definition: ClusteringDefinition,
@@ -202,6 +201,19 @@ class Extract:
         return np.mean(x)-np.mean(y)/np.mean(x)
 
     def fmo_stats_1d(self, populations: list):
+        """
+        Calculate descriptive statistics using FMO data for a 1-dimensional population. Target population will be
+        identified for each available FMO and used to compute differences between primary data and control.
+        The following are generated:
+            * Kolmogorov–Smirnov test statistic and p-value: quantifies the distance between the EDF of the sample
+            data and the CDF of the FMO; this provides a statistical comparison between the populations and indicates
+            if the removal of the fluorochrome significantly changes the distribution
+            * Fold change in MFI: the fold change in MFI in the FMO data relative to the sample data
+            * KL Divergence: using the KL statistical distance measure, calculate the 'distance' between the PDF of
+            the FMO and the primary PDF
+        :param populations: Name of target population
+        :return: None
+        """
         assert self.include_controls, 'include_controls currently set to False, reinitialise object with argument ' \
                                       'set to True to include FMO data'
         for fmo_id in self.gating.fmo.keys():
@@ -229,9 +241,18 @@ class Extract:
         if self.verbose:
             print('...Completed!')
 
-    def fmo_stats_multiple(self, fmo: list, population: str, transform: str = 'logicle'):
+    def fmo_stats_multiple(self, fmo: list, population: str, features: list):
+        """
+        Calculate descriptive statistics using FMO data for a population in multiple dimensions. Target population will be
+        identified for the FMO and then the centroid of the target population in
+        :param population: Name of target population
+        :param fmo: list of FMO controls to investigate
+        :param features: dimensions to perform calculation in
+        :return: None
+        """
         assert self.include_controls, 'include_controls currently set to False, reinitialise object with argument ' \
                                       'set to True to include FMO data'
+        assert features in self.gating.data.columns, f'Invalid features specified, must be one of {self.gating.data.colums.tolist()}'
         if not self.gating.fmo.keys():
             if self.verbose:
                 print(f'{self.gating.id} has no associated FMOs, aborting')
@@ -245,7 +266,7 @@ class Extract:
             print('...calculating summary of multi-dimensional FMO topology')
         whole_data = self.raw_data.loc[self.gated_populations.get(population).index, :]
         fmo_data = {name: apply_transform(self.gating.get_fmo_data(population, name, self.sml_profiles),
-                                          transform_method=transform)
+                                          transform_method=self.transform)
                     for name in fmo}
         centroids = {name: data[fmo].median() for name, data in fmo_data.items()}
         euclidean_dist = {name: np.linalg.norm(whole_data[fmo].median - c) for name, c in centroids.items()}
