@@ -223,7 +223,7 @@ class Panel(mongoengine.Document):
         return True
 
     @staticmethod
-    def __query(x: str or None, ref: list, e: bool) -> str or None and bool:
+    def _query(x: str or None, ref: list, e: bool) -> str or None and bool:
         """
         Internal static method for querying a channel/marker against a reference list
         :param x: channel/marker to query
@@ -243,7 +243,7 @@ class Panel(mongoengine.Document):
             return x, e
         return corrected[0], e
 
-    def __check_pairing(self, channel: str, marker: str or None) -> bool:
+    def _check_pairing(self, channel: str, marker: str or None) -> bool:
         """
         Internal method. Given a channel and marker check that a valid pairing exists for this panel.
         :param channel: channel for checking
@@ -257,7 +257,7 @@ class Panel(mongoengine.Document):
         return True
 
     @staticmethod
-    def __check_duplication(x: list) -> bool:
+    def _check_duplication(x: list) -> bool:
         """
         Internal method. Given a list check for duplicates. Duplicates are printed.
         :param x:
@@ -285,10 +285,10 @@ class Panel(mongoengine.Document):
                 if channel.isspace():
                     channel = None
                 else:
-                    channel, err = self.__query(channel, self.channels, err)
+                    channel, err = self._query(channel, self.channels, err)
             # Normalise marker
             if marker:
-                marker, err = self.__query(marker, self.markers, err)
+                marker, err = self._query(marker, self.markers, err)
             else:
                 # If marker is None, default to that assigned by panel
                 default = [x for x in self.mappings if x.channel == channel]
@@ -299,16 +299,16 @@ class Panel(mongoengine.Document):
                 else:
                     marker = default[0].marker
             # Check channel/marker pairing is correct
-            if not self.__check_pairing(channel, marker):
+            if not self._check_pairing(channel, marker):
                 print(f'The channel/marker pairing {channel}/{marker} does not correspond to any defined in panel')
                 err = True
             new_column_mappings.append((channel, marker))
         # Check for duplicate channels/markers
         channels = [c for c, _ in new_column_mappings]
-        if self.__check_duplication(channels):
+        if self._check_duplication(channels):
             err = True
         markers = [m for _, m in new_column_mappings]
-        if self.__check_duplication(markers):
+        if self._check_duplication(markers):
             err = True
         # Check for missing channels
         for x in self.channels:
