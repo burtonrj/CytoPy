@@ -7,23 +7,30 @@ import pandas as pd
 import json
 
 
-def chunks(l, n):
+def chunks(df_list: list, n: int) -> pd.DataFrame:
     """
     Yield successive n-sized chunks from l.
     ref: https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks
+    :param df_list: list of dataframes to generated 'chunks' from
+    :param n: number of chunks to generate
+    :return: Yields successive n-sized DataFrames
     """
-    for i in range(0, len(l), n):
-        yield l[i:i + n]
+    for i in range(0, len(df_list), n):
+        yield df_list[i:i + n]
 
 
-def fcs_mappings(file_path: str) -> list:
+def fcs_mappings(path:str) -> list or None:
     """
-    Given a file path, load as an FCSFile object and return the channel/marker mappings
-    :param file_path:
-    :return: list of dictionary objects; each a channel/marker pair
+    Fetch channel mappings from fcs file.
+    :param path: path to fcs file
+    :return: List of channel mappings. Will return None if file fails to load.
     """
-    fcs = FCSFile(file_path)
-    return fcs.fluoro_mappings
+    try:
+        fo = FCSFile(path)
+    except ValueError as e:
+        print(f'Failed to load file {path}; {e}')
+        return None
+    return fo.fluoro_mappings
 
 
 def explore_channel_mappings(fcs_dir: str, exclude_comps: bool = True) -> list:
