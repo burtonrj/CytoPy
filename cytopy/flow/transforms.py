@@ -66,7 +66,15 @@ def apply_transform(data: pd.DataFrame, features_to_transform: list or str = 'al
                          " 'asinh', 'percentile rank', 'Yeo-Johnson', 'RobustScale'")
 
 
-def sklearn_scaler(data, features_to_transform, scale_method, **kwargs):
+def sklearn_scaler(data: pd.DataFrame, features_to_transform: list, scale_method: str, **kwargs) -> pd.DataFrame:
+    """
+    Wrapper function for transforming single cell data using Sklearn scaler functions
+    :param data: dataframe of data to apply scale function too
+    :param features_to_transform: list of features (columns) to scale
+    :param scale_method: name of scaler method to use (see cytopy.flow.supervised.utilities.scaler_for available methods)
+    :param kwargs: keyword arguments to pass to scaler function (see cytopy.flow.supervised.utilities.scaler)
+    :return: DataFrame with scaler applied
+    """
     data = data.copy()
     transform, _ = scaler(data[features_to_transform], scale_method=scale_method, **kwargs)
     data[features_to_transform] = transform
