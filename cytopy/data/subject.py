@@ -10,7 +10,7 @@ class MetaDataDictionary(mongoengine.Document):
 
     Attributes:
         key - name of meta-data (column name)
-        desc - string value of wrriten description
+        desc - string value of writen description
     """
     key = mongoengine.StringField()
     desc = mongoengine.StringField()
@@ -162,16 +162,16 @@ class Subject(mongoengine.DynamicDocument):
     }
 
 
-def gram_status(patient: Subject) -> str:
+def gram_status(subject: Subject) -> str:
     """
-    Given an instance of Patient, return the gram status of isolated organisms.
+    Given an instance of Subject, return the gram status of isolated organisms.
     Where multiple organisms are found, if gram status differs amongst orgs, returns 'mixed'
-    :param patient:
-    :return: String (P+ve, N+ve, Unknown, or Mixed)
+    :param subject: Subject document
+    :return: String value for gram status
     """
-    if not patient.infection_data:
+    if not subject.infection_data:
         return 'Unknown'
-    orgs = [b.gram_status for b in patient.infection_data]
+    orgs = [b.gram_status for b in subject.infection_data]
     if not orgs:
         return 'Unknown'
     if len(orgs) == 1:
@@ -179,22 +179,22 @@ def gram_status(patient: Subject) -> str:
     return 'Mixed'
 
 
-def bugs(patient: Subject, multi_org: str, short_name: bool = False) -> str:
+def bugs(subject: Subject, multi_org: str, short_name: bool = False) -> str:
     """
     Fetch the name of isolated organisms for each patient.
     :param short_name: If True, the shortened name rather than whole latin name is returned
-    :param patient: Patient model object
+    :param subject: Patient model object
     :param multi_org: If 'multi_org' equals 'list' then multiple organisms will be stored as a comma separated list
     without duplicates, whereas if the value is 'mixed' then multiple organisms will result in a value of 'mixed'.
-    :return: string of isolated organisms comma seperated, or 'mixed' if multi_org == 'mixed' and multiple organisms
+    :return: string of isolated organisms comma separated, or 'mixed' if multi_org == 'mixed' and multiple organisms
     listed for patient
     """
-    if not patient.infection_data:
+    if not subject.infection_data:
         return 'Unknown'
     if short_name:
-        orgs = [b.short_name for b in patient.infection_data]
+        orgs = [b.short_name for b in subject.infection_data]
     else:
-        orgs = [b.org_name for b in patient.infection_data]
+        orgs = [b.org_name for b in subject.infection_data]
     if not orgs:
         return 'Unknown'
     if len(orgs) == 1:
@@ -204,11 +204,11 @@ def bugs(patient: Subject, multi_org: str, short_name: bool = False) -> str:
     return 'mixed'
 
 
-def org_type(patient: Subject) -> str:
+def org_type(subject: Subject) -> str:
     """
     Parse all infectious isolates for each patient and return the organism type isolated, one of either:
     'gram positive', 'gram negative', 'virus', 'mixed' or 'fungal'
-    :param patient: Patient model object
+    :param subject: Patient model object
     :return: common organism type isolated for patient
     """
 
@@ -219,7 +219,7 @@ def org_type(patient: Subject) -> str:
             return b.gram_status
         return b.organism_type
 
-    bugs = list(set(map(bug_type, patient.infection_data)))
+    bugs = list(set(map(bug_type, subject.infection_data)))
     if len(bugs) == 0:
         return 'Unknown'
     if len(bugs) == 1:
@@ -227,34 +227,34 @@ def org_type(patient: Subject) -> str:
     return 'mixed'
 
 
-def hmbpp_ribo(patient: Subject, field: str) -> str:
+def hmbpp_ribo(subject: Subject, field: str) -> str:
     """
     Given a value of either 'hmbpp' or 'ribo' for 'field' argument, return True if any Bug has a positive status
     for the given patient ID.
-    :param patient: Patient model object
+    :param subject: Patient model object
     :param field: field name to search for; expecting either 'hmbpp_status' or 'ribo_status'
     :return: common value of hmbpp_status/ribo_status
     """
-    if all([b[field] is None for b in patient.infection_data]):
+    if all([b[field] is None for b in subject.infection_data]):
         return 'Unknown'
-    if all([b[field] == 'P+ve' for b in patient.infection_data]):
+    if all([b[field] == 'P+ve' for b in subject.infection_data]):
         return 'P+ve'
-    if all([b[field] == 'N-ve' for b in patient.infection_data]):
+    if all([b[field] == 'N-ve' for b in subject.infection_data]):
         return 'N-ve'
     return 'mixed'
 
 
-def biology(pt_id: str, test_name: str, method: str) -> np.float or None:
+def biology(subject_id: str, test_name: str, method: str) -> np.float or None:
     """
     Given some test name, return a summary statistic of all results for a given patient ID
-    :param pt_id: patient identifier
+    :param subject_id: patient identifier
     :param test_name: name of test to search for
     :param method: summary statistic to use
     :return: Summary statistic (numpy float) or None if test does not exist
     """
-    if pt_id is None:
+    if subject_id is None:
         return None
-    tests = Subject.objects(patient_id=pt_id).get().patient_biology
+    tests = Subject.objects(patient_id=subject_id).get().patient_biology
     tests = [t.result for t in tests if t.test == test_name]
     if not tests:
         return None
