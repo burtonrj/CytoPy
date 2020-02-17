@@ -105,7 +105,7 @@ Shapely==1.6.4.post2
 six==1.13.0
 tasklogger==1.0.0
 tensorboard==2.1.0
-tensorflow==2.1.0
+tensorflow
 tensorflow-estimator==2.1.0
 termcolor==1.1.0
 terminado==0.8.3
