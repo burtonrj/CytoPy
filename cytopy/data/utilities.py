@@ -7,8 +7,9 @@ import os
 def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True) -> list:
     """
     Given a directory, return file paths for all fcs files in directory and subdirectories contained within
-    :param fcs_dir:
-    :param exclude_comps:
+    :param fcs_dir: path to directory for search
+    :param exclude_comps: if True, compensation files will be ignored (note: function searches for 'comp' in file name
+    for exclusion)
     :return: list of fcs file paths
     """
     fcs_files = []
