@@ -197,12 +197,12 @@ class Explorer:
             if pt_id is None:
                 continue
             p = Subject.objects(patient_id=pt_id).get()
-            self.data.loc[self.data.pt_id == pt_id, 'organism_name'] = bugs(patient=p, multi_org=multi_org)
-            self.data.loc[self.data.pt_id == pt_id, 'organism_name_short'] = bugs(patient=p, multi_org=multi_org,
-                                                                                         short_name=True)
-            self.data.loc[self.data.pt_id == pt_id, 'hmbpp'] = hmbpp_ribo(patient=p, field='hmbpp_status')
-            self.data.loc[self.data.pt_id == pt_id, 'ribo'] = hmbpp_ribo(patient=p, field='ribo_status')
-            self.data.loc[self.data.pt_id == pt_id, 'gram_status'] = gram_status(patient=p)
+            self.data.loc[self.data.pt_id == pt_id, 'organism_name'] = bugs(subject=p, multi_org=multi_org)
+            self.data.loc[self.data.pt_id == pt_id, 'organism_name_short'] = bugs(subject=p, multi_org=multi_org,
+                                                                                  short_name=True)
+            self.data.loc[self.data.pt_id == pt_id, 'hmbpp'] = hmbpp_ribo(subject=p, field='hmbpp_status')
+            self.data.loc[self.data.pt_id == pt_id, 'ribo'] = hmbpp_ribo(subject=p, field='ribo_status')
+            self.data.loc[self.data.pt_id == pt_id, 'gram_status'] = gram_status(subject=p)
 
     def load_biology_data(self, test_name: str, summary_method: str = 'average'):
         """
