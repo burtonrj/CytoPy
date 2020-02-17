@@ -49,7 +49,7 @@ class FCSExperiment(mongoengine.Document):
         'collection': 'fcs_experiments'
     }
 
-    def delete_all_populations(self, sample_id: str, remove_gates: bool = False):
+    def delete_all_populations(self, sample_id: str, remove_gates: bool = False) -> None:
         """
         Delete population data associated to experiment. Give a value of 'all' for sample_id to remove all population data for every sample.
         :param sample_id: name of sample to remove populations from'; give a value of 'all' for sample_id to remove all population data for every sample.
@@ -63,7 +63,7 @@ class FCSExperiment(mongoengine.Document):
                     f.gates = []
                 f.save()
 
-    def delete_gating_templates(self, template_name: str):
+    def delete_gating_templates(self, template_name: str) -> None:
         """
         Remove association and delete gating template. If template_name is 'all', then all associated gating templates will be deleted and removed
         :param template_name: name of template to remove; if 'all', then all associated gating templates will be deleted and removed

@@ -30,7 +30,11 @@ class Gate(mongoengine.EmbeddedDocument):
         'abstract': True
     }
 
-    def to_python(self):
+    def to_python(self) -> dict:
+        """
+        Convert document to Python dictionary object
+        :return: Dictionary representation of document
+        """
         return dict(gate_name=self.gate_name, children=self.children,
                     class_=self.class_, method=self.method, kwargs=self.kwargs)
 
