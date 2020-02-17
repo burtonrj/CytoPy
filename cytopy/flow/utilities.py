@@ -11,20 +11,6 @@ import pandas as pd
 import numpy as np
 
 
-def fetch_mappings(path:str) -> list or None:
-    """
-    Fetch channel mappings from fcs file.
-    :param path: path to fcs file
-    :return: List of channel mappings. Will return None if file fails to load.
-    """
-    try:
-        fo = FCSFile(path)
-    except ValueError as e:
-        print(f'Failed to load file {path}; {e}')
-        return None
-    return fo.fluoro_mappings
-
-
 def which_environment() -> str:
     """
     Test if module is being executed in the Jupyter environment.
