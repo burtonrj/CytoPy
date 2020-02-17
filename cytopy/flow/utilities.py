@@ -2,7 +2,6 @@ from cytopy.data.fcs_experiments import FCSExperiment
 from cytopy.flow.read_write import FCSFile
 from cytopy.flow.gating.actions import Gating
 from cytopy.flow.supervised.utilities import scaler
-from multiprocessing import Pool, cpu_count
 from IPython import get_ipython
 from tqdm import tqdm_notebook, tqdm
 from sklearn.neighbors import BallTree, KernelDensity
@@ -10,10 +9,14 @@ from sklearn.model_selection import GridSearchCV
 from scipy.stats import entropy as kl_divergence
 import pandas as pd
 import numpy as np
-import os
 
 
-def fetch_mappings(path):
+def fetch_mappings(path:str) -> list or None:
+    """
+    Fetch channel mappings from fcs file.
+    :param path: path to fcs file
+    :return: List of channel mappings. Will return None if file fails to load.
+    """
     try:
         fo = FCSFile(path)
     except ValueError as e:
@@ -22,26 +25,10 @@ def fetch_mappings(path):
     return fo.fluoro_mappings
 
 
-def inspect_channel_mappings(file_paths: list):
-    """
-    Given a list of file paths attaining to fcs files for inspection, return all permutations of
-    channel/marker mappings
-    Arguments:
-        - file_paths: list of valid file paths for fcs files
-    """
-    file_paths = [x for x in file_paths if os.path.splitext(x)[1] == '.fcs']
-    file_paths = [x for x in file_paths if os.path.isfile(x)]
-    pool = Pool(cpu_count())
-    mappings = pool.map(fetch_mappings, file_paths)
-    pool.close()
-    pool.join()
-    return [m for m in mappings if m]
-
-
-def which_environment():
+def which_environment() -> str:
     """
     Test if module is being executed in the Jupyter environment.
-    :return:
+    :return: environment name
     """
     try:
         ipy_str = str(type(get_ipython()))
@@ -90,7 +77,7 @@ def faithful_downsampling(data: np.array, h: float):
     return communities
 
 
-def hellinger_dot(p, q):
+def hellinger_dot(p: np.array, q: np.array) -> np.float:
     """
     Hellinger distance between two discrete distributions.
     Original code found here: https://nbviewer.jupyter.org/gist/Teagum/460a508cda99f9874e4ff828e1896862
@@ -102,12 +89,12 @@ def hellinger_dot(p, q):
     return np.sqrt(z @ z / 2)
 
 
-def jsd_divergence(p, q):
+def jsd_divergence(p: np.array, q: np.array) -> np.float:
     """
     Calculate the Jensen-Shannon Divergence between two PDFs
-    :param p:
-    :param q:
-    :return:
+    :param p: discrete probability distribution, p
+    :param q: discrete probability distribution, q
+    :return: Jenson-Shannon Divergence
     """
     m = (p + q)/2
     divergence = (kl_divergence(p, m) + kl_divergence(q, m)) / 2
@@ -115,13 +102,26 @@ def jsd_divergence(p, q):
 
 
 def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
-                     bandwidth_search: list or None = None, x_grid_n: int or None = 1000, **kwargs):
+                     bandwidth_search: tuple or None = None, x_grid_n: int or None = 1000, **kwargs) -> np.array:
+    """
+    Perform Kernel Density Estimation for a multivariant data. Function is a wrapper for methods provided by
+    the scikit-learn library. See scikit-learn documentation for available kernels (default = gaussian).
+    Cross-validation available for bandwidth search by setting bandwidth argument to 'cross_val' otherwise
+    a float value is expected.
+    :param x: data to perform KDE upon; if 1 dimensional data must be reshaped e.g. np.array.reshape(-1, 1)
+    :param bandwidth: either float value for bandwidth or 'cross-val' to estimate bandwidth using cross-validation
+    :param bandwidth_search: tuple specifying range of bandwidth values to search (start, end) in cross validaiton;
+    ignored if bandwidth != 'cross_val'
+    :param x_grid_n: n elements of space to generate log prob estimate over (default = 1000; if None, estimates probability
+    density function over entire input space)
+    :param kwargs: additional keyword arguments to pass to sklearn.neighbors.KernelDensity
+    :return: Probability density estimate
+    """
     if type(bandwidth) == str:
         assert bandwidth == 'cross_val', 'Invalid input for bandwidth, must be either float or "cross_val"'
-        if bandwidth_search is None:
-            bandwidth_search = [np.quantile(x, 0.05), np.quantile(x, 0.95)]
-            if bandwidth_search == 0:
-                bandwidth_search[0] = 0.01
+        bandwidth_search = bandwidth_search or [np.quantile(x, 0.05), np.quantile(x, 0.95)]
+        if bandwidth_search[0] == 0:
+            bandwidth_search = (0.01, bandwidth_search[1])
         grid = GridSearchCV(KernelDensity(),
                             {'bandwidth': np.linspace(bandwidth_search[0], bandwidth_search[1], 30)},
                             cv=20)
@@ -141,13 +141,13 @@ def load_and_transform(sample_id: str, experiment: FCSExperiment, root_populatio
                        scale: str or None = None, sample_n: int or None = None) -> pd.DataFrame or None:
     """
     Standard function for loading data from an experiment, transforming, scaling, and sampling.
-    :param experiment:
-    :param sample_id:
-    :param root_population:
-    :param transform:
-    :param scale:
-    :param sample_n:
-    :return:
+    :param experiment: Experiment object that sample belongs to
+    :param sample_id: ID for sample to load
+    :param root_population: name of root population to load from sample
+    :param transform: name of transformation method to apply (if None, data is returned untransformed)
+    :param scale: name of scalling method to apply after transformation (if None, no scaling is applied)
+    :param sample_n: number of events to return (sample is uniform; if None, no sampling occurs)
+    :return: Population DataFrame
     """
     gating = Gating(experiment=experiment, sample_id=sample_id, include_controls=False)
     if transform is None:
@@ -172,7 +172,19 @@ def load_and_transform(sample_id: str, experiment: FCSExperiment, root_populatio
 
 
 def ordered_load_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str,
-                           scale: str or None = None, sample_n: int or None = None):
+                           scale: str or None = None, sample_n: int or None = None) -> (str, pd.DataFrame or None):
+    """
+    Wrapper function for load_and_transform that adds convenience for multi-processing (data can be ordered post-hoc);
+    returns a tuple, first element is the subject ID and the second element the population dataframe.
+
+    :param experiment: Experiment object that sample belongs to
+    :param sample_id: ID for sample to load
+    :param root_population: name of root population to load from sample
+    :param transform: name of transformation method to apply (if None, data is returned untransformed)
+    :param scale: name of scalling method to apply after transformation (if None, no scaling is applied)
+    :param sample_n: number of events to return (sample is uniform; if None, no sampling occurs)
+    :return: sample_id, population dataframe
+    """
     try:
         data = load_and_transform(sample_id, experiment, root_population, transform,
                                   scale, sample_n)
