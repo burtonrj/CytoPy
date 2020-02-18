@@ -179,12 +179,10 @@ class FCSExperiment(mongoengine.Document):
         :param sample_id: ID of sample to remove
         :return: True if successful
         """
-        fg = FileGroup.objects(primary_id=sample_id)
-        if not fg:
-            print(f'Error: {sample_id} does not exist')
-            return False
+        assert sample_id in self.list_samples(), f'{sample_id} not associated to this experiment'
+        fg = self.pull_sample(sample_id)
         self.fcs_files = [f for f in self.fcs_files if f.primary_id != sample_id]
-        fg[0].delete()
+        fg.delete()
         self.save()
         return True
 
