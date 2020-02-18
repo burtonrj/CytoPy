@@ -1,6 +1,6 @@
 from cytopy.flow.supervised.cell_classifier import CellClassifier
 from sklearn.svm import LinearSVC, SVC
-from sklearn.multiclass import OneVsOneClassifier
+from sklearn.multiclass import OneVsRestClassifier
 
 
 class SupportVectorMachine(CellClassifier):
@@ -29,7 +29,7 @@ class SupportVectorMachine(CellClassifier):
         Build non-linear SVM. Implements Scikit-Learn's C-Support Vector Classification, see
         http://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html
 
-        Implements one-versus-one strategy for handling multi-class classification.
+        Implements one-versus-rest strategy for handling multi-class classification.
         :param kernel: kernel type to be used by the algorithm, must be one of ‘linear’, ‘poly’, ‘rbf’, ‘sigmoid’,
         or a function (custom kernel).
         :param cache_size: Size of kernel cache (default = 4000 MB)
@@ -40,9 +40,10 @@ class SupportVectorMachine(CellClassifier):
             assert kernel in ['poly', 'rbf', 'sigmoid'], "unsupported kernel type, must be one of " \
                                                          "'poly', 'rbf', or 'sigmoid'"
         if self.class_weights is None:
-            self.classifier = OneVsOneClassifier(SVC(kernel=kernel, cache_size=cache_size, **kwargs))
+            self.classifier = OneVsRestClassifier(SVC(kernel=kernel, cache_size=cache_size,
+                                                      probability=True, **kwargs), n_jobs=-1)
         else:
-            self.classifier = OneVsOneClassifier(SVC(kernel=kernel, cache_size=cache_size,
-                                                     class_weight=self.class_weights, **kwargs))
+            self.classifier = OneVsRestClassifier(SVC(kernel=kernel, cache_size=cache_size, probability=True,
+                                                      class_weight=self.class_weights, **kwargs), n_jobs=-1)
 
 
