@@ -243,8 +243,9 @@ class Extract:
 
     def fmo_stats_multiple(self, fmo: list, population: str, features: list):
         """
-        Calculate descriptive statistics using FMO data for a population in multiple dimensions. Target population will be
-        identified for the FMO and then the centroid of the target population in
+        Centroid of the target population in the given dimensions is calculated for each FMO. The centroid for the same population
+        is calculated for the primary data. The euclidean distance between the primary data and the FMO is calculated and then stored
+        as '{fmo_name}_{population}_euclidean_distance'
         :param population: Name of target population
         :param fmo: list of FMO controls to investigate
         :param features: dimensions to perform calculation in
