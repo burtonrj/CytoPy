@@ -198,7 +198,7 @@ class Gating:
         return {x.__name__: x for x in available_classes}
 
     def get_population_df(self, population_name: str, transform: bool = False,
-                          transform_method: str = 'logicle',
+                          transform_method: str or None = 'logicle',
                           transform_features: list or str = 'all',
                           label: bool =False) -> pd.DataFrame or None:
         """
@@ -222,6 +222,8 @@ class Gating:
             dependencies = self.find_dependencies(population_name)
             for pop in dependencies:
                 data.loc[self.populations[pop].index, 'label'] = pop
+        if transform_method is None:
+            transform = False
         if transform:
             return apply_transform(data, features_to_transform=transform_features, transform_method=transform_method)
         return data
