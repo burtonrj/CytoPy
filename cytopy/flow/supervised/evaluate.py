@@ -41,6 +41,9 @@ def report_card(classifier, x, y, mappings=None, threshold=None, sample_weights=
         pprint(mappings)
     print('-----------------------------------------')
     if include_confusion_matrix:
+        if 'keras' in str(type(classifier)):
+            print('Confusion matrix plot currently not supported for Keras deep learning model')
+            return
         plot_cm(classifier, x, y).show()
 
 
