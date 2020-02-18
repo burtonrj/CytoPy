@@ -8,7 +8,7 @@ from cytopy.flow.supervised.utilities import scaler, find_common_features, \
 from cytopy.flow.gating.utilities import density_dependent_downsample, check_downstream_overlaps
 from cytopy.flow.supervised.evaluate import evaluate_model, report_card
 from cytopy.flow.utilities import progress_bar
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import train_test_split, KFold, GridSearchCV
 from sklearn.decomposition import PCA
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.linear_model import LinearRegression
@@ -197,7 +197,8 @@ class CellClassifier:
                  multi_label: bool = True, transform: str = 'logicle', root_population: str = 'root',
                  threshold: float = 0.5, scale: str or None = 'standard',
                  balance_method: None or str or dict = None, frac: float or None = None,
-                 downsampling_kwargs: dict or None = None, scale_kwargs: dict or None = None):
+                 downsampling_kwargs: dict or None = None, scale_kwargs: dict or None = None,
+                 verbose=True):
         """
         Constructor for CellClassifier
         :param experiment: FCSExperiment for classification
@@ -217,7 +218,8 @@ class CellClassifier:
         Normalise scales data between 0 and 1 using the MinMaxScaler
         (https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html)
         """
-        print('Constructing cell classifier object...')
+        self.vprint = print if verbose else lambda *a, **k: None
+        self.vprint('Constructing cell classifier object...')
         self.experiment = experiment
         self.transform = transform
         self.multi_label = multi_label
@@ -229,27 +231,27 @@ class CellClassifier:
         self.mappings = None
         self.class_weights = None
         self.prefix = 'sml'
-        print('Loading information on reference sample...')
+        self.vprint('Loading information on reference sample...')
         ref = Gating(self.experiment, reference_sample, include_controls=False)
 
         self.population_labels = ref.valid_populations(population_labels)
         assert len(self.population_labels) > 2, f'Error: reference sample {reference_sample} does not contain any '\
                                                 f'gated populations, please ensure that the reference sample has ' \
                                                 f'been gated prior to training.'
-        print('Preparing training data and labels...')
+        self.vprint('Preparing training data and labels...')
         if multi_label:
             self.threshold = None
             self.train_X, self.train_y, self.mappings = self.multiclass_labels(ref, features, root_population)
         else:
             self.train_X, self.train_y, self.mappings = self.singleclass_labels(ref, features, root_population)
-        print('Scaling data...')
+        self.vprint('Scaling data...')
         if scale is not None:
             if scale_kwargs is not None:
                 self.train_X, self.preprocessor = scaler(self.train_X, scale_method=scale, **scale_kwargs)
             else:
                 self.train_X, self.preprocessor = scaler(self.train_X, scale_method=scale)
         else:
-            print('Warning: it is recommended that data is scaled prior to training. Unscaled data can result '
+            self.vprint('Warning: it is recommended that data is scaled prior to training. Unscaled data can result '
                   'in some weights updating faster than others, having a negative effect on classifier performance')
 
         if type(balance_method) == str:
@@ -257,7 +259,7 @@ class CellClassifier:
                 'Balance method must be one of ["density", "oversample", "auto_weights"] or custom weights given as ' \
                 'a python dictionary object'
             if balance_method in ['density', 'oversample']:
-                print('Balancing dataset by sampling...')
+                self.vprint('Balancing dataset by sampling...')
                 if frac:
                     self.balance_dataset(method=balance_method, frac=frac, downsampling_kwargs=downsampling_kwargs)
                 else:
@@ -270,7 +272,7 @@ class CellClassifier:
                 self.class_weights = list(map(lambda x: class_weights[x], self.train_y))
         elif type(balance_method) == dict:
             self.class_weights = list(map(lambda x: balance_method[x], self.train_y))
-        print('Ready for training!')
+        self.vprint('Ready for training!')
 
     def _binarize_labels(self, ref: Gating, features: list, root_pop: str) -> (pd.DataFrame, np.array):
         """
@@ -449,13 +451,14 @@ class CellClassifier:
         kf = KFold(n_splits=k)
         train_performance = list()
         test_performance = list()
-        print(f'----------- Cross Validation: {k} folds -----------')
+        self.vprint(f'----------- Cross Validation: {k} folds -----------')
         idx = kf.split(self.train_X)
         for i in progress_bar(range(k)):
             train_index, test_index = next(idx)
             train_x, test_x = self.train_X[train_index], self.train_X[test_index]
             train_y, test_y = self.train_y[train_index], self.train_y[test_index]
             self._fit(train_x, train_y, **kwargs)
+            test_y, train_y = self._flatten_one_hot(test_y, train_y)
             p = evaluate_model(self.classifier, train_x, train_y, self.threshold)
             p['k'] = i
             train_performance.append(p)
@@ -469,8 +472,23 @@ class CellClassifier:
         test_performance['test_train'] = 'test'
         return pd.concat([train_performance, test_performance])
 
+    def gridsearch(self, param_grid, scoring='f1_weighted', n_jobs=-1, cv=5, **kwargs):
+        assert self.classifier, 'Call to build_model must be made prior to grid search'
+        grid = GridSearchCV(estimator=self.classifier, param_grid=param_grid,
+                            scoring=scoring, n_jobs=n_jobs, cv=cv, **kwargs)
+        grid.fit(self.train_X, self.train_y)
+        return grid
+
     def train(self, **kwargs):
         self._fit(self.train_X, self.train_y, **kwargs)
+
+    @staticmethod
+    def _flatten_one_hot(test, train):
+        if train.ndim != 1:
+            train = np.argmax(train, axis=1)
+        if test.ndim != 1:
+            test = np.argmax(test, axis=1)
+        return test, train
 
     def train_holdout(self, holdout_frac: float = 0.3, print_report_card: bool = False, **kwargs) -> pd.DataFrame:
         """
@@ -481,15 +499,16 @@ class CellClassifier:
         """
         train_x, test_x, train_y, test_y = self.train_test_split(test_size=holdout_frac)
         self._fit(train_x, train_y, **kwargs)
+        test_y, train_y = self._flatten_one_hot(test_y, train_y)
         if not print_report_card:
             train_performance = evaluate_model(self.classifier, train_x, train_y, self.threshold)
             train_performance['test_train'] = 'train'
             test_performance = evaluate_model(self.classifier, test_x, test_y, self.threshold)
             test_performance['test_train'] = 'test'
             return pd.concat([test_performance, train_performance])
-        print('TRAINING PERFORMANCE')
+        self.vprint('TRAINING PERFORMANCE')
         report_card(self.classifier, train_x, train_y, mappings=self.mappings, threshold=self.threshold)
-        print('HOLDOUT PERFORMANCE')
+        self.vprint('HOLDOUT PERFORMANCE')
         report_card(self.classifier, test_x, test_y, mappings=self.mappings, threshold=self.threshold)
 
     def manual_validation(self, sample_id: str, print_report_card: bool = False,
@@ -515,12 +534,9 @@ class CellClassifier:
             x, y, mappings = self.singleclass_labels(val_sample, self.features, root_pop)
 
         # Check mappings match that expected from training data
-        assert len(mappings.keys()) == len(self.mappings.keys()), \
-            f'Class mappings do not match training data: {len(mappings.keys())} classes in ' \
-            f'validation data, but {len(self.mappings.keys())} classes in training data'
-        valm = set([np.array2string(x) for x in mappings.values()])
-        trainm = set([np.array2string(x) for x in self.mappings.values()])
-        assert valm == trainm,  f'Class mappings do not match training data: {valm} != {trainm}'
+        for m in mappings.values():
+            assert np.array2string(m) in set([np.array2string(i) for i in self.mappings.values()]), \
+            f'Invalid mappings; label {np.array2string(m)} present in validation data but not in training data'
 
         # Standardise/normalise if necessary
         if self.preprocessor is not None:
@@ -591,7 +607,7 @@ class CellClassifier:
             train_x = train_x[idx, :]
         assert val_x.shape[0] == train_x.shape[0], f'Row length for val data != length of train data; ' \
                                                    f'{val_x.shape[0]} != {train_x.shape[0]}. Try altering sample size.'
-        print('Performing PCA...')
+        self.vprint('Performing PCA...')
         pca = PCA(random_state=42, n_components=len(self.mappings.keys()))
         val_embeddings = pca.fit_transform(val_x)
         train_embeddings = pca.fit_transform(train_x)
@@ -609,13 +625,13 @@ class CellClassifier:
         hax.set_title('R-squared from regression of PCA components Train vs Validation')
         hfig.show()
         if plot_umap:
-            print('Performing UMAP...')
+            self.vprint('Performing UMAP...')
             umap = UMAP(n_components=2, random_state=42)
             val_embeddings = umap.fit_transform(val_x)
             train_embeddings = umap.fit_transform(train_x)
             scatter_plot(train_embeddings, val_embeddings, title='Comparison of UMAP embeddings; Training Vs PCA')
         if plot_phate:
-            print('Performing PHATE...')
+            self.vprint('Performing PHATE...')
             ph = PHATE(n_jobs=-2, verbose=0)
             val_embeddings = ph.fit_transform(val_x)
             train_embeddings = ph.fit_transform(train_x)
