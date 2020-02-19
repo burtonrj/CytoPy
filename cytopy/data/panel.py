@@ -338,3 +338,11 @@ class Panel(mongoengine.Document):
                 marker = [p.marker for p in self.mappings if p.channel == channel][0]
             updated_mappings.append((channel, marker))
         return column_mappings
+
+    def get_channels(self):
+        for cm in self.mappings:
+            yield cm.channel
+
+    def get_markers(self):
+        for cm in self.mappings:
+            yield cm.marker

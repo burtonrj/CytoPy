@@ -833,6 +833,14 @@ class Gating:
         _, idx = croot_pop.pull_cluster(cluster_id=cluster_id, meta=meta)
         return idx
 
+    def register_as_invalid(self):
+        fg = self.filegroup
+        if fg.flags:
+            fg.flags = fg.flags + ',invalid'
+        else:
+            fg.flags = 'invalid'
+        fg.save()
+
 
 class Template(Gating):
     """
