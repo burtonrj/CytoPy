@@ -144,7 +144,8 @@ class Plot:
                 if any([x in axes_vars[a] for x in ['FSC', 'SSC']]):
                     transforms[a] = None
 
-        geoms = {c: self.gating.populations[c].geom for c in gate.children}
+        geoms = {c: self.gating.populations[c].geom for c in gate.children
+                 if self.gating.populations[c].geom is not None}
         data = {k: transform_axes(v, axes_vars, transforms) for k, v in self._get_gate_data(gate).items()}
         xlim, ylim = plot_axis_lims(data=data, x=axes_vars['x'], y=y, xlim=xlim, ylim=ylim)
         num_axes = len(data.keys())
