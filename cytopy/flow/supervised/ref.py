@@ -6,28 +6,30 @@ from functools import partial
 import numpy as np
 
 
-def calculate_ref_sample_fast(experiment, exclude_samples: list or None = None, sample_n=1000):
+def calculate_ref_sample_fast(experiment, exclude_samples: list or None = None,
+                              sample_n=1000, verbose=True):
+    vprint = print if verbose else lambda *a, **k: None
     if exclude_samples is None:
         exclude_samples = []
-    print('-------- Calculating Reference Sample (Multi-processing) --------')
+    vprint('-------- Calculating Reference Sample (Multi-processing) --------')
     # Calculate common features
-    print('...match feature space between samples')
+    vprint('...match feature space between samples')
     features = find_common_features(experiment)
     # List samples
     all_samples = [x for x in experiment.list_samples() if x not in exclude_samples]
-    print('...pulling data')
+    vprint('...pulling data')
     # Fetch data
     pool = Pool(cpu_count())
     f = partial(pull_data_hashtable, experiment=experiment, features=features, sample_n=sample_n)
     all_data_ = pool.map(f, all_samples)
-    print('...calculate covariance matrix for each sample')
+    vprint('...calculate covariance matrix for each sample')
     # Calculate covar for each
     all_data = dict()
     for d in all_data_:
         all_data.update(d)
     del all_data_
     all_data = {k: np.cov(v, rowvar=False) for k, v in all_data.items()}
-    print('...search for sample with smallest average euclidean distance to all other samples')
+    vprint('...search for sample with smallest average euclidean distance to all other samples')
     # Make comparisons
     n = len(all_samples)
     norms = np.zeros(shape=[n, n])

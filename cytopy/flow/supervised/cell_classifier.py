@@ -106,9 +106,9 @@ def create_reference_sample(experiment: FCSExperiment,
                             exclude: list or None = None,
                             new_file_name: str or None = None,
                             sampling_method: str = 'uniform',
-                            sample_n: int = 1000,
-                            sample_frac: float or None = None,
-                            include_population_labels: bool = False) -> None:
+                            sample_n: int or float = 1000,
+                            include_population_labels: bool = False,
+                            verbose=True) -> None:
     """
     Given some experiment and a root population that is common to all fcs file groups within this experiment, take
     a sample from each and create a new file group from the concatenation of these data. New file group will be created
@@ -120,26 +120,26 @@ def create_reference_sample(experiment: FCSExperiment,
     :param exclude: list of sample IDs for samples to be excluded from sampling process
     :param new_file_name: name of file group generated
     :param sampling_method: method to use for sampling files (currently only supports 'uniform')
-    :param sample_n: number of events to sample from each file
-    :param sample_frac: fraction of events to sample from each file (default = None, if not None then sample_n is
-    ignored)
+    :param sample_n: number or fraction of events to sample from each file
     :return: None
     """
     def sample(d):
         if sampling_method == 'uniform':
-            if sample_frac is None:
+            if type(sample_n) == int:
                 if d.shape[0] > sample_n:
                     return d.sample(sample_n)
                 return d
-            return d.sample(frac=sample_frac)
+            return d.sample(frac=sample_n)
         raise ValueError('Error: currently only uniform sampling is implemented in this version of cytopy')
 
-    print('-------------------- Generating Reference Sample --------------------')
+    vprint = print if verbose else lambda *a, **k: None
+
+    vprint('-------------------- Generating Reference Sample --------------------')
     if exclude is None:
         exclude = []
     if new_file_name is None:
         new_file_name = f'{experiment.experiment_id}_sampled_data'
-    print('Finding features common to all fcs files...')
+    vprint('Finding features common to all fcs files...')
     features = find_common_features(experiment=experiment, exclude=exclude)
     channel_mappings = __channel_mappings(features,
                                           experiment.panel)
@@ -148,21 +148,21 @@ def create_reference_sample(experiment: FCSExperiment,
     if include_population_labels:
         features.append('label')
     for f in files:
-        print(f'Sampling {f}...')
+        vprint(f'Sampling {f}...')
         g = Gating(experiment, f, include_controls=False)
         if root_population not in g.populations.keys():
-            print(f'Skipping {f} as {root_population} is absent from gated populations')
+            vprint(f'Skipping {f} as {root_population} is absent from gated populations')
             continue
         df = g.get_population_df(root_population, label=include_population_labels)[features]
         data = pd.concat([data, sample(df)])
     data = data.reset_index(drop=True)
-    print('Sampling complete!')
+    vprint('Sampling complete!')
     new_filegroup = FileGroup(primary_id=new_file_name)
     new_filegroup.flags = 'sampled data'
     new_file = File(file_id=new_file_name,
                     compensated=True,
                     channel_mappings=channel_mappings)
-    print('Inserting sampled data to database...')
+    vprint('Inserting sampled data to database...')
     new_file.put(data[[f for f in features if f != 'label']].values)
     new_filegroup.files.append(new_file)
     root_p = Population(population_name='root',
@@ -171,7 +171,7 @@ def create_reference_sample(experiment: FCSExperiment,
     root_p.save_index(data.index.values)
     new_filegroup.populations.append(root_p)
     if include_population_labels:
-        print('Warning: new concatenated sample will inherit population labels but NOT gates or '
+        vprint('Warning: new concatenated sample will inherit population labels but NOT gates or '
               'population hierarchy')
         for pop in data.label.unique():
             idx = data[data.label == pop].index.values
@@ -181,12 +181,12 @@ def create_reference_sample(experiment: FCSExperiment,
                            geom=[['shape', None], ['x', 'FSC-A'], ['y', 'SSC-A']])
             p.save_index(idx)
             new_filegroup.populations.append(p)
-    print('Saving changes...')
+    vprint('Saving changes...')
     mid = new_filegroup.save()
     experiment.fcs_files.append(new_filegroup)
     experiment.save()
-    print(f'Complete! New file saved to database: {new_file_name}, {mid}')
-    print('-----------------------------------------------------------------')
+    vprint(f'Complete! New file saved to database: {new_file_name}, {mid}')
+    vprint('-----------------------------------------------------------------')
 
 
 class CellClassifier:
