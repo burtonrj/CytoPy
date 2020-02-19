@@ -421,7 +421,7 @@ class EvaluateBatchEffects:
             print(f'Calculate PDF for all other samples and calculate F-divergence metric: {divergence_method}...')
 
         # Fetch data frame for all other samples if kde not previously computed
-        samples_df = [(name, s.values) for name, s in self.data.items()
+        samples_df = [(name, s.select_dtypes(include='number').values) for name, s in self.data.items()
                       if name in comparisons and name not in self.kde_cache.keys()]
         kde_f = partial(kde_multivariant, bandwidth='cross_val', kernel=kde_kernel)
         kde_indexed_f = partial(indexed_kde, kde_f=kde_f)
