@@ -14,7 +14,7 @@ from .quantile import Quantile
 from .mixturemodel import MixtureModel
 from .defaults import ChildPopulationCollection
 from .plotting.static_plots import Plot
-from .utilities import get_params, inside_ellipse
+from .utilities import get_params, inside_ellipse, inside_polygon
 # Housekeeping and other tools
 from anytree.exporter import DotExporter
 from anytree import Node, RenderTree
@@ -391,14 +391,16 @@ class Gating:
                             method='merge', kwargs=kwargs, class_='merge')
         self.gates[name] = new_gate
 
-    def subtraction(self, target: list, parent: str, new_population_name: str) -> bool:
+    def subtraction(self, target: list, parent: str, new_population_name: str) -> None:
         """
         Given a target population and a parent population, generate a new population by subtraction of the
         target population from the parent
-        :return: True if successful, else False
+        :return: None
         """
         assert parent in self.populations.keys(), 'Error: parent population not recognised'
         assert all([t in self.populations.keys() for t in target]), 'Error: target population not recognised'
+        assert new_population_name not in self.populations.keys(), f'Error: a population with name ' \
+                                                                   f'{new_population_name} already exists'
 
         x = self.populations[parent].geom['x']
         y = self.populations[parent].geom['y']
@@ -413,7 +415,7 @@ class Gating:
                                 parent_name=parent, warnings=[])
         kwargs = [('parent', parent), ('target', target), ('name', new_population_name),
                   ('x', x), ('y', y), ('child_populations', new_population)]
-        new_gate = DataGate(gate_name=f'{parent}_minus_{target}', children=[new_population],
+        new_gate = DataGate(gate_name=f'{parent}_minus_{target}', children=[new_population_name],
                             parent=parent, method='subtraction', kwargs=kwargs, class_='subtraction')
         self.gates[f'{parent}_minus_{target}'] = new_gate
 
@@ -516,6 +518,9 @@ class Gating:
         if gatedoc.class_ == 'merge':
             self.merge(population_left=gkwargs.get('left'), population_right=gkwargs.get('right'),
                        new_population_name=gkwargs.get('name'))
+        elif gatedoc.class_ == 'subtraction':
+            self.subtraction(target=gkwargs.get('target'), parent=gkwargs.get('parent'),
+                             new_population_name=gkwargs.get('name'))
         else:
             self.__construct_class_and_gate(gatedoc, gkwargs, feedback)
         if plot_output:
@@ -588,31 +593,35 @@ class Gating:
         :param geom: valid dictionary describing geom
         :return: None
         """
-        def transform_x_y(d):
-            d = d.copy()
-            assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", the transform method for the x-axis AND ' \
-                                                                                    'a key "transform_y", the transform method for the y-axis'
-            if geom['transform_x'] is not None:
-                d = apply_transform(d, transform_method=geom['transform_x'], features_to_transform=[geom['x']])
-            if geom['transform_y'] is not None:
-                d = apply_transform(d, transform_method=geom['transform_y'], features_to_transform=[geom['y']])
-            return d
-
         assert population_name in self.populations.keys(), f'Population {population_name} does not exist'
-        assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
-                                            'if population is the "positive" or "negative"'
+        assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
+                                                                                'the transform method for the x-axis AND ' \
+                                                                                'a key "transform_y", ' \
+                                                                                'the transform method for the y-axis'
         parent_name = self.populations[population_name].parent.name
         parent = self.get_population_df(parent_name, transform=False)
+        transform_x, transform_y = geom.get('transform_x'), geom.get('transform_y')
+        x, y = geom.get('x'), geom.get('y')
+        assert x, 'Geom is missing value for "x"'
+        if transform_x is not None and x is not None:
+            parent = apply_transform(parent, transform_method=transform_y,
+                                     features_to_transform=[x])
+        if transform_y is not None and y is not None:
+            parent = apply_transform(parent, transform_method=transform_y,
+                                     features_to_transform=[y])
+
         if geom['shape'] == 'threshold':
             assert 'threshold' in geom.keys(), 'Geom must contain a key "threshold" with a float value'
-            assert 'transform_x' in geom.keys(), 'Geom must contain a key "transform_x", the transform method for the x-axis'
-            if geom['transform_x'] is not None:
-                parent = apply_transform(parent, transform_method=geom['transform_x'], features_to_transform=[geom['x']])
+            assert 'transform_x' in geom.keys(), 'Geom must contain a key "transform_x", ' \
+                                                 'the transform method for the x-axis'
+            assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
+                                                'if population is the "positive" or "negative"'
             if geom['definition'] == '+':
                 return parent[parent[geom['x']] >= geom['threshold']].index.values
             if geom['definition'] == '-':
                 return parent[parent[geom['x']] < geom['threshold']].index.values
             raise ValueError('Definition must have a value of "+" or "-" for a 1D threshold gate')
+
         if geom['shape'] == '2d_threshold':
             def geom_bool(definition, p):
                 p = p.round(decimals=2)
@@ -628,9 +637,12 @@ class Gating:
                     return p[(p[x_] < tx) & (p[y_] > ty)].index.values
                 raise ValueError('Definition must have a value of "+-", "-+", "--", or "++" for a 2D threshold gate')
 
+            assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
+                                                'if population is the "positive" or "negative"'
             assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), \
                 'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
-            parent = transform_x_y(parent)
+            assert y, 'Geom is missing value for "y"'
+
             if type(geom['definition']) == list:
                 idx = list(map(lambda d: geom_bool(d, parent), geom['definition']))
                 return [i for l in idx for i in l]
@@ -639,8 +651,11 @@ class Gating:
 
         if geom['shape'] == 'rect':
             keys = ['x_min', 'x_max', 'y_min', 'y_max']
+            assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
+                                                'if population is the "positive" or "negative"'
             assert all([r in geom.keys() for r in keys]), f'Geom must contain keys {keys} both with a float value'
-            parent = transform_x_y(parent)
+            assert y, 'Geom is missing value for "y"'
+
             x = (parent[geom['x']] >= geom['x_min']) & (parent[geom['x']] <= geom['x_max'])
             y = (parent[geom['y']] >= geom['y_min']) & (parent[geom['y']] <= geom['y_max'])
             pos = parent[x & y]
@@ -649,10 +664,14 @@ class Gating:
             if geom['definition'] == '-':
                 return parent[~parent.index.isin(pos.index)].index.values
             raise ValueError('Definition must have a value of "+" or "-" for a rectangular geom')
+
         if geom['shape'] == 'ellipse':
             keys = ['centroid', 'width', 'height', 'angle']
+            assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
+                                                'if population is the "positive" or "negative"'
             assert all([c in geom.keys() for c in keys]), f'Geom must contain keys {keys}; note, centroid must be a tuple and all others a float value'
-            parent = transform_x_y(parent)
+            assert y, 'Geom is missing value for "y"'
+
             channels = [geom['x'], geom['y']]
             mask = inside_ellipse(parent[channels].values,
                                   center=tuple(geom['centroid']),
@@ -665,8 +684,18 @@ class Gating:
             if geom['definition'] == '-':
                 return parent[~parent.index.isin(pos.index)].index.values
             raise ValueError('Definition must have a value of "+" or "-" for a ellipse geom')
-        raise ValueError('Gates producing polygon geoms (i.e. like density based clustering), substitution gates '
-                         'and supervised ML gates cannot be edited in the current build of Immunova.')
+
+        if geom['shape'] == 'poly':
+            keys = ['cords', 'transform_x', 'transform_y', 'x', 'y']
+            assert all([c in geom.keys() for c in keys]), f'Geom must contain keys {keys}'
+            assert type(geom.get('cords')) == dict, 'Cords should be of type dictionary with keys: x, y'
+            cords = geom.get('cords')
+            assert all([_ in cords.keys() for _ in ['x', 'y']]), 'Cords should contain keys: x, y'
+
+            poly = Polygon([(x, y) for x, y in zip(cords['x'], cords['y'])])
+            pos = inside_polygon(parent, x, y, poly)
+            return pos.index
+        raise ValueError('Geom shape not recognised, should be one of: threshold, 2d_threshold, ellipse, rect, poly')
 
     def edit_gate(self, gate_name: str, updated_geom: dict, delete: bool = True):
         """
