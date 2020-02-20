@@ -160,15 +160,9 @@ def inside_polygon(df, x, y, poly):
     :param poly:
     :return:
     """
-    pool = Pool(cpu_count())
-    f = partial(__multiprocess_point_in_poly, x=x, y=y, poly=poly)
-    n = int(df.shape[0]/10)
-    list_df = [df[i: i+1] for i in range(0, df.shape[0], n)]
-    result = pool.map(f, list_df)
-    df_positive = pd.concat(result)
-    pool.close()
-    pool.join()
-    return df_positive
+    xy = df[[x, y]].values
+    pos_idx = list(map(lambda i: poly.contains(Point(i)), xy))
+    return df.iloc[pos_idx]
 
 
 def density_dependent_downsample(data: pd.DataFrame, features: list, frac: float = 0.1, sample_n: int or None = None,
