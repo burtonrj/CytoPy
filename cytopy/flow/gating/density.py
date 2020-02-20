@@ -30,7 +30,7 @@ class DensityThreshold(Gate):
         self.peak_threshold = peak_threshold
         self.sample = self.sampling(self.data, 5000)
 
-    def __find_peaks(self, probs: np.array) -> np.array:
+    def _find_peaks(self, probs: np.array) -> np.array:
         """
         Internal method. Perform peak finding (see scipy.signal.find_peaks for details)
         :param probs: array of probability estimates generated using flow.gating.utilities.kde
@@ -42,7 +42,7 @@ class DensityThreshold(Gate):
             peaks = check_peak(peaks, probs, self.peak_threshold)
         return peaks
 
-    def __evaluate_peaks(self, data: pd.DataFrame, peaks: np.array, probs: np.array, xx: np.array) -> float and str:
+    def _evaluate_peaks(self, data: pd.DataFrame, peaks: np.array, probs: np.array, xx: np.array) -> float and str:
         """
         Internal method. Given the outputs of `__find_peaks` and `__smooth` calculate the threshold to generate
         for gating. If a single peak (one population) is found use quantile or standard deviation. If multiple peaks
@@ -86,15 +86,15 @@ class DensityThreshold(Gate):
                 method = 'Quantile'
         return threshold, method
 
-    def __calc_threshold(self, data: pd.DataFrame, x: str) -> float and str:
+    def _calc_threshold(self, data: pd.DataFrame, x: str) -> float and str:
         """
         Internal method. Wrapper for calculating threshold for gating.
         :param x: feature of interest for threshold calculation
         :return: threshold, method used to generate threshold
         """
         probs, xx = kde(data, x, self.kde_bw)
-        peaks = self.__find_peaks(probs)
-        return self.__evaluate_peaks(data, peaks, probs, xx)
+        peaks = self._find_peaks(probs)
+        return self._evaluate_peaks(data, peaks, probs, xx)
 
     def gate_1d(self, merge_options: str = 'overwrite') -> ChildPopulationCollection:
         """
@@ -108,9 +108,9 @@ class DensityThreshold(Gate):
         if self.empty_parent:
             return self.child_populations
         if self.sample is not None:
-            threshold, method = self.__calc_threshold(self.sample, self.x)
+            threshold, method = self._calc_threshold(self.sample, self.x)
         else:
-            threshold, method = self.__calc_threshold(self.data, self.x)
+            threshold, method = self._calc_threshold(self.data, self.x)
         if not threshold:
             raise GateError('Unexpected error whilst performing threshold gating. Calculated threshold is Null.')
         # Update child populations
@@ -128,11 +128,11 @@ class DensityThreshold(Gate):
         if not self.y:
             raise GateError('For a 2D threshold gate a value for `y` is required')
         if self.sample is not None:
-            x_threshold, x_method = self.__calc_threshold(self.sample, self.x)
-            y_threshold, y_method = self.__calc_threshold(self.sample, self.y)
+            x_threshold, x_method = self._calc_threshold(self.sample, self.x)
+            y_threshold, y_method = self._calc_threshold(self.sample, self.y)
         else:
-            x_threshold, x_method = self.__calc_threshold(self.data, self.x)
-            y_threshold, y_method = self.__calc_threshold(self.data, self.y)
+            x_threshold, x_method = self._calc_threshold(self.data, self.x)
+            y_threshold, y_method = self._calc_threshold(self.data, self.y)
         if not x_threshold or not y_threshold:
             raise GateError('Unexpected error whilst performing threshold gating. Calculated threshold is Null.')
         method = f'X: {x_method}, Y: {y_method}'
