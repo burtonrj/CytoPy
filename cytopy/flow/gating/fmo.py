@@ -65,8 +65,8 @@ class FMOGate(DensityThreshold):
         if fmo.shape[0] == 0:
             raise GateError('No events in parent population in FMO!')
             # Calculate threshold for whole panel (primary sample)
-        whole_threshold, whole_method = self.__calc_threshold(whole, feature)
-        fmo_threshold, fmo_method = self.__calc_threshold(fmo, feature)
+        whole_threshold, whole_method = self._calc_threshold(whole, feature)
+        fmo_threshold, fmo_method = self._calc_threshold(fmo, feature)
         if whole_method in ['Quantile', 'Standard deviation']:
             return fmo_threshold, fmo_method
         elif whole_method == 'Local minima between pair of highest peaks':
