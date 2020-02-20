@@ -1,5 +1,4 @@
 from cytopy.data.fcs_experiments import FCSExperiment
-from cytopy.flow.read_write import FCSFile
 from cytopy.flow.gating.actions import Gating
 from cytopy.flow.supervised.utilities import scaler
 from IPython import get_ipython
@@ -87,8 +86,29 @@ def jsd_divergence(p: np.array, q: np.array) -> np.float:
     return np.sqrt(divergence)
 
 
+def kde_bandwidth_cv(x, bandwidth_search: tuple or None = None, cv: int = 20):
+    """
+    Estimate best bandwidth for KDE using cross validation
+    :param x: data for KDE
+    :param bandwidth_search:  tuple specifying range of bandwidth values to search (start, end) in cross validation;
+    if value is None, 5th and 95th quartile of data is used for lower ad upper limit respectively
+    :param cv: number of folds to use in cross validation (default = 20)
+    :return: Optimal bandwidth
+    """
+    bandwidth_search = bandwidth_search or (np.quantile(x, 0.05), np.quantile(x, 0.95))
+    if bandwidth_search[0] == 0:
+        bandwidth_search = (0.01, bandwidth_search[1])
+    grid = GridSearchCV(KernelDensity(),
+                        {'bandwidth': np.linspace(bandwidth_search[0], bandwidth_search[1], 30)},
+                        cv=cv)
+    grid.fit(x)
+    return grid.best_estimator_.bandwidth
+
+
 def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
-                     bandwidth_search: tuple or None = None, x_grid_n: int or None = 1000, **kwargs) -> np.array:
+                     bandwidth_search: tuple or None = None,
+                     bins: int = 100j, return_grid: bool = False,
+                     **kwargs) -> np.array:
     """
     Perform Kernel Density Estimation for a multivariant data. Function is a wrapper for methods provided by
     the scikit-learn library. See scikit-learn documentation for available kernels (default = gaussian).
@@ -98,29 +118,27 @@ def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
     :param bandwidth: either float value for bandwidth or 'cross-val' to estimate bandwidth using cross-validation
     :param bandwidth_search: tuple specifying range of bandwidth values to search (start, end) in cross validaiton;
     ignored if bandwidth != 'cross_val'
-    :param x_grid_n: n elements of space to generate log prob estimate over (default = 1000; if None, estimates probability
-    density function over entire input space)
+    :param bins: bin size for generating grid of sample locations for scoring probability estimate (defaults to 100)
     :param kwargs: additional keyword arguments to pass to sklearn.neighbors.KernelDensity
     :return: Probability density estimate
     """
     if type(bandwidth) == str:
         assert bandwidth == 'cross_val', 'Invalid input for bandwidth, must be either float or "cross_val"'
-        bandwidth_search = bandwidth_search or [np.quantile(x, 0.05), np.quantile(x, 0.95)]
-        if bandwidth_search[0] == 0:
-            bandwidth_search = (0.01, bandwidth_search[1])
-        grid = GridSearchCV(KernelDensity(),
-                            {'bandwidth': np.linspace(bandwidth_search[0], bandwidth_search[1], 30)},
-                            cv=20)
-        grid.fit(x)
-        bandwidth = grid.best_estimator_.bandwidth
+        bandwidth = kde_bandwidth_cv(x, bandwidth_search)
+    # Build grid
+    n_dims = x.shape[1]
+    min_, max_ = np.min(x), np.max(x)
+    n_bins = bins*np.ones(n_dims)
+    bounds = np.repeat([(min_, max_)], n_dims, axis=0)
+    grid = np.mgrid[[slice(row[0], row[1], n*1j) for row, n in zip(bounds, n_bins)]]
+
+    sample = np.vstack([n.ravel() for n in grid]).T
+    train = np.vstack([x[:, n] for n in range(x.shape[1])]).T
     kde = KernelDensity(bandwidth=bandwidth, **kwargs)
-    kde.fit(x)
-    if x_grid_n is not None:
-        x_grid = np.array([np.linspace(np.amin(x), np.amax(x), x_grid_n) for _ in range(x.shape[1])])
-        log_pdf = kde.score_samples(x_grid.T)
-    else:
-        log_pdf = kde.score_samples(x)
-    return np.exp(log_pdf)
+    kde.fit(train)
+    if return_grid:
+        return np.exp(kde.score_samples(sample)), grid
+    return np.exp(kde.score_samples(sample))
 
 
 def load_and_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str or None,
