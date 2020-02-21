@@ -171,7 +171,7 @@ class Explorer:
         for pt_id in progress_bar(self.data.pt_id.unique()):
             if pt_id is None:
                 continue
-            p = Subject.objects(patient_id=pt_id).get()
+            p = Subject.objects(subject_id=pt_id).get()
             assert type(p[variable]) != EmbeddedDocumentList, 'Chosen variable is an embedded document.'
             self.data.loc[self.data.pt_id == pt_id, variable] = p[variable]
 
@@ -196,7 +196,7 @@ class Explorer:
         for pt_id in progress_bar(self.data.pt_id.unique()):
             if pt_id is None:
                 continue
-            p = Subject.objects(patient_id=pt_id).get()
+            p = Subject.objects(subject_id=pt_id).get()
             self.data.loc[self.data.pt_id == pt_id, 'organism_name'] = bugs(subject=p, multi_org=multi_org)
             self.data.loc[self.data.pt_id == pt_id, 'organism_name_short'] = bugs(subject=p, multi_org=multi_org,
                                                                                   short_name=True)
@@ -652,7 +652,7 @@ class SingleClustering(Clustering):
         pt = Subject.objects(files__contains=sample.mongo_id)
         self.data['pt_id'] = None
         if pt:
-            self.data['pt_id'] = pt[0].patient_id
+            self.data['pt_id'] = pt[0].subject_id
         if include_population_label:
             self.data = self._population_labels(self.data, sample.populations[self.ce.root_population])
 
@@ -789,7 +789,7 @@ class GlobalClustering(Clustering):
             fdata = fdata.rename({'index': 'original_index'}, axis=1)
             pt = Subject.objects(files__contains=g.mongo_id)
             if pt:
-                fdata['pt_id'] = pt[0].patient_id
+                fdata['pt_id'] = pt[0].subject_id
             else:
                 print(f'File group {g.id} in experiment {experiment.experiment_id} is not associated to any patient')
                 fdata['pt_id'] = None
