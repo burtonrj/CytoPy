@@ -406,7 +406,8 @@ class Gating:
         y = self.populations[parent].geom['y']
         pindex = self.populations[parent].index
         tindex = np.unique(np.concatenate([self.populations[t].index for t in target], axis=0))
-        index = [p for p in pindex if p not in tindex]
+        index = pindex.delete(np.where(pindex == tindex))
+        # index = [p for p in pindex if p not in tindex]
         new_population = ChildPopulationCollection(gate_type='sub')
         new_population.add_population(new_population_name)
         new_population.populations[new_population_name].update_geom(x=x, y=y, shape='sub')
