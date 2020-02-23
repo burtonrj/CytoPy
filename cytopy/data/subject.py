@@ -87,7 +87,7 @@ class Subject(mongoengine.DynamicDocument):
     subject_id = mongoengine.StringField(required=True, unique=True)
     age = mongoengine.IntField(required=False)
     dob = mongoengine.DateField(required=False)
-    gender = mongoengine.IntField(required=False)
+    gender = mongoengine.IntField(required=False) # 1 = Female, 0 = Male
     date_first_symptoms = mongoengine.DateTimeField(required=False)
 
     # Associated FCS Files
