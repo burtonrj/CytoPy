@@ -1,10 +1,53 @@
 from datetime import datetime
 from collections import Counter
+from functools import partial
 import pandas as pd
 import mongoengine
 import xlrd
 import os
 import re
+
+
+def create_regex(s, initials=True):
+    def has_numbers(inputString):
+        return any(char.isdigit() for char in inputString)
+
+    s = [i for ls in [_.split('-') for _ in s.split(' ')] for i in ls]
+    s = [i for ls in [_.split('.') for _ in s] for i in ls]
+    s = [i for ls in [_.split('/') for _ in s] for i in ls]
+    new_string = list()
+    for i in s:
+        if not has_numbers(i) and len(i) > 2 and initials:
+            new_string.append(f'{i[0]}({i[1:]})*')
+        else:
+            new_string.append(i)
+    new_string = '[\s.-]+'.join(new_string)
+    new_string = '<*\s*' + new_string + '\s*>*'
+    return new_string
+
+
+def create_template(channel_mappings, file_name, case_sensitive=False, initials=True):
+
+    try:
+        assert file_name.split('.')[1] == 'xlsx', 'Invalid file name, must be of format "NAME.xlsx"'
+    except IndexError:
+        raise Exception('Invalid file name, must be of format "NAME.xlsx"')
+
+    mappings = pd.DataFrame()
+    mappings['channel'] = [cm['channel'] for cm in channel_mappings]
+    mappings['marker'] = [cm['marker'] for cm in channel_mappings]
+
+    nomenclature = pd.DataFrame()
+    names = mappings['channel'].tolist() + mappings['marker'].tolist()
+    nomenclature['name'] = [n for n in names if n]
+    f = partial(create_regex, initials=initials)
+    nomenclature['regex'] = nomenclature['name'].apply(f)
+    nomenclature['case'] = case_sensitive
+    nomenclature['permutations'] = None
+    writer = pd.ExcelWriter(file_name, engine='xlsxwriter')
+    mappings.to_excel(writer, sheet_name='mappings')
+    nomenclature.to_excel(writer, sheet_name='nomenclature')
+    writer.save()
 
 
 class ChannelMap(mongoengine.EmbeddedDocument):
