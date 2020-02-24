@@ -595,17 +595,13 @@ class Gating:
         :return: None
         """
         assert population_name in self.populations.keys(), f'Population {population_name} does not exist'
-        assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
-                                                                                'the transform method for the x-axis AND ' \
-                                                                                'a key "transform_y", ' \
-                                                                                'the transform method for the y-axis'
         parent_name = self.populations[population_name].parent.name
         parent = self.get_population_df(parent_name, transform=False)
         transform_x, transform_y = geom.get('transform_x'), geom.get('transform_y')
         x, y = geom.get('x'), geom.get('y')
         assert x, 'Geom is missing value for "x"'
         if transform_x is not None and x is not None:
-            parent = apply_transform(parent, transform_method=transform_y,
+            parent = apply_transform(parent, transform_method=transform_x,
                                      features_to_transform=[x])
         if transform_y is not None and y is not None:
             parent = apply_transform(parent, transform_method=transform_y,
@@ -643,6 +639,10 @@ class Gating:
             assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), \
                 'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
             assert y, 'Geom is missing value for "y"'
+            assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
+                                                                                    'the transform method for the x-axis AND ' \
+                                                                                    'a key "transform_y", ' \
+                                                                                    'the transform method for the y-axis'
 
             if type(geom['definition']) == list:
                 idx = list(map(lambda d: geom_bool(d, parent), geom['definition']))
@@ -655,6 +655,10 @@ class Gating:
             assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
                                                 'if population is the "positive" or "negative"'
             assert all([r in geom.keys() for r in keys]), f'Geom must contain keys {keys} both with a float value'
+            assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
+                                                                                    'the transform method for the x-axis AND ' \
+                                                                                    'a key "transform_y", ' \
+                                                                                    'the transform method for the y-axis'
             assert y, 'Geom is missing value for "y"'
 
             x = (parent[geom['x']] >= geom['x_min']) & (parent[geom['x']] <= geom['x_max'])
@@ -672,6 +676,10 @@ class Gating:
                                                 'if population is the "positive" or "negative"'
             assert all([c in geom.keys() for c in keys]), f'Geom must contain keys {keys}; note, centroid must be a tuple and all others a float value'
             assert y, 'Geom is missing value for "y"'
+            assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
+                                                                                    'the transform method for the x-axis AND ' \
+                                                                                    'a key "transform_y", ' \
+                                                                                    'the transform method for the y-axis'
 
             channels = [geom['x'], geom['y']]
             mask = inside_ellipse(parent[channels].values,
@@ -726,6 +734,21 @@ class Gating:
             for c in immediate_children:
                 self.remove_population(c)
         print('Edit complete!')
+
+    def nudge_threshold(self, gate_name: str, new_x: float, new_y: float or None = None):
+        assert gate_name in self.gates.keys(), 'Invalid gate name'
+        assert self.gates[gate_name].class_ == 'DensityThreshold', 'Can only nudge threshold gates'
+        children = self.gates[gate_name].children
+        geoms = {c: self.fetch_geom(c) for c in children}
+        for c in children:
+            if self.gates[gate_name].method == 'gate_1d':
+                geoms[c]['threshold'] = new_x
+            else:
+                geoms[c]['threshold_x'] = new_x
+                if new_y is not None:
+                    geoms[c]['threshold_y'] = new_y
+        self.edit_gate(gate_name, updated_geom=geoms)
+
 
     def find_dependencies(self, population: str = None) -> list or None:
         """
