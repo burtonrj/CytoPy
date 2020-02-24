@@ -406,7 +406,7 @@ class Gating:
         y = self.populations[parent].geom['y']
         pindex = self.populations[parent].index
         tindex = np.unique(np.concatenate([self.populations[t].index for t in target], axis=0))
-        index = pindex.delete(np.where(pindex == tindex))
+        index = np.setdiff1d(pindex, tindex)
         # index = [p for p in pindex if p not in tindex]
         new_population = ChildPopulationCollection(gate_type='sub')
         new_population.add_population(new_population_name)
@@ -847,6 +847,21 @@ class Gating:
         pop_mongo.save_index(pop_node.index)
         return pop_mongo
 
+    def _overwrite(self, population: Population, catch: bool):
+        if np.array_equal(population.load_index(), self.populations.get(population.population_name).index):
+            return False
+        if catch:
+            raise ValueError(f'{population.population_name} has been changed, change "overwrite" to '
+                             f'True to overwrite existing data; note this will delete any clusters '
+                             f'currently associated to this population')
+        if population.clustering:
+            print(f'Warning: index for {population.population_name} has changed and the associated clusters '
+                  f'are now invalid')
+            self.filegroup.populations = [p for p in self.filegroup.populations
+                                          if p.population_name != population.population_name]
+            self.filegroup = self.filegroup.save()
+        return True
+
     def save(self, overwrite: bool = False, feedback: bool = True) -> bool:
         """
         Save all gates and population's to mongoDB
@@ -854,19 +869,21 @@ class Gating:
         :return: True if successful else False
         """
         fg = self.filegroup
-        existing_cache = fg.populations
-        existing_gates = fg.gates
-        if existing_cache or existing_gates:
-            if not overwrite:
-                print(f'Population cache for fcs file {self.id} already exists, if you wish to overwrite'
-                      f'this cache then specify overwrite as True')
-                return False
-            fg.populations = []
-            fg.gates = []
-            fg.save()
+        existing_cache = [p.population_name for p in fg.populations]
+
         for name in self.populations.keys():
-            FileGroup.objects(id=self.mongo_id).update(push__populations=self._population_to_mongo(name))
-        for _, gate in self.gates.items():
+            if name in existing_cache:
+                if self._overwrite([p for p in existing_cache if p.population_name == name][0],
+                                   overwrite):
+                    FileGroup.objects(id=self.mongo_id).update(push__populations=self._population_to_mongo(name))
+
+        for gate_name, gate in self.gates.items():
+            if gate_name in [g.gate_name for g in self.filegroup.gates]:
+                if not overwrite:
+                    raise ValueError(f'{gate_name} already exists, change "overwrite" to True to overwrite '
+                                     f'the existing gates')
+                self.filegroup.gates = [g for g in self.filegroup.gates if g.gate_name != gate_name]
+                self.filegroup = self.filegroup.save()
             gate = self._serailise_gate(gate)
             FileGroup.objects(id=self.mongo_id).update(push__gates=gate)
         if feedback:
@@ -894,6 +911,19 @@ class Gating:
         else:
             fg.flags = 'invalid'
         fg.save()
+
+    def nudge_threshold(self, gate_name, new_x: float, new_y: float or None = None, delete: bool = True):
+        gate = self.gates.get(gate_name)
+        assert gate, 'Invalid gate name'
+        assert gate.class_ == 'DensityThreshold', 'Nudge threshold only valid for threshold gates'
+        new_geom = {c: self.fetch_geom(c) for c in gate.children}
+        _ = {'gate_1d': 'threshold', 'gate_2d': 'threshold_x'}
+        x = _.get(gate.method)
+        for c in gate.children:
+            new_geom[c][x] = new_x
+            if new_y is not None:
+                new_geom[c]['threshold_y'] = new_y
+        self.edit_gate(gate_name, updated_geom=new_geom, delete=delete)
 
 
 class Template(Gating):
