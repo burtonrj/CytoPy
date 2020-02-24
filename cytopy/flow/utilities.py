@@ -107,7 +107,7 @@ def kde_bandwidth_cv(x, bandwidth_search: tuple or None = None, cv: int = 20):
 
 def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
                      bandwidth_search: tuple or None = None,
-                     bins: int = 100j, return_grid: bool = False,
+                     bins: int or None = 1000, return_grid: bool = False,
                      **kwargs) -> np.array:
     """
     Perform Kernel Density Estimation for a multivariant data. Function is a wrapper for methods provided by
@@ -125,20 +125,15 @@ def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
     if type(bandwidth) == str:
         assert bandwidth == 'cross_val', 'Invalid input for bandwidth, must be either float or "cross_val"'
         bandwidth = kde_bandwidth_cv(x, bandwidth_search)
-    # Build grid
-    n_dims = x.shape[1]
-    min_, max_ = np.min(x), np.max(x)
-    n_bins = bins*np.ones(n_dims)
-    bounds = np.repeat([(min_, max_)], n_dims, axis=0)
-    grid = np.mgrid[[slice(row[0], row[1], n*1j) for row, n in zip(bounds, n_bins)]]
 
-    sample = np.vstack([n.ravel() for n in grid]).T
-    train = np.vstack([x[:, n] for n in range(x.shape[1])]).T
     kde = KernelDensity(bandwidth=bandwidth, **kwargs)
-    kde.fit(train)
-    if return_grid:
-        return np.exp(kde.score_samples(sample)), grid
-    return np.exp(kde.score_samples(sample))
+    kde.fit(x)
+    if bins is not None:
+        x_grid = np.array([np.linspace(np.amin(x), np.amax(x), bins) for _ in range(x.shape[1])])
+        log_pdf = kde.score_samples(x_grid.T)
+    else:
+        log_pdf = kde.score_samples(x)
+    return np.exp(log_pdf)
 
 
 def load_and_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str or None,
