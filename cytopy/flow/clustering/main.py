@@ -840,6 +840,7 @@ class MetaClustering(Clustering):
     def __init__(self, experiment: FCSExperiment,
                  samples: str or list = 'all',
                  scale: str or None = 'norm',
+                 load_existing_meta: bool = False,
                  **kwargs):
         super().__init__(**kwargs)
         self.experiment = experiment
@@ -847,6 +848,22 @@ class MetaClustering(Clustering):
         if samples == 'all':
             samples = experiment.list_samples()
         self.data = self.load_clusters(samples)
+        if load_existing_meta:
+            print('Attempting to load existing meta-clusters')
+            self.load_existing_clusters()
+            print('meta_cluster_id populated with existing cluster results')
+        print('------------ Completed! ------------')
+
+    def load_existing_clusters(self):
+        def load(sample_id, cluster_id):
+            fg = self.experiment.pull_sample(sample_id)
+            root = [p for p in fg.populations if p.population_name == self.ce.root_population]
+            assert root, f'{self.ce.root_population} missing from sample {s}'
+            root = root[0]
+            cluster = [c for c in root.clustering if c.cluster_id == cluster_id][0]
+            assert cluster.meta_cluster_id, f'Meta cluster missing from {sample_id}, repeat clustering'
+            return cluster.meta_cluster_id
+        self.data['meta_cluster_id'] = self.data.apply(lambda row: load(row['sample_id'], row['cluster_id']), axis=1)
 
     def load_clusters(self, samples: list) -> pd.DataFrame:
         """
@@ -871,7 +888,8 @@ class MetaClustering(Clustering):
                                  include_population_label=True)
             pt_id = clustering.data['pt_id'].values[0]
             if len(clustering.clusters.keys()) == 0:
-                print(f'No clusters found for clustering UID {target_clustering_def[0].clustering_uid} and sample {s}')
+                print(f'No clusters found for clustering UID '
+                      f'{target_clustering_def[0].clustering_uid} and sample {s}')
             for c_name in clustering.clusters.keys():
                 c_data = clustering.get_cluster_dataframe(c_name)
                 n = c_data.shape[0]
@@ -882,7 +900,6 @@ class MetaClustering(Clustering):
                 c_data['cluster_id'], c_data['cluster_size'], c_data['cluster_n'], \
                     c_data['pt_id'], c_data['sample_id'] = c_name, relative_n, n, pt_id, s
                 clusters = clusters.append(c_data, ignore_index=True)
-        print('------------ Completed! ------------')
         return clusters
 
     def cluster(self):
