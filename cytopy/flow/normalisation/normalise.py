@@ -232,14 +232,14 @@ class EvaluateBatchEffects:
             if marker not in reference.columns:
                 print(f'{marker} absent from reference sample, skipping')
             ax = fig.add_subplot(nrows, 3, i)
-            ax = sns.kdeplot(reference[marker], shade=True, color="r", ax=ax)
+            ax = sns.kdeplot(reference[marker], shade=True, color="b", ax=ax)
             ax.set_title(f'Total variance in {marker}')
             ax.set_xlim((0, max(reference[marker])))
             for d in comparison_samples:
                 d = self.data[d]
                 if marker not in d.columns:
                     continue
-                ax = sns.kdeplot(d[marker], color='b', shade=False, alpha=0.5, ax=ax)
+                ax = sns.kdeplot(d[marker], color='r', shade=False, alpha=0.5, ax=ax)
                 ax.get_legend().remove()
             ax.set(aspect='auto')
         fig.tight_layout()
