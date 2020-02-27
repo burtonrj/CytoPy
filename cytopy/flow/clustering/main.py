@@ -913,7 +913,6 @@ class MetaClustering(Clustering):
                                       index=data.index).map(palette_mappings)
         return sns.clustermap(data[self.ce.features], row_colors=pop_label_colours, figsize=figsize)
 
-
     def save(self):
         """
         Save results of meta-clustering to underlying database
