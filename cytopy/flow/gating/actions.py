@@ -749,7 +749,6 @@ class Gating:
                     geoms[c]['threshold_y'] = new_y
         self.edit_gate(gate_name, updated_geom=geoms)
 
-
     def find_dependencies(self, population: str = None) -> list or None:
         """
         For a given population find all dependencies
@@ -915,6 +914,7 @@ class Gating:
         else:
             fg.flags = 'invalid'
         fg.save()
+
 
 class Template(Gating):
     """
