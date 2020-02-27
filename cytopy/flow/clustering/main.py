@@ -342,7 +342,8 @@ class Explorer:
 
     def heatmap(self, heatmap_var: str, features: list,
                 clustermap: bool = False, mask: pd.DataFrame or None = None,
-                normalise: bool = True, figsize: tuple = (10, 5), title: str or None = None):
+                normalise: bool = True, figsize: tuple = (10, 5), title: str or None = None,
+                col_cluster: bool = False):
         """
         Generate a heatmap of marker expression for either clusters or gated populations
         (indicated with 'heatmap_var' argument)
@@ -363,7 +364,7 @@ class Explorer:
             d[features] = preprocessing.MinMaxScaler().fit_transform(d[features])
         d = d.groupby(by=heatmap_var).mean()
         if clustermap:
-            ax = sns.clustermap(d, col_cluster=False, cmap='viridis', figsize=figsize)
+            ax = sns.clustermap(d, col_cluster=col_cluster, cmap='viridis', figsize=figsize)
             return ax
         fig, ax = plt.subplots(figsize=(16, 10))
         ax = sns.heatmap(d, linewidth=0.5, ax=ax, cmap='viridis')
