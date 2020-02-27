@@ -850,7 +850,7 @@ class Gating:
     def _overwrite(self, population: Population, catch: bool):
         if np.array_equal(population.load_index(), self.populations.get(population.population_name).index):
             return False
-        if catch:
+        if not catch:
             raise ValueError(f'{population.population_name} has been changed, change "overwrite" to '
                              f'True to overwrite existing data; note this will delete any clusters '
                              f'currently associated to this population')
@@ -868,13 +868,13 @@ class Gating:
         :param overwrite: If True, existing populations/gates for sample will be overwritten
         :return: True if successful else False
         """
-        fg = self.filegroup
+        fg = FileGroup.objects(id=self.mongo_id).get()
         existing_cache = [p.population_name for p in fg.populations]
         existing_gates = [g.gate_name for g in fg.gates]
 
         for name in self.populations.keys():
             if name in existing_cache:
-                if self._overwrite([p for p in existing_cache if p == name][0], overwrite):
+                if self._overwrite([p for p in fg.populations if p.population_name == name][0], overwrite):
                     FileGroup.objects(id=self.mongo_id).update(push__populations=self._population_to_mongo(name))
             else:
                 FileGroup.objects(id=self.mongo_id).update(push__populations=self._population_to_mongo(name))
