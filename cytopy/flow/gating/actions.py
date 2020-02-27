@@ -870,20 +870,24 @@ class Gating:
         """
         fg = self.filegroup
         existing_cache = [p.population_name for p in fg.populations]
+        existing_gates = [g.gate_name for g in fg.gates]
 
         for name in self.populations.keys():
             if name in existing_cache:
-                if self._overwrite([p for p in existing_cache if p.population_name == name][0],
-                                   overwrite):
+                if self._overwrite([p for p in existing_cache if p == name][0], overwrite):
                     FileGroup.objects(id=self.mongo_id).update(push__populations=self._population_to_mongo(name))
+            else:
+                FileGroup.objects(id=self.mongo_id).update(push__populations=self._population_to_mongo(name))
+
+        if not overwrite:
+            assert any([gate_name in existing_gates for gate_name in self.gates.keys()]), f'One or more gates in Gating instance already exist, ' \
+                                                                                          f'change "overwrite" to True to overwrite ' \
+                                                                                          f'the existing gates'
+        else:
+            fg.gates = []
+            self.filegroup = fg.save()
 
         for gate_name, gate in self.gates.items():
-            if gate_name in [g.gate_name for g in self.filegroup.gates]:
-                if not overwrite:
-                    raise ValueError(f'{gate_name} already exists, change "overwrite" to True to overwrite '
-                                     f'the existing gates')
-                self.filegroup.gates = [g for g in self.filegroup.gates if g.gate_name != gate_name]
-                self.filegroup = self.filegroup.save()
             gate = self._serailise_gate(gate)
             FileGroup.objects(id=self.mongo_id).update(push__gates=gate)
         if feedback:
@@ -911,20 +915,6 @@ class Gating:
         else:
             fg.flags = 'invalid'
         fg.save()
-
-    def nudge_threshold(self, gate_name, new_x: float, new_y: float or None = None, delete: bool = True):
-        gate = self.gates.get(gate_name)
-        assert gate, 'Invalid gate name'
-        assert gate.class_ == 'DensityThreshold', 'Nudge threshold only valid for threshold gates'
-        new_geom = {c: self.fetch_geom(c) for c in gate.children}
-        _ = {'gate_1d': 'threshold', 'gate_2d': 'threshold_x'}
-        x = _.get(gate.method)
-        for c in gate.children:
-            new_geom[c][x] = new_x
-            if new_y is not None:
-                new_geom[c]['threshold_y'] = new_y
-        self.edit_gate(gate_name, updated_geom=new_geom, delete=delete)
-
 
 class Template(Gating):
     """
