@@ -763,10 +763,11 @@ class Gating:
         node = self.populations[population]
         return [x.name for x in findall(root, filter_=lambda n: node in n.path)]
 
-    def remove_population(self, population_name: str) -> None:
+    def remove_population(self, population_name: str, hard_delete: bool = False) -> None:
         """
         Remove a population
         :param population_name: name of population to remove
+        :param hard_delete: if True, population and dependencies will be removed from database
         :return: None
         """
         if population_name not in self.populations.keys():
@@ -776,6 +777,9 @@ class Gating:
         self.populations[population_name].parent = None
         for x in downstream_populations:
             self.populations.pop(x)
+        if hard_delete:
+            self.filegroup.delete_populations(downstream_populations)
+            self.filegroup = self.filegroup.save()
 
     def remove_gate(self, gate_name: str, propagate: bool = True) -> list and list or None:
         """
@@ -846,49 +850,39 @@ class Gating:
         pop_mongo.save_index(pop_node.index)
         return pop_mongo
 
-    def _overwrite(self, population: Population, catch: bool):
-        if np.array_equal(population.load_index(), self.populations.get(population.population_name).index):
-            return False
-        if not catch:
-            raise ValueError(f'{population.population_name} has been changed, change "overwrite" to '
-                             f'True to overwrite existing data; note this will delete any clusters '
-                             f'currently associated to this population')
-        if population.clustering:
-            print(f'Warning: index for {population.population_name} has changed and the associated clusters '
-                  f'are now invalid')
-            self.filegroup.populations = [p for p in self.filegroup.populations
-                                          if p.population_name != population.population_name]
-            self.filegroup = self.filegroup.save()
-        return True
-
     def save(self, overwrite: bool = False, feedback: bool = True) -> bool:
         """
         Save all gates and population's to mongoDB
         :param overwrite: If True, existing populations/gates for sample will be overwritten
         :return: True if successful else False
         """
-        fg = FileGroup.objects(id=self.mongo_id).get()
-        existing_cache = [p.population_name for p in fg.populations]
-        existing_gates = [g.gate_name for g in fg.gates]
+        existing_pops = list(self.filegroup.list_populations())
+        existing_gates = list(self.filegroup.list_gates())
 
+        # Update populations
+        populations_to_save = list()
         for name in self.populations.keys():
-            if name in existing_cache:
-                if self._overwrite([p for p in fg.populations if p.population_name == name][0], overwrite):
-                    FileGroup.objects(id=self.mongo_id).update(push__populations=self._population_to_mongo(name))
+            if name in existing_pops:
+                existing_population = FileGroup.objects(id=self.mongo_id).get().get_population(name)
+                if np.array_equal(existing_population.load_index(), self.populations.get(name).index):
+                    populations_to_save.append(existing_population)
+                    continue
+                if not overwrite:
+                    raise ValueError(f'The index for population {name} has been changed, change "overwrite" to '
+                                     f'True to overwrite existing data; note this will delete any clusters '
+                                     f'currently associated to this population')
+                else:
+                    if existing_population.clustering:
+                        print(f'Warning: index for {name} has changed and the associated clusters '
+                              f'are now invalid')
+                    populations_to_save.append(self._population_to_mongo(name))
             else:
-                FileGroup.objects(id=self.mongo_id).update(push__populations=self._population_to_mongo(name))
+                populations_to_save.append(self._population_to_mongo(name))
+        self.filegroup.populations = populations_to_save
 
-        if not overwrite:
-            assert any([gate_name in existing_gates for gate_name in self.gates.keys()]), f'One or more gates in Gating instance already exist, ' \
-                                                                                          f'change "overwrite" to True to overwrite ' \
-                                                                                          f'the existing gates'
-        else:
-            fg.gates = []
-            self.filegroup = fg.save()
-
-        for gate_name, gate in self.gates.items():
-            gate = self._serailise_gate(gate)
-            FileGroup.objects(id=self.mongo_id).update(push__gates=gate)
+        # Update gates
+        self.filegroup.gates = [self._serailise_gate(gate) for gate in self.gates.values()]
+        self.filegroup = self.filegroup.save()
         if feedback:
             print('Saved successfully!')
         return True
@@ -908,7 +902,7 @@ class Gating:
         return idx
 
     def register_as_invalid(self):
-        fg = self.filegroup
+        fg = FileGroup.objects(id=self.mongo_id).get()
         if fg.flags:
             fg.flags = fg.flags + ',invalid'
         else:
