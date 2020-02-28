@@ -359,6 +359,14 @@ class FileGroup(mongoengine.Document):
         'collection': 'fcs_files'
     }
 
+    def list_populations(self):
+        for p in self.populations:
+            yield p.population_name
+
+    def list_gates(self):
+        for g in self.gates:
+            yield g.gate_name
+
     def delete_populations(self, populations: list or str) -> None:
         """
         Delete one or more populations from FileGroup
@@ -405,7 +413,7 @@ class FileGroup(mongoengine.Document):
             return False
         return True
 
-    def pull_population(self, population_name: str) -> Population:
+    def get_population(self, population_name: str) -> Population:
         """
         Retrieve a population from the database
         :param population_name: name of population to pull

@@ -326,7 +326,7 @@ class Plot:
         if cluster_root_population is None:
             all_clusters = []
         else:
-            all_clusters = list(fg.pull_population(cluster_root_population).list_clusters(meta=meta_clusters))
+            all_clusters = list(fg.get_population(cluster_root_population).list_clusters(meta=meta_clusters))
         for p in [base_population] + pgeoms + poverlay:
             assert p in self.gating.populations.keys(), f'Error: could not find {p}, valid populations include: ' \
                                                         f'{self.gating.populations.keys()}'
