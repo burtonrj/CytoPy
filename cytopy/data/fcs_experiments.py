@@ -100,11 +100,13 @@ class FCSExperiment(mongoengine.Document):
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
         return FileGroup.objects(id=file_grp.id).get()
         
-    def list_samples(self) -> list:
+    def list_samples(self, valid_only=True) -> list:
         """
         Generate a list IDs of file groups associated to experiment
         :return: List of IDs of file groups associated to experiment
         """
+        if valid_only:
+            return [f.primary_id for f in self.fcs_files if not f.validity()]
         return [f.primary_id for f in self.fcs_files]
 
     def list_invalid(self) -> list:
