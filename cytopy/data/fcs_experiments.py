@@ -106,7 +106,7 @@ class FCSExperiment(mongoengine.Document):
         :return: List of IDs of file groups associated to experiment
         """
         if valid_only:
-            return [f.primary_id for f in self.fcs_files if not f.validity()]
+            return [f.primary_id for f in self.fcs_files if f.validity()]
         return [f.primary_id for f in self.fcs_files]
 
     def list_invalid(self) -> list:
