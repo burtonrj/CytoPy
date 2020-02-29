@@ -17,12 +17,9 @@ def __pull_features(sid, experiment):
     return list(d.columns)
 
 
-def find_common_features(experiment: FCSExperiment, exclude: list or None = None):
+def find_common_features(experiment: FCSExperiment, samples: list or None = None):
     pool = Pool(cpu_count())
-    if exclude is not None:
-        samples = [f for f in experiment.list_samples() if f not in exclude]
-    else:
-        samples = experiment.list_samples()
+    assert all([s in experiment.list_samples() for s in samples]), 'One or more samples specified do not belong to experiment'
     pull = partial(__pull_features, experiment=experiment)
     all_features = pool.map(pull, samples)
     common_features = set(all_features[0])

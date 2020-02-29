@@ -164,32 +164,26 @@ class Normalise:
 
 
 class EvaluateBatchEffects:
-    def __init__(self, experiment: FCSExperiment, root_population: str,
+    def __init__(self, experiment: FCSExperiment, root_population: str, samples: list or None = None,
                  transform: str = 'logicle', scale: str or None = None,
-                 sample_n: str or None = 10000, exclude: list or None = None):
+                 sample_n: str or None = 10000):
         self.experiment = experiment
-        self.sample_ids = experiment.list_samples()
+        self.sample_ids = samples or experiment.list_samples()
         self.transform = transform
         self.scale = scale
         self.sample_n = sample_n
         self.root_population = root_population
-        self.data = self.load_data(experiment, exclude)
+        self.data = self.load_data()
         self.kde_cache = dict()
 
-    def load_data(self, experiment: FCSExperiment, exclude: list or None = None) -> dict:
+    def load_data(self) -> dict:
         """
         Load new dataset from given FCS Experiment
-        :param experiment:
-        :param exclude:
         :return:
         """
-        self.experiment = experiment
-        self.sample_ids = experiment.list_samples()
         self.kde_cache = dict()
-        if exclude is not None:
-            self.sample_ids = [s for s in self.sample_ids if s not in exclude]
         lt = partial(ordered_load_transform,
-                     experiment=experiment,
+                     experiment=self.experiment,
                      root_population=self.root_population,
                      transform=self.transform,
                      scale=self.scale,

@@ -103,7 +103,7 @@ def __channel_mappings(features: list, panel: Panel) -> list:
 
 def create_reference_sample(experiment: FCSExperiment,
                             root_population='root',
-                            exclude: list or None = None,
+                            samples: list or None = None,
                             new_file_name: str or None = None,
                             sampling_method: str = 'uniform',
                             sample_n: int or float = 1000,
@@ -133,25 +133,22 @@ def create_reference_sample(experiment: FCSExperiment,
         raise ValueError('Error: currently only uniform sampling is implemented in this version of cytopy')
 
     vprint = print if verbose else lambda *a, **k: None
-
+    assert all([s in experiment.list_samples() for s in samples]), 'One or more samples specified do not belong to experiment'
     vprint('-------------------- Generating Reference Sample --------------------')
-    if exclude is None:
-        exclude = []
     if new_file_name is None:
         new_file_name = f'{experiment.experiment_id}_sampled_data'
     vprint('Finding features common to all fcs files...')
-    features = find_common_features(experiment=experiment, exclude=exclude)
+    features = find_common_features(experiment=experiment, samples=samples)
     channel_mappings = __channel_mappings(features,
                                           experiment.panel)
-    files = [f for f in experiment.list_samples() if f not in exclude]
     data = pd.DataFrame()
     if include_population_labels:
         features.append('label')
-    for f in files:
-        vprint(f'Sampling {f}...')
-        g = Gating(experiment, f, include_controls=False)
+    for s in samples:
+        vprint(f'Sampling {s}...')
+        g = Gating(experiment, s, include_controls=False)
         if root_population not in g.populations.keys():
-            vprint(f'Skipping {f} as {root_population} is absent from gated populations')
+            vprint(f'Skipping {s} as {root_population} is absent from gated populations')
             continue
         df = g.get_population_df(root_population, label=include_population_labels)[features]
         data = pd.concat([data, sample(df)])
@@ -172,7 +169,7 @@ def create_reference_sample(experiment: FCSExperiment,
     new_filegroup.populations.append(root_p)
     if include_population_labels:
         vprint('Warning: new concatenated sample will inherit population labels but NOT gates or '
-              'population hierarchy')
+               'population hierarchy')
         for pop in data.label.unique():
             idx = data[data.label == pop].index.values
             n = len(idx)
