@@ -882,10 +882,14 @@ class MetaClustering(Clustering):
         assert target_clustering_def, f'No such clustering definition {self.ce.meta_clustering_uid_target} to target'
         for s in progress_bar(samples):
             clustering = SingleClustering(clustering_definition=target_clustering_def[0])
-            clustering.load_data(experiment=self.experiment,
-                                 sample_id=s,
-                                 scale=self.scale,
-                                 include_population_label=True)
+            try:
+                clustering.load_data(experiment=self.experiment,
+                                     sample_id=s,
+                                     scale=self.scale,
+                                     include_population_label=True)
+            except KeyError as e:
+                print(f'failed to load data for {s}: {e}')
+                continue
             pt_id = clustering.data['pt_id'].values[0]
             if len(clustering.clusters.keys()) == 0:
                 print(f'No clusters found for clustering UID '
