@@ -188,7 +188,10 @@ class Population(mongoengine.EmbeddedDocument):
         :return: None
         """
         for c in self.clustering:
-            if c.cluster_experiment.clustering_uid == current_uid:
+            try:
+                if c.cluster_experiment.clustering_uid == current_uid:
+                    c.cluster_experiment = new_cluster_definition
+            except mongoengine.errors.DoesNotExist:
                 c.cluster_experiment = new_cluster_definition
 
     def update_cluster(self, cluster_id: str, new_cluster: Cluster) -> None:
