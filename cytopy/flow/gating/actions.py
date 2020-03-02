@@ -846,7 +846,8 @@ class Gating:
                                prop_of_parent=pop_node.prop_of_parent,
                                prop_of_total=pop_node.prop_of_total,
                                warnings=pop_node.warnings,
-                               geom=geom)
+                               geom=geom,
+                               n=len(pop_node.index))
         pop_mongo.save_index(pop_node.index)
         return pop_mongo
 

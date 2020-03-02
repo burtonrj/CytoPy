@@ -112,6 +112,7 @@ class Population(mongoengine.EmbeddedDocument):
     """
     population_name = mongoengine.StringField()
     index = mongoengine.FileField(db_alias='core', collection_name='population_indexes')
+    n = mongoengine.IntField()
     parent = mongoengine.StringField()
     prop_of_parent = mongoengine.FloatField()
     prop_of_total = mongoengine.FloatField()

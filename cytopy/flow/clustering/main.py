@@ -322,7 +322,7 @@ class Explorer:
                                              figsize=figsize, **matplotlib_kwargs)
 
             return scprep.plot.scatter2d(data[embedding_cols], c=plabel, ticks=False,
-                                         label_prefix=dim_reduction_method, s=1,
+                                         label_prefix=dim_reduction_method,
                                          discrete=discrete, legend_loc="lower left",
                                          legend_anchor=(1.04, 0), legend_title=label,
                                          figsize=figsize, **matplotlib_kwargs)
@@ -335,7 +335,7 @@ class Explorer:
                                              legend_anchor=(1.04, 0), legend_title=label,
                                              figsize=figsize, **matplotlib_kwargs)
             return scprep.plot.scatter3d(data[embedding_cols], c=plabel, ticks=False,
-                                         label_prefix=dim_reduction_method, s=1,
+                                         label_prefix=dim_reduction_method,
                                          discrete=discrete, legend_loc="lower left",
                                          legend_anchor=(1.04, 0), legend_title=label,
                                          figsize=figsize, **matplotlib_kwargs)
@@ -858,7 +858,7 @@ class MetaClustering(Clustering):
         def load(sample_id, cluster_id):
             fg = self.experiment.pull_sample(sample_id)
             root = [p for p in fg.populations if p.population_name == self.ce.root_population]
-            assert root, f'{self.ce.root_population} missing from sample {s}'
+            assert root, f'{self.ce.root_population} missing from sample {sample_id}'
             root = root[0]
             cluster = [c for c in root.clustering if c.cluster_id == cluster_id][0]
             assert cluster.meta_cluster_id, f'Meta cluster missing from {sample_id}, repeat clustering'

@@ -1,4 +1,5 @@
 from ..data.fcs_experiments import FCSExperiment
+from ..data.fcs import FileGroup
 from ..data.subject import Subject, gram_status, bugs, hmbpp_ribo, org_type
 from cytopy.flow.dim_reduction import dimensionality_reduction
 from ..data.fcs import ClusteringDefinition
@@ -20,6 +21,130 @@ from scipy import stats
 import pandas as pd
 import numpy as np
 import scprep
+
+
+class NormalisedMFI:
+    def __init__(self, experiment: FCSExperiment, samples: list or None = None):
+        self.experiment = experiment
+        if not samples:
+            self.samples = self.experiment.list_samples()
+
+    def add_population(self, population_name: str):
+        pass
+
+
+def meta_labelling(experiment: FCSExperiment, dataframe: pd.DataFrame, meta_label: str):
+    def fetch_meta(sample_id):
+        subject = Subject.objects(files=experiment.pull_sample(sample_id))
+        assert subject, f'Sample {sample_id} is not associated to any subject!'
+        try:
+            return subject[0][meta_label]
+        except KeyError:
+            return None
+    assert 'sample_id' in dataframe.columns, 'DataFrame must contain a column of valid sample IDs with ' \
+                                             'column name "sample_id"'
+    assert all([s in experiment.list_samples() for s in dataframe['sample_id']]), 'One or more sample IDs ' \
+                                                                                  'are not associated to the ' \
+                                                                                  'given experiment'
+    df = dataframe.copy()
+    df[meta_label] = df['sample_id'].apply(fetch_meta)
+    return df
+
+
+class ExperimentProportions:
+    def __init__(self, experiment: FCSExperiment, samples: list or None = None):
+        self.experiment = experiment
+        if not samples:
+            self.samples = self.experiment.list_samples()
+        else:
+            assert all([s in experiment.list_samples() for s in samples]), 'One or more given sample IDs is ' \
+                                                                           'invalid or not associated to the ' \
+                                                                           'given experiment'
+            self.samples = samples
+
+    def population_proportions(self, parent: str, populations_of_interest: list):
+        results = pd.DataFrame()
+        for s in self.samples:
+            try:
+                prop = Proportions(experiment=self.experiment, sample_id=s)
+                results = pd.concat([results, prop.get_pop_proportions(parent, populations_of_interest)])
+            except AssertionError as e:
+                print(f'Failed to retrieve data for {s}: {e}')
+        return results
+
+    def cluster_proportions(self, comparison_population: str, clusters_of_interest: list,
+                            clustering_definition: ClusteringDefinition,
+                            merge_associated_clusters: bool = False):
+        results = pd.DataFrame()
+        for s in self.samples:
+            prop = Proportions(experiment=self.experiment, sample_id=s)
+            try:
+                results = pd.concat([results, prop.get_cluster_proportions(comparison_population,
+                                                                           clusters_of_interest,
+                                                                           clustering_definition,
+                                                                           merge_associated_clusters)])
+            except AssertionError as e:
+                print(f'Failed to retrieve data for {s}: {e}')
+        return results
+
+
+class Proportions:
+    def __init__(self, experiment: FCSExperiment, sample_id: str):
+        assert sample_id in experiment.list_samples(), f'{sample_id} not found for {experiment.experiment_id}, ' \
+                                                       f'are you sure this is a valid sample?'
+        self.experiment = experiment
+        self.sample_id = sample_id
+        self.file_group: FileGroup = self.experiment.pull_sample(self.sample_id)
+
+    def get_population_n(self, population: str):
+        return self.file_group.get_population(population).n
+
+    def get_cluster_n(self, clustering_definition: ClusteringDefinition, cluster_id: str,
+                      merge_on_like_term: bool = False):
+        root = self.file_group.get_population(clustering_definition.root_population)
+        if merge_on_like_term:
+            # Get a list of meta cluster IDs that contain the term of interest
+            filtered_clusters = set(filter(lambda c: cluster_id in c, [c.meta_cluster_id for c in root.clustering]))
+            # Use the filtered list to generate a list of relevant cluster objects
+            clusters = [c for c in root.clustering if c.meta_cluster_id in filtered_clusters]
+            # If empty return 0
+            if not clusters:
+                return 0
+            # Sum the resulting cluster n's
+            return sum([c.n_events for c in clusters])
+        try:
+            return len(root.pull_cluster(cluster_id=cluster_id, meta=clustering_definition.meta_method)[1])
+        except AssertionError:
+            return 0
+
+    def _as_dataframe(self, results: dict):
+        results['sample_id'] = [self.sample_id]
+        return pd.DataFrame(results)
+
+    def get_pop_proportions(self, parent: str, populations_of_interest: list):
+        results = {i: list() for i in populations_of_interest}
+        population_n = {p: self.get_population_n(p) for p in populations_of_interest}
+        parent_n = self.get_population_n(parent)
+        for p in populations_of_interest:
+            assert population_n.get(p) < parent_n, f'Population {p} is larger than the given parent {parent}, ' \
+                                                   f'are you sure {parent} is upstream of {p}'
+            results[p].append(population_n.get(p)/parent_n)
+        return self._as_dataframe(results)
+
+    def get_cluster_proportions(self, comparison_population: str, clusters_of_interest: list,
+                                clustering_definition: ClusteringDefinition, merge_associated_clusters: bool = False):
+        results = {i: list() for i in clusters_of_interest}
+        cluster_n = {c: self.get_cluster_n(clustering_definition,
+                                           cluster_id=c,
+                                           merge_on_like_term=merge_associated_clusters) for c in clusters_of_interest}
+        denominator = self.file_group.get_population(comparison_population).n
+        for c in clusters_of_interest:
+            results[c].append(cluster_n[c]/denominator)
+        return self._as_dataframe(results)
+
+
+def get_normalised_mfi():
+    pass
 
 
 class Extract:
