@@ -62,6 +62,18 @@ class ExperimentProportions:
                                                                            'given experiment'
             self.samples = samples
 
+    def raw_counts(self, populations: list or None):
+        results = {p: list() for p in populations}
+        for s in self.samples:
+            results['sample_id'].append(s)
+            try:
+                prop = Proportions(experiment=self.experiment, sample_id=s)
+                for p in populations:
+                    results[p].append(prop.get_population_n(p))
+            except AssertionError as e:
+                print(f'Failed to retrieve data for {s}: {e}')
+                continue
+
     def population_proportions(self, parent: str, populations_of_interest: list):
         results = pd.DataFrame()
         for s in self.samples:
