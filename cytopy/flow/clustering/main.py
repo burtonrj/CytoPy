@@ -172,8 +172,12 @@ class Explorer:
             if pt_id is None:
                 continue
             p = Subject.objects(subject_id=pt_id).get()
-            assert type(p[variable]) != EmbeddedDocumentList, 'Chosen variable is an embedded document.'
-            self.data.loc[self.data.pt_id == pt_id, variable] = p[variable]
+            try:
+                assert type(p[variable]) != EmbeddedDocumentList, 'Chosen variable is an embedded document.'
+                self.data.loc[self.data.pt_id == pt_id, variable] = p[variable]
+            except KeyError:
+                print(f'{pt_id} is missing meta-variable {variable}')
+                self.data.loc[self.data.pt_id == pt_id, variable] = None
 
     def load_infectious_data(self, multi_org: str = 'list'):
         """
