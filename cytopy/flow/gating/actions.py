@@ -15,6 +15,7 @@ from .mixturemodel import MixtureModel
 from .defaults import ChildPopulationCollection
 from .plotting.static_plots import Plot
 from .utilities import get_params, inside_ellipse, inside_polygon
+from ..utilities import progress_bar
 # Housekeeping and other tools
 from anytree.exporter import DotExporter
 from anytree import Node, RenderTree
@@ -27,6 +28,7 @@ import inspect
 import copy
 # Scipy
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
 import pandas as pd
 import numpy as np
 
@@ -98,31 +100,34 @@ class Gating:
             raise GateError(f'Error: failed to fetch data for {sample_id}. Aborting.')
         self.data = [x for x in data if x['typ'] == 'complete'][0]['data']
         if include_controls:
-            self.fmo = [x for x in data if x['typ'] == 'control']
-            self.fmo = {x['id'].replace(f'{sample_id}_', ''): x['data'] for x in self.fmo}
+            self.ctrl = [x for x in data if x['typ'] == 'control']
+            self.ctrl = {x['id'].replace(f'{sample_id}_', ''): x['data'] for x in self.ctrl}
         else:
-            self.fmo = {}
+            self.ctrl = {}
         self.id = sample_id
         self.mongo_id = experiment.fetch_sample_mid(sample_id)
         self.experiment = experiment
         self.plotting = Plot(self, default_axis)
-        self.fmo_search_cache = {_id: dict(root=data.index.values) for _id, data in self.fmo.items()}
         del data
         fg = experiment.pull_sample(sample_id)
         self.filegroup = fg
         self.gates = dict()
+        self.populations = dict()
         if fg.gates:
             for g in fg.gates:
                 self._deserialise_gate(g)
 
-        self.populations = dict()
+        # If no population data in database create root populations and instantiate empty tree
         if not fg.populations or len(fg.populations) == 1:
+            control_cache = None
+            if include_controls:
+                control_cache = {control_id: control_data.index.values for control_id, control_data in self.ctrl.items()}
             root = Node(name='root', prop_of_parent=1.0, prop_of_total=1.0,
                         warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values,
-                        parent=None)
+                        parent=None, control_cache=control_cache)
             self.populations['root'] = root
         else:
-            # Reconstruct tree
+            # Reconstruct tree and populate control cache is necessary
             assert 'root' in [p.population_name for p in fg.populations], 'Root population missing!'
             parents = [p.parent for p in fg.populations]
             pops = [p.to_python() for p in fg.populations]
@@ -244,86 +249,152 @@ class Gating:
                 valid.append(pop)
         return valid
 
-    def search_fmo_cache(self, target_population: str, fmo: str) -> list or None:
+    def search_ctrl_cache(self, target_population: str, ctrl_id: str, return_dataframe: bool = False):
         """
-        Given the name of some desired population and an FMO of interest, check the FMO cache to determine
-        if this population has been estimated for the FMO previously, if so, return the cached index.
-        :param target_population: name of desired population
-        :param fmo: name of FMO of interest
-        :return: FMO population index or None if non-existing
-        """
-        if target_population in self.fmo_search_cache[fmo].keys():
-            return self.fmo_search_cache[fmo][target_population]
-        return None
+        Search the control cache for a target population. Return either index of events belonging to target
+        population in control data or Pandas DataFrame of target population from control data.
 
-    def get_fmo_data(self, target_population: str, fmo: str, sml_profiles: dict or None) -> pd.DataFrame:
+        Parameters
+        ----------
+        target_population: str
+            Name of population to extract from control data
+        ctrl_id: str
+            Name of control to extract data from
+        return_dataframe: bool
+            If True, return a Pandas DataFrame of target population, else return index of events belonging to target
+            population
+
+        Returns
+        -------
+        Numpy.Array or Pandas.DataFrame
         """
-        Given some target population that has already been defined in the primary data, predict the same population
-        in a given FMO control. Following the gating strategy, each population from the root until the target population
-        is predicted using a KNN model trained on the primary data (the FMO is assumed to have been collected under
-        the same experimental conditions and therefore should not significantly deviate).
-        A dynamic programming methodology is taken where by predictions are cached for future use.
-        Note: currently fmo cache is not saved to the database and must be re-calculated for each instance of Gating,
-        future releases will offer the ability to save FMO cache
-        :param target_population: name of target population to predict in FMO data (all upstream populations will also
-        be predicted and cached)
-        :param fmo: name of target FMO control
-        :param sml_profiles: if one or more populations were derived using supervised machine learning methods in the
-        primary data, you must provide a dictionary where each population is associated with geometric information
-        defining what dimensions to isolate the population in e.g. {'XGBoost_CD4+Tcells': {'x': 'CD4', 'y': 'CD8'}}
-        the KNN model would be trained using CD4 and CD8 as input features with the target being the CD4+Tcell
-        population.
-        :return: Pandas DataFrame for target population in FMO data
+        assert target_population in self.populations.keys(), f'Invalid population {target_population}'
+        assert self.ctrl, 'No control data present for current gating instance, was "include_controls" set to False?'
+        assert self.ctrl.get(ctrl_id), f'No control data found for {ctrl_id}'
+        if return_dataframe:
+            idx = self.populations[target_population]['control_idx'].get(ctrl_id)
+            assert idx, f'No population data found for {ctrl_id}, have you called "control_gating"'
+            return self.ctrl[ctrl_id].loc[idx]
+        return self.populations[target_population]['control_idx'].get(ctrl_id)
+
+    def _predict_ctrl_population(self, target_population: str, ctrl_id: str, model: SVC or KNeighborsClassifier,
+                                 mappings: dict or None = None):
         """
-        # Check cache if this population has been derived previously
-        cache_idx = self.search_fmo_cache(target_population, fmo)
-        if cache_idx is not None:
-            return self.fmo[fmo].loc[cache_idx]
+        Internal method. Predict a target population for a given control using the primary data as
+        training data. Results are assigned to population node.
+
+        Parameters
+        ----------
+        target_population: str
+            Name of population to predict
+        ctrl_id: str
+            Name of the control to predict population for
+        model: Object
+            Instance of Scikit-Learn classifier
+        mappings: dict, optional
+            Dictionary of axis mappings for classification (necessary if training data is generated from a supervised
+            learning method)
+
+        Returns
+        -------
+        None
+        """
+        assert target_population in self.populations.keys(), f'Invalid population {target_population}'
+        target_node = self.populations.get(target_population)
+        cache_idx = self.search_ctrl_cache(target_node.parent.name, ctrl_id)
+        if cache_idx is None:
+            self._predict_ctrl_population(target_node.parent.name, ctrl_id, model, mappings)
+            cache_idx = self.search_ctrl_cache(target_node.parent.name, ctrl_id)
+
+        x, y = target_node.get('x'), target_node.get('y') or 'FSC-A'
+        if x is None or y is None:
+            assert mappings, f'{target_population} has no specified x and y, please provide mappings'
+            x = x or mappings.get('x')
+            y = y or mappings.get('y')
+        # Prepare training data
+        train = self.get_population_df(target_node.parent.name)[[x, y]].copy()
+        if train.shape[0] > 10000:
+            train = train.sample(10000)
+        train['pos'] = 0
+        train.pos = train.pos.mask(train.index.isin(target_node.index), 1)
+        y_ = train.pos.values
+        # Fit model and predict values for fmo
+        model.fit(train[[x, y]], y_)
+        ctrl_data = self.ctrl.get(ctrl_id).loc[cache_idx]
+        ctrl_data['pos'] = model.predict(ctrl_data[[x, y]])
+        self.populations[target_population]['control_idx'][ctrl_id] = ctrl_data[ctrl_data['pos'] == 1].index.values
+
+    def clear_control_cache(self, ctrl_id: str) -> None:
+        """
+        Remove all associated populations to given control.
+
+        Parameters
+        ----------
+        ctrl_id: str
+            Control to remove populations from
+
+        Returns
+        -------
+        None
+        """
+        assert ctrl_id in self.ctrl.keys(), f'No control data found for {ctrl_id}'
+        for pop_name in self.populations.keys():
+            self.populations[pop_name]['control_idx'].pop(pop_name)
+
+    def control_gating(self, ctrl_id: str,
+                       tree_map: dict or None,
+                       overwrite_existing: bool = False,
+                       verbose: bool = True,
+                       model: str = 'knn',
+                       **model_kwargs) -> None:
+        """
+        Using the primary data as a training set, transverse over the population tree and predict the same
+        populations for some given control. Results of classification are saved to the population nodes.
+
+        Parameters
+        ----------
+        ctrl_id: str
+            Name of control data to predict populations for; must be a valid ID currently associated to Gating object
+        tree_map: dict, optional
+            Dictionary describing the axis of populations in the population tree. This is only necessary if populations
+            currently in population tree were generated using a supervised machine learning method.
+        overwrite_existing: bool, (default=False)
+            If True, any existing control populations will be removed
+        verbose: bool, (default=True)
+            If True, a progress bar is provided as well as text output
+        model: str, (default='knn')
+            Type of model to use for per-population classification. Currently supports K-Nearest Neighbours (knn) and
+            Support Vector Machines (svm)
+        model_kwargs:
+            Additional keyword arguments to pass to instance of Scikit-Learn classifier (see sklearn documentation)
+
+        Returns
+        -------
+        None
+        """
+        vprint = print if verbose else lambda *a, **k: None
+        # Check that control data is available
+        assert self.ctrl, 'No control data present for current gating instance, was "include_controls" set to False?'
+        assert ctrl_id in self.ctrl.keys(), f'No control data found for {ctrl_id}'
+        assert all([all([i in x.keys() for i in ['x', 'y']]) for x in tree_map.values()]), 'Invalid tree_map'
+        if model == 'knn':
+            model = KNeighborsClassifier(n_jobs=-1, **model_kwargs)
+        elif model == 'svm':
+            model = SVC(random_state=42, **model_kwargs)
         else:
-            cache_idx = self.fmo_search_cache[fmo]['root']
+            raise ValueError('Currently only KNearestNeighbours (knn) or Support Vector Machines (svm) are supported')
 
-        node = self.populations[target_population]
-        route = [x.name for x in node.path][1:]
-
-        # Find start position by searching cache
-        for i, pop in enumerate(route[::-1]):
-            if pop in self.fmo_search_cache.keys():
-                route = route[::-1][:i+1][::-1]
-                cache_idx = self.populations[pop].index
-                break
-
-        fmo_data = self.fmo[fmo].loc[cache_idx]
-        # Predict FMO index
-        for pop in route:
-            fmo_data = self.fmo[fmo].loc[cache_idx]
-
-            # Train KNN from whole panel data
-            x = self.populations[pop].geom['x']
-            y = self.populations[pop].geom['y'] or 'FSC-A'
-
-            # Check if SML gate, if so, check sml_profiles
-            if self.populations[pop].geom['shape'] == 'sml':
-                assert sml_profiles, f'No SML profiles provide yet population {pop} is sml defined'
-                assert pop in sml_profiles.keys(), f'SML defined {pop} missing from sml_profiles'
-                geom = sml_profiles.get(pop)
-                x, y = geom.get('x'), geom.get('y')
-
-            parent = self.populations[pop].parent.name
-            train = self.get_population_df(parent)[[x, y]].copy()
-            train['pos'] = 0
-            if train.shape[0] > 10000:
-                train = train.sample(10000)
-            train.pos = train.pos.mask(train.index.isin(self.populations[pop].index), 1)
-            y_ = train.pos.values
-            knn = KNeighborsClassifier(n_jobs=-1, algorithm='ball_tree', n_neighbors=5)
-            knn.fit(train[[x, y]], y_)
-
-            # Predict population in FMO
-            y_hat = knn.predict(fmo_data[[x, y]])
-            fmo_data['pos'] = y_hat
-            cache_idx = fmo_data[fmo_data['pos'] == 1].index.values
-            self.fmo_search_cache[fmo][pop] = cache_idx
-        return fmo_data.loc[cache_idx]
+        if overwrite_existing:
+            self.clear_control_cache(ctrl_id)
+        sml_populations = any([p.get('geom', {}).get('shape') == 'sml' for p in self.populations.values()])
+        if sml_populations:
+            assert tree_map, 'One or more gates detected that have been generated by a supervised machine learning ' \
+                             'method. Please provide a mapping of the Gating tree to proceed (see documentation for ' \
+                             'help)'
+        vprint(f'------ Gating control {ctrl_id} ------')
+        for pop_name in progress_bar(self.populations.keys(), verbose):
+            if self.search_ctrl_cache(pop_name, ctrl_id) is None:
+                self._predict_ctrl_population(pop_name, ctrl_id, model, mappings=tree_map.get(ctrl_id))
 
     @staticmethod
     def __check_class_args(klass, method: str, **kwargs) -> bool:
@@ -513,9 +584,9 @@ class Gating:
         for k, v in kwargs.items():
             gkwargs[k] = v
         if 'fmo_x' in gkwargs.keys():
-            gkwargs['fmo_x'] = self.get_fmo_data(gatedoc.parent, gkwargs['fmo_x'], sml_profiles=None)
+            gkwargs['fmo_x'] = self.control_gating(gatedoc.parent, gkwargs['fmo_x'], sml_profiles=None)
         if 'fmo_y' in kwargs.keys():
-            gkwargs['fmo_y'] = self.get_fmo_data(gatedoc.parent, gkwargs['fmo_y'], sml_profiles=None)
+            gkwargs['fmo_y'] = self.control_gating(gatedoc.parent, gkwargs['fmo_y'], sml_profiles=None)
         if gatedoc.class_ == 'merge':
             self.merge(population_left=gkwargs.get('left'), population_right=gkwargs.get('right'),
                        new_population_name=gkwargs.get('name'))
@@ -552,7 +623,8 @@ class Gating:
                                           prop_of_parent=prop_of_parent,
                                           prop_of_total=prop_of_total,
                                           geom=geom, warnings=warnings,
-                                          parent=self.populations[parent_name])
+                                          parent=self.populations[parent_name],
+                                          control_idx=dict())
         return output
 
     def apply_many(self, gates: list = None, apply_all: bool = False,
@@ -849,6 +921,8 @@ class Gating:
                                geom=geom,
                                n=len(pop_node.index))
         pop_mongo.save_index(pop_node.index)
+        if pop_node.get('control_idx'):
+            pop_mongo.save_control_idx(pop_node.get('control_idx'))
         return pop_mongo
 
     def save(self, overwrite: bool = False, feedback: bool = True) -> bool:
@@ -858,7 +932,6 @@ class Gating:
         :return: True if successful else False
         """
         existing_pops = list(self.filegroup.list_populations())
-        existing_gates = list(self.filegroup.list_gates())
 
         # Update populations
         populations_to_save = list()

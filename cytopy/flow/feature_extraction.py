@@ -359,14 +359,14 @@ class Extract:
         """
         assert self.include_controls, 'include_controls currently set to False, reinitialise object with argument ' \
                                       'set to True to include FMO data'
-        for fmo_id in self.gating.fmo.keys():
+        for fmo_id in self.gating.ctrl.keys():
             if self.verbose:
                 print(f'...FMO Summary: {fmo_id}')
             if self.verbose:
                 print('...performing KDE calculations')
 
             for pop_id in progress_bar(populations):
-                fmo_data = apply_transform(self.gating.get_fmo_data(pop_id, fmo_id, self.sml_profiles),
+                fmo_data = apply_transform(self.gating.control_gating(pop_id, fmo_id, self.sml_profiles),
                                            transform_method=self.transform)
                 whole_data = self.raw_data.loc[self.gated_populations.get(pop_id).index, :]
                 ks_stat, p = stats.ks_2samp(fmo_data[fmo_id].values, whole_data[fmo_id].values)
@@ -397,19 +397,19 @@ class Extract:
         assert self.include_controls, 'include_controls currently set to False, reinitialise object with argument ' \
                                       'set to True to include FMO data'
         assert features in self.gating.data.columns, f'Invalid features specified, must be one of {self.gating.data.colums.tolist()}'
-        if not self.gating.fmo.keys():
+        if not self.gating.ctrl.keys():
             if self.verbose:
                 print(f'{self.gating.id} has no associated FMOs, aborting')
                 return
-        assert all([x in self.gating.fmo.keys() for x in fmo]), f'Some/all requested FMOs missing, ' \
-                                                                f'valid FMOs include {self.gating.fmo.keys()}'
+        assert all([x in self.gating.ctrl.keys() for x in fmo]), f'Some/all requested FMOs missing, ' \
+                                                                f'valid FMOs include {self.gating.ctrl.keys()}'
         assert population in self.gating.populations.keys(), f'Invalid population name, ' \
                                                              f'valid populations include: ' \
                                                              f'{self.gating.populations.keys()}'
         if self.verbose:
             print('...calculating summary of multi-dimensional FMO topology')
         whole_data = self.raw_data.loc[self.gated_populations.get(population).index, :]
-        fmo_data = {name: apply_transform(self.gating.get_fmo_data(population, name, self.sml_profiles),
+        fmo_data = {name: apply_transform(self.gating.control_gating(population, name, self.sml_profiles),
                                           transform_method=self.transform)
                     for name in fmo}
         centroids = {name: data[fmo].median() for name, data in fmo_data.items()}
