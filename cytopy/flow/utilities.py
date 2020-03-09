@@ -1,43 +1,11 @@
-from cytopy.data.fcs_experiments import FCSExperiment
-from cytopy.flow.gating.actions import Gating
-from cytopy.flow.supervised.utilities import scaler
-from IPython import get_ipython
-from tqdm import tqdm_notebook, tqdm
 from sklearn.neighbors import BallTree, KernelDensity
 from sklearn.model_selection import GridSearchCV
 from scipy.stats import entropy as kl_divergence
 import pandas as pd
 import numpy as np
-
-
-def which_environment() -> str:
-    """
-    Test if module is being executed in the Jupyter environment.
-    :return: environment name
-    """
-    try:
-        ipy_str = str(type(get_ipython()))
-        if 'zmqshell' in ipy_str:
-            return 'jupyter'
-        if 'terminal' in ipy_str:
-            return 'ipython'
-    except:
-        return 'terminal'
-
-
-def progress_bar(x: iter, verbose: bool = True, **kwargs) -> callable:
-    """
-    Generate a progress bar using the tqdm library. If execution environment is Jupyter, return tqdm_notebook
-    otherwise used tqdm.
-    :param x: some iterable to pass to tqdm function
-    :param kwargs: additional keyword arguments for tqdm
-    :return: tqdm or tqdm_notebook, depending on environment
-    """
-    if not verbose:
-        return x
-    if which_environment() == 'jupyter':
-        return tqdm_notebook(x, **kwargs)
-    return tqdm(x, **kwargs)
+from ..data.fcs_experiments import FCSExperiment
+from .gating.actions import Gating
+from .supervised.utilities import scaler
 
 
 def faithful_downsampling(data: np.array, h: float):
@@ -138,6 +106,29 @@ def kde_multivariant(x: np.array, bandwidth: str or float = 'cross_val',
     return np.exp(log_pdf)
 
 
+def ordered_load_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str,
+                           scale: str or None = None, sample_n: int or None = None) -> (str, pd.DataFrame or None):
+    """
+    Wrapper function for load_and_transform that adds convenience for multi-processing (data can be ordered post-hoc);
+    returns a tuple, first element is the subject ID and the second element the population dataframe.
+
+    :param experiment: Experiment object that sample belongs to
+    :param sample_id: ID for sample to load
+    :param root_population: name of root population to load from sample
+    :param transform: name of transformation method to apply (if None, data is returned untransformed)
+    :param scale: name of scalling method to apply after transformation (if None, no scaling is applied)
+    :param sample_n: number of events to return (sample is uniform; if None, no sampling occurs)
+    :return: sample_id, population dataframe
+    """
+    try:
+        data = load_and_transform(sample_id, experiment, root_population, transform,
+                                  scale, sample_n)
+    except KeyError:
+        print(f'Sample {sample_id} missing root population {root_population}')
+        return sample_id, None
+    return sample_id, data
+
+
 def load_and_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str or None,
                        scale: str or None = None, sample_n: int or None = None) -> pd.DataFrame or None:
     """
@@ -170,26 +161,3 @@ def load_and_transform(sample_id: str, experiment: FCSExperiment, root_populatio
             return data
         return data.sample(sample_n)
     return data
-
-
-def ordered_load_transform(sample_id: str, experiment: FCSExperiment, root_population: str, transform: str,
-                           scale: str or None = None, sample_n: int or None = None) -> (str, pd.DataFrame or None):
-    """
-    Wrapper function for load_and_transform that adds convenience for multi-processing (data can be ordered post-hoc);
-    returns a tuple, first element is the subject ID and the second element the population dataframe.
-
-    :param experiment: Experiment object that sample belongs to
-    :param sample_id: ID for sample to load
-    :param root_population: name of root population to load from sample
-    :param transform: name of transformation method to apply (if None, data is returned untransformed)
-    :param scale: name of scalling method to apply after transformation (if None, no scaling is applied)
-    :param sample_n: number of events to return (sample is uniform; if None, no sampling occurs)
-    :return: sample_id, population dataframe
-    """
-    try:
-        data = load_and_transform(sample_id, experiment, root_population, transform,
-                                  scale, sample_n)
-    except KeyError:
-        print(f'Sample {sample_id} missing root population {root_population}')
-        return sample_id, None
-    return sample_id, data
