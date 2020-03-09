@@ -273,7 +273,8 @@ class Gating:
         assert self.ctrl.get(ctrl_id), f'No control data found for {ctrl_id}'
         if return_dataframe:
             idx = self.populations[target_population]['control_idx'].get(ctrl_id)
-            assert idx, f'No population data found for {ctrl_id}, have you called "control_gating"'
+            if idx is None:
+                raise ValueError(f'No population data found for {ctrl_id}, have you called "control_gating"?')
             return self.ctrl[ctrl_id].loc[idx]
         return self.populations[target_population]['control_idx'].get(ctrl_id)
 
@@ -342,7 +343,7 @@ class Gating:
             self.populations[pop_name]['control_idx'].pop(pop_name)
 
     def control_gating(self, ctrl_id: str,
-                       tree_map: dict or None,
+                       tree_map: dict or None = None,
                        overwrite_existing: bool = False,
                        verbose: bool = True,
                        model: str = 'knn',
@@ -583,10 +584,19 @@ class Gating:
         # Add kwargs if given
         for k, v in kwargs.items():
             gkwargs[k] = v
-        if 'fmo_x' in gkwargs.keys():
-            gkwargs['fmo_x'] = self.control_gating(gatedoc.parent, gkwargs['fmo_x'], sml_profiles=None)
-        if 'fmo_y' in kwargs.keys():
-            gkwargs['fmo_y'] = self.control_gating(gatedoc.parent, gkwargs['fmo_y'], sml_profiles=None)
+        for fmo in ['fmo_x', 'fmo_y']:
+            if fmo in gkwargs.keys():
+                try:
+                    gkwargs[fmo] = self.search_ctrl_cache(target_population=gatedoc.parent,
+                                                          ctrl_id=gkwargs[fmo],
+                                                          return_dataframe=True)
+                except ValueError:
+                    print(f'No control data found for {gkwargs[fmo]}, calling "control_gating"')
+                    self.control_gating(ctrl_id=gkwargs[fmo])
+                    gkwargs[fmo] = self.search_ctrl_cache(target_population=gatedoc.parent,
+                                                          ctrl_id=gkwargs[fmo],
+                                                          return_dataframe=True)
+
         if gatedoc.class_ == 'merge':
             self.merge(population_left=gkwargs.get('left'), population_right=gkwargs.get('right'),
                        new_population_name=gkwargs.get('name'))
