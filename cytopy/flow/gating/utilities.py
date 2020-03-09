@@ -1,7 +1,6 @@
 from shapely.geometry import Point
-from multiprocessing import Pool, cpu_count
 from functools import partial
-from cytopy.flow.gating.base import GateError
+from .base import GateError
 from sklearn.neighbors import KernelDensity, KDTree
 import pandas as pd
 import numpy as np
@@ -257,3 +256,5 @@ def check_downstream_overlaps(ref, root_population: str, population_labels: list
                       f'with these population targets, please set multi_label parameter to True')
                 downstream_overlaps = True
     return downstream_overlaps
+
+

@@ -15,7 +15,7 @@ from .mixturemodel import MixtureModel
 from .defaults import ChildPopulationCollection
 from .plotting.static_plots import Plot
 from .utilities import get_params, inside_ellipse, inside_polygon
-from ..utilities import progress_bar
+from ..feedback import progress_bar
 # Housekeeping and other tools
 from anytree.exporter import DotExporter
 from anytree import Node, RenderTree
@@ -121,10 +121,11 @@ class Gating:
         if not fg.populations or len(fg.populations) == 1:
             control_cache = None
             if include_controls:
-                control_cache = {control_id: control_data.index.values for control_id, control_data in self.ctrl.items()}
+                control_cache = {control_id: control_data.index.values for
+                                 control_id, control_data in self.ctrl.items()}
             root = Node(name='root', prop_of_parent=1.0, prop_of_total=1.0,
                         warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values,
-                        parent=None, control_cache=control_cache)
+                        parent=None, control_idx=control_cache)
             self.populations['root'] = root
         else:
             # Reconstruct tree and populate control cache is necessary
@@ -142,6 +143,9 @@ class Gating:
                         self.populations[p.get('name')] = Node(**p)
                     else:
                         self.populations[p.get('name')] = Node(**p, parent=self.populations.get(parent))
+        if not self.populations['root'].control_idx:
+            self.populations['root'].control_idx = {control_id: control_data.index.values for
+                                                    control_id, control_data in self.ctrl.items()}
 
     def clear_gates(self):
         """
@@ -205,7 +209,7 @@ class Gating:
     def get_population_df(self, population_name: str, transform: bool = False,
                           transform_method: str or None = 'logicle',
                           transform_features: list or str = 'all',
-                          label: bool =False) -> pd.DataFrame or None:
+                          label: bool =False, ctrl_id: str or None = None) -> pd.DataFrame or None:
         """
         Retrieve a population as a pandas dataframe
         :param population_name: name of population to retrieve
@@ -220,13 +224,19 @@ class Gating:
         if population_name not in self.populations.keys():
             print(f'Population {population_name} not recognised')
             return None
-        idx = self.populations[population_name].index
-        data = self.data.loc[idx]
+        if ctrl_id is None:
+            idx = self.populations[population_name].index
+            data = self.data.loc[idx]
+        else:
+            idx = self.populations[population_name].control_idx.get(ctrl_id)
+            assert idx is not None, f'No cached index for {ctrl_id} associated to population {population_name}, ' \
+                                    f'have you called "control_gating" previously?'
+            data = self.ctrl[ctrl_id].loc[idx]
         if label:
             data['label'] = None
             dependencies = self.find_dependencies(population_name)
             for pop in dependencies:
-                data.loc[self.populations[pop].index, 'label'] = pop
+                data.loc[idx, 'label'] = pop
         if transform_method is None:
             transform = False
         if transform:
@@ -270,13 +280,13 @@ class Gating:
         """
         assert target_population in self.populations.keys(), f'Invalid population {target_population}'
         assert self.ctrl, 'No control data present for current gating instance, was "include_controls" set to False?'
-        assert self.ctrl.get(ctrl_id), f'No control data found for {ctrl_id}'
+        assert ctrl_id in self.ctrl.keys(), f'No control data found for {ctrl_id}'
         if return_dataframe:
-            idx = self.populations[target_population]['control_idx'].get(ctrl_id)
+            idx = self.populations[target_population].control_idx.get(ctrl_id)
             if idx is None:
                 raise ValueError(f'No population data found for {ctrl_id}, have you called "control_gating"?')
             return self.ctrl[ctrl_id].loc[idx]
-        return self.populations[target_population]['control_idx'].get(ctrl_id)
+        return self.populations[target_population].control_idx.get(ctrl_id)
 
     def _predict_ctrl_population(self, target_population: str, ctrl_id: str, model: SVC or KNeighborsClassifier,
                                  mappings: dict or None = None):
@@ -307,7 +317,7 @@ class Gating:
             self._predict_ctrl_population(target_node.parent.name, ctrl_id, model, mappings)
             cache_idx = self.search_ctrl_cache(target_node.parent.name, ctrl_id)
 
-        x, y = target_node.get('x'), target_node.get('y') or 'FSC-A'
+        x, y = target_node.geom.get('x'), target_node.geom.get('y') or 'FSC-A'
         if x is None or y is None:
             assert mappings, f'{target_population} has no specified x and y, please provide mappings'
             x = x or mappings.get('x')
@@ -323,7 +333,7 @@ class Gating:
         model.fit(train[[x, y]], y_)
         ctrl_data = self.ctrl.get(ctrl_id).loc[cache_idx]
         ctrl_data['pos'] = model.predict(ctrl_data[[x, y]])
-        self.populations[target_population]['control_idx'][ctrl_id] = ctrl_data[ctrl_data['pos'] == 1].index.values
+        self.populations[target_population].control_idx[ctrl_id] = ctrl_data[ctrl_data['pos'] == 1].index.values
 
     def clear_control_cache(self, ctrl_id: str) -> None:
         """
@@ -379,15 +389,15 @@ class Gating:
         assert ctrl_id in self.ctrl.keys(), f'No control data found for {ctrl_id}'
         assert all([all([i in x.keys() for i in ['x', 'y']]) for x in tree_map.values()]), 'Invalid tree_map'
         if model == 'knn':
-            model = KNeighborsClassifier(n_jobs=-1, **model_kwargs)
+            model = KNeighborsClassifier(**model_kwargs)
         elif model == 'svm':
-            model = SVC(random_state=42, **model_kwargs)
+            model = SVC(**model_kwargs)
         else:
             raise ValueError('Currently only KNearestNeighbours (knn) or Support Vector Machines (svm) are supported')
 
         if overwrite_existing:
             self.clear_control_cache(ctrl_id)
-        sml_populations = any([p.get('geom', {}).get('shape') == 'sml' for p in self.populations.values()])
+        sml_populations = any([p.geom.get('shape') == 'sml' for p in self.populations.values()])
         if sml_populations:
             assert tree_map, 'One or more gates detected that have been generated by a supervised machine learning ' \
                              'method. Please provide a mapping of the Gating tree to proceed (see documentation for ' \
@@ -395,7 +405,7 @@ class Gating:
         vprint(f'------ Gating control {ctrl_id} ------')
         for pop_name in progress_bar(self.populations.keys(), verbose):
             if self.search_ctrl_cache(pop_name, ctrl_id) is None:
-                self._predict_ctrl_population(pop_name, ctrl_id, model, mappings=tree_map.get(ctrl_id))
+                self._predict_ctrl_population(pop_name, ctrl_id, model, mappings=tree_map.get(pop_name))
 
     @staticmethod
     def __check_class_args(klass, method: str, **kwargs) -> bool:
