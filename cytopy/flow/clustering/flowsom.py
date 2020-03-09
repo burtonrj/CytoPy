@@ -1,4 +1,4 @@
-from ..utilities import progress_bar
+from ..feedback import progress_bar
 from .consensus import ConsensusCluster
 from sklearn.preprocessing import MinMaxScaler
 from minisom import MiniSom

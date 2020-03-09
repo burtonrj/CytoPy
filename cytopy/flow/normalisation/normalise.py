@@ -3,7 +3,8 @@ from cytopy.data.fcs import Normalisation
 from cytopy.flow.gating.actions import Gating
 from cytopy.flow.normalisation.MMDResNet import MMDNet
 from cytopy.flow.supervised.ref import calculate_reference_sample
-from cytopy.flow.utilities import progress_bar, kde_multivariant, hellinger_dot, ordered_load_transform
+from cytopy.flow.utilities import kde_multivariant, hellinger_dot, ordered_load_transform
+from flow.feedback import progress_bar
 from cytopy.flow.dim_reduction import dimensionality_reduction
 from multiprocessing import Pool, cpu_count
 from functools import partial

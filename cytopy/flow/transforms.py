@@ -37,7 +37,7 @@ def apply_transform(data: pd.DataFrame, features_to_transform: list or str = 'al
     if features_to_transform == 'all':
         features_to_transform = data.columns
     elif features_to_transform == 'fluorochromes':
-        features_to_transform = [x for x in data.columns if all([y not in x for y in ['FSC', 'SSC', 'Time']])]
+        features_to_transform = [x for x in data.columns if all([y not in x for y in ['FSC', 'SSC', 'Time', 'label']])]
     elif type(features_to_transform) != list:
         print('Error: invalid argument provided for `features_to_transform`, expected one of: `all`, `fluorochromes`,'
               ' or list of valid column names, proceeding with transformation of entire dataframe as precaution.')
