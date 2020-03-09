@@ -107,6 +107,52 @@ class Cluster(mongoengine.EmbeddedDocument):
         return pickle.loads(bytes(self.index.read()))
 
 
+class ControlIndex(mongoengine.EmbeddedDocument):
+    """
+    Cached index for population in an associated control
+
+    Parameters
+    ----------
+    control_id: str
+        Name of the control file
+    index: FileField
+        numpy array storing index of events that belong to population
+    """
+    control_id = mongoengine.StringField()
+    index = mongoengine.FileField(db_alias='core', collection_name='control_indexes')
+
+    def save_index(self, data: np.array) -> None:
+        """
+        Given a new numpy array of index values, serialise and commit data to database
+
+        Parameters
+        ----------
+        data: np.array
+            Array of index values
+
+        Returns
+        -------
+        None
+        """
+        if self.index:
+            self.index.replace(Binary(pickle.dumps(data, protocol=2)))
+        else:
+            self.index.new_file()
+            self.index.write(Binary(pickle.dumps(data, protocol=2)))
+            self.index.close()
+
+    def load_index(self) -> np.array:
+        """
+        Retrieve the index values for the given population
+
+        Returns
+        -------
+        np.array
+            Array of index values
+        """
+        return pickle.loads(bytes(self.index.read()))
+
+
 class Population(mongoengine.EmbeddedDocument):
     """
     Cached populations; stores the index of events associated to a population for quick loading.
@@ -143,6 +189,7 @@ class Population(mongoengine.EmbeddedDocument):
     geom = mongoengine.ListField()
     clustering = mongoengine.EmbeddedDocumentListField(Cluster)
     clusters = mongoengine.ListField() # NEEDS REMOVING
+    control_idx = mongoengine.EmbeddedDocumentListField(ControlIndex)
 
     def save_index(self, data: np.array) -> None:
         """
@@ -186,9 +233,10 @@ class Population(mongoengine.EmbeddedDocument):
         """
 
         geom = {k: v for k, v in self.geom}
+        control_idx = {control.control_id: control.load_index() for control in self.control_idx}
         population = dict(name=self.population_name, prop_of_parent=self.prop_of_parent,
                           prop_of_total=self.prop_of_total, warnings=self.warnings, geom=geom,
-                          parent=self.parent, index=self.load_index())
+                          parent=self.parent, index=self.load_index(), control_idx=control_idx)
         return population
 
     def list_clustering_experiments(self) -> list:
@@ -323,6 +371,14 @@ class Population(mongoengine.EmbeddedDocument):
         assert clusters, f'No such cluster with clustering ID {cluster_id}'
         assert len(clusters) == 1, f'Multiple clusters with ID {cluster_id}'
         return clusters[0], clusters[0].load_index()
+
+    def save_control_idx(self, control_idx: dict):
+        new_control_index = list()
+        for control_id, data in control_idx.items():
+            cidx = ControlIndex(control_id=control_id)
+            cidx.save_index(data)
+            new_control_index.append(cidx)
+        self.control_idx = new_control_index
 
 
 class Normalisation(mongoengine.EmbeddedDocument):

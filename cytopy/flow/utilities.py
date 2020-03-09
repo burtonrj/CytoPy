@@ -25,7 +25,7 @@ def which_environment() -> str:
         return 'terminal'
 
 
-def progress_bar(x: iter, **kwargs) -> callable:
+def progress_bar(x: iter, verbose: bool = True, **kwargs) -> callable:
     """
     Generate a progress bar using the tqdm library. If execution environment is Jupyter, return tqdm_notebook
     otherwise used tqdm.
@@ -33,6 +33,8 @@ def progress_bar(x: iter, **kwargs) -> callable:
     :param kwargs: additional keyword arguments for tqdm
     :return: tqdm or tqdm_notebook, depending on environment
     """
+    if not verbose:
+        return x
     if which_environment() == 'jupyter':
         return tqdm_notebook(x, **kwargs)
     return tqdm(x, **kwargs)
