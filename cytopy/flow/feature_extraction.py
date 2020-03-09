@@ -23,6 +23,11 @@ import numpy as np
 import scprep
 
 
+class Migrations:
+    def __init__(self, experiment: FCSExperiment, samples: list or None = None):
+        pass
+
+
 class NormalisedMFI:
     def __init__(self, experiment: FCSExperiment, samples: list or None = None):
         self.experiment = experiment
@@ -116,6 +121,7 @@ class Proportions:
         root = self.file_group.get_population(clustering_definition.root_population)
         if merge_on_like_term:
             # Get a list of meta cluster IDs that contain the term of interest
+            meta_clusters = [c.meta_cluster_id for c in root.clustering]
             filtered_clusters = set(filter(lambda c: cluster_id in c, [c.meta_cluster_id for c in root.clustering]))
             # Use the filtered list to generate a list of relevant cluster objects
             clusters = [c for c in root.clustering if c.meta_cluster_id in filtered_clusters]
@@ -125,7 +131,7 @@ class Proportions:
             # Sum the resulting cluster n's
             return sum([c.n_events for c in clusters])
         try:
-            return len(root.pull_cluster(cluster_id=cluster_id, meta=clustering_definition.meta_method)[1])
+            return len(root.get_cluster(cluster_id=cluster_id, meta=clustering_definition.meta_method)[1])
         except AssertionError:
             return 0
 
