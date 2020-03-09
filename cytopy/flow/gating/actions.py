@@ -899,7 +899,7 @@ class Gating:
         assert clustering_root in self.populations.keys(), f'Invalid root name, must be one of {self.populations.keys()}'
         fg = FileGroup.objects(id=self.mongo_id).get()
         croot_pop = [p for p in fg.populations if p.population_name == clustering_root][0]
-        _, idx = croot_pop.pull_cluster(cluster_id=cluster_id, meta=meta)
+        _, idx = croot_pop.get_cluster(cluster_id=cluster_id, meta=meta)
         return idx
 
     def register_as_invalid(self):

@@ -639,10 +639,9 @@ class SingleClustering(Clustering):
         self.experiment = experiment
         self.sample_id = sample_id
         fg = experiment.pull_sample(sample_id)
-        root_p = [p for p in fg.populations if p.population_name == self.ce.root_population]
-        assert root_p, f'{self.ce.root_population} does not exist for sample {sample_id}'
-        if self.ce.clustering_uid in root_p[0].list_clustering_experiments():
-            self._load_clusters(root_p[0])
+        root_p = fg.get_population(self.ce.root_population)
+        if self.ce.clustering_uid in root_p.list_clustering_experiments():
+            self._load_clusters(root_p)
         sample = Gating(experiment, sample_id, include_controls=False)
         transform = True
         if not self.ce.transform_method:
@@ -667,7 +666,7 @@ class SingleClustering(Clustering):
         associated to the root population of chosen sample.
         :param root_p: root population Population object
         """
-        clusters = root_p.pull_clusters(self.ce.clustering_uid)
+        clusters = root_p.get_many_clusters(self.ce.clustering_uid)
         for c in clusters:
             self.clusters[c.cluster_id] = dict(n_events=c.n_events,
                                                prop_of_root=c.prop_of_root,
@@ -693,7 +692,7 @@ class SingleClustering(Clustering):
         # Is the given UID unique?
         self._has_data()
         fg = self.experiment.pull_sample(self.sample_id)
-        root_p = [p for p in fg.populations if p.population_name == self.ce.root_population][0]
+        root_p = fg.get_population(self.ce.root_population)
         if self.ce.clustering_uid in root_p.list_clustering_experiments():
             if overwrite:
                 root_p.delete_clusters(self.ce.clustering_uid)
@@ -945,7 +944,7 @@ class MetaClustering(Clustering):
         """
         def _save(x):
             fg = self.experiment.pull_sample(x.sample_id)
-            pop = [p for p in fg.populations if p.population_name == self.ce.root_population][0]
+            pop = fg.get_population(self.ce.root_population)
             cluster = [c for c in pop.clustering if c.cluster_id == x.cluster_id][0]
             cluster.meta_cluster_id = x.meta_cluster_id
             pop.update_cluster(x.cluster_id, cluster)
