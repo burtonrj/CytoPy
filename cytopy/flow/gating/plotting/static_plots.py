@@ -89,8 +89,9 @@ class Plot:
         data = dict(primary=self.gating.get_population_df(gate.parent, transform=False))
         for x in ['fmo_x', 'fmo_y']:
             if x in kwargs.keys():
-                data[x] = self.gating.control_gating(target_population=gate.parent,
-                                                     fmo=kwargs[x])
+                data[x] = self.gating.search_ctrl_cache(target_population=gate.parent,
+                                                        ctrl_id=kwargs[x],
+                                                        return_dataframe=True)
         return data
 
     @staticmethod
