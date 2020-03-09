@@ -7,7 +7,7 @@ from ..flow.gating.actions import Gating
 from ..flow.clustering.main import SingleClustering
 from cytopy.flow.transforms import apply_transform
 from ..flow.utilities import kde_multivariant
-from ..flow.utilities import progress_bar
+from .feedback import progress_bar
 from sklearn.feature_selection import f_classif
 from sklearn.svm import LinearSVC
 from sklearn.utils import check_random_state

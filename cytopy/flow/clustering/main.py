@@ -4,7 +4,7 @@ from cytopy.data.subject import Subject, MetaDataDictionary, gram_status, bugs, 
 from cytopy.data.fcs import Cluster, Population, ClusteringDefinition
 from ..supervised.utilities import scaler
 from ..gating.actions import Gating
-from ..utilities import progress_bar
+from ..feedback import progress_bar
 from ..dim_reduction import dimensionality_reduction
 from .flowsom import FlowSOM
 from .consensus import ConsensusCluster

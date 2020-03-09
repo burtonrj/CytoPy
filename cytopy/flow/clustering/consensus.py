@@ -1,4 +1,4 @@
-from ..utilities import progress_bar
+from ..feedback import progress_bar
 from itertools import combinations
 import numpy as np
 import bisect
