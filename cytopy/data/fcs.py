@@ -157,7 +157,7 @@ class Population(mongoengine.EmbeddedDocument):
     """
     Cached populations; stores the index of events associated to a population for quick loading.
 
-    Attributes
+    Parameters
     ----------
     population_name: str, required
         name of population
@@ -397,33 +397,40 @@ class Population(mongoengine.EmbeddedDocument):
 
 class File(mongoengine.EmbeddedDocument):
     """
-    Embedded document -> FileGroup
     Document representation of a single FCS file.
 
-    Attributes:
-        file_id [str] - unique identifier for fcs file
-        file_type [str] - one of either 'complete' or 'control'; signifies the type of data stored
-        data [FileField] - numpy array of fcs events data
-        norm [EmbeddedDoc] - numpy array of normalised fcs events data
-        compensated [bool] - boolean value, if True then data have been compensated
-        channel_mappings [list] - list of standarised channel/marker mappings (corresponds to column names of underlying data)
-
-    Methods:
-        pull - loads data, returning a multi-dimensional numpy array
-        put - given a numpy array, data is serialised and stored
+    Parameters
+    -----------
+    file_id: str, required
+        Unique identifier for fcs file
+    file_type: str, required, (default='complete')
+        One of either 'complete' or 'control'; signifies the type of data stored
+    data: FileField
+        Numpy array of fcs events data
+    compensated: bool, required, (default=False)
+        Boolean value, if True then data have been compensated
+    channel_mappings: list
+        List of standarised channel/marker mappings (corresponds to column names of underlying data)
     """
     file_id = mongoengine.StringField(required=True)
     file_type = mongoengine.StringField(default='complete')
     data = mongoengine.FileField(db_alias='core', collection_name='fcs_file_data')
     compensated = mongoengine.BooleanField(default=False)
     channel_mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
-    batch = mongoengine.StringField(required=False)
 
     def pull(self, sample: int or None = None) -> np.array:
         """
-        Load raw data
-        :param sample: int value; produces a sample of given value
-        :return:  Numpy array of events data (raw)
+        Retrieve single cell data from database
+
+        Parameters
+        ----------
+        sample: int, optional
+            If an integer value is given, a random sample of this size is returned
+
+        Returns
+        -------
+        Numpy.array
+            Array of single cell data
         """
         data = pickle.loads(self.data.read())
         if sample and sample < data.shape[0]:
@@ -433,9 +440,16 @@ class File(mongoengine.EmbeddedDocument):
 
     def put(self, data: np.array) -> None:
         """
-        Save events data to database
-        :param data: numpy array of events data
-        :return: None
+        Save single cell data to database
+
+        Parameters
+        ----------
+        data: Numpy.array
+            Single cell data (as a numpy array) to save to database
+
+        Returns
+        -------
+        None
         """
         if self.data:
             self.data.replace(Binary(pickle.dumps(data, protocol=2)))
@@ -450,21 +464,24 @@ class FileGroup(mongoengine.Document):
     Document representation of a file group; a selection of related fcs files (e.g. a sample and it's associated
     controls)
 
-    Attributes:
-        primary_id [str] - unique ID to associate to group
-        files [EmbeddedDoc] - list of File objects
-        flags [str] - warnings associated to file group
-        notes [str] - additional free text
-        populations [EmbeddedDocList] - populations derived from this file group
-        gates [EmbeddedDocList] - gate objects that have been applied to this file group
-        collection_datetime [DateTime] - date and time of sample collection
-        processing_datetime [DateTime] date and time of sample processing
-    Methods:
-        delete_populations - delete populations
-        update_population - update an existing population with a new Population document
-        delete_gates - delete gates
-        validity - search flags for the 'invalid', returns False if found
-        pull_population - retrieve a population document from database
+    Parameters
+    ----------
+    primary_id: str, required
+        Unique ID to associate to group
+    files: EmbeddedDocList
+        List of File objects
+    flags: str, optional
+        Warnings associated to file group
+    notes: str, optional
+        Additional free text
+    populations: EmbeddedDocList
+        Populations derived from this file group
+    gates: EmbeddedDocList
+        Gate objects that have been applied to this file group
+    collection_datetime: DateTime, optional
+        Date and time of sample collection
+    processing_datetime: DateTime, optional
+        Date and time of sample processing
     """
     primary_id = mongoengine.StringField(required=True)
     files = mongoengine.EmbeddedDocumentListField(File)
@@ -479,19 +496,39 @@ class FileGroup(mongoengine.Document):
         'collection': 'fcs_files'
     }
 
-    def list_populations(self):
+    def list_populations(self) -> iter:
+        """
+        Yields list of population names
+        Returns
+        -------
+        Generator
+        """
         for p in self.populations:
             yield p.population_name
 
-    def list_gates(self):
+    def list_gates(self) -> iter:
+        """
+        Yields names of saved gates
+
+        Returns
+        -------
+        Generator
+        """
         for g in self.gates:
             yield g.gate_name
 
     def delete_populations(self, populations: list or str) -> None:
         """
-        Delete one or more populations from FileGroup
-        :param populations: either a list of population names or 'all' to delete all associated populations
-        :return: None
+        Delete given populations
+
+        Parameters
+        ----------
+        populations: list or str
+            Either a list of populations (list of strings) to remove or a single population as a string
+
+        Returns
+        -------
+        None
         """
         if populations == all:
             self.populations = []
@@ -502,9 +539,17 @@ class FileGroup(mongoengine.Document):
     def update_population(self, population_name: str, new_population: Population):
         """
         Given an existing population name, replace that population with the new population document
-        :param population_name: name of population to be replaced
-        :param new_population: updated/new Population document
-        :return: None
+
+        Parameters
+        -----------
+        population_name: str
+            Name of population to be replaced
+        new_population: Population
+            Updated/new Population document
+
+        Returns
+        --------
+        None
         """
         self.populations = [p for p in self.populations if p.population_name != population_name]
         self.populations.append(new_population)
@@ -513,8 +558,16 @@ class FileGroup(mongoengine.Document):
     def delete_gates(self, gates: list or str):
         """
         Delete one or many gates from FileGroup
-        :param gates: either a list of gate names or 'all' to delete all associated gates
-        :return: None
+
+        Parameters
+        ----------
+        gates: list or str
+            Either a single gate name (str) or list of gate names (list of strings) of gates
+            to remove
+
+        Returns
+        -------
+        None
         """
         if gates == all:
             self.gates = []
@@ -524,8 +577,13 @@ class FileGroup(mongoengine.Document):
 
     def validity(self) -> bool:
         """
-        If 'invalid' found in Flags, will return False
-        :return: True if valid (invalid in flags), else False
+        Returns True if FileGroup is deemed 'valid'; that is, the term 'invalid' is absent from the
+        'flags' attribute.
+
+        Returns
+        -------
+        bool
+            True if valid, else False
         """
         if self.flags is None:
             return True
@@ -535,9 +593,16 @@ class FileGroup(mongoengine.Document):
 
     def get_population(self, population_name: str) -> Population:
         """
-        Retrieve a population from the database
-        :param population_name: name of population to pull
-        :return: Population document
+        Given the name of a population associated to the FileGroup, returns the Population object
+
+        Parameters
+        ----------
+        population_name: str
+            Name of population to retrieve from database
+
+        Returns
+        -------
+        Population
         """
         p = [p for p in self.populations if p.population_name == population_name]
         assert p, f'Population {population_name} does not exist'
