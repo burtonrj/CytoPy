@@ -8,7 +8,23 @@ import os
 import re
 
 
-def create_regex(s, initials=True):
+def create_regex(s: str, initials: bool = True) -> str:
+    """
+    Given a string representation of either a channel or marker, generate a standard
+    regex string to be used in a panel template
+
+    Parameters
+    ----------
+    s: str
+        String value of channel or marker to generate regex term for
+    initials: bool, (default=True)
+        If True, account for use of initials to represent a marker/channel name
+
+    Returns
+    -------
+    str
+        Formatted regex string
+    """
     def has_numbers(inputString):
         return any(char.isdigit() for char in inputString)
 
@@ -26,8 +42,26 @@ def create_regex(s, initials=True):
     return new_string
 
 
-def create_template(channel_mappings, file_name, case_sensitive=False, initials=True):
+def create_template(channel_mappings: list, file_name: str,
+                    case_sensitive: bool = False, initials: bool = True):
+    """
+    Given a list of channel mappings from an fcs file, create an excel template for Panel creation.
 
+    Parameters
+    ----------
+    channel_mappings: list
+        List of channel mappings (list of dictionaries)
+    file_name: str
+        File name for saving excel template
+    case_sensitive: bool, (default=False)
+        If True, search terms for channels/markers will be case sensitive
+    initials: bool, (default=True)
+        If True, search terms for channels/markers will account for the use of initials of channels/markers
+
+    Returns
+    -------
+    None
+    """
     try:
         assert file_name.split('.')[1] == 'xlsx', 'Invalid file name, must be of format "NAME.xlsx"'
     except IndexError:
@@ -52,18 +86,15 @@ def create_template(channel_mappings, file_name, case_sensitive=False, initials=
 
 class ChannelMap(mongoengine.EmbeddedDocument):
     """
-    Embedded document -> Panel
-
     Defines channel/marker mapping. Each document will contain a single value for channel and a single value for marker,
     these two values are treated as a pair within the panel.
 
-    Attributes:
-        channel - name of channel (fluorochrome)
-        marker - name of marker (protein)
-
-    Methods:
-        check_matched_pair - Check a channel/marker pair for resemblance to this channel_mapping definition
-        to_python - Convert to python dicationary object
+    Parameters
+    ----------
+    channel: str
+        name of channel (e.g. fluorochrome)
+    marker: str
+        name of marker (e.g. protein)
     """
     channel = mongoengine.StringField()
     marker = mongoengine.StringField()
@@ -71,9 +102,18 @@ class ChannelMap(mongoengine.EmbeddedDocument):
     def check_matched_pair(self, channel: str, marker: str) -> bool:
         """
         Check a channel/marker pair for resemblance
-        :param channel: channel to check
-        :param marker: marker to check
-        :return: True if equal, else False
+
+        Parameters
+        ----------
+        channel: str
+            channel to check
+        marker: str
+            marker to check
+
+        Returns
+        --------
+        bool
+            True if equal, else False
         """
         if self.channel == channel and self.marker == marker:
             return True
@@ -82,26 +122,30 @@ class ChannelMap(mongoengine.EmbeddedDocument):
     def to_python(self) -> dict:
         """
         Convert object to python dictionary
-        :return: Dictionary object
+
+        Returns
+        --------
+        dict
         """
         return {'channel': self.channel, 'marker': self.marker}
 
 
 class NormalisedName(mongoengine.EmbeddedDocument):
     """
-    Embedded document -> Panel
-
     Defines a standardised name for a channel or marker and provides method for testing if a channel/marker
     should be associated to standard
 
-    Attributes:
-        standard - the "standard" name i.e. the nomenclature we used for a channel/marker in this panel
-        regex_str - regular expression used to test if a term corresponds to this standard
-        permutations - list of string values that have direct association to this standard
-        case_sensitive - is the nomenclature case sensitive? This would be false for something like 'CD3' for example,
+    Parameters
+    ----------
+    standard: str, required
+        the "standard" name i.e. the nomenclature we used for a channel/marker in this panel
+    regex_str: str
+        regular expression used to test if a term corresponds to this standard
+    permutations: str
+        String values that have direct association to this standard (comma seperated values)
+    case_sensitive: bool, (default=False)
+        is the nomenclature case sensitive? This would be false for something like 'CD3' for example,
         where 'cd3' and 'CD3' are synonymous
-    Methods:
-         query - given a term 'x', determine if 'x' is synonymous to this standard. If so, return the standardised name.
     """
     standard = mongoengine.StringField(required=True)
     regex_str = mongoengine.StringField()
@@ -111,8 +155,16 @@ class NormalisedName(mongoengine.EmbeddedDocument):
     def query(self, x: str) -> None or str:
         """
         Given a term 'x', determine if 'x' is synonymous to this standard. If so, return the standardised name.
-        :param x: search term
-        :return: Standardised name if synonymous to standard, else None
+
+        Parameters
+        -----------
+        x: str
+            search term
+
+        Returns
+        --------
+        str or None
+            Standardised name if synonymous to standard, else None
         """
         if self.case_sensitive:
             if re.search(self.regex_str, x):
@@ -128,24 +180,22 @@ class NormalisedName(mongoengine.EmbeddedDocument):
 
 class Panel(mongoengine.Document):
     """
-    Embedded document -> FCSExperiment
     Document representation of channel/marker definition for an experiment. A panel, once associated to an experiment
     will standardise data upon input; when an fcs file is created in the database, it will be associated to
     an experiment and the channel/marker definitions in the fcs file will be mapped to the associated panel.
 
-    Attributes:
-        panel_name - unique identifier for the panel
-        markers - list of marker names; see NormalisedName
-        channels - list of channels; see NormalisedName
-        mappings - list of channel/marker mappings; see ChannelMap
-        initiation_date - date of creation
-    Methods:
-        check_excel_template - Given the file path of an excel template, check validity
-        create_from_excel - Given the file path of an excel template, populate panel using template
-        create_from_dict - Given a python dictionary object, populate panel using dictionary as template
-        standardise_names - Given a dictionary of column mappings, apply standardisation defined by this panel object
-        and return standardised column mappings.
-        standardise - Given a dataframe of fcs events, standardise the columns according to the panel definition
+    Parameters
+    -----------
+    panel_name: str, required
+        unique identifier for the panel
+    markers: EmbeddedDocListField
+        list of marker names; see NormalisedName
+    channels: EmbeddedDocListField
+        list of channels; see NormalisedName
+    mappings: EmbeddedDocListField
+        list of channel/marker mappings; see ChannelMap
+    initiation_date: DateTime
+        date of creation
 
     """
     panel_name = mongoengine.StringField(required=True, unique=True)
@@ -162,8 +212,16 @@ class Panel(mongoengine.Document):
     def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
         """
         Check excel template and if valid return pandas dataframes
-        :param path: file path for excel template
-        :return: tuple of pandas dataframes (nomenclature, mappings) or None
+
+        Parameters
+        ----------
+        path: str
+            file path for excel template
+
+        Returns
+        --------
+        (Pandas.DataFrame, Pandas.DataFrame) or None
+            tuple of pandas dataframes (nomenclature, mappings) or None
         """
         # Check sheet names
         xls = xlrd.open_workbook(path, on_demand=True)
@@ -199,8 +257,16 @@ class Panel(mongoengine.Document):
     def create_from_excel(self, path: str) -> bool:
         """
         Populate panel attributes from an excel template
-        :param path: path of file
-        :return: True is successful else False
+
+        Parameters
+        ----------
+        path: str
+            path of file
+
+        Returns
+        --------
+        bool
+            True is successful else False
         """
         if not os.path.isfile(path):
             print(f'Error: no such file {path}')
@@ -233,8 +299,16 @@ class Panel(mongoengine.Document):
     def create_from_dict(self, x: dict) -> bool:
         """
         Populate panel attributes from a python dictionary
-        :param x: dictionary object containing panel definition
-        :return: True if successful else False
+
+        Parameters
+        ----------
+        x: dict
+            dictionary object containing panel definition
+
+        Returns
+        --------
+        bool
+            True if successful else False
         """
 
         # Check validity of input dictionary
@@ -269,10 +343,20 @@ class Panel(mongoengine.Document):
     def _query(x: str or None, ref: list, e: bool) -> str or None and bool:
         """
         Internal static method for querying a channel/marker against a reference list
-        :param x: channel/marker to query
-        :param ref: list of ChannelMap objects for reference search
-        :param e: error state
-        :return: Standardised name and error state
+
+        Parameters
+        ----------
+        x: str or None
+            channel/marker to query
+        ref: list
+            list of ChannelMap objects for reference search
+        e: bool
+            error state
+
+        Returns
+        --------
+        str or None and bool
+            Standardised name and error state
         """
         corrected = list(filter(None.__ne__, [n.query(x) for n in ref]))
         if len(corrected) == 0:
@@ -289,9 +373,18 @@ class Panel(mongoengine.Document):
     def _check_pairing(self, channel: str, marker: str or None) -> bool:
         """
         Internal method. Given a channel and marker check that a valid pairing exists for this panel.
-        :param channel: channel for checking
-        :param marker: marker for checking
-        :return: True if pairing exists, else False
+
+        Parameters
+        ----------
+        channel: str
+            channel for checking
+        marker: str
+            marker for checking
+
+        Returns
+        --------
+        bool
+            True if pairing exists, else False
         """
         if marker is None:
             marker = ''
@@ -303,8 +396,15 @@ class Panel(mongoengine.Document):
     def _check_duplication(x: list) -> bool:
         """
         Internal method. Given a list check for duplicates. Duplicates are printed.
-        :param x:
-        :return: True if duplicates are found, else False
+
+        Parameters
+        ----------
+        x: list
+
+        Returns
+        --------
+        bool
+            True if duplicates are found, else False
         """
         x = [i if i else None for i in x]
         duplicates = [item for item, count in Counter(x).items() if count > 1 and item is not None]
@@ -317,8 +417,16 @@ class Panel(mongoengine.Document):
         """
         Given a dictionary of column mappings, apply standardisation defined by this panel object and return
         standardised column mappings.
-        :param column_mappings: dictionary corresponding to channel/marker mappings (channel, marker)
-        :return: standardised column mappings and error state
+
+        Parameters
+        ----------
+        column_mappings: list
+            List of dictionaries, where each dictionary corresponds to channel/marker mappings (channel, marker)
+
+        Returns
+        --------
+        list or None and bool
+            standardised column mappings and error state
         """
         err = False
         new_column_mappings = list()
@@ -363,9 +471,15 @@ class Panel(mongoengine.Document):
     def standardise(self, data: pd.DataFrame, catch_standardisation_errors: bool = False) -> pd.DataFrame or None:
         """
         Given a dataframe of fcs events, standardise the columns according to the panel definition
-        :param catch_standardisation_errors: if True, any error in standardisation will cause function to return Null
-        :param data: pandas dataframe of cell events
-        :return: standardised pandas dataframe with columns ordered according to the panel definition
+
+        catch_standardisation_errors: bool
+            if True, any error in standardisation will cause function to return Null
+        data: Pandas.DataFrame
+            Pandas DataFrame of cell events
+
+        Returns
+        --------
+        standardised Pandas DataFrame with columns ordered according to the panel definition
         """
         # Standardise the names
         # channel_marker -> channel_marker: [channel, marker]
@@ -382,10 +496,24 @@ class Panel(mongoengine.Document):
             updated_mappings.append((channel, marker))
         return column_mappings
 
-    def get_channels(self):
+    def get_channels(self) -> iter:
+        """
+        Yields list of channels associated to panel
+
+        Returns
+        -------
+        Generator
+        """
         for cm in self.mappings:
             yield cm.channel
 
-    def get_markers(self):
+    def get_markers(self) -> iter:
+        """
+        Yields list of channels associated to panel
+
+        Returns
+        -------
+        Generator
+        """
         for cm in self.mappings:
             yield cm.marker
