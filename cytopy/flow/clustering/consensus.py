@@ -5,24 +5,29 @@ import bisect
 
 
 class ConsensusCluster:
-    """
-      Implementation of Consensus clustering, following the paper
+    """Implementation of Consensus clustering, following the paper
       https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf
       Code is adapted from https://github.com/ZigaSajovic/Consensus_Clustering
-      Arguments:
-        - cluster: clustering class (needs fit_predict method called with parameter n_clusters)
-        - L: smallest number of clusters to try
-        - K: biggest number of clusters to try
-        - H: number of resamplings for each cluster number
-        - resample_proportion -> percentage to sample
-        - Mk: consensus matrices for each k (shape =(K,data.shape[0],data.shape[0]))
-        (NOTE: every consensus matrix is retained, like specified in the paper)
-        - Ak: area under CDF for each number of clusters
-        (see paper: section 3.3.1. Consensus distribution.)
-        - deltaK: changes in ares under CDF
-         (see paper: section 3.3.1. Consensus distribution.)
-        - self.bestK: number of clusters that was found to be best
-      """
+
+    Parameters
+    ----------
+    cluster :
+        clustering class (must be an instance of clustering algorithm with fit/fit_predict method (e.g. scikit-learn)
+    L:
+        smallest number of clusters to try
+    K:
+        biggest number of clusters to try
+    H:
+        number of resamplings for each cluster number
+    resample_proportion :
+        percentage to sample
+    Mk:
+        consensus matrices for each k (OTE: every consensus matrix is retained)
+    Ak :
+        area under CDF for each number of clusters (see paper)
+    deltaK :
+        changes in ares under CDF (see paper)
+    """
 
     def __init__(self, cluster: callable, smallest_cluster_n: int,
                  largest_cluster_n: int, n_resamples: int, resample_proportion: float = 0.5):
@@ -39,20 +44,35 @@ class ConsensusCluster:
 
     @staticmethod
     def _internal_resample(data: np.array, proportion: float) -> (np.array, np.array):
-        """
-        Resampling array
-        :param data: data to be resampled
-        :param proportion: percentage to resample
-        :return:
+        """Resampling array
+
+        Parameters
+        ----------
+        data : Numpy.array
+            data to be resampled
+        proportion : float
+            percentage to resample
+
+        Returns
+        -------
+        Numpy.array, Numpy.array
+            Resampled indices and numpy array of resampled data
         """
         resampled_indices = np.random.choice(
             range(data.shape[0]), size=int(data.shape[0]*proportion), replace=False)
         return resampled_indices, data[resampled_indices, :]
 
     def fit(self, data: np.array) -> None:
-        """
-        Fits a consensus matrix for each number of clusters
-        :param data: numpy array to fit clustering algorithm too
+        """Fits a consensus matrix for each number of clusters
+
+        Parameters
+        ----------
+        data : Numpy.array
+            numpy array to fit clustering algorithm too
+
+        Returns
+        -------
+        None
         """
         # Init a connectivity matrix and an indicator matrix with zeros
         Mk = np.zeros((self.K_-self.L_, data.shape[0], data.shape[0]))
@@ -99,18 +119,25 @@ class ConsensusCluster:
             self.L_ if self.deltaK.size > 0 else self.L_
 
     def predict(self):
-        """
-        Predicts on the consensus matrix, for best found cluster number
-        :return clustering predictions
+        """Predicts on the consensus matrix, for best found cluster number
+        Returns
+        -------
+            Clustering predictions
         """
         assert self.Mk is not None, "First run fit"
         return self.cluster_(n_clusters=self.bestK).fit_predict(1-self.Mk[self.bestK-self.L_])
 
     def predict_data(self, data: np.array):
-        """
-        Predicts on the data, for best found cluster number
-        :param data: data to make predictions
-        :return clustering predictions
+        """Predicts on the data, for best found cluster number
+
+        Parameters
+        ----------
+        data: np.array :
+            data to make predictions
+
+        Returns
+        -------
+            Clustering predictions
         """
         assert self.Mk is not None, "First run fit"
         return self.cluster_(n_clusters=self.bestK).fit_predict(data)
