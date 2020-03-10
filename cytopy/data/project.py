@@ -8,20 +8,18 @@ class Project(mongoengine.Document):
     """
     Document representation of Project
 
-    Attributes:
-        project_id - unique identifier for project
-        patients - reference field for associated patients; see Patient
-        start_date - date of creation
-        owner - user name of owner
-        fcs_experiments - reference field for associated fcs files
-    Methods:
-        add_experiment - create new experiment and associate to project
-        load_experiment - For a given experiment in project, return the experiment object
-        list_fcs_experiments - generate a list of IDs for fcs experiments associated to this project
-        add_subject - create a new subject and associated to project
-        list_subjects - generate a list of subject ID for all subjects associated to project
-        pull_subject -given a subject ID, pull the subject document for corresponding subject
-        delete - delete project (wraps parent call to delete, see mongoengine.Document.delete)
+    Parameters
+    ----------
+    project_id: str, required
+        unique identifier for project
+    subjects: ListField
+        List of references for associated subjects; see Subject
+    start_date: DateTime
+        date of creation
+    owner: str, required
+        user name of owner
+    fcs_experiments: ListField
+        List of references for associated fcs files
     """
     project_id = mongoengine.StringField(required=True, unique=True)
     subjects = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
@@ -37,7 +35,11 @@ class Project(mongoengine.Document):
     def list_fcs_experiments(self) -> list:
         """
         Generate a list of associated flow cytometry experiments
-        :return: list of experiment IDs
+
+        Returns
+        -------
+        list
+            list of experiment IDs
         """
         experiments = [e.experiment_id for e in self.fcs_experiments]
         return experiments
@@ -45,8 +47,15 @@ class Project(mongoengine.Document):
     def load_experiment(self, experiment_id: str) -> None or FCSExperiment:
         """
         For a given experiment in project, load the experiment object
-        :param experiment_id: experiment to load
-        :return: FCSExperiment object
+
+        Parameters
+        ----------
+        experiment_id: str
+            experiment to load
+
+        Returns
+        --------
+        FCSExperiment or None
         """
         if experiment_id not in self.list_fcs_experiments():
             print(f'Error: no experiment {experiment_id} found')
@@ -57,9 +66,18 @@ class Project(mongoengine.Document):
     def add_experiment(self, experiment_id: str, panel_name: str) -> None or FCSExperiment:
         """
         Add new experiment to project
-        :param experiment_id: experiment name
-        :param panel_name: panel to associate to experiment
-        :return: MongoDB document ID of newly created experiment
+
+        Parameters
+        -----------
+        experiment_id: str
+            experiment name
+        panel_name: str
+            panel to associate to experiment
+
+        Returns
+        --------
+        FCSExperiment or None
+            Newly created FCSExperiment
         """
         if FCSExperiment.objects(experiment_id=experiment_id):
             print(f'Error: Experiment with id {experiment_id} already exists!')
@@ -85,12 +103,23 @@ class Project(mongoengine.Document):
         """
         Create a new subject and associated to project; a subject is an individual element of a study
         e.g. a patient or a mouse
-        :param subject_id: subject ID for the new subject
-        :param drug_data: list of Drug documents to associated to subject (see cytopy.data.subject.Drug)
-        :param infection_data: list of Bug documents to associated to subject (see cytopy.data.subject.Bug)
-        :param patient_biology: list of Biology documents to associated to subject (see cytopy.data.subject.Biology)
-        :param kwargs: addiitonal keyword arguments to pass to Subject initialisation (see cytopy.data.subject.Subject)
-        :return: None
+
+        Parameters
+        -----------
+        subject_id: str
+            subject ID for the new subject
+        drug_data: list, optional
+            list of Drug documents to associated to subject (see cytopy.data.subject.Drug)
+        infection_data: list, optional
+            list of Bug documents to associated to subject (see cytopy.data.subject.Bug)
+        patient_biology: list, optional
+            list of Biology documents to associated to subject (see cytopy.data.subject.Biology)
+        kwargs:
+            Additional keyword arguments to pass to Subject initialisation (see cytopy.data.subject.Subject)
+
+        Returns
+        --------
+        None
         """
         new_subject = Subject(subject_id=subject_id, **kwargs)
         if drug_data is not None:
@@ -106,15 +135,26 @@ class Project(mongoengine.Document):
     def list_subjects(self) -> list:
         """
         Generate a list of subject ID for subjects associated to this project
-        :return: List of subject IDs
+
+        Returns
+        --------
+        list
+            List of subject IDs
         """
         return [p.subject_id for p in self.subjects]
 
     def pull_subject(self, subject_id: str) -> Subject:
         """
         Given a subject ID associated to Project, return the Subject document
-        :param subject_id: subject ID to pull
-        :return: Subject document
+
+        Parameters
+        -----------
+        subject_id: str
+            subject ID to pull
+
+        Returns
+        --------
+        Subject
         """
         assert subject_id in self.list_subjects(), f'Invalid subject ID, valid subjects: {self.list_subjects()}'
         return [p for p in self.subjects if p.subject_id == subject_id][0]
@@ -122,9 +162,17 @@ class Project(mongoengine.Document):
     def delete(self, *args, **kwargs) -> None:
         """
         Delete project (wrapper function of mongoengine.Document.delete)
-        :param args: positional arguments to pass to parent call (see mongoengine.Document.delete)
-        :param kwargs: keyword arguments to pass to parent call (see mongoengine.Document.delete)
-        :return: None
+
+        Parameters
+        -----------
+        args:
+            positional arguments to pass to parent call (see mongoengine.Document.delete)
+        kwargs:
+            keyword arguments to pass to parent call (see mongoengine.Document.delete)
+
+        Returns
+        --------
+        None
         """
         experiments = [self.load_experiment(e) for e in self.list_fcs_experiments()]
         for e in experiments:
