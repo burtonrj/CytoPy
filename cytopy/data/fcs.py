@@ -395,51 +395,6 @@ class Population(mongoengine.EmbeddedDocument):
         self.control_idx = new_control_index
 
 
-class Normalisation(mongoengine.EmbeddedDocument):
-    """
-    Stores a normalised copy of single cell data
-    Attributes:
-         data [FileField] - tabular normalised single cell data
-         root_population [str] - name of the root population data is derived from
-         method [str] - name of normalisation method used
-    Methods:
-        pull - load data and return as a multi-dimensional numpy array
-        put - given a numpy array, save the data to the underlying database a new normalised data matrix
-    """
-    data = mongoengine.FileField(db_alias='core', collection_name='fcs_file_norm')
-    root_population = mongoengine.StringField()
-    method = mongoengine.StringField()
-
-    def pull(self, sample: int or None = None) -> np.array:
-        """
-        Load normalised data
-        :param sample: int value; produces a sample of given value
-        :return:  Numpy array of events data (normalised)
-        """
-        data = pickle.loads(self.data.read())
-        if sample and sample < data.shape[0]:
-            idx = np.random.randint(0, data.shape[0], size=sample)
-            return data[idx, :]
-        return data
-
-    def put(self, data: np.array, root_population: str, method: str) -> None:
-        """
-        Save events data to database
-        :param data: numpy array of events data
-        :param root_population: name of the population data is derived from
-        :param method: method used for normalisation process
-        :return: None
-        """
-        if self.data:
-            self.data.replace(Binary(pickle.dumps(data, protocol=2)))
-        else:
-            self.data.new_file()
-            self.data.write(Binary(pickle.dumps(data, protocol=2)))
-            self.data.close()
-        self.root_population = root_population
-        self.method = method
-
-
 class File(mongoengine.EmbeddedDocument):
     """
     Embedded document -> FileGroup
@@ -460,7 +415,6 @@ class File(mongoengine.EmbeddedDocument):
     file_id = mongoengine.StringField(required=True)
     file_type = mongoengine.StringField(default='complete')
     data = mongoengine.FileField(db_alias='core', collection_name='fcs_file_data')
-    norm = mongoengine.EmbeddedDocumentField(Normalisation)
     compensated = mongoengine.BooleanField(default=False)
     channel_mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
     batch = mongoengine.StringField(required=False)
