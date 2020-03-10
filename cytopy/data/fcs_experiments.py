@@ -13,28 +13,22 @@ class FCSExperiment(mongoengine.Document):
     """
     Document representation of Flow Cytometry experiment
 
-    Attributes:
-        experiment_id - unique identifier for experiment
-        panel - Panel object describing associated channel/marker pairs
-        fcs_files - reference field for associated files
-        flags - warnings associated to experiment
-        notes - additional free text comments
-        gating_templates - reference to gating templates associated to this experiment
-        meta_cluster_ids - list of IDs for meta clusters belonging to this experiment
-    Methods:
-        pull_sample_data - Given a sample ID, associated to this experiment, fetch the fcs data
-        pull_sample - Given a sample ID, returns the FileGroup object
-        list_samples - Generate a list IDs of file groups associated to experiment
-        list_invalid - Lists all samples that have an 'invalid' flag
-        remove_sample - Remove sample (FileGroup) from experiment.
-        add_new_sample - Add a new sample (FileGroup) to this experiment
-        fetch_sample_mid - Given a sample_id, return it's corresponding mongo ObjectID
-        pull_sample_mappings - Given a sample ID, return a dictionary of channel/marker mappings for
-        all associated fcs files
-        delete_all_populations - deletes all population data associated to a given sample; value of 'all' will delete population data for every sample
-        delete_gating_templates - deletes a gating template associated to experiment; value of 'all' will delete all gating templates
-        sample_exists - checks if sample is associated to experiment
-
+    Parameters
+    -----------
+    experiment_id: str, required
+        Unique identifier for experiment
+    panel: ReferenceField, required
+        Panel object describing associated channel/marker pairs
+    fcs_files: ListField
+        Reference field for associated files
+    flags: str, optional
+        Warnings associated to experiment
+    notes: str, optional
+        Additional free text comments
+    gating_templates: ListField
+        Reference to gating templates associated to this experiment
+    meta_cluster_ids: ListField
+        List of IDs for meta clusters belonging to this experiment
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
     panel = mongoengine.ReferenceField(Panel, reverse_delete_rule=4)
@@ -51,10 +45,20 @@ class FCSExperiment(mongoengine.Document):
 
     def delete_all_populations(self, sample_id: str, remove_gates: bool = False) -> None:
         """
-        Delete population data associated to experiment. Give a value of 'all' for sample_id to remove all population data for every sample.
-        :param sample_id: name of sample to remove populations from'; give a value of 'all' for sample_id to remove all population data for every sample.
-        :param remove_gates: If True, all stored gating information will also be removed
-        :return: None
+        Delete population data associated to experiment. Give a value of 'all' for sample_id to remove all population data
+        for every sample.
+
+        Parameters
+        ----------
+        sample_id: str
+            Name of sample to remove populations from'; give a value of 'all'
+            for sample_id to remove all population data for every sample.
+        remove_gates: bool, (default=False)
+            If True, all stored gating information will also be removed
+
+        Returns
+        -------
+        None
         """
         for f in self.fcs_files:
             if sample_id == 'all' or f.primary_id == sample_id:
@@ -65,9 +69,17 @@ class FCSExperiment(mongoengine.Document):
 
     def delete_gating_templates(self, template_name: str) -> None:
         """
-        Remove association and delete gating template. If template_name is 'all', then all associated gating templates will be deleted and removed
-        :param template_name: name of template to remove; if 'all', then all associated gating templates will be deleted and removed
-        :return: None
+        Remove association and delete gating template. If template_name is 'all',
+        then all associated gating templates will be deleted and removed
+
+        Parameters
+        ----------
+        template_name: str
+            Name of template to remove; if 'all', then all associated gating templates will be deleted and removed
+
+        Returns
+        --------
+        None
         """
         for g in self.gating_templates:
             if template_name == 'all' or g.template_name == template_name:
@@ -81,8 +93,16 @@ class FCSExperiment(mongoengine.Document):
     def sample_exists(self, sample_id: str) -> bool:
         """
         Returns True if the given sample_id exists in FCSExperiment
-        :param sample_id: name of sample to search for
-        :return: True if exists, else False
+
+        Parameters
+        ----------
+        sample_id: str
+            Name of sample to search for
+
+        Returns
+        --------
+        bool
+            True if exists, else False
         """
         if sample_id not in self.list_samples():
             print(f'Error: invalid sample_id, {sample_id} not associated to this experiment')
@@ -92,18 +112,35 @@ class FCSExperiment(mongoengine.Document):
     def pull_sample(self, sample_id: str) -> FileGroup or None:
         """
         Given a sample ID, return the corresponding FileGroup object
-        :param sample_id: sample ID for search
-        :return: FileGroup object; if sample does not belong to experiment, returns Null
+
+        Parameters
+        ----------
+        sample_id: str
+            Sample ID for search
+
+        Returns
+        --------
+        FileGroup or None
+            If sample does not belong to experiment, returns Null, else returns sample FileGroup
         """
         if not self.sample_exists(sample_id):
             return None
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
         return FileGroup.objects(id=file_grp.id).get()
         
-    def list_samples(self, valid_only=True) -> list:
+    def list_samples(self, valid_only: bool = True) -> list:
         """
         Generate a list IDs of file groups associated to experiment
-        :return: List of IDs of file groups associated to experiment
+
+        Parameters
+        -----------
+        valid_only: bool
+            If True, returns only valid samples (samples without 'invalid' flag)
+
+        Returns
+        --------
+        list
+            List of IDs of file groups associated to experiment
         """
         if valid_only:
             return [f.primary_id for f in self.fcs_files if f.validity()]
@@ -112,15 +149,27 @@ class FCSExperiment(mongoengine.Document):
     def list_invalid(self) -> list:
         """
         Generate list of sample IDs for samples that have the 'invalid' flag in their flag attribute
-        :return: List of sample IDs for invalid samples
+
+        Returns
+        --------
+        list
+            List of sample IDs for invalid samples
         """
         return [f.primary_id for f in self.fcs_files if not f.validity()]
 
     def fetch_sample_mid(self, sample_id: str) -> str or None:
         """
         Given a sample ID (for a sample belonging to this experiment) return it's mongo ObjectID as a string
-        :param sample_id: sample ID for sample of interest
-        :return: string value for ObjectID
+
+        Parameters
+        -----------
+        sample_id: str
+            Sample ID for sample of interest
+
+        Returns
+        --------
+        str
+            string value for ObjectID
         """
         if not self.sample_exists(sample_id):
             return None
@@ -130,8 +179,16 @@ class FCSExperiment(mongoengine.Document):
     def pull_sample_mappings(self, sample_id):
         """
         Given a sample ID, return a dictionary of channel/marker mappings for all associated fcs files
-        :param sample_id: sample ID for search 
-        :return: dictionary of channel/marker mappings for each associated fcs file
+
+        Parameters
+        -----------
+        sample_id: str
+            Sample ID for search
+
+        Returns
+        --------
+        dict
+            Dictionary of channel/marker mappings for each associated fcs file
         """
         file_grp = self.pull_sample(sample_id)
         if not file_grp:
@@ -145,16 +202,26 @@ class FCSExperiment(mongoengine.Document):
                          output_format: str = 'dataframe', columns_default: str = 'marker') -> None or list:
         """
         Given a sample ID, associated to this experiment, fetch the fcs data
-        :param sample_id: ID of sample to fetch data for
-        :param sample_size: if provided with an integer value, a sample of data of given size will be returned
-        (sample drawn from a uniform distribution)
-        :param include_controls: if True (default) then control files associated to sample are included in the result
-        :param output_format: preferred format of output; can either be 'dataframe' for a pandas dataframe, or 'matrix'
-        for a numpy array
-        :param columns_default: naming convention for returned dataframes; must be either 'marker' or 'channel'
-        (default = marker)
-        :return: list of dictionaries {id: file id, typ: data type, either raw or normalised,
-        data: dataframe/matrix}
+
+        Parameters
+        -----------
+        sample_id: str
+            ID of sample to fetch data for
+        sample_size: int or None, (default=None)
+            If provided with an integer value, a sample of data of given size will be returned
+            (sample drawn from a uniform distribution)
+        include_controls: bool, (default=True)
+            If True (default) then control files associated to sample are included in the result
+        output_format: str, (default='dataframe')
+            Preferred format of output; can either be 'dataframe' for a pandas dataframe, or 'matrix'
+            for a numpy array
+        columns_default: str, (default='marker')
+            Naming convention for returned dataframes; must be either 'marker' or 'channel'
+
+        Returns
+        --------
+        list
+            List of dictionaries {id: file id, typ: data type, either raw or normalised, data: dataframe/matrix}
         """
         file_grp = self.pull_sample(sample_id)
         if not file_grp:
@@ -178,8 +245,16 @@ class FCSExperiment(mongoengine.Document):
     def remove_sample(self, sample_id: str) -> bool:
         """
         Remove sample (FileGroup) from experiment.
-        :param sample_id: ID of sample to remove
-        :return: True if successful
+
+        Parameters
+        -----------
+        sample_id: str
+            ID of sample to remove
+
+        Returns
+        --------
+        bool
+            True if successful
         """
         assert sample_id in self.list_samples(), f'{sample_id} not associated to this experiment'
         fg = self.pull_sample(sample_id)
@@ -193,15 +268,27 @@ class FCSExperiment(mongoengine.Document):
                            control: bool = False) -> File or None:
         """
         Internal method. Create a new File object.
-        :param path: file path of the primary fcs file (e.g. the fcs file that is of primary interest such as the
-        file with complete staining)
-        :param file_id: identifier for file
-        :param comp_matrix: compensation matrix (if Null, linked matrix expected)
-        :param compensate: if True, compensation will be applied else False
-        :param catch_standardisation_errors: If True, standardisation errors will result in no File generation
-        and function will return Null
-        :param control: if True, File will be created as file type 'control'
-        :return: File Object
+
+        Parameters
+        -----------
+        path: str
+            File path of the primary fcs file (e.g. the fcs file that is of primary interest such as the
+            file with complete staining)
+        file_id: str
+            Identifier for file
+        comp_matrix: str or None
+            Path to compensation matrix (if Null, matrix expected to be embedded in fcs file)
+        compensate: bool
+            If True, compensation will be applied else False
+        catch_standardisation_errors: bool
+            If True, standardisation errors will result in no File generation
+            and function will return Null
+        control: bool
+            If True, File will be created as file type 'control'
+
+        Returns
+        --------
+        File or None
         """
         try:
             fcs = FCSFile(path, comp_matrix=comp_matrix)
@@ -231,20 +318,35 @@ class FCSExperiment(mongoengine.Document):
                        collection_datetime: str or None = None) -> None or str:
         """
         Add a new sample (FileGroup) to this experiment
-        :param sample_id: primary ID for identification of sample (FileGroup.primary_id)
-        :param subject_id: ID for patient to associate sample too
-        :param file_path: file path of the primary fcs file (e.g. the fcs file that is of primary interest such as the
-        file with complete staining)
-        :param controls: list of file paths for control files e.g. a list of file paths for associated FMO controls
-        :param comp_matrix: (optional) numpy array for spillover matrix for compensation calculation; if not supplied
-        the matrix linked within the fcs file will be used, if not present will present an error
-        :param compensate: boolean value as to whether compensation should be applied before data entry (default=True)
-        :param feedback: boolean value, if True function will provide feedback in the form of print statements
-        (default=True)
-        :param catch_standardisation_errors: if True, standardisation errors will cause process to abort
-        :param processing_datetime:
-        :param collection_datetime:
-        :return: MongoDB ObjectID string for new FileGroup entry
+
+        Parameters
+        ----------
+        sample_id: str
+            Primary ID for identification of sample (FileGroup.primary_id)
+        subject_id: str, optional
+            ID for patient to associate sample too
+        file_path: str
+            File path of the primary fcs file (e.g. the fcs file that is of primary interest such as the
+            file with complete staining)
+        controls: list
+            list of file paths for control files e.g. a list of file paths for associated FMO controls
+        comp_matrix: str, optional
+            Path to csv file for spillover matrix for compensation calculation; if not supplied
+            the matrix linked within the fcs file will be used, if not present will present an error
+        compensate: bool, (default=True)
+            Boolean value as to whether compensation should be applied before data entry (default=True)
+        feedback: bool, (default=True)
+            If True function will provide feedback in the form of print statements
+            (default=True)
+        catch_standardisation_errors: bool, (default=True)
+            If True, standardisation errors will cause process to abort
+        processing_datetime: str, optional
+        collection_datetime: str, optional
+
+        Returns
+        --------
+        str or None
+            MongoDB ObjectID string for new FileGroup entry
         """
         if self.panel is None:
             print('Error: no panel design assigned to this experiment')
