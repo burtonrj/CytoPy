@@ -7,10 +7,19 @@ import os
 def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True) -> list:
     """
     Given a directory, return file paths for all fcs files in directory and subdirectories contained within
-    :param fcs_dir: path to directory for search
-    :param exclude_comps: if True, compensation files will be ignored (note: function searches for 'comp' in file name
-    for exclusion)
-    :return: list of fcs file paths
+
+    Parameters
+    ----------
+    fcs_dir: str
+        path to directory for search
+    exclude_comps: bool
+        if True, compensation files will be ignored (note: function searches for 'comp' in file name
+        for exclusion)
+
+    Returns
+    --------
+    list
+        list of fcs file paths
     """
     fcs_files = []
     for root, dirs, files in os.walk(fcs_dir):
@@ -25,14 +34,25 @@ def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True) -> list:
     return fcs_files
 
 
-def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_comp=True) -> dict:
+def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_comp: bool = True) -> dict:
     """
     Generate a standard dictionary object of fcs files in given directory
-    :param fcs_dir: target directory for search
-    :param control_names: names of expected control files (names must appear in filenames)
-    :param ctrl_id: global identifier for control file e.g. 'FMO' (must appear in filenames)
-    :param ignore_comp: If True, files with 'compensation' in their name will be ignored (default = True)
-    :return: standard dictionary of fcs files contained in target directory
+
+    Parameters
+    -----------
+    fcs_dir: str
+        target directory for search
+    control_names: list
+        names of expected control files (names must appear in filenames)
+    ctrl_id: str
+        global identifier for control file e.g. 'FMO' (must appear in filenames)
+    ignore_comp: bool, (default=True)
+        If True, files with 'compensation' in their name will be ignored (default = True)
+
+    Returns
+    --------
+    dict
+        standard dictionary of fcs files contained in target directory
     """
     file_tree = dict(primary=[], controls=[])
     fcs_files = filter_fcs_files(fcs_dir, exclude_comps=ignore_comp)
@@ -54,17 +74,25 @@ def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_c
     return file_tree
 
 
-def data_from_file(file: File, sample_size: int, output_format: str = 'dataframe',
+def data_from_file(file: File, sample_size: int or None, output_format: str = 'dataframe',
                    columns_default: str = 'marker') -> None or dict:
     """
     Pull data from a given file document (Used for multi-process pull)
-    :param file: File object
-    :param sample_size: return a sample of given integer size
-    :param output_format: preferred format of output; can either be 'dataframe' for a pandas dataframe, or 'matrix'
-    for a numpy array
-    :param columns_default: how to name columns if output_format='dataframe';
-    either 'marker' or 'channel' (default = 'marker')
-    :return: Dictionary output {id: file_id, typ: file_type, data: dataframe/matrix}
+
+    Parameters
+    -----------
+    file: File
+    sample_size: int, optional
+        return a sample of given integer size
+    output_format: str, (default='dataframe')
+        preferred format of output; can either be 'dataframe' for a pandas dataframe, or 'matrix' for a numpy array
+    columns_default: str, (default='marker')
+        how to name columns if output_format='dataframe'; either 'marker' or 'channel' (default = 'marker')
+
+    Returns
+    --------
+    dict
+        Dictionary output {id: file_id, typ: file_type, data: dataframe/matrix}
     """
     data = file.pull(sample=sample_size)
     if output_format == 'dataframe':
@@ -72,14 +100,23 @@ def data_from_file(file: File, sample_size: int, output_format: str = 'dataframe
     return dict(id=file.file_id, typ=file.file_type, data=data)
 
 
-def as_dataframe(matrix: np.array, column_mappings, columns_default: str = 'marker'):
+def as_dataframe(matrix: np.array, column_mappings: list, columns_default: str = 'marker'):
     """
     Generate a pandas dataframe using a given numpy multi-dim array with specified column defaults
     (Used for multi-process pull)
-    :param matrix: numpy matrix to convert to dataframe
-    :param column_mappings: Channel/marker mappings for each columns in matrix
-    :param columns_default: how to name columns; either 'marker' or 'channel' (default = 'marker')
-    :return: Pandas dataframe
+
+    Parameters
+    -----------
+    matrix: Numpy.array
+        numpy array to convert to dataframe
+    column_mappings: list
+        Channel/marker mappings for each columns in matrix
+    columns_default: str
+        how to name columns; either 'marker' or 'channel' (default = 'marker')
+
+    Returns
+    --------
+    Pandas.DataFrame
     """
     columns = []
     if columns_default == 'channel':
