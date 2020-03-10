@@ -34,64 +34,23 @@ import numpy as np
 
 
 class Gating:
-    """
-    Central class for performing semi-automated gating and storing gating information on an FCS FileGroup of a single sample.
-
-    Arguments:
-        experiment - FCSExperiment you're currently working on
-        sample_id - name of the sample to analyse (must belong to experiment)
-        sample - number of events to sample from FCS file(s) (optional)
-        include_controls - if True and FMOs are inclued for specified samples, the FMO data will also be loaded into
-        the Gating object
-
-    Attributes:
-        id - the sample ID
-        mongo_id - the document ID for the loaded sample
-        experiment - an instance of the associated FCSExperiment
-        plotting - instance of Plot object (seeo gating.plotting.static_plots)
-        fmo_search_cache - dictionary of cached index of populations in FMO data (see method 'get_fmo_data')
-        filegroup - instance of FileGroup object for associated sample
-        gates - dictionary of Gate objects; contains all gate information
-        populations dictionary of population Nodes (anytree.Node); contains all population information
-        gating_classes - dictionary of available gating classes
-
-    Methods:
-        clear_gates - removes all existing gates
-        fetch_geom - retrieve the geom that defined a given population
-        population_size - returns in integer count for the number of events in a given population
-        get_population_df - retrieve a population as a pandas dataframe
-        valid_populations - given a list of populations, check validity and return list of valid populations
-        search_fmo_cache - given the name of some desired population and an FMO of interest,
-        check the FMO cache to determine if this population has been estimated for the FMO previously,
-        if so, return the cached index.
-        get_fmo_gate - given some target population that has already been defined in the primary data, predict the same
-        population in a given FMO control. Following the gating strategy, each population from the root until the
-        target population is predicted using a KNN model trained on the primary data (the FMO is assumed to have
-        been collected under the same experimental conditions and therefore should not significantly deviate).
-        A dynamic programming methodology is taken where by predictions are cached for future use.
-        Note: currently fmo cache is not saved to the database and must be re-calculated for each instance of Gating,
-        future releases will offer the ability to save FMO cache
-        subtraction - given a target population and a parent population, generate a new population by subtraction of the
-        target population from the parent
-        create_gate - define a new gate to be used using 'apply' method
-        apply - given the name of an existing gate previously defined, apply the gate and store result internally
-        apply_many - apply multiple existing gates sequentially
-        update_populations - given some ChildPopulationCollection object generated from a gate, update saved populations
-        edit_gate - manually replace the outcome of a gate by updating the geom of it's child populations.
-        find_dependencies - for a given population return a list of populations downstream
-        remove_population - remove given population from population tree
-        remove_gate - remove gate from Gating object
-        print_population_tree - print the population tree in a hierarchical format
-        save - save all gates and population's to mongoDB
+    """Central class for performing semi-automated gating and storing gating information on an FCS FileGroup of a single sample.
+    
+    Parameters
+    -----------
+    experiment: FCSExperiment
+        experiment you're currently working on
+    sample_id: str
+        name of the sample to analyse (must belong to experiment)
+    sample: int, optional
+        number of events to sample from FCS file(s) (optional)
+    include_controls: bool, (default=True)
+        if True and FMOs are inclued for specified samples, the FMO data will also be loaded into the Gating object
+    default_axis: str, (default='FSC-A')
+        default value for y-axis for all plots
     """
     def __init__(self, experiment: FCSExperiment, sample_id: str, sample: int or None = None,
                  include_controls=True, default_axis='FSC-A'):
-        """
-        Constructor for Gating
-        :param experiment: FCSExperiment currently being processed
-        :param sample_id: Identifier of sample of interest
-        :param sample: if an integer value is supplied then data will be sampled to this size. Optional (default = None)
-        """
         try:
             data = experiment.pull_sample_data(sample_id=sample_id, sample_size=sample,
                                                include_controls=include_controls)
@@ -148,16 +107,21 @@ class Gating:
                                                     control_id, control_data in self.ctrl.items()}
 
     def clear_gates(self):
-        """
-        Remove all currently associated gates.
-        """
+        """Remove all currently associated gates."""
         self.gates = dict()
 
     def fetch_geom(self, population: str) -> dict:
-        """
-        Given the name of a population, retrieve the geom that defined this population
-        :param population: name of population to be fetched
-        :return: Population geom (dictionary)
+        """Given the name of a population, retrieve the geom that defined this population
+
+        Parameters
+        ----------
+        population : str
+            name of population to be fetched
+
+        Returns
+        -------
+        dict
+            Population geom (dictionary)
         """
         assert population in self.populations.keys(), f'Population invalid, valid population names: ' \
                                                       f'{self.populations.keys()}'
@@ -166,18 +130,33 @@ class Gating:
     def population_size(self, population: str):
         """
         Returns in integer count for the number of events in a given population
-        :param population: population name
-        :return: event count
+
+        Parameters
+        ----------
+        population : str
+            population name
+
+        Returns
+        -------
+        int
+            event count
         """
         assert population in self.populations.keys(), f'Population invalid, valid population names: ' \
                                                       f'{self.populations.keys()}'
         return len(self.populations[population].index)
 
-    def _deserialise_gate(self, gate):
+    def _deserialise_gate(self, gate: DataGate):
         """
         Given some Gate document from the database, deserialise for use; re-instantiate ChildPopulationCollection
-        :param gate: Gate object to deserialise
-        :return: None
+
+        Parameters
+        ----------
+        gate : Gate
+            Gate object to deserialise
+
+        Returns
+        -------
+        None
         """
         kwargs = {k: v for k, v in gate.kwargs}
         kwargs['child_populations'] = ChildPopulationCollection(json_dict=kwargs['child_populations'])
@@ -185,11 +164,19 @@ class Gating:
         self.gates[gate.gate_name] = gate
 
     @staticmethod
-    def _serailise_gate(gate):
+    def _serailise_gate(gate: DataGate):
         """
         Given some Gate document, serialise so that it can be saved to the database
-        :param gate: Gate object to serialise
-        :return: New 'database friendly' Gate
+
+        Parameters
+        ----------
+        gate : Gate
+            Gate object to serialise
+
+        Returns
+        -------
+        Gate
+            New 'database friendly' Gate
         """
         gate = deepcopy(gate)
         kwargs = {k: v for k, v in gate.kwargs}
@@ -201,7 +188,11 @@ class Gating:
     def gating_classes(self) -> dict:
         """
         Available gating classes
-        :return: Class look-up dictionary
+
+        Returns
+        -------
+        dict
+            Class look-up dictionary
         """
         available_classes = [Static, FMOGate, DensityBasedClustering, DensityThreshold, Quantile, MixtureModel]
         return {x.__name__: x for x in available_classes}
@@ -209,17 +200,32 @@ class Gating:
     def get_population_df(self, population_name: str, transform: bool = False,
                           transform_method: str or None = 'logicle',
                           transform_features: list or str = 'all',
-                          label: bool =False, ctrl_id: str or None = None) -> pd.DataFrame or None:
+                          label: bool = False, ctrl_id: str or None = None) -> pd.DataFrame or None:
         """
         Retrieve a population as a pandas dataframe
-        :param population_name: name of population to retrieve
-        :param transform: if True, the provided transformation method will be applied to the returned dataframe
-        (default = False)
-        :param transform_method: transformation method to apply, default = 'logicle' (ignored if transform is False)
-        :param transform_features: argument specifying which columns to transform in the returned dataframe. Can either
-        be a string value of 'all' (transform all columns), 'fluorochromes' (transform all columns corresponding to a
-        fluorochrome) or a list of valid column names
-        :return: Population dataframe
+
+        Parameters
+        ----------
+        population_name : str
+            name of population to retrieve
+        transform : bool, (default=False)
+            if True, the provided transformation method will be applied to the returned dataframe
+        transform_method : str, (default='logicle')
+            transformation method to apply, default = 'logicle' (ignored if transform is False)
+        transform_features : list or str, (default='all')
+            argument specifying which columns to transform in the returned dataframe. Can either
+            be a string value of 'all' (transform all columns), 'fluorochromes' (transform all columns corresponding to a
+            fluorochrome) or a list of valid column names
+        label: bool, (default=False)
+            If true, additional column included named 'label' with population label (terminal node in population tree)
+        ctrl_id: str, optional
+            If given, retrieves DataFrame of data from control file rather than primary data
+
+        Returns
+        -------
+        Pandas.DataFrame or None
+            Population DataFrame
+
         """
         if population_name not in self.populations.keys():
             print(f'Population {population_name} not recognised')
@@ -246,9 +252,18 @@ class Gating:
     def valid_populations(self, populations: list, verbose: bool = True) -> list:
         """
         Given a list of populations, check validity and return list of valid populations
-        :param populations: list of populations to check
-        :param verbose: if True, prints invalid population
-        :return: Valid populations
+
+        Parameters
+        ----------
+        populations : list
+            list of populations to check
+        verbose : bool, (default=True)
+            if True, prints invalid population
+
+        Returns
+        -------
+        list
+            Valid populations
         """
         valid = list()
         for pop in populations:
@@ -260,23 +275,22 @@ class Gating:
         return valid
 
     def search_ctrl_cache(self, target_population: str, ctrl_id: str, return_dataframe: bool = False):
-        """
-        Search the control cache for a target population. Return either index of events belonging to target
+        """Search the control cache for a target population. Return either index of events belonging to target
         population in control data or Pandas DataFrame of target population from control data.
 
         Parameters
         ----------
-        target_population: str
+        target_population : str
             Name of population to extract from control data
-        ctrl_id: str
+        ctrl_id : str
             Name of control to extract data from
-        return_dataframe: bool
+        return_dataframe : bool, (default=False)
             If True, return a Pandas DataFrame of target population, else return index of events belonging to target
             population
 
         Returns
         -------
-        Numpy.Array or Pandas.DataFrame
+        Pandas.DataFrame or Numpy.array
         """
         assert target_population in self.populations.keys(), f'Invalid population {target_population}'
         assert self.ctrl, 'No control data present for current gating instance, was "include_controls" set to False?'
@@ -290,19 +304,18 @@ class Gating:
 
     def _predict_ctrl_population(self, target_population: str, ctrl_id: str, model: SVC or KNeighborsClassifier,
                                  mappings: dict or None = None):
-        """
-        Internal method. Predict a target population for a given control using the primary data as
+        """Internal method. Predict a target population for a given control using the primary data as
         training data. Results are assigned to population node.
 
         Parameters
         ----------
-        target_population: str
+        target_population : str
             Name of population to predict
-        ctrl_id: str
+        ctrl_id : str
             Name of the control to predict population for
-        model: Object
+        model : Object
             Instance of Scikit-Learn classifier
-        mappings: dict, optional
+        mappings : dict, optional
             Dictionary of axis mappings for classification (necessary if training data is generated from a supervised
             learning method)
 
@@ -341,7 +354,7 @@ class Gating:
 
         Parameters
         ----------
-        ctrl_id: str
+        ctrl_id : str
             Control to remove populations from
 
         Returns
@@ -364,19 +377,19 @@ class Gating:
 
         Parameters
         ----------
-        ctrl_id: str
+        ctrl_id : str
             Name of control data to predict populations for; must be a valid ID currently associated to Gating object
-        tree_map: dict, optional
+        tree_map : dict, optional
             Dictionary describing the axis of populations in the population tree. This is only necessary if populations
             currently in population tree were generated using a supervised machine learning method.
-        overwrite_existing: bool, (default=False)
+        overwrite_existing : bool, (default=False)
             If True, any existing control populations will be removed
-        verbose: bool, (default=True)
+        verbose : bool, (default=True)
             If True, a progress bar is provided as well as text output
-        model: str, (default='knn')
+        model : str, (default='knn')
             Type of model to use for per-population classification. Currently supports K-Nearest Neighbours (knn) and
             Support Vector Machines (svm)
-        model_kwargs:
+        model_kwargs :
             Additional keyword arguments to pass to instance of Scikit-Learn classifier (see sklearn documentation)
 
         Returns
@@ -408,13 +421,23 @@ class Gating:
                 self._predict_ctrl_population(pop_name, ctrl_id, model, mappings=tree_map.get(pop_name))
 
     @staticmethod
-    def __check_class_args(klass, method: str, **kwargs) -> bool:
+    def _check_class_args(klass, method: str, **kwargs) -> bool:
         """
         Check parameters meet class requirements
-        :param klass: Valid gating class
-        :param method: Name of class method to be called
-        :param kwargs: Keyword arguments supplied by user
-        :return: True if valid, else False
+
+        Parameters
+        ----------
+        klass :
+            Valid gating class
+        method :
+            Name of class method to be called
+        kwargs :
+            Keyword arguments supplied by user
+
+        Returns
+        -------
+        bool
+            True if valid, else False
         """
         try:
             if not inspect.getmro(klass):
@@ -442,6 +465,22 @@ class Gating:
             return False
 
     def merge(self, population_left: str, population_right: str, new_population_name: str):
+        """
+        Merge two populations from the same parent, generating a new population saved to population tree
+
+        Parameters
+        ----------
+        population_left: str :
+            Name of left population to merge
+        population_right: str :
+            Name of right population to merge
+        new_population_name: str :
+            Name of the new population
+
+        Returns
+        -------
+        None
+        """
         assert new_population_name not in self.populations.keys(), f'{new_population_name} already exists!'
         assert population_left in self.populations.keys(), f'{population_left} not recognised!'
         assert population_right in self.populations.keys(), f'{population_right} not recognised!'
@@ -477,7 +516,19 @@ class Gating:
         """
         Given a target population and a parent population, generate a new population by subtraction of the
         target population from the parent
-        :return: None
+
+        Parameters
+        ----------
+        target: list :
+            One or more population names
+        parent: str :
+            Name of parent population
+        new_population_name: str :
+            Name of new population generated after subtraction
+
+        Returns
+        -------
+        None
         """
         assert parent in self.populations.keys(), 'Error: parent population not recognised'
         assert all([t in self.populations.keys() for t in target]), 'Error: target population not recognised'
@@ -504,15 +555,28 @@ class Gating:
 
     def create_gate(self, gate_name: str, parent: str, class_: str, method: str, kwargs: dict,
                     child_populations: ChildPopulationCollection) -> bool:
-        """
-        Define a new gate to be used using 'apply' method
-        :param gate_name: Name of the gate
-        :param parent: Name of parent population gate is applied to
-        :param class_: Name of a valid gating class
-        :param method: Name of the class method to invoke upon gating
-        :param kwargs: Keyword arguments (include constructor arguments and method arguments)
-        :param child_populations: A valid ChildPopulationCollection object describing the resulting populations
-        :return: True if successful, else False
+        """Define a new gate to be used using 'apply' method
+
+        Parameters
+        ----------
+        gate_name : str
+            Name of the gate
+        parent : str
+            Name of parent population gate is applied to
+        class_ : str
+            Name of a valid gating class
+        method : str
+            Name of the class method to invoke upon gating
+        kwargs : dict
+            Keyword arguments (include constructor arguments and method arguments)
+        child_populations : ChildPopulationCollection
+            A valid ChildPopulationCollection object describing the resulting populations
+
+        Returns
+        -------
+        bool
+            True if successful, else False
+
         """
         if gate_name in self.gates.keys():
             print(f'Error: gate with name {gate_name} already exists.')
@@ -521,7 +585,7 @@ class Gating:
             print(f'Error: invalid gate class, must be one of {self.gating_classes}')
             return False
         kwargs['child_populations'] = child_populations
-        if not self.__check_class_args(self.gating_classes[class_], method, **kwargs):
+        if not self._check_class_args(self.gating_classes[class_], method, **kwargs):
             return False
         kwargs = [(k, v) for k, v in kwargs.items()]
         new_gate = DataGate(gate_name=gate_name, children=list(child_populations.populations.keys()), parent=parent,
@@ -529,11 +593,20 @@ class Gating:
         self.gates[gate_name] = new_gate
         return True
 
-    def __apply_checks(self, gate_name: str) -> DataGate or None:
+    def _apply_checks(self, gate_name: str) -> DataGate or None:
         """
         Default checks applied whenever a gate is applied
-        :param gate_name: Name of gate to apply
-        :return: Gate document (None if checks fail)
+
+        Parameters
+        ----------
+        gate_name : str
+            Name of gate to apply
+
+        Returns
+        -------
+        Gate or None
+            Gate document (None if checks fail)
+
         """
         if gate_name not in self.gates.keys():
             print(f'Error: {gate_name} does not exist. You must create this gate first using the create_gate method')
@@ -549,12 +622,21 @@ class Gating:
                 return None
         return gatedoc
 
-    def __construct_class_and_gate(self, gatedoc: DataGate, kwargs: dict, feedback: bool = True):
-        """
-        Construct a gating class object and apply the intended method for gating
-        :param gatedoc: Gate document generated with `create_gate`
-        :param kwargs: keyword arguments for constructor and method
-        :return: None
+    def _construct_class_and_gate(self, gatedoc: DataGate, kwargs: dict, feedback: bool = True):
+        """Construct a gating class object and apply the intended method for gating
+
+        Parameters
+        ----------
+        gatedoc : Gate
+            Gate document generated with `create_gate`
+        kwargs : dict
+            keyword arguments for constructor and method
+        feedback: bool, (Default value = True):
+            If True, feedback printed to stdout
+
+        Returns
+        -------
+        None
         """
         klass = self.gating_classes[gatedoc.class_]
         parent_population = self.get_population_df(gatedoc.parent)
@@ -580,14 +662,23 @@ class Gating:
             print('-----------------------')
 
     def apply(self, gate_name: str, plot_output: bool = True, feedback: bool = True, **kwargs) -> None:
+        """Apply a gate to events data (must be generated with `create_gate` first)
+
+        Parameters
+        ----------
+        gate_name : str
+            Name of the gate to apply
+        plot_output : bool, (default=True)
+            If True, resulting gates will be printed to screen
+        feedback : bool, (default=True)
+            If True, print feedback
+        **kwargs : keyword arguments to pass to call to gating method
+
+        Returns
+        -------
+        None
         """
-        Apply a gate to events data (must be generated with `create_gate` first)
-        :param gate_name: Name of the gate to apply
-        :param plot_output: If True, resulting gates will be printed to screen
-        :param feedback: If True, print feedback
-        :return: None
-        """
-        gatedoc = self.__apply_checks(gate_name)
+        gatedoc = self._apply_checks(gate_name)
         if gatedoc is None:
             return None
         gkwargs = {k: v for k, v in gatedoc.kwargs}
@@ -614,19 +705,29 @@ class Gating:
             self.subtraction(target=gkwargs.get('target'), parent=gkwargs.get('parent'),
                              new_population_name=gkwargs.get('name'))
         else:
-            self.__construct_class_and_gate(gatedoc, gkwargs, feedback)
+            self._construct_class_and_gate(gatedoc, gkwargs, feedback)
         if plot_output:
             self.plotting.plot_gate(gate_name=gate_name)
 
     def update_populations(self, output: ChildPopulationCollection, parent_df: pd.DataFrame, warnings: list,
                            parent_name: str) -> ChildPopulationCollection:
-        """
-        Given some ChildPopulationCollection object generated from a gate, update saved populations
-        :param output: ChildPopulationCollection object generated from a gate
-        :param parent_df: pandas dataframe of events data from parent population
-        :param warnings: list of warnings generated from gate
-        :param parent_name: name of the parent population
-        :return: output
+        """Given some ChildPopulationCollection object generated from a gate, update saved populations
+
+        Parameters
+        ----------
+        output : ChildPopulationCollection
+            ChildPopulationCollection object generated from a gate
+        parent_df : Pandas.DataFrame
+            pandas dataframe of events data from parent population
+        warnings : list
+            list of warnings generated from gate
+        parent_name : str
+            name of the parent population
+
+        Returns
+        -------
+        ChildPopulationCollection
+            output
         """
         for name, population in output.populations.items():
             n = len(population.index)
@@ -649,14 +750,23 @@ class Gating:
 
     def apply_many(self, gates: list = None, apply_all: bool = False,
                    plot_outcome: bool = False, feedback: bool = True) -> None:
-        """
-        Apply multiple existing gates sequentially
-        :param gates: Name of gates to apply (NOTE: Gates must be provided in sequential order!)
-        :param apply_all: If True, gates is ignored and all current gates will be applied
-        (population tree must be empty)
-        :param plot_outcome: If True, resulting gates will be printed to screen
-        :param feedback: If True, feedback will be printed to stdout
-        :return: None
+        """Apply multiple existing gates sequentially
+
+        Parameters
+        ----------
+        gates : list, optional
+            Name of gates to apply (NOTE: Gates must be provided in sequential order!)
+        apply_all : bool (default=False)
+            If True, gates is ignored and all current gates will be applied
+            (population tree must be empty)
+        plot_outcome : bool, (default=False)
+            If True, resulting gates will be printed to screen
+        feedback : bool, (default=True)
+            If True, feedback will be printed to stdout
+
+        Returns
+        -------
+        None
         """
         if gates is None:
             gates = list()
@@ -679,12 +789,19 @@ class Gating:
         if feedback:
             print('Complete!')
 
-    def __update_index(self, population_name: str, geom: dict):
-        """
-        Given some new gating geom and the name of a population to update, update the population index
-        :param population_name: name of population to update
-        :param geom: valid dictionary describing geom
-        :return: None
+    def _update_index(self, population_name: str, geom: dict):
+        """Given some new gating geom and the name of a population to update, update the population index
+
+        Parameters
+        ----------
+        population_name : str
+            name of population to update
+        geom : dict
+            valid dictionary describing geom
+
+        Returns
+        -------
+        None
         """
         assert population_name in self.populations.keys(), f'Population {population_name} does not exist'
         parent_name = self.populations[population_name].parent.name
@@ -713,6 +830,19 @@ class Gating:
 
         if geom['shape'] == '2d_threshold':
             def geom_bool(definition, p):
+                """
+
+                Parameters
+                ----------
+                definition :
+                    
+                p :
+                    
+
+                Returns
+                -------
+
+                """
                 p = p.round(decimals=2)
                 x_, y_ = geom['x'], geom['y']
                 tx, ty = round(geom['threshold_x'], 2), round(geom['threshold_y'], 2)
@@ -799,13 +929,21 @@ class Gating:
         raise ValueError('Geom shape not recognised, should be one of: threshold, 2d_threshold, ellipse, rect, poly')
 
     def edit_gate(self, gate_name: str, updated_geom: dict, delete: bool = True):
-        """
-        Manually replace the outcome of a gate by updating the geom of it's child populations.
-        :param gate_name: name of gate to update
-        :param updated_geom: new geom as valid dictionary
-        :param delete: if True, all populations downstream of immediate children will be removed. This is recommended
-        as edit_gate does not update the index of populations downstream of the immediate children.
-        :return: None
+        """Manually replace the outcome of a gate by updating the geom of it's child populations.
+
+        Parameters
+        ----------
+        gate_name : str
+            name of gate to update
+        updated_geom : dict
+            new geom as valid dictionary
+        delete : bool, (default=True)
+            if True, all populations downstream of immediate children will be removed. This is recommended
+            as edit_gate does not update the index of populations downstream of the immediate children.
+
+        Returns
+        -------
+        None
         """
         print(f'Editing gate: {gate_name}')
         assert gate_name in self.gates.keys(), f'Invalid gate, existing gates are: {self.gates.keys()}'
@@ -817,7 +955,7 @@ class Gating:
             assert c in updated_geom.keys(), f'Invalid child populations specified/missing child, gate {gate_name} ' \
                                              f'has the following children: {children}'
             self.populations[c].geom = updated_geom[c]
-            self.populations[c].index = self.__update_index(c, updated_geom[c])
+            self.populations[c].index = self._update_index(c, updated_geom[c])
             effected_populations = effected_populations + self.find_dependencies(population=c)
             immediate_children = immediate_children + [n.name for n in self.populations[c].children]
         effected_gates = [name for name, gate in self.gates.items() if gate.parent in effected_populations]
@@ -828,6 +966,22 @@ class Gating:
         print('Edit complete!')
 
     def nudge_threshold(self, gate_name: str, new_x: float, new_y: float or None = None):
+        """
+        Given some DensityThreshold gate, update the threshold calculated for child populations
+
+        Parameters
+        ----------
+        gate_name: str :
+            Name of gate to update
+        new_x: float :
+            New x-axis threshold
+        new_y: float, optional
+            New y-axis threshold
+
+        Returns
+        -------
+        None
+        """
         assert gate_name in self.gates.keys(), 'Invalid gate name'
         assert self.gates[gate_name].class_ == 'DensityThreshold', 'Can only nudge threshold gates'
         children = self.gates[gate_name].children
@@ -841,11 +995,19 @@ class Gating:
                     geoms[c]['threshold_y'] = new_y
         self.edit_gate(gate_name, updated_geom=geoms)
 
-    def find_dependencies(self, population: str = None) -> list or None:
-        """
-        For a given population find all dependencies
-        :param population: population name
-        :return: List of populations dependent on given population
+    def find_dependencies(self, population: str) -> list or None:
+        """For a given population find all dependencies
+
+        Parameters
+        ----------
+        population : str
+            population name
+
+        Returns
+        -------
+        list or None
+            List of populations dependent on given population
+
         """
         if population not in self.populations.keys():
             print(f'Error: population {population} does not exist; '
@@ -856,11 +1018,24 @@ class Gating:
         return [x.name for x in findall(root, filter_=lambda n: node in n.path)]
 
     def remove_population(self, population_name: str, hard_delete: bool = False) -> None:
-        """
-        Remove a population
-        :param population_name: name of population to remove
-        :param hard_delete: if True, population and dependencies will be removed from database
-        :return: None
+        """Remove a population
+
+        Parameters
+        ----------
+        population_name :
+            name of population to remove
+        hard_delete :
+            if True, population and dependencies will be removed from database
+        population_name: str :
+            
+        hard_delete: bool :
+             (Default value = False)
+
+        Returns
+        -------
+        type
+            None
+
         """
         if population_name not in self.populations.keys():
             print(f'{population_name} does not exist')
@@ -874,11 +1049,24 @@ class Gating:
             self.filegroup = self.filegroup.save()
 
     def remove_gate(self, gate_name: str, propagate: bool = True) -> list and list or None:
-        """
-        Remove gate
-        :param gate_name: name of gate to remove
-        :param propagate: If True, downstream gates and effected populations will also be removed
-        :return: list of removed gates, list of removed populations
+        """Remove gate
+
+        Parameters
+        ----------
+        gate_name :
+            name of gate to remove
+        propagate :
+            If True, downstream gates and effected populations will also be removed
+        gate_name: str :
+            
+        propagate: bool :
+             (Default value = True)
+
+        Returns
+        -------
+        type
+            list of removed gates, list of removed populations
+
         """
         if gate_name not in self.gates.keys():
             print('Error: invalid gate name')
@@ -903,12 +1091,25 @@ class Gating:
         return effected_gates, effected_populations
 
     def print_population_tree(self, image: bool = False, image_name: str or None = None) -> None:
-        """
-        Generate a tree diagram of the populations associated to this Gating object and print to stdout
-        :param image: if True, an image will be saved to the working directory
-        :param image_name: name of the resulting image file, ignored if image = False (optional; default name is of
-        format `filename_populations.png`
-        :return: None
+        """Generate a tree diagram of the populations associated to this Gating object and print to stdout
+
+        Parameters
+        ----------
+        image :
+            if True, an image will be saved to the working directory
+        image_name :
+            name of the resulting image file, ignored if image = False (optional; default name is of
+            format `filename_populations.png`
+        image: bool :
+             (Default value = False)
+        image_name: str or None :
+             (Default value = None)
+
+        Returns
+        -------
+        type
+            None
+
         """
         root = self.populations['root']
         if image:
@@ -919,10 +1120,20 @@ class Gating:
             print('%s%s' % (pre, node.name))
 
     def _population_to_mongo(self, population_name: str) -> Population:
-        """
-        Convert a population into a mongoengine Population document
-        :param population_name: Name of population to convert
-        :return: Population document
+        """Convert a population into a mongoengine Population document
+
+        Parameters
+        ----------
+        population_name :
+            Name of population to convert
+        population_name: str :
+            
+
+        Returns
+        -------
+        type
+            Population document
+
         """
         pop_node = self.populations[population_name]
         if pop_node.geom is None:
@@ -941,15 +1152,27 @@ class Gating:
                                geom=geom,
                                n=len(pop_node.index))
         pop_mongo.save_index(pop_node.index)
-        if pop_node.get('control_idx'):
-            pop_mongo.save_control_idx(pop_node.get('control_idx'))
+        if pop_node.control_idx:
+            pop_mongo.save_control_idx(pop_node.control_idx)
         return pop_mongo
 
     def save(self, overwrite: bool = False, feedback: bool = True) -> bool:
-        """
-        Save all gates and population's to mongoDB
-        :param overwrite: If True, existing populations/gates for sample will be overwritten
-        :return: True if successful else False
+        """Save all gates and population's to mongoDB
+
+        Parameters
+        ----------
+        overwrite :
+            If True, existing populations/gates for sample will be overwritten
+        overwrite: bool :
+             (Default value = False)
+        feedback: bool :
+             (Default value = True)
+
+        Returns
+        -------
+        type
+            True if successful else False
+
         """
         existing_pops = list(self.filegroup.list_populations())
 
@@ -982,12 +1205,28 @@ class Gating:
         return True
 
     def _cluster_idx(self, cluster_id: str, clustering_root: str, meta: bool = True):
-        """
-        Fetch the index of a given cluster/meta-cluster in associated sample
-        :param cluster_id: name of cluster if interest
-        :param clustering_root: name of root population for cluster of interest
-        :param meta: if True, search for a meta-cluster if False, treat cluster_id as unique clustering ID
-        :return: numpy array for index of events contained in cluster
+        """Fetch the index of a given cluster/meta-cluster in associated sample
+
+        Parameters
+        ----------
+        cluster_id :
+            name of cluster if interest
+        clustering_root :
+            name of root population for cluster of interest
+        meta :
+            if True, search for a meta-cluster if False, treat cluster_id as unique clustering ID
+        cluster_id: str :
+            
+        clustering_root: str :
+            
+        meta: bool :
+             (Default value = True)
+
+        Returns
+        -------
+        type
+            numpy array for index of events contained in cluster
+
         """
         assert clustering_root in self.populations.keys(), f'Invalid root name, must be one of {self.populations.keys()}'
         fg = FileGroup.objects(id=self.mongo_id).get()
@@ -996,6 +1235,7 @@ class Gating:
         return idx
 
     def register_as_invalid(self):
+        """ """
         fg = FileGroup.objects(id=self.mongo_id).get()
         if fg.flags:
             fg.flags = fg.flags + ',invalid'
@@ -1005,19 +1245,26 @@ class Gating:
 
 
 class Template(Gating):
-    """
-    Generate a reusable template for gating. Inherits all functionality of Gating class.
-
-    Methods:
-        save_new_template - save all gates as a GatingStrategy document to database for later use
-        load_template - retrieve gates from a GatingStrategy and populate Template object
-    """
+    """Generate a reusable template for gating. Inherits all functionality of Gating class."""
     def save_new_template(self, template_name: str, overwrite: bool = True) -> bool:
-        """
-        Save template structure as a GatingStrategy
-        :param template_name: name of the template
-        :param overwrite: If True, any existing template with the same name will be overwritten
-        :return: True if successful, else False
+        """Save template structure as a GatingStrategy
+
+        Parameters
+        ----------
+        template_name :
+            name of the template
+        overwrite :
+            If True, any existing template with the same name will be overwritten
+        template_name: str :
+            
+        overwrite: bool :
+             (Default value = True)
+
+        Returns
+        -------
+        type
+            True if successful, else False
+
         """
         gating_strategy = GatingStrategy.objects(template_name=template_name)
         if gating_strategy:
@@ -1049,10 +1296,20 @@ class Template(Gating):
             return True
 
     def load_template(self, template_name: str) -> bool:
-        """
-        Load gates from a template GatingStrategy
-        :param template_name: name of template to load
-        :return: True if successful, else False
+        """Load gates from a template GatingStrategy
+
+        Parameters
+        ----------
+        template_name :
+            name of template to load
+        template_name: str :
+            
+
+        Returns
+        -------
+        type
+            True if successful, else False
+
         """
         gating_strategy = GatingStrategy.objects(template_name=template_name)
         if gating_strategy:
