@@ -373,6 +373,20 @@ class Population(mongoengine.EmbeddedDocument):
         return clusters[0], clusters[0].load_index()
 
     def save_control_idx(self, control_idx: dict):
+        """
+        Save index for control files. Takes a dictionary of values where the key corresponds to the control ID
+        and the value is a numpy array of index values
+
+        Parameters
+        ----------
+        control_idx: dict
+            Dictionary of values where the key corresponds to the control ID
+            and the value is a numpy array of index values
+
+        Returns
+        -------
+        None
+        """
         new_control_index = list()
         for control_id, data in control_idx.items():
             cidx = ControlIndex(control_id=control_id)
