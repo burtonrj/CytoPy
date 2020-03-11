@@ -1,8 +1,7 @@
 <p align="center">
-  <img width="350" height="350" src="https://github.com/burtonrj/CytoPy/blob/master/logo.png">
+  <img width="250" height="250" src="https://github.com/burtonrj/CytoPy/blob/master/logo.png">
+  # CytoPy: a cytometry analysis framework for Python
 </p>
-
-# CytoPy: a cytometry analysis framework for Python
 
 In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community.
 This expansion is looking to soon replace traditional methods such as manual gating with sophisticated automated algorithms.
