@@ -12,6 +12,7 @@ from anytree import Node
 from matplotlib.colors import LogNorm
 from sklearn import preprocessing
 from sklearn.cluster import AgglomerativeClustering, KMeans
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
