@@ -672,7 +672,8 @@ class Gating:
             If True, resulting gates will be printed to screen
         feedback : bool, (default=True)
             If True, print feedback
-        **kwargs : keyword arguments to pass to call to gating method
+        **kwargs :
+            keyword arguments to pass to call to gating method
 
         Returns
         -------
@@ -1018,23 +1019,19 @@ class Gating:
         return [x.name for x in findall(root, filter_=lambda n: node in n.path)]
 
     def remove_population(self, population_name: str, hard_delete: bool = False) -> None:
-        """Remove a population
+        """
+        Remove a population
 
         Parameters
         ----------
-        population_name :
+        population_name : str
             name of population to remove
-        hard_delete :
+        hard_delete : bool, (default=False)
             if True, population and dependencies will be removed from database
-        population_name: str :
-            
-        hard_delete: bool :
-             (Default value = False)
 
         Returns
         -------
-        type
-            None
+        None
 
         """
         if population_name not in self.populations.keys():
@@ -1049,22 +1046,19 @@ class Gating:
             self.filegroup = self.filegroup.save()
 
     def remove_gate(self, gate_name: str, propagate: bool = True) -> list and list or None:
-        """Remove gate
+        """
+        Remove gate
 
         Parameters
         ----------
-        gate_name :
+        gate_name : str
             name of gate to remove
-        propagate :
+        propagate : bool, (default=True)
             If True, downstream gates and effected populations will also be removed
-        gate_name: str :
-            
-        propagate: bool :
-             (Default value = True)
 
         Returns
         -------
-        type
+        (list, list) or None
             list of removed gates, list of removed populations
 
         """
@@ -1074,7 +1068,7 @@ class Gating:
         gate = self.gates[gate_name]
         if not gate.children or not propagate:
             self.gates.pop(gate_name)
-            return True
+            return None
         # Remove affected gates and downstream populations
         effected_populations = []
         for child in gate.children:
@@ -1091,24 +1085,20 @@ class Gating:
         return effected_gates, effected_populations
 
     def print_population_tree(self, image: bool = False, image_name: str or None = None) -> None:
-        """Generate a tree diagram of the populations associated to this Gating object and print to stdout
+        """
+        Generate a tree diagram of the populations associated to this Gating object and print to stdout
 
         Parameters
         ----------
-        image :
+        image : bool, (default=False)
             if True, an image will be saved to the working directory
-        image_name :
+        image_name : str, optional
             name of the resulting image file, ignored if image = False (optional; default name is of
             format `filename_populations.png`
-        image: bool :
-             (Default value = False)
-        image_name: str or None :
-             (Default value = None)
 
         Returns
         -------
-        type
-            None
+        None
 
         """
         root = self.populations['root']
@@ -1120,20 +1110,17 @@ class Gating:
             print('%s%s' % (pre, node.name))
 
     def _population_to_mongo(self, population_name: str) -> Population:
-        """Convert a population into a mongoengine Population document
+        """
+        Convert a population into a mongoengine Population document
 
         Parameters
         ----------
-        population_name :
+        population_name : str
             Name of population to convert
-        population_name: str :
-            
 
         Returns
         -------
-        type
-            Population document
-
+        Population
         """
         pop_node = self.populations[population_name]
         if pop_node.geom is None:
@@ -1157,20 +1144,19 @@ class Gating:
         return pop_mongo
 
     def save(self, overwrite: bool = False, feedback: bool = True) -> bool:
-        """Save all gates and population's to mongoDB
+        """
+        Save all gates and population's to mongoDB
 
         Parameters
         ----------
-        overwrite :
+        overwrite : bool, (default=False)
             If True, existing populations/gates for sample will be overwritten
-        overwrite: bool :
-             (Default value = False)
-        feedback: bool :
-             (Default value = True)
+        feedback: bool, (default=True)
+             If True, feedback printed to stdout
 
         Returns
         -------
-        type
+        bool
             True if successful else False
 
         """
@@ -1209,22 +1195,16 @@ class Gating:
 
         Parameters
         ----------
-        cluster_id :
+        cluster_id : str
             name of cluster if interest
-        clustering_root :
+        clustering_root : str
             name of root population for cluster of interest
-        meta :
+        meta : bool, (default=True)
             if True, search for a meta-cluster if False, treat cluster_id as unique clustering ID
-        cluster_id: str :
-            
-        clustering_root: str :
-            
-        meta: bool :
-             (Default value = True)
 
         Returns
         -------
-        type
+        Numpy.array
             numpy array for index of events contained in cluster
 
         """
@@ -1235,7 +1215,9 @@ class Gating:
         return idx
 
     def register_as_invalid(self):
-        """ """
+        """
+        Flags the sample associated to this Gating instance as invalid and saves state to database
+        """
         fg = FileGroup.objects(id=self.mongo_id).get()
         if fg.flags:
             fg.flags = fg.flags + ',invalid'
@@ -1251,18 +1233,14 @@ class Template(Gating):
 
         Parameters
         ----------
-        template_name :
+        template_name : str
             name of the template
-        overwrite :
+        overwrite : bool, (default=True)
             If True, any existing template with the same name will be overwritten
-        template_name: str :
-            
-        overwrite: bool :
-             (Default value = True)
 
         Returns
-        -------
-        type
+        --------
+        bool
             True if successful, else False
 
         """
@@ -1300,14 +1278,12 @@ class Template(Gating):
 
         Parameters
         ----------
-        template_name :
+        template_name : str
             name of template to load
-        template_name: str :
-            
 
         Returns
         -------
-        type
+        bool
             True if successful, else False
 
         """
