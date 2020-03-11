@@ -241,7 +241,9 @@ class Gating:
         if label:
             data['label'] = None
             dependencies = self.find_dependencies(population_name)
+            dependencies = [p for p in dependencies if p != population_name]
             for pop in dependencies:
+                idx = self.populations[pop].index
                 data.loc[idx, 'label'] = pop
         if transform_method is None:
             transform = False
