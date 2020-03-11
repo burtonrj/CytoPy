@@ -239,16 +239,16 @@ class Population(mongoengine.EmbeddedDocument):
                           parent=self.parent, index=self.load_index(), control_idx=control_idx)
         return population
 
-    def list_clustering_experiments(self) -> list:
+    def list_clustering_experiments(self) -> set:
         """
         Generate a list of clustering experiment UIDs
 
         Returns
         -------
-        list
+        set
             Clustering experiment UIDs
         """
-        return [c.cluster_experiment.clustering_uid for c in self.clustering]
+        return set([c.cluster_experiment.clustering_uid for c in self.clustering])
 
     def get_many_clusters(self, clustering_uid: str) -> list:
         """
