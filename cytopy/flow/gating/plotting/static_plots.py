@@ -333,7 +333,7 @@ class Plot:
             bins = 500
         else:
             bins = int(data.shape[0] * 0.5)
-        ax.hist2d(data[x], data[y], bins=bins, norm=LogNorm())
+        ax.hist2d(data[x], data[y], bins=bins, norm=LogNorm(), cmap=plt.cm.jet)
         return ax
 
     def plot_population(self, population_name: str, x: str, y: str,
@@ -436,12 +436,11 @@ class Plot:
         pgeoms, poverlay, cgeoms, coverlay = _default(pgeoms), _default(poverlay), _default(cgeoms), _default(coverlay)
         # Check populations exist
         fg = FileGroup.objects(id=self.gating.mongo_id).get()
-        if cluster_root_population is None:
-            assert cgeoms is None, 'If plotting clusters, must provide root population'
-            assert coverlay is None, 'If plotting clusters, must provide root population'
-            all_clusters = []
-        else:
+        if cgeoms or coverlay:
+            assert cluster_root_population, 'If plotting clusters, must provide root population'
             all_clusters = list(fg.get_population(cluster_root_population).list_clusters(meta=meta_clusters))
+        else:
+            all_clusters = []
         for p in [base_population] + pgeoms + poverlay:
             assert p in self.gating.populations.keys(), f'Error: could not find {p}, valid populations include: ' \
                                                         f'{self.gating.populations.keys()}'
