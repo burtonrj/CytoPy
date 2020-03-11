@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/burtonrj/CytoPy/blob/master/logo.png">
+  <img src="https://github.com/burtonrj/CytoPy/blob/master/logo.png" height="25%" width="25%">
   <h1 align="center">CytoPy: a cytometry analysis framework for Python</h1>
 </p>
 
