@@ -268,7 +268,7 @@ class Population(mongoengine.EmbeddedDocument):
             raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
         return [c for c in self.clustering if c.cluster_experiment.clustering_uid == clustering_uid]
 
-    def delete_clusters(self, clustering_uid: str) -> None:
+    def delete_clusters(self, clustering_uid: str or None = None, drop_all: bool = False) -> None:
         """
         Given a clustering UID, remove associated clusters
 
@@ -276,11 +276,17 @@ class Population(mongoengine.EmbeddedDocument):
         ----------
         clustering_uid: str
             UID for clusters to be removed
+        drop_all: bool
+            If True, all clusters are removed regardless of clustering experiment UID
 
         Returns
         -------
         None
         """
+        if drop_all:
+            self.clustering = []
+            return
+        assert clustering_uid, 'Must provide a valid clustering experiment UID'
         if clustering_uid not in self.list_clustering_experiments():
             raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
         self.clustering = [c for c in self.clustering if c.cluster_experiment.clustering_uid != clustering_uid]
@@ -516,6 +522,27 @@ class FileGroup(mongoengine.Document):
         """
         for g in self.gates:
             yield g.gate_name
+
+    def delete_clusters(self, clustering_uid: str or None = None, drop_all: bool = False):
+        """
+        Delete all cluster attaining to a given clustering UID
+
+        Parameters
+        ----------
+        clustering_uid: str
+            Unique identifier for clustering experiment that should have clusters deleted from file
+        drop_all: bool
+            If True, all clusters for every population are dropped from database regardless of the
+            clustering experiment they are associated too
+        Returns
+        -------
+        None
+        """
+        if not drop_all:
+            assert clustering_uid, 'Must provide a valid clustering experiment UID'
+        for p in self.populations:
+            p.delete_clusters(clustering_uid, drop_all)
+        self.save()
 
     def delete_populations(self, populations: list or str) -> None:
         """
