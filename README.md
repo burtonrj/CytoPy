@@ -13,8 +13,8 @@ resulting in large custom scripts, poor reproducibility, and insufficient data m
 CytoPy was created to address these issues. It was created with the general philosophy that given some 
 cytometry data and a clinical/experimental endpoint, we wish to find what properties seperate groups (e.g. what cell populations
 are important for identifying a disease? What phenotypes are changing in response to a stimulus? etc). 
-The pipeline itself is centered around a MongoDB database, built in  the Python programming language, 
-and designed with 'low code' as a core aim, greatly 
+The pipeline itself is centered around a MongoDB database, is built in  the Python programming language, 
+and designed with a 'low code' API, greatly 
 simplifying cytometry analysis. We can break it all down into the following steps that can be completed 
 in just a few lines of code:
 
@@ -54,7 +54,7 @@ MongoDB
 
 Install using pip (not currently active):
 
-`pip install cytodragon`
+`pip install cytopy`
 
 Or, download source code and run the following from the source directory:
 
