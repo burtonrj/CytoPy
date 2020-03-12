@@ -191,6 +191,19 @@ class Population(mongoengine.EmbeddedDocument):
     clusters = mongoengine.ListField() # NEEDS REMOVING
     control_idx = mongoengine.EmbeddedDocumentListField(ControlIndex)
 
+    def ctrl_search(self, ctrl_id) -> bool:
+        """
+        If specified control exists in control_idx return True, otherwise False
+
+        Returns
+        -------
+        bool
+        """
+        for c in self.control_idx:
+            if c.control_id == ctrl_id:
+                return True
+        return False
+
     def save_index(self, data: np.array) -> None:
         """
         Given a new numpy array of index values, serialise and commit data to database
@@ -501,6 +514,29 @@ class FileGroup(mongoengine.Document):
         'db_alias': 'core',
         'collection': 'fcs_files'
     }
+
+    def list_controls(self) -> list:
+        """
+        Return a list of file IDs for associated control files
+
+        Returns
+        -------
+        list
+        """
+        return [f.file_id.replace(f'{self.primary_id}_') for f in self.files if f.file_type == 'control']
+
+    def list_gated_controls(self) -> list:
+        """
+        List ID of controls that have a cached index in each population of the saved population tree
+        (i.e. they have been gated)
+
+        Returns
+        -------
+        list
+            List of control IDs for gated controls
+        """
+        ctrls = self.list_controls()
+        return [c for c in ctrls if all([p.ctrl_search(c) for p in self.populations])]
 
     def list_populations(self) -> iter:
         """

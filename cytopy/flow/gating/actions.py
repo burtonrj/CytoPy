@@ -1,7 +1,7 @@
 # Dependencies
 # Immunova.data
 from ...data.gating import Gate as DataGate, GatingStrategy
-from ...data.fcs import FileGroup, Population
+from ...data.fcs import FileGroup, Population, ControlIndex
 from ...data.fcs_experiments import FCSExperiment
 # Immunova.flow
 from ..transforms import apply_transform
@@ -398,6 +398,8 @@ class Gating:
         -------
         None
         """
+        if tree_map is None:
+            tree_map = {}
         vprint = print if verbose else lambda *a, **k: None
         # Check that control data is available
         assert self.ctrl, 'No control data present for current gating instance, was "include_controls" set to False?'
@@ -1145,6 +1147,28 @@ class Gating:
             pop_mongo.save_control_idx(pop_node.control_idx)
         return pop_mongo
 
+    def _save_ctrl_idx(self):
+        """
+        Saves the cached control index of each current population to the database
+
+        Returns
+        -------
+        None
+        """
+        updated_populations = list()
+        for pop in self.filegroup.populations:
+            ctrl_idx = self.populations[pop.population_name].control_idx
+            if not ctrl_idx:
+                updated_populations.append(pop)
+                continue
+            controls = {k: ControlIndex(control_id=k) for k in ctrl_idx.keys()}
+            for ctrl_id, idx in ctrl_idx.items():
+                controls[ctrl_id].save_index(idx)
+            pop.control_idx = list(controls.values())
+            updated_populations.append(pop)
+        self.filegroup.populations = updated_populations
+        self.filegroup.save()
+
     def save(self, overwrite: bool = False, feedback: bool = True) -> bool:
         """
         Save all gates and population's to mongoDB
@@ -1188,6 +1212,7 @@ class Gating:
         # Update gates
         self.filegroup.gates = [self._serailise_gate(gate) for gate in self.gates.values()]
         self.filegroup = self.filegroup.save()
+        self._save_ctrl_idx()
         if feedback:
             print('Saved successfully!')
         return True
