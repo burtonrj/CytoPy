@@ -23,18 +23,120 @@ import numpy as np
 import scprep
 
 
-class Migrations:
-    def __init__(self, experiment: FCSExperiment, samples: list or None = None):
-        pass
-
-
-class NormalisedMFI:
-    def __init__(self, experiment: FCSExperiment, samples: list or None = None):
+class ControlComparisons:
+    def __init__(self, experiment: FCSExperiment,
+                 samples: list or None = None,
+                 gating_model: str = 'knn',
+                 tree_map: dict or None = None,
+                 **model_kwargs):
         self.experiment = experiment
-        if not samples:
-            self.samples = self.experiment.list_samples()
+        print('---- Preparing for control comparisons ----')
+        print('If control files have not been gated prior to initiation, control gating will '
+              'be performed automatically (gating methodology can be specified in ControlComparison arguments '
+              'see documentation for details). Note: control gating can take some time so please be patient. '
+              'Results will be saved to the database to reduce future computation time.')
+        print('\n')
+        self.samples = self._gate_samples(self._check_samples(samples), tree_map, gating_model, **model_kwargs)
 
-    def add_population(self, population_name: str):
+    def _gate_samples(self, samples: dict, tree_map, gating_model, **model_kwargs) -> dict:
+        not_gated = [s for s, gated in samples.items() if gated is None]
+        if len(not_gated) == 0:
+            return samples
+        print(f'The following samples have not been previously gated for one or more controls: {not_gated}')
+        print('\n')
+
+        if tree_map is None:
+            tree_map = dict()
+            print('No tree_map provided. If one or more of the gates to be calculated for control files '
+                  'derives from a supervised learning method, this will raise an Assertion error; tree_map '
+                  'must provide details of the "x" and "y" dimensions for model fitting for each gate')
+            print('\n')
+
+        for s in progress_bar(not_gated):
+            for ctrl in samples[s]:
+                g = Gating(self.experiment, s, include_controls=True)
+                g.control_gating(ctrl, tree_map=tree_map, model=gating_model, verbose=False, **model_kwargs)
+                g.save(feedback=False)
+        return samples
+
+    def _check_samples(self, samples: list):
+        if not samples:
+            samples = self.experiment.list_samples()
+        else:
+            assert all([s in self.experiment.list_samples() for s in samples]), 'One or more given sample IDs is ' \
+                                                                                'invalid or not associated to the ' \
+                                                                                'given experiment'
+
+        filtered_samples = list(filter(lambda s: any([f.file_type == 'control' for
+                                                      f in self.experiment.pull_sample(s).files]), samples))
+        assert filtered_samples, 'No files in the provided experiment have associated control data'
+        no_ctrls = [s for s in samples if s not in filtered_samples]
+        if no_ctrls:
+            print(f'The following samples are missing control data and therefore will be omitted from '
+                  f'analysis: {no_ctrls}')
+        return {s: self.experiment.pull_sample(s).list_gated_controls() for s in filtered_samples}
+
+    def _has_control_data(self, marker):
+        no_ctrl_data = [s for s, ctrls in self.samples.items() if marker not in ctrls]
+        if no_ctrl_data:
+            assert not len(no_ctrl_data) == len(self.samples), f'No {marker} control data present for any ' \
+                                                               f'samples in associated experiment'
+            print(f'The following samples are missing control data for {marker} and will be excluded from analysis')
+        return [s for s in self.samples.keys() if s not in no_ctrl_data]
+
+    def _get_marker_data(self, marker: str, population: str,
+                         transform: bool = True, transform_method: str = 'logicle'):
+        samples = self._has_control_data(marker)
+        data = {}
+        for s in samples:
+            g = Gating(self.experiment, s, include_controls=True)
+            primary = g.get_population_df(population,
+                                          transform=transform,
+                                          transform_method=transform_method,
+                                          transform_features=[marker])[marker].values
+            control = g.get_population_df(population,
+                                          transform=transform,
+                                          transform_method=transform_method,
+                                          transform_features=[marker],
+                                          ctrl_id=marker)[marker].values
+            data[s] = {'primary': primary, 'control': control}
+        return data
+
+    def statistic_1d(self, marker: str,
+                     population: str,
+                     stat: str = 'fold_change',
+                     transform: bool = True,
+                     transform_method: str = 'logicle') -> pd.DataFrame:
+
+        data = self._get_marker_data(marker, population, transform, transform_method)
+        if stat == 'fold_change':
+            results = {'sample_id': [], f'relative_fold_change_MFI_{marker}': []}
+            for s, data_ in data.items():
+                results['sample_id'].append(s)
+                primary, control = np.mean(data_['primary']), np.mean(data_['control'])
+                if control > primary:
+                    print(f'Warning: MFI for control in {s} > primary data yielding a negative relative fold change '
+                          f'is this correct?')
+                    results[f'relative_fold_change_MFI_{marker}'].append(-control / primary)
+                else:
+                    results[f'relative_fold_change_MFI_{marker}'].append(primary / control)
+            return pd.DataFrame(results)
+        if stat == 'ks_test':
+            results = {'sample_id': [], f'ks_stat_{marker}': [], f'ks_pval_{marker}': []}
+            for s, data_ in data.items():
+                results['sample_id'].append(s)
+                ks_stat, p = stats.ks_2samp(data_['primary'], data_['control'])
+                results[f'ks_stat_{marker}'].append(ks_stat)
+                results[f'ks_pval_{marker}'].append(p)
+            return pd.DataFrame(results)
+        raise ValueError('Invalid input for stat, must be one of: "fold_change" or "ks_test"')
+
+    def ks_test(self, marker: str,
+                population: str,
+                transform: bool = True,
+                transform_method: str = 'logicle') -> pd.DataFrame:
+        data = self._get_marker_data(marker, population, transform, transform_method)
+
         pass
 
 
@@ -160,9 +262,6 @@ class Proportions:
             results[c].append(cluster_n[c]/denominator)
         return self._as_dataframe(results)
 
-
-def get_normalised_mfi():
-    pass
 
 
 class Extract:
