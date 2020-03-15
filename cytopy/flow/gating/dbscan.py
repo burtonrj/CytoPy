@@ -1,5 +1,5 @@
 from cytopy.flow.gating.base import Gate, GateError
-from cytopy.flow.gating.utilities import centroid, multi_centroid_calculation, inside_polygon
+from cytopy.flow.gating.utilities import multi_centroid_calculation, inside_polygon, centroid
 from multiprocessing import Pool, cpu_count
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.neighbors import KDTree, KNeighborsClassifier

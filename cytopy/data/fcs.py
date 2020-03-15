@@ -523,7 +523,7 @@ class FileGroup(mongoengine.Document):
         -------
         list
         """
-        return [f.file_id.replace(f'{self.primary_id}_') for f in self.files if f.file_type == 'control']
+        return [f.file_id.replace(f'{self.primary_id}_', '') for f in self.files if f.file_type == 'control']
 
     def list_gated_controls(self) -> list:
         """
