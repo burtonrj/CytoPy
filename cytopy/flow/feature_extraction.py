@@ -24,6 +24,28 @@ import scprep
 
 
 class ControlComparisons:
+    """
+    This class is for making experiment wide comparisons of controls to the primary data collected
+    on each sample. As an example, people commonly use Full-Minus-One controls (FMO) in cytometry experiments.
+    Where a common FMO is present across all samples of an experiment, a ControlComparison object will allow
+    the extraction of a population from both primary samples and control samples and make comparisons.
+
+    Parameters
+    ----------
+    experiment: FCSExperiment
+        Instance of FCSExperiment to investigate
+    samples: list, optional
+        List of samples in experiment to investigate, if left as None all samples will be included
+    gating_model: str, (default='knn')
+        Type of model to use to estimate the populations in control samples using primary data as training data, if
+        control samples have not been gated previously and saved to the database.
+        By default it uses a KNearestNeighbours model, but user has the option to use a Support Vector Machine instead (svm).
+    tree_map: dict, optional
+        Only required if one or more samples in experiment is lacking populations for control data and populations in sample
+        were derived using a supervised machine learning model. See cytopy.gating.actions.Gating.control_gating for more information.
+    model_kwargs:
+        Additional keyword arguments will be passed to instance scikit-learn classifier
+    """
     def __init__(self, experiment: FCSExperiment,
                  samples: list or None = None,
                  gating_model: str = 'knn',
@@ -39,6 +61,26 @@ class ControlComparisons:
         self.samples = self._gate_samples(self._check_samples(samples), tree_map, gating_model, **model_kwargs)
 
     def _gate_samples(self, samples: dict, tree_map, gating_model, **model_kwargs) -> dict:
+        """
+        Internal function. Pass samples in experiment. If they have not been previously gated, perform control gating.
+
+        Parameters
+        ----------
+        samples: dict
+            Dictionary output of self.check_samples
+        tree_map: dict
+            See cytopy.gating.actions.Gating.control_gating for more information.
+        gating_model: str
+            Type of gating model to use for estimating populations in controls
+        model_kwargs:
+            Additional keyword arguments will be passed to instance scikit-learn classifier
+
+        Returns
+        -------
+        dict
+            Returns modified sample dictionary where each key is a sample name and the value a list of control file IDs
+            present for this sample
+        """
         not_gated = [s for s, gated in samples.items() if gated is None]
         if len(not_gated) == 0:
             return samples
@@ -60,6 +102,23 @@ class ControlComparisons:
         return samples
 
     def _check_samples(self, samples: list):
+        """
+        Internal function. Parses samples and checks that they are valid, that they have associated
+        control data, and then returns a dictionary where the key is the sample name and the value a list
+        of control IDs associated to this sample, e.g. {'sample_1': ['CXCR3', 'CD27']} would indicate
+        one file with controls for CXCR3 and CD27.
+
+        Parameters
+        ----------
+        samples: list
+            List of samples to pass from experiment
+
+        Returns
+        -------
+        dict
+            Returns modified sample dictionary where each key is a sample name and the value a list of control file IDs
+            present for this sample
+        """
         if not samples:
             samples = self.experiment.list_samples()
         else:
@@ -76,7 +135,21 @@ class ControlComparisons:
                   f'analysis: {no_ctrls}')
         return {s: self.experiment.pull_sample(s).list_gated_controls() for s in filtered_samples}
 
-    def _has_control_data(self, marker):
+    def _has_control_data(self, marker: str) -> list:
+        """
+        Internal function. For a given marker (e.g. the name of a cell surface protein) pass all
+        samples and return a list of samples where control data is present
+
+        Parameters
+        ----------
+        marker: str
+            Name of marker to search for (e.g. the name of a cell surface protein)
+
+        Returns
+        -------
+        list
+            list of samples where control data is present
+        """
         no_ctrl_data = [s for s, ctrls in self.samples.items() if marker not in ctrls]
         if no_ctrl_data:
             assert not len(no_ctrl_data) == len(self.samples), f'No {marker} control data present for any ' \
@@ -84,60 +157,114 @@ class ControlComparisons:
             print(f'The following samples are missing control data for {marker} and will be excluded from analysis')
         return [s for s in self.samples.keys() if s not in no_ctrl_data]
 
-    def _get_marker_data(self, marker: str, population: str,
-                         transform: bool = True, transform_method: str = 'logicle'):
-        samples = self._has_control_data(marker)
-        data = {}
+    def _get_data(self, markers: list, population: str,
+                  transform: bool = True, transform_method: str = 'logicle') -> pd.DataFrame:
+        """
+        Internal function. Parse all samples and fetch the given population, collecting data from both
+        the control(s) and the primary data. Return a Pandas DataFrame, where samples are identifiable by
+        the 'sample_id' column, controls from the 'data_source' column, and the events data itself transformed
+        as specified.
+
+        Parameters
+        ----------
+        markers: list
+            List of one or many controls to fetch for each sample
+        population: str
+            Name of the population that data should be derived from
+        transform: bool, (default=True)
+            If True, transformation will be applied
+        transform_method: str, (default='logicle')
+            Name of the transformation method to be applied (see cytopy.flow.transforms)
+
+        Returns
+        -------
+        Pandas.DataFrame
+            Pandas DataFrame, where samples are identifiable by
+            the 'sample_id' column, controls from the 'data_source' column, and the events data itself transformed
+            as specified.
+        """
+        data = pd.DataFrame()
+        samples = [set(self._has_control_data(m)) for m in markers]
+        samples = set.intersection(*samples)
         for s in samples:
             g = Gating(self.experiment, s, include_controls=True)
             primary = g.get_population_df(population,
                                           transform=transform,
-                                          transform_method=transform_method,
-                                          transform_features=[marker])[marker].values
-            control = g.get_population_df(population,
-                                          transform=transform,
-                                          transform_method=transform_method,
-                                          transform_features=[marker],
-                                          ctrl_id=marker)[marker].values
-            data[s] = {'primary': primary, 'control': control}
+                                          transform_method=transform_method)
+            primary['data_source'] = 'primary'
+            for m in markers:
+                control = g.get_population_df(population,
+                                              transform=transform,
+                                              transform_method=transform_method,
+                                              ctrl_id=m)
+                control['data_source'] = m
+                primary = pd.concat([primary, control])
+            primary['sample_id'] = s
+            data = pd.concat([data, primary])
         return data
+
+    @staticmethod
+    def _fold_change(data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Internal function. Calculates the relative fold change in MFI between a control and
+        the primary data. NOTE: this function expects only one control present in data.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            As generated from self._get_data
+
+        Returns
+        -------
+        Pandas.DataFrame
+            Pandas DataFrame where each sample is identifiable from the 'sample_id' column, the control
+            identifiable from the 'data_source' column, and the relative fold change given in a column
+            aptly named 'relative_fold_change'
+        """
+        def safe_fold_change(x, m):
+            primary = x[x.data_source == 'primary'][m].values[0]
+            ctrl = x[x.data_source == m][m].values[0]
+            if ctrl > primary:
+                print(f'Warning: MFI for control in {x.sample_id.values[0]} > primary data yielding a negative relative fold change '
+                      f'is this correct?')
+                return -ctrl / primary
+            return primary / ctrl
+        marker = [c for c in data.columns if c not in ['sample_id', 'data_source']][0]
+        mfi = pd.DataFrame(data.groupby(by=['sample_id', 'data_source'])[marker].mean()).reset_index()
+        col_name = f'relative_fold_change_{marker}'
+        return pd.DataFrame(mfi.groupby('sample_id').apply(lambda x: safe_fold_change(x, marker))).reset_index().rename({0: col_name})
 
     def statistic_1d(self, marker: str,
                      population: str,
                      stat: str = 'fold_change',
                      transform: bool = True,
                      transform_method: str = 'logicle') -> pd.DataFrame:
+        """
+        For a single marker (and thus control) calculate a desired statistic
 
-        data = self._get_marker_data(marker, population, transform, transform_method)
+        Parameters
+        ----------
+        marker: str
+            Name of marker to search for (e.g. the name of a cell surface protein)
+        population: str
+            Name of population to derive data from
+        stat: str, (default = 'fold_change')
+            Name of the statistic to calculate. Currently CytoPy version 0.0.1 only supports fold_change, which is
+            the relative fold change in MFI between control and primary data. Future releases hope to include more.
+        transform: bool, (default = True)
+            If True, data is transformed prior to calculating statistic
+        transform_method: str, (default='logicle')
+            Name of the transformation method to be applied
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+
+        data = self._get_data([marker], population, transform, transform_method)[['sample_id', marker, 'data_source']]
         if stat == 'fold_change':
-            results = {'sample_id': [], f'relative_fold_change_MFI_{marker}': []}
-            for s, data_ in data.items():
-                results['sample_id'].append(s)
-                primary, control = np.mean(data_['primary']), np.mean(data_['control'])
-                if control > primary:
-                    print(f'Warning: MFI for control in {s} > primary data yielding a negative relative fold change '
-                          f'is this correct?')
-                    results[f'relative_fold_change_MFI_{marker}'].append(-control / primary)
-                else:
-                    results[f'relative_fold_change_MFI_{marker}'].append(primary / control)
-            return pd.DataFrame(results)
-        if stat == 'ks_test':
-            results = {'sample_id': [], f'ks_stat_{marker}': [], f'ks_pval_{marker}': []}
-            for s, data_ in data.items():
-                results['sample_id'].append(s)
-                ks_stat, p = stats.ks_2samp(data_['primary'], data_['control'])
-                results[f'ks_stat_{marker}'].append(ks_stat)
-                results[f'ks_pval_{marker}'].append(p)
-            return pd.DataFrame(results)
+            return self._fold_change(data)
         raise ValueError('Invalid input for stat, must be one of: "fold_change" or "ks_test"')
-
-    def ks_test(self, marker: str,
-                population: str,
-                transform: bool = True,
-                transform_method: str = 'logicle') -> pd.DataFrame:
-        data = self._get_marker_data(marker, population, transform, transform_method)
-
-        pass
 
 
 def meta_labelling(experiment: FCSExperiment, dataframe: pd.DataFrame, meta_label: str):
