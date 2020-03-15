@@ -121,12 +121,6 @@ def rectangular_filter(data: pd.DataFrame, x: str, y: str, definition: dict) -> 
     return data
 
 
-def centroid(data: np.array):
-    x = np.median(data[:, 0])
-    y = np.median(data[:, 1])
-    return np.array([x, y])
-
-
 def multi_centroid_calculation(data: pd.DataFrame):
     centroids = list()
     for c in data['labels'].unique():
@@ -258,3 +252,7 @@ def check_downstream_overlaps(ref, root_population: str, population_labels: list
     return downstream_overlaps
 
 
+def centroid(data: np.array):
+    x = np.median(data[:, 0])
+    y = np.median(data[:, 1])
+    return np.array([x, y])
