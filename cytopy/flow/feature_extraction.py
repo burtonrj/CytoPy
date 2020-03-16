@@ -59,6 +59,7 @@ class ControlComparisons:
               'Results will be saved to the database to reduce future computation time.')
         print('\n')
         self.samples = self._gate_samples(self._check_samples(samples), tree_map, gating_model, **model_kwargs)
+        self.data = None
 
     def _gate_samples(self, samples: dict, tree_map, gating_model, **model_kwargs) -> dict:
         """
@@ -163,8 +164,8 @@ class ControlComparisons:
             print('\n')
         return [s for s in self.samples.keys() if s not in no_ctrl_data]
 
-    def _get_data(self, markers: list, population: str,
-                  transform: bool = True, transform_method: str = 'logicle') -> pd.DataFrame:
+    def add_data(self, markers: list, population: str,
+                 transform: bool = True, transform_method: str = 'logicle') -> pd.DataFrame:
         """
         Internal function. Parse all samples and fetch the given population, collecting data from both
         the control(s) and the primary data. Return a Pandas DataFrame, where samples are identifiable by
@@ -240,38 +241,25 @@ class ControlComparisons:
         col_name = f'relative_fold_change_{marker}'
         return pd.DataFrame(mfi.groupby('sample_id').apply(lambda x: safe_fold_change(x, marker))).reset_index().rename({0: col_name})
 
-    def statistic_1d(self, marker: str,
-                     population: str,
-                     stat: str = 'fold_change',
-                     transform: bool = True,
-                     transform_method: str = 'logicle') -> pd.DataFrame:
+    def statistic_1d(self,
+                     stat: str = 'fold_change') -> pd.DataFrame:
         """
-        For a single marker (and thus control) calculate a desired statistic
+        Calculate a desired statistic for each marker currently acquired
 
         Parameters
         ----------
-        marker: str
-            Name of marker to search for (e.g. the name of a cell surface protein)
-        population: str
-            Name of population to derive data from
         stat: str, (default = 'fold_change')
             Name of the statistic to calculate. Currently CytoPy version 0.0.1 only supports fold_change, which is
             the relative fold change in MFI between control and primary data. Future releases hope to include more.
-        transform: bool, (default = True)
-            If True, data is transformed prior to calculating statistic
-        transform_method: str, (default='logicle')
-            Name of the transformation method to be applied
 
         Returns
         -------
         Pandas.DataFrame
         """
-        print('Collecting data...')
-        data = self._get_data([marker], population, transform, transform_method)[['sample_id', marker, 'data_source']]
-        print('Calculating statistics...')
+        assert self.data is not None, 'Populate object with data using add_data() method before calculating statistics'
         if stat == 'fold_change':
-            return self._fold_change(data)
-        raise ValueError('Invalid input for stat, must be one of: "fold_change" or "ks_test"')
+            return self._fold_change(self.data)
+        raise ValueError('Invalid input for stat, must be one of: "fold_change"')
 
 
 def meta_labelling(experiment: FCSExperiment, dataframe: pd.DataFrame, meta_label: str):
