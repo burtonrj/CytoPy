@@ -81,7 +81,7 @@ class ControlComparisons:
             Returns modified sample dictionary where each key is a sample name and the value a list of control file IDs
             present for this sample
         """
-        not_gated = [s for s, ctrls in samples.items() if len(ctrls['gated']) != len(ctrls['all'])]
+        not_gated = [s for s, ctrls in samples.items() if len(ctrls['gated']) < len(ctrls['all'])]
         if len(not_gated) == 0:
             return {s: ctrls['all'] for s, ctrls in samples.items()}
         print(f'The following samples have not been previously gated for one or more controls: {not_gated}')
