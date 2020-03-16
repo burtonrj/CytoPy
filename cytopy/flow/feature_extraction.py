@@ -67,7 +67,7 @@ class ControlComparisons:
         Parameters
         ----------
         samples: dict
-            Dictionary output of self.check_samples
+            Dictionary output of self._check_samples
         tree_map: dict
             See cytopy.gating.actions.Gating.control_gating for more information.
         gating_model: str
@@ -81,9 +81,9 @@ class ControlComparisons:
             Returns modified sample dictionary where each key is a sample name and the value a list of control file IDs
             present for this sample
         """
-        not_gated = [s for s, gated in samples.items() if gated is None]
+        not_gated = [s for s, ctrls in samples.items() if len(ctrls['gated']) != len(ctrls['all'])]
         if len(not_gated) == 0:
-            return samples
+            return {s: ctrls['all'] for s, ctrls in samples.items()}
         print(f'The following samples have not been previously gated for one or more controls: {not_gated}')
         print('\n')
 
@@ -95,11 +95,14 @@ class ControlComparisons:
             print('\n')
 
         for s in progress_bar(not_gated):
-            for ctrl in samples[s]:
+            for ctrl in samples[s]['all']:
+                if ctrl in samples[s]['gated']:
+                    continue
                 g = Gating(self.experiment, s, include_controls=True)
                 g.control_gating(ctrl, tree_map=tree_map, model=gating_model, verbose=False, **model_kwargs)
                 g.save(feedback=False)
-        return samples
+                samples[s]['gated'].append(ctrl)
+        return {s: ctrls['gated'] for s, ctrls in samples.items()}
 
     def _check_samples(self, samples: list):
         """
@@ -133,7 +136,9 @@ class ControlComparisons:
         if no_ctrls:
             print(f'The following samples are missing control data and therefore will be omitted from '
                   f'analysis: {no_ctrls}')
-        return {s: self.experiment.pull_sample(s).list_gated_controls() for s in filtered_samples}
+            print('\n')
+        return {s: {'all': self.experiment.pull_sample(s).list_controls(),
+                    'gated': self.experiment.pull_sample(s).list_gated_controls()} for s in filtered_samples}
 
     def _has_control_data(self, marker: str) -> list:
         """
@@ -155,6 +160,7 @@ class ControlComparisons:
             assert not len(no_ctrl_data) == len(self.samples), f'No {marker} control data present for any ' \
                                                                f'samples in associated experiment'
             print(f'The following samples are missing control data for {marker} and will be excluded from analysis')
+            print('\n')
         return [s for s in self.samples.keys() if s not in no_ctrl_data]
 
     def _get_data(self, markers: list, population: str,
@@ -186,7 +192,7 @@ class ControlComparisons:
         data = pd.DataFrame()
         samples = [set(self._has_control_data(m)) for m in markers]
         samples = set.intersection(*samples)
-        for s in samples:
+        for s in progress_bar(samples):
             g = Gating(self.experiment, s, include_controls=True)
             primary = g.get_population_df(population,
                                           transform=transform,
@@ -260,8 +266,9 @@ class ControlComparisons:
         -------
         Pandas.DataFrame
         """
-
+        print('Collecting data...')
         data = self._get_data([marker], population, transform, transform_method)[['sample_id', marker, 'data_source']]
+        print('Calculating statistics...')
         if stat == 'fold_change':
             return self._fold_change(data)
         raise ValueError('Invalid input for stat, must be one of: "fold_change" or "ks_test"')
