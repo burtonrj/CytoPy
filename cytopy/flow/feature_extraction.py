@@ -365,7 +365,11 @@ class Proportions:
 
     def _as_dataframe(self, results: dict):
         results['sample_id'] = [self.sample_id]
-        return pd.DataFrame(results)
+        try:
+            return pd.DataFrame(results)
+        except ValueError as e:
+            print(f'Unable to convert dictionary to DataFrame: {results}')
+            raise ValueError(e)
 
     def get_pop_proportions(self, parent: str, populations_of_interest: list):
         results = {i: list() for i in populations_of_interest}
@@ -387,7 +391,6 @@ class Proportions:
         for c in clusters_of_interest:
             results[c].append(cluster_n[c]/denominator)
         return self._as_dataframe(results)
-
 
 
 class Extract:
