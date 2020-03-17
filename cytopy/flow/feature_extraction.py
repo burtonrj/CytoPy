@@ -13,7 +13,7 @@ from sklearn.svm import LinearSVC
 from sklearn.utils import check_random_state
 from multiprocessing import Pool, cpu_count
 from itertools import combinations, product
-from functools import partial
+from functools import partial, reduce
 from yellowbrick.features import RadViz
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -59,7 +59,6 @@ class ControlComparisons:
               'Results will be saved to the database to reduce future computation time.')
         print('\n')
         self.samples = self._gate_samples(self._check_samples(samples), tree_map, gating_model, **model_kwargs)
-        self.data = None
 
     def _gate_samples(self, samples: dict, tree_map, gating_model, **model_kwargs) -> dict:
         """
@@ -141,31 +140,17 @@ class ControlComparisons:
         return {s: {'all': self.experiment.pull_sample(s).list_controls(),
                     'gated': self.experiment.pull_sample(s).list_gated_controls()} for s in filtered_samples}
 
-    def _has_control_data(self, marker: str) -> list:
-        """
-        Internal function. For a given marker (e.g. the name of a cell surface protein) pass all
-        samples and return a list of samples where control data is present
+    def _has_control_data(self, sample_id: str, marker: str, verbose: bool = False) -> bool:
+        assert sample_id in self.samples.keys(), 'Invalid sample_id'
+        present_ctrls = self.samples.get(sample_id)
+        if marker in present_ctrls:
+            return True
+        if verbose:
+            print(f'Warning: {sample_id} missing control data for {marker}')
+        return False
 
-        Parameters
-        ----------
-        marker: str
-            Name of marker to search for (e.g. the name of a cell surface protein)
-
-        Returns
-        -------
-        list
-            list of samples where control data is present
-        """
-        no_ctrl_data = [s for s, ctrls in self.samples.items() if marker not in ctrls]
-        if no_ctrl_data:
-            assert not len(no_ctrl_data) == len(self.samples), f'No {marker} control data present for any ' \
-                                                               f'samples in associated experiment'
-            print(f'The following samples are missing control data for {marker} and will be excluded from analysis')
-            print('\n')
-        return [s for s in self.samples.keys() if s not in no_ctrl_data]
-
-    def add_data(self, markers: list, population: str,
-                 transform: bool = True, transform_method: str = 'logicle') -> pd.DataFrame:
+    def _fetch_data(self, sample_id: str, markers: list, population: str,
+                    transform: bool = True, transform_method: str = 'logicle') -> pd.DataFrame:
         """
         Internal function. Parse all samples and fetch the given population, collecting data from both
         the control(s) and the primary data. Return a Pandas DataFrame, where samples are identifiable by
@@ -190,28 +175,33 @@ class ControlComparisons:
             the 'sample_id' column, controls from the 'data_source' column, and the events data itself transformed
             as specified.
         """
-        data = pd.DataFrame()
-        samples = [set(self._has_control_data(m)) for m in markers]
-        samples = set.intersection(*samples)
-        for s in progress_bar(samples):
-            g = Gating(self.experiment, s, include_controls=True)
-            primary = g.get_population_df(population,
-                                          transform=transform,
-                                          transform_method=transform_method)
-            primary['data_source'] = 'primary'
-            for m in markers:
-                control = g.get_population_df(population,
+        assert all(list(filter(lambda x: self._has_control_data(sample_id=sample_id, marker=x), self.samples.keys()))), \
+            f'One or more controls {markers} missing from {sample_id}'
+        data = dict()
+        g = Gating(self.experiment, sample_id, include_controls=True)
+        data['primary'] = g.get_population_df(population,
                                               transform=transform,
                                               transform_method=transform_method,
-                                              ctrl_id=m)
-                control['data_source'] = m
-                primary = pd.concat([primary, control])
-            primary['sample_id'] = s
-            data = pd.concat([data, primary])
+                                              transform_features=markers)[markers].melt(value_name='primary',
+                                                                                        var_name='marker')
+        for m in markers:
+            data[m] = g.get_population_df(population,
+                                          transform=transform,
+                                          transform_method=transform_method,
+                                          transform_features=markers,
+                                          ctrl_id=m)[markers].melt(value_name=m,
+                                                                   var_name='marker')
         return data
 
     @staticmethod
-    def _fold_change(data: pd.DataFrame) -> pd.DataFrame:
+    def _summarise_fi(data: dict, method: callable):
+        summary = list()
+        for k in list(data.keys()):
+            summary.append(data[k].groupby('marker').apply(method).reset_index())
+        return reduce(lambda left, right: pd.merge(left, right, on=['marker'],
+                                                   how='outer'), summary)
+
+    def _fold_change(self, data: dict, center_func: callable or None = None, sample_id: str or None = None) -> pd.DataFrame:
         """
         Internal function. Calculates the relative fold change in MFI between a control and
         the primary data. NOTE: this function expects only one control present in data.
@@ -228,21 +218,24 @@ class ControlComparisons:
             identifiable from the 'data_source' column, and the relative fold change given in a column
             aptly named 'relative_fold_change'
         """
-        def safe_fold_change(x, m):
-            primary = x[x.data_source == 'primary'][m].values[0]
-            ctrl = x[x.data_source == m][m].values[0]
-            if ctrl > primary:
-                print(f'Warning: MFI for control in {x.sample_id.values[0]} > primary data yielding a negative relative fold change '
-                      f'is this correct?')
-                return -ctrl / primary
-            return primary / ctrl
-        marker = [c for c in data.columns if c not in ['sample_id', 'data_source']][0]
-        mfi = pd.DataFrame(data.groupby(by=['sample_id', 'data_source'])[marker].mean()).reset_index()
-        col_name = f'relative_fold_change_{marker}'
-        return pd.DataFrame(mfi.groupby('sample_id').apply(lambda x: safe_fold_change(x, marker))).reset_index().rename({0: col_name})
+        def check_fold_change(x):
+            if x.loc[0, f'relative_fold_change_{x.loc[0, "marker"]}'] < 1:
+                print(f'WARNING {sample_id}: primary MFI < control {x.loc[0, "marker"]}, interpret results with caution')
+        if center_func is None:
+            center_func = np.mean
+        mfi = self._summarise_fi(data, method=center_func)
+        for m in mfi.marker:
+            mfi[f'relative_fold_change_{m}'] = mfi['primary'] / mfi[m]
+        mfi.groupby('marker').apply(check_fold_change)
+        return mfi
 
     def statistic_1d(self,
-                     stat: str = 'fold_change') -> pd.DataFrame:
+                     markers: list,
+                     population: str,
+                     transform: bool = True,
+                     transform_method: str = 'logicle',
+                     stat: str = 'fold_change',
+                     center_function: callable or None =  None) -> pd.DataFrame:
         """
         Calculate a desired statistic for each marker currently acquired
 
@@ -256,10 +249,21 @@ class ControlComparisons:
         -------
         Pandas.DataFrame
         """
-        assert self.data is not None, 'Populate object with data using add_data() method before calculating statistics'
-        if stat == 'fold_change':
-            return self._fold_change(self.data)
-        raise ValueError('Invalid input for stat, must be one of: "fold_change"')
+        assert stat in ['fold_change'], f'Invalid statistic, CytoPy currently supports: ["fold_change"]'
+        results = pd.DataFrame()
+        print('Collecting data...')
+        for s in progress_bar(self.samples.keys()):
+            valid_markers = list(filter(lambda x: self._has_control_data(sample_id=s, marker=x, verbose=True), markers))
+            data = self._fetch_data(sample_id=s,
+                                    population=population,
+                                    markers=valid_markers,
+                                    transform=transform,
+                                    transform_method=transform_method)
+            if stat == 'fold_change':
+                fold_change = self._fold_change(data, center_func=center_function, sample_id=s)
+                fold_change['sample_id'] = s
+                results = pd.concat([results, fold_change])
+        return results
 
 
 def meta_labelling(experiment: FCSExperiment, dataframe: pd.DataFrame, meta_label: str):
