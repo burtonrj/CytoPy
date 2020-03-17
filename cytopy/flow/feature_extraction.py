@@ -295,7 +295,8 @@ class ExperimentProportions:
                                                                            'given experiment'
             self.samples = samples
 
-    def raw_counts(self, populations: list or None):
+    def raw_counts(self, populations: list):
+        populations = list(set(populations))
         results = {p: list() for p in populations}
         for s in self.samples:
             results['sample_id'].append(s)
@@ -308,6 +309,7 @@ class ExperimentProportions:
                 continue
 
     def population_proportions(self, parent: str, populations_of_interest: list):
+        populations_of_interest = list(set(populations_of_interest))
         results = pd.DataFrame()
         for s in self.samples:
             try:
@@ -320,6 +322,7 @@ class ExperimentProportions:
     def cluster_proportions(self, comparison_population: str, clusters_of_interest: list,
                             clustering_definition: ClusteringDefinition,
                             merge_associated_clusters: bool = False):
+        clusters_of_interest = list(set(clusters_of_interest))
         results = pd.DataFrame()
         for s in self.samples:
             prop = Proportions(experiment=self.experiment, sample_id=s)
