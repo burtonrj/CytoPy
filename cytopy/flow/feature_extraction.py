@@ -353,7 +353,7 @@ class Proportions:
         if merge_on_like_term:
             # Get a list of meta cluster IDs that contain the term of interest
             meta_clusters = [c.meta_cluster_id for c in root.clustering]
-            filtered_clusters = set(filter(lambda c: cluster_id in c, [c.meta_cluster_id for c in root.clustering]))
+            filtered_clusters = set(filter(lambda c: cluster_id in c, meta_clusters))
             # Use the filtered list to generate a list of relevant cluster objects
             clusters = [c for c in root.clustering if c.meta_cluster_id in filtered_clusters]
             # If empty return 0
