@@ -1,6 +1,5 @@
 from shapely.geometry import Point
 from functools import partial
-from .base import GateError
 from sklearn.neighbors import KernelDensity, KDTree
 import pandas as pd
 import numpy as np
@@ -13,6 +12,7 @@ def check_peak(peaks: np.array, probs: np.array, t=0.05) -> np.array:
     :param peaks: array of indices for peaks
     :param probs: array of probability values of density estimate
     :param t: height threshold as a percentage of highest peak"""
+    assert len(peaks) > 0, '"peak" array is empty'
     if peaks.shape[0] == 1:
         return peaks
     sorted_peaks = np.sort(probs[peaks])[::-1]
@@ -114,8 +114,9 @@ def rectangular_filter(data: pd.DataFrame, x: str, y: str, definition: dict) -> 
     static.rect_gate for conventions
     :return: filtered pandas dataframe
     """
+    data = data.copy()
     if not all([x in ['xmin', 'xmax', 'ymin', 'ymax'] for x in definition.keys()]):
-        raise GateError('Invalid definition for rectangular filter; must be dict with keys: xmin, xmax, ymin, ymax')
+        raise ValueError('Invalid definition for rectangular filter; must be dict with keys: xmin, xmax, ymin, ymax')
     data = data[(data[x] >= definition['xmin']) & (data[x] <= definition['xmax'])]
     data = data[(data[y] >= definition['ymin']) & (data[y] <= definition['ymax'])]
     return data
