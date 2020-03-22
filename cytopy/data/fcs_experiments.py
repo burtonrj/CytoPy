@@ -311,7 +311,7 @@ class FCSExperiment(mongoengine.Document):
         new_file.channel_mappings = [ChannelMap(channel=c, marker=m) for c, m in column_mappings]
         return new_file
 
-    def add_new_sample(self, sample_id: str, file_path: str, controls: list, subject_id: str or None = None,
+    def add_new_sample(self, sample_id: str, file_path: str, controls: list or None = None, subject_id: str or None = None,
                        comp_matrix: str or None = None, compensate: bool = True,
                        feedback: bool = True, catch_standardisation_errors: bool = False,
                        processing_datetime: str or None = None,
@@ -329,7 +329,7 @@ class FCSExperiment(mongoengine.Document):
             File path of the primary fcs file (e.g. the fcs file that is of primary interest such as the
             file with complete staining)
         controls: list
-            list of file paths for control files e.g. a list of file paths for associated FMO controls
+            list of dictionary objects containing file paths for control files e.g. a list of file paths for associated FMO controls
         comp_matrix: str, optional
             Path to csv file for spillover matrix for compensation calculation; if not supplied
             the matrix linked within the fcs file will be used, if not present will present an error
@@ -348,6 +348,9 @@ class FCSExperiment(mongoengine.Document):
         str or None
             MongoDB ObjectID string for new FileGroup entry
         """
+        if controls is None:
+            controls = list()
+        assert type(controls) == list, 'Invalid type, controls should be of type list'
         if self.panel is None:
             print('Error: no panel design assigned to this experiment')
             return None

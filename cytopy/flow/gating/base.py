@@ -47,13 +47,10 @@ class Gate:
         self.child_populations = child_populations
         self.warnings = list()
         self.empty_parent = self.__empty_parent()
+        self.frac = frac
         if low_memory:
             if self.data.shape[0] > 20000:
                 self.frac = 20000/self.data.shape[0]
-            else:
-                self.frac = None
-        else:
-            self.frac = frac
         self.downsample_method = downsample_method
         if self.downsample_method == 'density':
             if density_downsample_kwargs is not None:
