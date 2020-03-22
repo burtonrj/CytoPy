@@ -6,6 +6,7 @@ from cytopy.data.mongo_setup import global_init
 # Gating imports
 from ..flow.gating.actions import Gating, ChildPopulationCollection
 from ..flow.gating.base import Gate
+from ..flow.gating import dbscan
 from ..flow.gating import utilities
 # Other tools
 from .utilities import make_example_date
@@ -86,7 +87,8 @@ class TestUtilities(unittest.TestCase):
                                                   exclude_kwargs=True),
                              ['a', 'b', 'c'])
 
-class TestGating(unittest.TestCase):
+
+class TestChildPopulationColleciton(unittest.TestCase):
 
     def testChildPopulationCollection(self):
         test1d = ChildPopulationCollection(gate_type='threshold_1d')
@@ -104,81 +106,172 @@ class TestGating(unittest.TestCase):
         self.assertEqual(test1d.fetch_by_definition('++'), 'pospos')
         self.assertEqual(test1d.fetch_by_definition('--'), 'other')
 
-    def testGate(self):
-        def _build(dimensions=1):
-            example_data = make_example_date()
-            if dimensions == 1:
-                populations = ChildPopulationCollection()
-                populations.add_population('positive', definition='+')
-                populations.add_population('negative', definition='-')
-                return (Gate(data=example_data,
-                             x='feature0',
-                             y='feature1',
-                             child_populations=populations,
-                             transform_x=None,
-                             transform_y=None), None), example_data
-            populations1 = ChildPopulationCollection()
-            populations1.add_population('positive', definition='++')
-            populations1.add_population('negative', definition=['--', '-+', '+-'])
 
-            populations2 = ChildPopulationCollection()
-            populations2.add_population('positive', definition=['++', '-+'])
-            populations2.add_population('negative', definition=['--', '+-'])
+class TestGate(unittest.TestCase):
+
+    @staticmethod
+    def _build_gate(dimensions=1):
+        example_data = make_example_date()
+        if dimensions == 1:
+            populations = ChildPopulationCollection()
+            populations.add_population('positive', definition='+')
+            populations.add_population('negative', definition='-')
             return (Gate(data=example_data,
                          x='feature0',
                          y='feature1',
-                         child_populations=p,
+                         child_populations=populations,
                          transform_x=None,
-                         transform_y=None) for p in [populations1, populations2]), example_data
+                         transform_y=None), None), example_data
+        populations1 = ChildPopulationCollection()
+        populations1.add_population('positive', definition='++')
+        populations1.add_population('negative', definition=['--', '-+', '+-'])
 
-        def _test(g, pos):
-            neg = [i for i in data.index.values if i not in pos]
-            self.assertListEqual(list(g.child_populations.populations['positive'].index), pos)
-            self.assertListEqual(list(g.child_populations.populations['negative'].index), neg)
+        populations2 = ChildPopulationCollection()
+        populations2.add_population('positive', definition=['++', '-+'])
+        populations2.add_population('negative', definition=['--', '+-'])
+        return (Gate(data=example_data,
+                     x='feature0',
+                     y='feature1',
+                     child_populations=p,
+                     transform_x=None,
+                     transform_y=None) for p in [populations1, populations2]), example_data
 
+    def _test_index_updates(self, g, pos, data):
+        neg = [i for i in data.index.values if i not in pos]
+        self.assertListEqual(list(g.child_populations.populations['positive'].index), pos)
+        self.assertListEqual(list(g.child_populations.populations['negative'].index), neg)
+
+    def test_1d_update(self):
         # 1-D gate
-        gate, _, data = _build()
+        gate, _, data = self._build_gate()
         pos_idx = [1,  3,  5,  7,  8, 26, 31, 32, 38, 39, 42, 45, 49, 50, 51, 58, 61,
                    63, 66, 68, 69, 70, 74, 76, 78, 79, 81, 87, 89, 90, 91, 93, 97]
         gate.child_update_1d(threshold=0.3, method='test', merge_options='overwrite')
-        _test(gate, pos_idx)
+        self._test_index_updates(gate, pos_idx, data)
 
         gate.child_update_1d(threshold=4, method='test', merge_options='overwrite')
         pos_idx = [1,  3,  7,  8, 31, 32, 38, 39, 42, 51, 58, 66, 68, 69, 70, 74, 76,
                    78, 89, 90, 91, 93, 97]
         gate.child_update_1d(threshold=4, method='test', merge_options='overwrite')
-        _test(gate, pos_idx)
+        self._test_index_updates(gate, pos_idx, data)
 
         gate.child_update_1d(threshold=9, method='test', merge_options='merge')
-        _test(gate, pos_idx)
+        self._test_index_updates(gate, pos_idx, data)
 
+    def test_2d_update(self):
         # 2-D gate
-        gate1, gate2, data = _build(dimensions=2)
+        gate1, gate2, data = self._build_gate(dimensions=2)
         pos_idx = [1,  3,  5,  7,  8, 26, 31, 32, 38, 39, 42, 45, 49, 50, 51, 58, 61,
                    63, 66, 68, 69, 70, 74, 76, 78, 79, 81, 87, 89, 90, 91, 93, 97]
         gate1.child_update_2d(x_threshold=2, y_threshold=-2.5, method='test')
-        _test(gate1, pos_idx)
+        self._test_index_updates(gate1, pos_idx, data)
 
         pos_idx = [1,  2,  3,  5,  6,  7,  8,  9, 10, 13, 14, 17, 20, 23, 24, 25, 26,
                    31, 32, 34, 35, 36, 37, 38, 39, 41, 42, 43, 44, 45, 49, 50, 51, 52,
                    56, 57, 58, 59, 61, 63, 66, 68, 69, 70, 73, 74, 76, 78, 79, 80, 81,
                    82, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 99]
         gate2.child_update_2d(x_threshold=2, y_threshold=-2.5, method='test')
-        _test(gate2, pos_idx)
+        self._test_index_updates(gate2, pos_idx, data)
+
+    def test_generate_chunks(self):
+        example_data = make_example_date(n_samples=100)
+        populations = ChildPopulationCollection()
+        populations.add_population('positive', definition='+')
+        populations.add_population('negative', definition='-')
+        gate = Gate(data=example_data,
+                    x='feature0',
+                    y='feature1',
+                    child_populations=populations,
+                    transform_x=None,
+                    transform_y=None)
+        chunks = gate.generate_chunks(chunksize=10)
+        self.assertTrue(len(chunks) == 10)
+        self.assertTrue(all(x.shape[0] == 10 for x in chunks))
+
+    def test_generate_poly(self):
+        example_data = make_example_date(n_samples=100)
+        example_data['labels'] = example_data['bloblID']
+        populations = ChildPopulationCollection()
+        populations.add_population('positive', definition='+')
+        populations.add_population('negative', definition='-')
+        gate = Gate(data=example_data,
+                    x='feature0',
+                    y='feature1',
+                    child_populations=populations,
+                    transform_x=None,
+                    transform_y=None)
+        self.assertTrue(len(gate.generate_polygons()) == 3)
 
 
-    def testGating(self):
-        # Initiate Gating object
-        project = Project.objects(project_id='test').get()
-        gate = Gating(experiment=project.load_experiment('test'),
-                      sample_id='test_experiment_dummy')
-        self.assertEqual(gate.data.shape, (100, 3))
-        self.assertEqual(gate.ctrl.get('dummy_ctrl').shape, (100, 3))
-        self.assertEqual(len(gate.populations), 1)
+class TestDBSCAN(unittest.TestCase):
 
-        # Density Gates
-        test1d = ChildPopulationCollection(gate_type='threshold_1d')
-        test1d.add_population('positive', definition='+')
-        test1d.add_population('negative', definition='-')
-        gate.create_gate('test1d', parent='root', class_='DensityThreshold', method='gate1d')
+    def _build(self):
+        example_data = make_example_date(n_samples=10000)
+        example_data['labels'] = example_data['blobID']
+        populations = ChildPopulationCollection(gate_type='cluster')
+        populations.add_population('blob1', target=(-7.5, -7.5))
+        populations.add_population('blob2', target=(-2.5, 10))
+        populations.add_population('blob3', target=(5, 1))
+
+        gate = dbscan.DensityBasedClustering(data=example_data,
+                                             child_populations=populations,
+                                             x='feature0',
+                                             y='feature1',
+                                             transform_x=None,
+                                             transform_y=None,
+                                             min_pop_size=10)
+        return gate
+
+    def test_meta_assignmetn(self):
+        test_df = pd.DataFrame({'A': [0, 1, 2, 3],
+                                'labels': [0, 1, 2, 3],
+                                'chunk_idx': [0, 0, 0, 0]})
+        ref_df = pd.DataFrame({'chunk_idx': [0, 0, 1, 1],
+                               'cluster': [0, 1, 0, 1],
+                               'meta_cluster': ['0', '1', '0', '1']})
+        modified_df = dbscan.meta_assignment(test_df, ref_df)
+        self.assertListEqual(list(modified_df.labels.values), ['0', '1'])
+
+    def test_meta_clustering(self):
+        gate = self._build()
+        data = gate.data.copy()
+        data['chunk_idx'] = 0
+        cluster_centroids = gate._meta_clustering(clustered_chunks=[data])
+        self.assertEqual(cluster_centroids.shape[0], 3)
+
+    def test_post_cluster_checks(self):
+        gate = self._build()
+        data = gate.data.copy()
+        data = data[data.labels == 1]
+        gate._post_cluster_checks(data)
+        self.assertEqual(gate.warnings[0],
+                         'Failed to identify any distinct populations')
+        data = gate.data.copy()
+        data = data[data.labels.isin(0., 1.0)]
+        gate._post_cluster_checks(data)
+        self.assertEqual(gate.warnings[0],
+                         'Expected 3 populations, identified 2')
+
+    def test_dbscan_knn(self):
+        gate = self._build()
+        gate._dbscan_knn(distance_nn=0.5, core_only=False)
+        self.assertEqual(len(gate.data.labels.unique()), 3)
+
+    def test_match_pop_to_cluster(self):
+        gate = self._build()
+
+def testGating(self):
+    # Initiate Gating object
+    project = Project.objects(project_id='test').get()
+    gate = Gating(experiment=project.load_experiment('test'),
+                  sample_id='test_experiment_dummy')
+    self.assertEqual(gate.data.shape, (100, 3))
+    self.assertEqual(gate.ctrl.get('dummy_ctrl').shape, (100, 3))
+    self.assertEqual(len(gate.populations), 1)
+
+    # Density Gates
+    test1d = ChildPopulationCollection(gate_type='threshold_1d')
+    test1d.add_population('positive', definition='+')
+    test1d.add_population('negative', definition='-')
+    gate.create_gate('test1d', parent='root', class_='DensityThreshold', method='gate1d')
 

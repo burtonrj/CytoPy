@@ -38,7 +38,7 @@ class DensityBasedClustering(Gate):
         """
         super().__init__(**kwargs)
         self.min_pop_size = min_pop_size
-        self.__meta_assignment = staticmethod(meta_assignment)
+        self.tree = KDTree(self.data[[self.x, self.y]].values, leaf_size=100)
 
     def _meta_clustering(self, clustered_chunks: list):
         """
@@ -67,7 +67,7 @@ class DensityBasedClustering(Gate):
         cluster_centroids['meta_cluster'] = meta.labels_
         return cluster_centroids
 
-    def __dbscan_chunks(self, distance_nn, core_only):
+    def _dbscan_chunks(self, distance_nn, core_only):
         # Break data into workable chunks
         chunks = self.generate_chunks(30000)
 
@@ -94,7 +94,7 @@ class DensityBasedClustering(Gate):
         data = pd.concat(pool.map(f, clustered_data))
         pool.close()
         pool.join()
-        data = self.__post_cluster_checks(data)
+        data = self._post_cluster_checks(data)
 
         # Generate a Polygon for each cluster and update data according to polygon gates
         polygon_shapes = self.generate_polygons()
@@ -105,7 +105,7 @@ class DensityBasedClustering(Gate):
 
         return data, polygon_shapes
 
-    def __post_cluster_checks(self, data):
+    def _post_cluster_checks(self, data):
         # Post clustering error checking
         if len(data['labels'].unique()) == 1:
             self.warnings.append('Failed to identify any distinct populations')
@@ -114,11 +114,10 @@ class DensityBasedClustering(Gate):
         n_children = len(self.child_populations.populations.keys())
         n_clusters = len(data['labels'].unique())
         if n_clusters != n_children:
-            self.warnings.append(f'Expected {n_children} populations, '
-                                 f'identified {n_clusters}; {len(data["labels"].unique())}')
+            self.warnings.append(f'Expected {n_children} populations, identified {n_clusters}')
         return data
 
-    def __dbscan_knn(self, distance_nn, core_only):
+    def _dbscan_knn(self, distance_nn, core_only):
         sample = self.sampling(self.data, 40000)
         model = DBSCAN(eps=distance_nn,
                        min_samples=self.min_pop_size,
@@ -147,15 +146,15 @@ class DensityBasedClustering(Gate):
         if self.empty_parent:
             return self.child_populations
         if chunks:
-            self.data, polygon_shapes = self.__dbscan_chunks(distance_nn, core_only)
+            self.data, polygon_shapes = self._dbscan_chunks(distance_nn, core_only)
         else:
-            self.__dbscan_knn(distance_nn, core_only)
+            self._dbscan_knn(distance_nn, core_only)
             polygon_shapes = self.generate_polygons()
         # Test if target population falls within polygon and if so, assign accordingly
-        target_predictions = self.__predict_pop_clusters(polygon_shapes)
+        target_predictions = self._predict_pop_clusters(polygon_shapes)
 
         # Update child populations
-        return self.__assign_clusters(target_predictions, polygon_shapes)
+        return self._assign_clusters(target_predictions, polygon_shapes)
 
     def hdbscan(self, inclusion_threshold: float or None = None):
         """
@@ -186,18 +185,33 @@ class DensityBasedClustering(Gate):
             self.data.loc[mask, 'labels'] = -1
         # Predict clusters for child populations
         polygon_shapes = self.generate_polygons()
-        population_predictions = self.__predict_pop_clusters(polygon_shapes)
-        return self.__assign_clusters(population_predictions, polygon_shapes)
+        population_predictions = self._predict_pop_clusters(polygon_shapes)
+        return self._assign_clusters(population_predictions, polygon_shapes)
 
-    def __filter_by_centroid(self, target, neighbours):
-        distances = []
-        for _, label in neighbours:
-            d = self.data[self.data['labels'] == label]
-            c = centroid(d[[self.x, self.y]])
-            distances.append((label, np.linalg.norm(target-c)))
-        return min(distances, key=lambda x: x[1])[0]
+    def _match_pop_to_cluster(self, target_population: str, cluster_polygons: dict):
+        target = np.array(self.child_populations.populations[target_population].properties['target'])
+        target_point = Point(target[0], target[1])
+        # Check which clusters a target falls into
+        cluster_assingments = [cluster_label for cluster_label, poly in cluster_polygons.items()
+                               if poly.contains(target_point)]
+        if len(cluster_assingments) == 0:
+            # Target does not fall directly into any cluster
+            # Is the target surrounded by noise? (i.e. target cluster not found)
+            k = int(self.data.shape[0] * 0.01)
+            if k > 100:
+                k = 100
+            _, nearest_neighbours_idx = self.tree.query(self.data[[self.x, self.y]].values, k=k)
+            neighbours = self.data.iloc[nearest_neighbours_idx[0]]
+            if set(neighbours['labels'].unique()) == {-1}:
+                self.warnings.append(f'Population {target_population} assigned to noise (i.e. population not found)')
+                return -1
+        # Not surrounded by noise, assign to nearest centroid
+        cluster_centroids = [(x, centroid(self.data[self.data['labels'] == x][[self.x, self.y]].values))
+                             for x in [label for label in self.data['labels'].unique() if label != -1]]
+        distance_to_centroids = [(x, np.linalg.norm(target-c)) for x, c in cluster_centroids]
+        return min(distance_to_centroids, key=lambda x: x[1])[0]
 
-    def __predict_pop_clusters(self, cluster_polygons):
+    def _predict_pop_clusters(self, cluster_polygons):
         """
         Internal method. Predict which clusters the expected child populations belong to
         using the their polygon gate or the cluster centroid
@@ -208,38 +222,10 @@ class DensityBasedClustering(Gate):
         if set(self.data['labels'].unique()) == {-1}:
             raise GateError('Clustering algorithm failed to identify any clusters (all labels attain to noise) '
                             'If sampling, try increasing sample size')
-        cluster_centroids = [(x, centroid(self.data[self.data['labels'] == x][[self.x, self.y]].values))
-                             for x in [l for l in self.data['labels'].unique() if l != -1]]
-        tree_x = self.data[[self.x, self.y]].values
-        tree = KDTree(tree_x, leaf_size=100)
         assignments = dict()
         for p in self.child_populations.populations.keys():
-            target = np.array(self.child_populations.populations[p].properties['target'])
-            target_point = Point(target[0], target[1])
-            # Check which clusters a target falls into
-            cluster_assingments = [cluster_label for cluster_label, poly in cluster_polygons.items()
-                                   if poly.contains(target_point)]
-            if len(cluster_assingments) == 0:
-                # Target does not fall directly into any cluster
-                # Is the target surrounded by noise? (i.e. target cluster not found)
-                k = int(self.data.shape[0]*0.01)
-                if k > 100:
-                    k = 100
-                _, nearest_neighbours_idx = tree.query(tree_x, k=k)
-                neighbours = self.data.iloc[nearest_neighbours_idx[0]]
-                if set(neighbours['labels'].unique()) == {-1}:
-                    self.warnings.append(f'Population {p} assigned to noise (i.e. population not found)')
-                    assignments[p] = -1
-                    continue
-                # Not surrounded by noise, assign to nearest centroid
-                distance_to_centroids = [(x, np.linalg.norm(target-c)) for x, c in cluster_centroids]
-                cluster_assingments = min(distance_to_centroids, key=lambda x: x[1])
-            elif len(cluster_assingments) > 1:
-                distance_to_centroids = [(x, np.linalg.norm(target - c)) for x, c in cluster_centroids]
-                assignments[p] = min(distance_to_centroids, key=lambda x: x[1])[0]
-                continue
-            assignments[p] = cluster_assingments[0]
-
+            assignments[p] = self._match_pop_to_cluster(target_population=p,
+                                                        cluster_polygons=cluster_polygons)
         # Check for multiple cluster assignments
         final_assignments = dict()
         clusters_pops = collections.defaultdict(list)
@@ -263,7 +249,7 @@ class DensityBasedClustering(Gate):
             final_assignments[population[0]] = cluster
         return final_assignments
 
-    def __assign_clusters(self, target_predictions, polygon_shapes):
+    def _assign_clusters(self, target_predictions, polygon_shapes):
         """
         Internal method. Given child population cluster predictions, update index and geom of child populations
         :param population_predictions: predicted clustering assignments {label: [population names]}
