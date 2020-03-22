@@ -321,7 +321,7 @@ class CellClassifier:
         :param features: list of features for training
         :return: DataFrame of feature space, array of target labels, mappings of cell population labels
         """
-        if check_downstream_overlaps(ref, root_pop, self.population_labels):
+        if ref.check_downstream_overlaps(root_pop, self.population_labels):
             raise ValueError('Error: one or more population dependency errors')
         root = ref.get_population_df(root_pop, transform=True, transform_method=self.transform)[features]
         y = np.zeros((root.shape[0], len(self.population_labels)))
