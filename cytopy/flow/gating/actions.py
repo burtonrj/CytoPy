@@ -251,7 +251,7 @@ class Gating:
             return apply_transform(data, features_to_transform=transform_features, transform_method=transform_method)
         return data
 
-    def valid_populations(self, populations: list, verbose: bool = True) -> list:
+    def valid_populations(self, populations: list, verbose: bool = True):
         """
         Given a list of populations, check validity and return list of valid populations
 
@@ -264,7 +264,7 @@ class Gating:
 
         Returns
         -------
-        list
+        List
             Valid populations
         """
         valid = list()
@@ -1251,6 +1251,30 @@ class Gating:
         else:
             fg.flags = 'invalid'
         fg.save()
+
+    def check_downstream_overlaps(self, root_population: str, population_labels: list) -> bool:
+        """
+        Internal method. Check if a chosen root population is downstream of target populations for classification.
+        This is a problem because if the root population is downstream then the model won't have access to the events
+        it needs to classify.
+        :param ref: Gating object whom's populations you wish to check
+        :return: True if overlaps exist, otherwise False
+        """
+        downstream_overlaps = False
+        for pop_i in population_labels:
+            dependencies = self.find_dependencies(pop_i)
+            if root_population in dependencies:
+                print(f'Error: population {pop_i} is upstream from the chosen root population {root_population}')
+                downstream_overlaps = True
+            for pop_j in population_labels:
+                if pop_j == pop_i:
+                    continue
+                if pop_j in dependencies:
+                    print(f'Error: population {pop_j} is a dependency of population {pop_i} (i.e. it is downstream '
+                          f'from this population). This will result in invalid labelling. If you wish to continue '
+                          f'with these population targets, please set multi_label parameter to True')
+                    downstream_overlaps = True
+        return downstream_overlaps
 
 
 class Template(Gating):
