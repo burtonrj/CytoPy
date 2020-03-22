@@ -1,5 +1,6 @@
 from cytopy.flow.gating.defaults import ChildPopulationCollection
 from cytopy.flow.transforms import apply_transform
+from cytopy.flow.gating.utilities import density_dependent_downsample
 from shapely.geometry.polygon import Polygon
 from scipy.spatial import ConvexHull
 from sklearn.neighbors import KDTree
@@ -83,11 +84,11 @@ class Gate:
                 if not type(self.density_downsample_kwargs) == dict:
                     raise GateError('If applying density dependent down-sampling then a dictionary of '
                                     'keyword arguments is required as input for density_downsample_kwargs')
-                return self.density_dependent_downsample(frac=self.frac, features=features,
-                                                         **self.density_downsample_kwargs)
-            return self.density_dependent_downsample(frac=self.frac, features=features)
+                return density_dependent_downsample(data=data, frac=self.frac, features=features,
+                                                    **self.density_downsample_kwargs)
+            return density_dependent_downsample(data=data, frac=self.frac, features=features)
         else:
-            GateError('Invalid input, downsample_method must be either `uniform` or `density`')
+            GateError('Invalid input, down-sample_method must be either `uniform` or `density`')
 
     def __empty_parent(self):
         """
@@ -164,77 +165,18 @@ class Gate:
                                                                  threshold_y=float(y_threshold), definition=definition,
                                                                  transform_x=self.transform_x, transform_y=self.transform_y)
 
-    def uniform_downsample(self, frac: float or None, sample_n: int or None = None, data: pd.DataFrame or None = None):
+    def uniform_downsample(self, sample_size: int or float = 0.1,
+                           data: pd.DataFrame or None = None):
         """
         Sample associated events data
         :param frac: fraction of dataset to return as a sample
         :return: sampled pandas dataframe
         """
-        if data is not None:
-            if sample_n is not None:
-                return data.sample(n=sample_n)
-            return data.sample(frac=frac)
-        if sample_n is not None:
-            return self.data.sample(n=sample_n)
-        return self.data.sample(frac=frac)
-
-    # ToDo move to utilities
-    def density_dependent_downsample(self, features: list, frac: float = 0.1, sample_n: int or None = None,
-                                     data: pd.DataFrame or None = None, alpha: int = 5, mmd_sample_n: int = 2000,
-                                     outlier_dens: float = 1, target_dens: float = 5):
-        """
-        Perform density dependent down-sampling to remove risk of under-sampling rare populations;
-        adapted from SPADE*
-
-        * Extracting a cellular hierarchy from high-dimensional cytometry data with SPADE
-        Peng Qiu-Erin Simonds-Sean Bendall-Kenneth Gibbs-Robert
-        Bruggner-Michael Linderman-Karen Sachs-Garry Nolan-Sylvia Plevritis - Nature Biotechnology - 2011
-
-        :param features:
-        :param frac:fraction of dataset to return as a sample
-        :param alpha: used for estimating distance threshold between cell and nearest neighbour (default = 5 used in
-        original paper)
-        :param mmd_sample_n: number of cells to sample for generation of KD tree
-        :param outlier_dens: used to exclude cells with the lowest local densities; int value as a percentile of the
-        lowest local densities e.g. 1 (the default value) means the bottom 1% of cells with lowest local densities
-        are regarded as noise
-        :param target_dens: determines how many cells will survive the down-sampling process; int value as a
-        percentile of the lowest local densities e.g. 5 (the default value) means the density of bottom 5% of cells
-        will serve as the density threshold for rare cell populations
-        :return: Down-sampled pandas dataframe
-        """
-
-        def prob_downsample(local_d, target_d, outlier_d):
-            if local_d <= outlier_d:
-                return 0
-            if outlier_d < local_d <= target_d:
-                return 1
-            if local_d > target_d:
-                return target_d / local_d
-
-        if data is not None:
-            df = data.copy()
-        else:
-            df = self.data.copy()
-        mmd_sample = df.sample(mmd_sample_n)
-        tree = KDTree(mmd_sample[features], metric='manhattan')
-        dist, _ = tree.query(mmd_sample[features], k=2)
-        dist = np.median([x[1] for x in dist])
-        dist_threshold = dist * alpha
-        ld = tree.query_radius(df[features], r=dist_threshold, count_only=True)
-        od = np.percentile(ld, q=outlier_dens)
-        td = np.percentile(ld, q=target_dens)
-        prob_f = partial(prob_downsample, target_d=td, outlier_d=od)
-        prob = list(map(lambda x: prob_f(x), ld))
-        if sum(prob) == 0:
-            print('Error: density dependendent downsampling failed; weights sum to zero. Defaulting to uniform '
-                  'samplings')
-            if sample_n is not None:
-                return df.sample(n=sample_n)
-            return df.sample(frac=frac)
-        if sample_n is not None:
-            return df.sample(n=sample_n, weights=prob)
-        return df.sample(frac=frac, weights=prob)
+        if data is None:
+            data = self.data
+        if type(sample_size) is int:
+            return data.sample(n=sample_size)
+        return data.sample(frac=sample_size)
 
     def generate_chunks(self, chunksize):
         """
@@ -252,9 +194,9 @@ class Gate:
         else:
             if self.density_downsample_kwargs is not None:
                 kwargs = dict(sample_n=chunksize, features=[self.x, self.y], **self.density_downsample_kwargs)
-                sampling_func = partial(self.density_dependent_downsample, **kwargs)
+                sampling_func = partial(density_dependent_downsample, **kwargs)
             else:
-                sampling_func = partial(self.density_dependent_downsample, sample_n=chunksize,
+                sampling_func = partial(density_dependent_downsample, sample_n=chunksize,
                                         features=[self.x, self.y])
         data = self.data.copy()
         for x in range(0, int(d)):
