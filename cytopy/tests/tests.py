@@ -58,6 +58,7 @@ class TestPanel(unittest.TestCase):
                             'FL3 Log': '<CD45-ECD>',
                             'FL4 Log': '<IgG1-PC5>',
                             'FL5 Log': '<IgG1-PC7>'}
+        correct_mappings = [{'channel': k, 'marker': v} for k, v in correct_mappings.items()]
         invalid_mappings = {'FS Lin': '<--------->',
                             'SS Log': '<SS-Log>',
                             'FL1 Log': '<--------->',
@@ -65,6 +66,7 @@ class TestPanel(unittest.TestCase):
                             'FL3 Log': '<CD45-ECD>',
                             'FL4 Log': '<----------->',
                             'FL5 Log': '<IgG1-PC7>'}
+        invalid_mappings = [{'channel': k, 'marker': v} for k, v in invalid_mappings.items()]
         mappings, err = test.standardise_names(correct_mappings)
         self.assertFalse(err)
         mappings, err = test.standardise_names(invalid_mappings)
@@ -180,27 +182,68 @@ class TestGating(unittest.TestCase):
         self.assertEqual(test1d.fetch_by_definition('--'), 'other')
 
     def testGate(self):
-        blobs = make_blobs(n_samples=100, centers=3, n_features=2, random_state=42)
-        example_data = pd.DataFrame(np.hstack((blobs[0], blobs[1].reshape(-1, 1))),
-                                    columns=['feature0', 'feature1', 'blobID'])
-        populations = ChildPopulationCollection()
-        populations.add_population('positive', definition='+')
-        populations.add_population('negative', definition='-')
-        gate = Gate(data=example_data,
-                    x='feature0',
-                    y='feature1',
-                    child_populations=populations,
-                    transform_x=None,
-                    transform_y=None)
+        def _build(dimensions=1):
+            blobs = make_blobs(n_samples=100, centers=3, n_features=2, random_state=42)
+            example_data = pd.DataFrame(np.hstack((blobs[0], blobs[1].reshape(-1, 1))),
+                                        columns=['feature0', 'feature1', 'blobID'])
+            if dimensions == 1:
+                populations = ChildPopulationCollection()
+                populations.add_population('positive', definition='+')
+                populations.add_population('negative', definition='-')
+                return (Gate(data=example_data,
+                             x='feature0',
+                             y='feature1',
+                             child_populations=populations,
+                             transform_x=None,
+                             transform_y=None), None), example_data
+            populations1 = ChildPopulationCollection()
+            populations1.add_population('positive', definition='++')
+            populations1.add_population('negative', definition=['--', '-+', '+-'])
+
+            populations2 = ChildPopulationCollection()
+            populations2.add_population('positive', definition=['++', '-+'])
+            populations2.add_population('negative', definition=['--', '+-'])
+            return (Gate(data=example_data,
+                         x='feature0',
+                         y='feature1',
+                         child_populations=p,
+                         transform_x=None,
+                         transform_y=None) for p in [populations1, populations2]), example_data
+
+        def _test(g, pos):
+            neg = [i for i in data.index.values if i not in pos]
+            self.assertListEqual(list(g.child_populations.populations['positive'].index), pos)
+            self.assertListEqual(list(g.child_populations.populations['negative'].index), neg)
+
+        # 1-D gate
+        gate, _, data = _build()
         pos_idx = [1,  3,  5,  7,  8, 26, 31, 32, 38, 39, 42, 45, 49, 50, 51, 58, 61,
                    63, 66, 68, 69, 70, 74, 76, 78, 79, 81, 87, 89, 90, 91, 93, 97]
-        neg_idx = [0,  2,  4,  6,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-                   22, 23, 24, 25, 27, 28, 29, 30, 33, 34, 35, 36, 37, 40, 41, 43, 44,
-                   46, 47, 48, 52, 53, 54, 55, 56, 57, 59, 60, 62, 64, 65, 67, 71, 72,
-                   73, 75, 77, 80, 82, 83, 84, 85, 86, 88, 92, 94, 95, 96, 98, 99]
+        gate.child_update_1d(threshold=0.3, method='test', merge_options='overwrite')
+        _test(gate, pos_idx)
 
+        gate.child_update_1d(threshold=4, method='test', merge_options='overwrite')
+        pos_idx = [1,  3,  7,  8, 31, 32, 38, 39, 42, 51, 58, 66, 68, 69, 70, 74, 76,
+                   78, 89, 90, 91, 93, 97]
+        gate.child_update_1d(threshold=4, method='test', merge_options='overwrite')
+        _test(gate, pos_idx)
 
+        gate.child_update_1d(threshold=9, method='test', merge_options='merge')
+        _test(gate, pos_idx)
 
+        # 2-D gate
+        gate1, gate2, data = _build(dimensions=2)
+        pos_idx = [1,  3,  5,  7,  8, 26, 31, 32, 38, 39, 42, 45, 49, 50, 51, 58, 61,
+                   63, 66, 68, 69, 70, 74, 76, 78, 79, 81, 87, 89, 90, 91, 93, 97]
+        gate1.child_update_2d(x_threshold=2, y_threshold=-2.5, method='test')
+        _test(gate1, pos_idx)
+
+        pos_idx = [1,  2,  3,  5,  6,  7,  8,  9, 10, 13, 14, 17, 20, 23, 24, 25, 26,
+                   31, 32, 34, 35, 36, 37, 38, 39, 41, 42, 43, 44, 45, 49, 50, 51, 52,
+                   56, 57, 58, 59, 61, 63, 66, 68, 69, 70, 73, 74, 76, 78, 79, 80, 81,
+                   82, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 99]
+        gate2.child_update_2d(x_threshold=2, y_threshold=-2.5, method='test')
+        _test(gate2, pos_idx)
 
 
     def testGating(self):
