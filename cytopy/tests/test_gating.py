@@ -6,16 +6,85 @@ from cytopy.data.mongo_setup import global_init
 # Gating imports
 from ..flow.gating.actions import Gating, ChildPopulationCollection
 from ..flow.gating.base import Gate
+from ..flow.gating import utilities
 # Other tools
-from sklearn.datasets import make_blobs
+from .utilities import make_example_date
+from sklearn.neighbors import KernelDensity
+from scipy.signal import find_peaks
 import numpy as np
 import pandas as pd
 import unittest
 import sys
+
 unittest.TestLoader.sortTestMethodsUsing = None
 sys.path.append('/home/rossc/CytoPy')
 global_init('test')
 
+
+class TestUtilities(unittest.TestCase):
+    def test_check_peak(self):
+        probs = np.array([0, 0, 0, 0.01, 0, 0, 2, 0, 0, 3, 0, 0, 0.01])
+        peaks = np.where(np.array(probs) > 0)
+        self.assertEqual(len(utilities.check_peak(peaks, probs, t=0.05)), 2)
+        self.assertEqual(len(utilities.check_peak(peaks, probs, t=0.5)), 4)
+
+    def test_find_local_minima(self):
+        data = make_example_date()
+        data = pd.concat([data[data.blobID != 2],
+                          data[data.blobID == 2].sample(frac=0.25)])
+        d = data['feature0'].values
+        density = KernelDensity(bandwidth=0.5, kernel='gaussian')
+        density.fit(d[:, None])
+        x_d = np.linspace(min(d), max(d), 1000)
+        prob = np.exp(density.score_samples(x_d[:, None]))
+        peaks = find_peaks(prob)[0]
+        self.assertAlmostEqual(utilities.find_local_minima(prob, x_d, peaks),
+                               0.592, places=2)
+
+    def test_inside_ellipse(self):
+        data = make_example_date()
+        mask = utilities.inside_ellipse(data[['feature0', 'feature1']].values,
+                                        center=(4.5, 2.5),
+                                        width=2.3,
+                                        height=3,
+                                        angle=0)
+        correct = all(x == 1 for x in data.loc[mask].blobID.values)
+        self.assertTrue(correct)
+
+    def test_rectangular_filter(self):
+        data = make_example_date()
+        rect = dict(xmin=0, xmax=8, ymin=-2.5, ymax=6.0)
+        self.assertTrue(all(x == 1 for x in utilities.rectangular_filter(data,
+                                                                         x='feature0',
+                                                                         y='feature1',
+                                                                         definition=rect).blobID.values))
+
+    def test_dds(self):
+        def equal_ratio(d):
+            from itertools import combinations
+            ratios = [d[d.blobID == x[0]].shape[0] / d[d.blobID == x[1]].shape[0]
+                      for x in combinations(samples.blobID.unique(), 2)]
+            return combinations(ratios, 2)
+
+        data = make_example_date(n_samples=10000)
+        samples = utilities.density_dependent_downsample(data=data,
+                                                         features=['feature0', 'feature1'],
+                                                         mmd_sample_n=2000)
+        for x, y in equal_ratio(samples):
+            self.assertAlmostEqual(x, y, places=1)
+
+    def test_get_params(self):
+        class MakeshiftClass:
+            def __init__(self, a, b, c, d='test', **kwargs):
+                pass
+        self.assertListEqual(utilities.get_params(MakeshiftClass),
+                             ['a', 'b', 'c', 'd', 'kwargs'])
+        self.assertListEqual(utilities.get_params(MakeshiftClass, required_only=True),
+                             ['a', 'b', 'c', 'kwargs'])
+        self.assertListEqual(utilities.get_params(MakeshiftClass,
+                                                  required_only=True,
+                                                  exclude_kwargs=True),
+                             ['a', 'b', 'c'])
 
 class TestGating(unittest.TestCase):
 
@@ -37,9 +106,7 @@ class TestGating(unittest.TestCase):
 
     def testGate(self):
         def _build(dimensions=1):
-            blobs = make_blobs(n_samples=100, centers=3, n_features=2, random_state=42)
-            example_data = pd.DataFrame(np.hstack((blobs[0], blobs[1].reshape(-1, 1))),
-                                        columns=['feature0', 'feature1', 'blobID'])
+            example_data = make_example_date()
             if dimensions == 1:
                 populations = ChildPopulationCollection()
                 populations.add_population('positive', definition='+')
