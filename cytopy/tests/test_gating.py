@@ -7,7 +7,9 @@ from cytopy.data.mongo_setup import global_init
 from ..flow.gating.actions import Gating, ChildPopulationCollection
 from ..flow.gating.base import Gate
 from ..flow.gating import dbscan
+from ..flow.gating import density
 from ..flow.gating import utilities
+from ..flow.gating import mixturemodel
 # Other tools
 from .utilities import make_example_date
 from sklearn.neighbors import KernelDensity
@@ -205,13 +207,13 @@ class TestGate(unittest.TestCase):
 
 class TestDBSCAN(unittest.TestCase):
 
-    def _build(self):
+    def _build(self, return_data: bool = False):
         example_data = make_example_date(n_samples=10000)
         example_data['labels'] = example_data['blobID']
         populations = ChildPopulationCollection(gate_type='cluster')
-        populations.add_population('blob1', target=(-7.5, -7.5))
-        populations.add_population('blob2', target=(-2.5, 10))
-        populations.add_population('blob3', target=(5, 1))
+        populations.add_population('blob1', target=(-2.5, 10))
+        populations.add_population('blob2', target=(5, 1))
+        populations.add_population('blob3', target=(-7.5, -7.5))
 
         gate = dbscan.DensityBasedClustering(data=example_data,
                                              child_populations=populations,
@@ -220,6 +222,8 @@ class TestDBSCAN(unittest.TestCase):
                                              transform_x=None,
                                              transform_y=None,
                                              min_pop_size=10)
+        if return_data:
+            return gate, example_data
         return gate
 
     def test_meta_assignmetn(self):
@@ -259,19 +263,267 @@ class TestDBSCAN(unittest.TestCase):
 
     def test_match_pop_to_cluster(self):
         gate = self._build()
+        cluster_polygons = gate.generate_polygons()
+        self.assertEqual(gate._match_pop_to_cluster(target_population='blob1',
+                                                    cluster_polygons=cluster_polygons), 0.0)
+        self.assertEqual(gate._match_pop_to_cluster(target_population='blob2',
+                                                    cluster_polygons=cluster_polygons), 1.0)
+        self.assertEqual(gate._match_pop_to_cluster(target_population='blob3',
+                                                    cluster_polygons=cluster_polygons), 2.0)
 
-def testGating(self):
-    # Initiate Gating object
-    project = Project.objects(project_id='test').get()
-    gate = Gating(experiment=project.load_experiment('test'),
-                  sample_id='test_experiment_dummy')
-    self.assertEqual(gate.data.shape, (100, 3))
-    self.assertEqual(gate.ctrl.get('dummy_ctrl').shape, (100, 3))
-    self.assertEqual(len(gate.populations), 1)
+    def _clustering(self, method='dbscan'):
+        gate, data = self._build(return_data=True)
+        blob1_idx = data[data.blobID == 0].index.values
+        blob2_idx = data[data.blobID == 1].index.values
+        blob3_idx = data[data.blobID == 2].index.values
+        if method == 'dbscan':
+            populations = gate.dbscan(distance_nn=0.25)
+        else:
+            populations = gate.hdbscan()
+        for p, idx in zip(['blob1', 'blob2', 'blob3'], [blob1_idx, blob2_idx, blob3_idx]):
+            self.assertListEqual(list(populations.populations[p].index), list(idx))
 
-    # Density Gates
-    test1d = ChildPopulationCollection(gate_type='threshold_1d')
-    test1d.add_population('positive', definition='+')
-    test1d.add_population('negative', definition='-')
-    gate.create_gate('test1d', parent='root', class_='DensityThreshold', method='gate1d')
+    def test_dbscan(self):
+        self._clustering()
 
+    def test_hdbscan(self):
+        self._clustering(method='hdbscan')
+
+
+class TestDensity(unittest.TestCase):
+
+    @staticmethod
+    def kde(data, x, bw: int or float = 1.0):
+        dens = KernelDensity(bandwidth=bw, kernel='gaussian')
+        d = data[x].values
+        dens.fit(d[:, None])
+        x_d = np.linspace(min(d), max(d), 1000)
+        logprob = dens.score_samples(x_d[:, None])
+        peaks = find_peaks(logprob)[0]
+        return x_d, np.exp(logprob), peaks
+
+    @staticmethod
+    def _build(dimensions: int = 1,
+               return_data: bool = False,
+               **kwargs):
+        example_data = make_example_date(n_samples=1000)
+        example_data['labels'] = example_data['blobID']
+
+        if dimensions == 1:
+            populations = ChildPopulationCollection(gate_type='threshold_1d')
+            populations.add_population('positive', definition='+')
+            populations.add_population('negative', definition='-')
+        else:
+            populations = ChildPopulationCollection(gate_type='threshold_2d')
+            populations.add_population('positive', definition=['++', '-+'])
+            populations.add_population('negative', definition=['--', '+-'])
+
+        gate = density.DensityThreshold(data=example_data,
+                                        child_populations=populations,
+                                        x='feature0',
+                                        y='feature1',
+                                        transform_x=None,
+                                        transform_y=None,
+                                        **kwargs)
+        if return_data:
+            return gate, example_data
+        return gate
+
+    def test_eval_peaks(self):
+        gate, data = self._build(dimensions=1, return_data=True)
+        # 1 peak
+        xx, probs, peaks = self.kde(data, 'feature0', bw=10)
+        threshold, method = gate._evaluate_peaks(data=data,
+                                                 peaks=peaks,
+                                                 probs=probs,
+                                                 xx=xx)
+        self.assertEqual(method, 'Quantile')
+        self.assertEqual(threshold, data['feature0'].quantile(0.95, interpolation='nearest'))
+
+        # 2 peaks
+        xx, probs, peaks = self.kde(data, 'feature0', bw=2)
+        threshold, method = gate._evaluate_peaks(data=data,
+                                                 peaks=peaks,
+                                                 probs=probs,
+                                                 xx=xx)
+        self.assertEqual(method, 'Local minima between pair of highest peaks')
+        self.assertAlmostEqual(threshold, 1.10, places=2)
+
+        # >2 peaks
+        xx, probs, peaks = self.kde(data, 'feature0', bw=0.5)
+        self.assertEqual(method, 'Local minima between pair of highest peaks')
+        self.assertAlmostEqual(threshold, 1.32, places=2)
+
+    def test_gate_1d(self):
+        gate, data = self._build(dimensions=1,
+                                 return_data=True,
+                                 kde_bw=0.5)
+        populations = gate.gate_1d()
+        y = data[data.feature0 >= 1.32].index.values
+        y_hat = populations.populations['positive'].index.values
+        self.assertListEqual(list(y), list(y_hat))
+        y = data[data.feature0 < 1.32].index.values
+        y_hat = populations.populations['negative'].index.values
+        self.assertListEqual(list(y), list(y_hat))
+
+    def test_gate_2d(self):
+        gate, data = self._build(dimensions=2,
+                                 return_data=True,
+                                 kde_bw=0.5)
+        populations = gate.gate_2d()
+        y = data[(data.feature0.round(decimals=2) >= 1.32) &
+                 (data.feature1.round(decimals=2) >= -2.30)]
+        y_hat = populations.populations['positive'].index.values
+        self.assertListEqual(list(y), list(y_hat))
+        y = data[(data.feature0.round(decimals=2) < 1.32) &
+                 (data.feature1.round(decimals=2) < -2.30)]
+        y_hat = populations.populations['negative'].index.values
+        self.assertListEqual(list(y), list(y_hat))
+
+
+class TestMixtureModel(unittest.TestCase):
+
+    @staticmethod
+    def _build(return_data: bool = False,
+               blobs=3,
+               **kwargs):
+        example_data = make_example_date(n_samples=1000, centers=blobs)
+        example_data['labels'] = example_data['blobID']
+
+        populations = ChildPopulationCollection(gate_type='geom')
+        populations.add_population('positive', definition='+')
+        populations.add_population('negative', definition='-')
+
+        gate = mixturemodel.MixtureModel(data=example_data,
+                                         child_populations=populations,
+                                         x='feature0',
+                                         y='feature1',
+                                         transform_x=None,
+                                         transform_y=None,
+                                         **kwargs)
+        if return_data:
+            return gate, example_data
+        return gate
+
+    def test_create_ellipse(self):
+        gate, data = self._build(return_data=True,
+                                 target=(-2.5, 10),
+                                 k=3)
+        pos_idx = data[data.blobID == 0].index.values
+        populations = gate.gate()
+        tp = [i for i in pos_idx if i in populations.populations['positive'].index]
+        self.assertTrue(len(tp)/len(pos_idx) > 0.8)
+
+
+class TestQuantile(unittest.TestCase):
+    def _pass(self):
+        pass
+
+
+class TestStatic(unittest.TestCase):
+    def _pass(self):
+        pass
+
+class TestGating(unittest.TestCase):
+
+    def _build(self):
+        # Initiate Gating object
+        project = Project.objects(project_id='test').get()
+        gate = Gating(experiment=project.load_experiment('test'),
+                      sample_id='test_experiment_dummy')
+        self.assertEqual(gate.data.shape, (100, 3))
+        self.assertEqual(gate.ctrl.get('dummy_ctrl').shape, (100, 3))
+        self.assertEqual(len(gate.populations), 1)
+
+    def _add_dummy_pop(self):
+        pass
+
+    def _add_dummy_gate(self):
+        pass
+
+    def test_construct_tree(self):
+        pass
+
+    def test_serialise_gate(self):
+        pass
+
+    def test_get_pop_df(self):
+        pass
+
+    def test_valid_pops(self):
+        pass
+
+    def test_search_ctrl_cache(self):
+        pass
+
+    def test_predict_ctrl_pop(self):
+        pass
+
+    def test_clear_ctrl_cache(self):
+        pass
+
+    def test_ctrl_gating(self):
+        pass
+
+    def test_check_class_args(self):
+        pass
+
+    def test_merge(self):
+        pass
+
+    def test_subtraction(self):
+        pass
+
+    def test_create_gate(self):
+        pass
+
+    def test_apply_checks(self):
+        pass
+
+    def test_construct_and_gate(self):
+        pass
+
+    def test_apply(self):
+        pass
+
+    def test_update_populations(self):
+        pass
+
+    def test_apply_many(self):
+        pass
+
+    def test_update_idx(self):
+        pass
+
+    def test_edit_gate(self):
+        pass
+
+    def test_nudge_threshold(self):
+        pass
+
+    def test_find_dependencies(self):
+        pass
+
+    def test_remove_pop(self):
+        pass
+
+    def test_print_tree(self):
+        pass
+
+    def test_pop_to_mongo(self):
+        pass
+
+    def test_save_ctrl_idx(self):
+        pass
+
+    def test_save(self):
+        pass
+
+    def test_cluster_idx(self):
+        pass
+
+    def test_reg_as_invalid(self):
+        pass
+
+    def test_check_downstream_overlaps(self):
+        pass

@@ -157,7 +157,8 @@ def load_and_transform(sample_id: str, experiment: FCSExperiment, root_populatio
         raise KeyError(f'Error: unable to load data for population {root_population} for {sample_id}')
     if sample_n is not None:
         if data.shape[0] < sample_n:
-            print(f'{sample_id} contains less rows than the specified sampling n {sample_n}, returning unsampled dataframe')
+            print(f'{sample_id} contains less rows than the specified sampling n {sample_n}, '
+                  f'returning unsampled dataframe')
             return data
         return data.sample(sample_n)
     return data

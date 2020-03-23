@@ -224,8 +224,6 @@ class Gate:
             GateError('Method self.__generate_polygons called before cluster assignment')
         polygon_cords = {label: [] for label in df['labels'].unique() if label != -1}
         for label in polygon_cords.keys():
-            if label == -1:
-                continue
             d = df[df['labels'] == label][[self.x, self.y]].values
             hull = ConvexHull(d)
             polygon_cords[label] = [(d[v, 0], d[v, 1]) for v in hull.vertices]
