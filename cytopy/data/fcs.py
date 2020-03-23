@@ -233,7 +233,10 @@ class Population(mongoengine.EmbeddedDocument):
         np.array
             Array of index values
         """
-        return pickle.loads(bytes(self.index.read()))
+        data = self.index.read()
+        if data:
+            return pickle.loads(bytes(data))
+        return None
 
     def to_python(self) -> dict:
         """

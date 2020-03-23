@@ -49,18 +49,26 @@ class Gating:
     default_axis: str, (default='FSC-A')
         default value for y-axis for all plots
     """
-    def __init__(self, experiment: FCSExperiment, sample_id: str, sample: int or None = None,
-                 include_controls=True, default_axis='FSC-A'):
+    def __init__(self,
+                 experiment: FCSExperiment,
+                 sample_id: str,
+                 sample: int or None = None,
+                 include_controls=True,
+                 default_axis='FSC-A'):
         try:
-            data = experiment.pull_sample_data(sample_id=sample_id, sample_size=sample,
+            data = experiment.pull_sample_data(sample_id=sample_id,
+                                               sample_size=sample,
                                                include_controls=include_controls)
             assert data is not None
         except AssertionError:
             raise GateError(f'Error: failed to fetch data for {sample_id}. Aborting.')
-        self.data = [x for x in data if x['typ'] == 'complete'][0]['data']
+        self.data = [x for x in data
+                     if x['typ'] == 'complete'][0]['data']
         if include_controls:
-            self.ctrl = [x for x in data if x['typ'] == 'control']
-            self.ctrl = {x['id'].replace(f'{sample_id}_', ''): x['data'] for x in self.ctrl}
+            self.ctrl = [x for x in data
+                         if x['typ'] == 'control']
+            self.ctrl = {x['id'].replace(f'{sample_id}_', ''): x['data']
+                         for x in self.ctrl}
         else:
             self.ctrl = {}
         self.id = sample_id
@@ -103,7 +111,7 @@ class Gating:
                 if not parent:
                     populations[p.get('name')] = Node(**p)
                 else:
-                    populations[p.get('name')] = Node(**p, parent=self.populations.get(parent))
+                    populations[p.get('name')] = Node(**p, parent=populations.get(parent))
         if self.ctrl:
             if not populations['root'].control_idx:
                 populations['root'].control_idx = {control_id: control_data.index.values for
@@ -429,7 +437,9 @@ class Gating:
                 self._predict_ctrl_population(pop_name, ctrl_id, model, mappings=tree_map.get(pop_name))
 
     @staticmethod
-    def _check_class_args(klass, method: str, **kwargs) -> bool:
+    def _check_class_args(klass,
+                          method: str,
+                          **kwargs) -> bool:
         """
         Check parameters meet class requirements
 
@@ -452,7 +462,7 @@ class Gating:
                 raise GateError(f'{klass} Invalid: must inherit from Gate class')
             klass_args = get_params(klass, required_only=True, exclude_kwargs=True)
             for arg in klass_args:
-                if arg in ['data']:
+                if arg == 'data':
                     continue
                 if arg not in kwargs.keys():
                     print(f'Error: missing required class constructor argument {arg} '
@@ -472,7 +482,10 @@ class Gating:
             print(f'Error: {method} is not a valid method for class {klass.__name__}')
             return False
 
-    def merge(self, population_left: str, population_right: str, new_population_name: str):
+    def merge(self,
+              population_left: str,
+              population_right: str,
+              new_population_name: str):
         """
         Merge two populations from the same parent, generating a new population saved to population tree
 
@@ -511,8 +524,9 @@ class Gating:
         cords = dict(x=polygon.exterior.xy[0], y=polygon.exterior.xy[1])
         new_population.populations[new_population_name].update_geom(x=x, y=y, shape='poly', cords=cords)
         new_population.populations[new_population_name].update_index(index)
-        self.update_populations(output=new_population, parent_df=parent_df,
-                                parent_name=parent.name, warnings=[])
+        self.update_populations(output=new_population,
+                                parent_name=parent.name,
+                                warnings=[])
         name = f'merge_{population_left}_{population_right}'
         kwargs = [('left', population_left), ('right', population_right), ('name', new_population_name),
                   ('x', x), ('y', y), ('child_populations', new_population)]
@@ -520,7 +534,10 @@ class Gating:
                             method='merge', kwargs=kwargs, class_='merge')
         self.gates[name] = new_gate
 
-    def subtraction(self, target: list, parent: str, new_population_name: str) -> None:
+    def subtraction(self,
+                    target: list,
+                    parent: str,
+                    new_population_name: str) -> None:
         """
         Given a target population and a parent population, generate a new population by subtraction of the
         target population from the parent
@@ -553,15 +570,21 @@ class Gating:
         new_population.add_population(new_population_name)
         new_population.populations[new_population_name].update_geom(x=x, y=y, shape='sub')
         new_population.populations[new_population_name].update_index(index)
-        self.update_populations(output=new_population, parent_df=self.get_population_df(parent),
-                                parent_name=parent, warnings=[])
+        self.update_populations(output=new_population,
+                                parent_name=parent,
+                                warnings=[])
         kwargs = [('parent', parent), ('target', target), ('name', new_population_name),
                   ('x', x), ('y', y), ('child_populations', new_population)]
         new_gate = DataGate(gate_name=f'{parent}_minus_{target}', children=[new_population_name],
                             parent=parent, method='subtraction', kwargs=kwargs, class_='subtraction')
         self.gates[f'{parent}_minus_{target}'] = new_gate
 
-    def create_gate(self, gate_name: str, parent: str, class_: str, method: str, kwargs: dict,
+    def create_gate(self,
+                    gate_name: str,
+                    parent: str,
+                    class_: str,
+                    method: str,
+                    kwargs: dict,
                     child_populations: ChildPopulationCollection) -> bool:
         """Define a new gate to be used using 'apply' method
 
@@ -630,7 +653,10 @@ class Gating:
                 return None
         return gatedoc
 
-    def _construct_class_and_gate(self, gatedoc: DataGate, kwargs: dict, feedback: bool = True):
+    def _construct_class_and_gate(self,
+                                  gatedoc: DataGate,
+                                  kwargs: dict,
+                                  feedback: bool = True):
         """Construct a gating class object and apply the intended method for gating
 
         Parameters
@@ -660,8 +686,9 @@ class Gating:
             if analyst.warnings:
                 for x in analyst.warnings:
                     print(x)
-        self.update_populations(output, parent_df=parent_population,
-                                warnings=analyst.warnings, parent_name=gatedoc.parent)
+        self.update_populations(output,
+                                warnings=analyst.warnings,
+                                parent_name=gatedoc.parent)
         if feedback:
             for pop in output.populations.keys():
                 print(f'New population: {pop}')
@@ -669,7 +696,11 @@ class Gating:
                 print(f'...proportion of parent: {self.populations[pop].prop_of_parent:.3f}')
             print('-----------------------')
 
-    def apply(self, gate_name: str, plot_output: bool = True, feedback: bool = True, **kwargs) -> None:
+    def apply(self,
+              gate_name: str,
+              plot_output: bool = True,
+              feedback: bool = True,
+              **kwargs) -> None:
         """Apply a gate to events data (must be generated with `create_gate` first)
 
         Parameters
@@ -718,7 +749,9 @@ class Gating:
         if plot_output:
             self.plotting.plot_gate(gate_name=gate_name)
 
-    def update_populations(self, output: ChildPopulationCollection, parent_df: pd.DataFrame, warnings: list,
+    def update_populations(self,
+                           output: ChildPopulationCollection,
+                           warnings: list,
                            parent_name: str) -> ChildPopulationCollection:
         """Given some ChildPopulationCollection object generated from a gate, update saved populations
 
@@ -726,8 +759,6 @@ class Gating:
         ----------
         output : ChildPopulationCollection
             ChildPopulationCollection object generated from a gate
-        parent_df : Pandas.DataFrame
-            pandas dataframe of events data from parent population
         warnings : list
             list of warnings generated from gate
         parent_name : str
@@ -738,6 +769,7 @@ class Gating:
         ChildPopulationCollection
             output
         """
+        parent_df = self.get_population_df(parent_name)
         for name, population in output.populations.items():
             n = len(population.index)
             if n == 0:
