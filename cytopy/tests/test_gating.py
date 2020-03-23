@@ -10,6 +10,7 @@ from ..flow.gating import dbscan
 from ..flow.gating import density
 from ..flow.gating import utilities
 from ..flow.gating import mixturemodel
+from ..flow.gating import quantile
 # Other tools
 from .utilities import make_example_date
 from sklearn.neighbors import KernelDensity
@@ -416,8 +417,44 @@ class TestMixtureModel(unittest.TestCase):
 
 
 class TestQuantile(unittest.TestCase):
-    def _pass(self):
-        pass
+
+    @staticmethod
+    def _build(return_data: bool = False,
+               blobs=3,
+               **kwargs):
+        example_data = make_example_date(n_samples=100, centers=blobs)
+        example_data['labels'] = example_data['blobID']
+
+        populations = ChildPopulationCollection(gate_type='threshold_2d')
+        populations.add_population('positive', definition='+')
+        populations.add_population('negative', definition='-')
+
+        gate = quantile.Quantile(data=example_data,
+                                 child_populations=populations,
+                                 x='feature0',
+                                 y='feature1',
+                                 transform_x=None,
+                                 transform_y=None,
+                                 **kwargs)
+        if return_data:
+            return gate, example_data
+        return gate
+
+    def test_gate_1d(self):
+        gate, data = self._build(return_data=True, q=0.95)
+        threshold = float(data['feature0'].quantile(0.95, interpolation='nearest'))
+        y = list(data[data.feature0.round(2) >= round(threshold, 2)].index.values)
+        y_hat = list(gate.gate_1d().populations['positive'].index)
+        self.assertListEqual(y, y_hat)
+
+    def test_gate_2d(self):
+        gate, data = self._build(return_data=True, q=0.95)
+        x_threshold = float(data['feature0'].quantile(0.95, interpolation='nearest'))
+        y_threshold = float(data['feature1'].quantile(0.95, interpolation='nearest'))
+        y = list(data[(data.feature0.round(2) >= round(x_threshold, 2)) &
+                      (data.feature1.round(2) >= round(y_threshold, 2))].index.values)
+        y_hat = list(gate.gate_2d().populations['positive'].index)
+        self.assertListEqual(y, y_hat)
 
 
 class TestStatic(unittest.TestCase):
