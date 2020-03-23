@@ -25,10 +25,17 @@ class Gate:
         - child populations: ChildPopulationCollection (see docs)
         - output: GateOutput object for standard gating output
     """
-    def __init__(self, data: pd.DataFrame, x: str, child_populations: ChildPopulationCollection, y: str or None = None,
-                 frac: float or None = None, downsample_method: str = 'uniform',
-                 density_downsample_kwargs: dict or None = None, transform_x: str or None = 'logicle',
-                 transform_y: str or None = 'logicle', low_memory: bool = False):
+    def __init__(self,
+                 data: pd.DataFrame,
+                 x: str,
+                 child_populations: ChildPopulationCollection,
+                 y: str or None = None,
+                 frac: float or None = None,
+                 downsample_method: str = 'uniform',
+                 density_downsample_kwargs: dict or None = None,
+                 transform_x: str or None = 'logicle',
+                 transform_y: str or None = 'logicle',
+                 low_memory: bool = False):
         """
         Constructor for Gate definition
         :param data: pandas dataframe of fcs data for gating
