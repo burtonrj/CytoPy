@@ -76,35 +76,39 @@ class Gating:
             for g in fg.gates:
                 self._deserialise_gate(g)
 
-        # If no population data in database create root populations and instantiate empty tree
+        self.populations = self._construct_tree(fg=fg)
+
+    def _construct_tree(self, fg: FileGroup):
+        populations = dict()
         if not fg.populations or len(fg.populations) == 1:
             control_cache = None
-            if include_controls:
+            if self.ctrl:
                 control_cache = {control_id: control_data.index.values for
                                  control_id, control_data in self.ctrl.items()}
-            root = Node(name='root', prop_of_parent=1.0, prop_of_total=1.0,
-                        warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'), index=self.data.index.values,
-                        parent=None, control_idx=control_cache)
-            self.populations['root'] = root
-        else:
-            # Reconstruct tree and populate control cache is necessary
-            assert 'root' in [p.population_name for p in fg.populations], 'Root population missing!'
-            parents = [p.parent for p in fg.populations]
-            pops = [p.to_python() for p in fg.populations]
-            structured = dict()
-            for parent in parents:
-                structured[parent] = [p for p in pops if p.get('parent') == parent]
-            self.populations = dict()
-            for name, pops in structured.items():
-                for p in pops:
-                    parent = p.pop('parent', None)
-                    if not parent:
-                        self.populations[p.get('name')] = Node(**p)
-                    else:
-                        self.populations[p.get('name')] = Node(**p, parent=self.populations.get(parent))
-        if not self.populations['root'].control_idx:
-            self.populations['root'].control_idx = {control_id: control_data.index.values for
-                                                    control_id, control_data in self.ctrl.items()}
+            populations['root'] = Node(name='root', prop_of_parent=1.0, prop_of_total=1.0,
+                                       warnings=[], geom=dict(shape=None, x='FSC-A', y='SSC-A'),
+                                       index=self.data.index.values,
+                                       parent=None, control_idx=control_cache)
+            return populations
+        # Reconstruct tree and populate control cache is necessary
+        assert 'root' in [p.population_name for p in fg.populations], 'Root population missing!'
+        parents = [p.parent for p in fg.populations]
+        pops = [p.to_python() for p in fg.populations]
+        structured = dict()
+        for parent in parents:
+            structured[parent] = [p for p in pops if p.get('parent') == parent]
+        for name, pops in structured.items():
+            for p in pops:
+                parent = p.pop('parent', None)
+                if not parent:
+                    populations[p.get('name')] = Node(**p)
+                else:
+                    populations[p.get('name')] = Node(**p, parent=self.populations.get(parent))
+        if self.ctrl:
+            if not populations['root'].control_idx:
+                populations['root'].control_idx = {control_id: control_data.index.values for
+                                                   control_id, control_data in self.ctrl.items()}
+        return populations
 
     def clear_gates(self):
         """Remove all currently associated gates."""

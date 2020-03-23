@@ -135,7 +135,7 @@ class DensityBasedClustering(Gate):
                                    algorithm='ball_tree').fit(sample[[self.x, self.y]], db_labels)
         self.data['labels'] = knn.predict(self.data[[self.x, self.y]])
 
-    def dbscan(self, distance_nn: int, core_only: bool = False, chunks: bool =  False):
+    def dbscan(self, distance_nn: int or float, core_only: bool = False, chunks: bool =  False):
         """
         Perform gating with dbscan algorithm
         :param distance_nn: nearest neighbour distance (smaller value will create tighter clusters)
