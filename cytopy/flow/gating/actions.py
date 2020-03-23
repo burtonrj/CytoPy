@@ -830,6 +830,127 @@ class Gating:
         if feedback:
             print('Complete!')
 
+    @staticmethod
+    def geom_bool(geom: dict, definition: str, parent: pd.DataFrame):
+        """
+
+        Parameters
+        ----------
+        geom
+        definition :
+
+        parent :
+
+
+        Returns
+        -------
+
+        """
+        parent = parent.round(decimals=2)
+        x_, y_ = geom['x'], geom['y']
+        tx, ty = round(geom['threshold_x'], 2), round(geom['threshold_y'], 2)
+        if definition == '++':
+            return parent[(parent[x_] > tx) & (parent[y_] > ty)].index.values
+        if definition == '--':
+            return parent[(parent[x_] < tx) & (parent[y_] < ty)].index.values
+        if definition == '+-':
+            return parent[(parent[x_] > tx) & (parent[y_] < ty)].index.values
+        if definition == '-+':
+            return parent[(parent[x_] < tx) & (parent[y_] > ty)].index.values
+        raise ValueError('Definition must have a value of "+-", "-+", "--", or "++" for a 2D threshold gate')
+
+    @staticmethod
+    def _update_threshold_1d(geom: dict, parent: pd.DataFrame):
+        assert 'threshold' in geom.keys(), 'Geom must contain a key "threshold" with a float value'
+        assert 'transform_x' in geom.keys(), 'Geom must contain a key "transform_x", ' \
+                                             'the transform method for the x-axis'
+        assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
+                                            'if population is the "positive" or "negative"'
+        if geom['definition'] == '+':
+            return parent[parent[geom['x']] >= geom['threshold']].index.values
+        if geom['definition'] == '-':
+            return parent[parent[geom['x']] < geom['threshold']].index.values
+        raise ValueError('Definition must have a value of "+" or "-" for a 1D threshold gate')
+
+    @staticmethod
+    def _update_rect(geom: dict, parent: pd.DataFrame):
+        keys = ['x_min', 'x_max', 'y_min', 'y_max']
+        assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
+                                            'if population is the "positive" or "negative"'
+        assert all([r in geom.keys() for r in keys]), f'Geom must contain keys {keys} both with a float value'
+        assert all(
+            [t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
+                                                                         'the transform method for the x-axis AND ' \
+                                                                         'a key "transform_y", ' \
+                                                                         'the transform method for the y-axis'
+        assert geom.get('y'), 'Geom is missing value for "y"'
+
+        x = (parent[geom['x']] >= geom['x_min']) & (parent[geom['x']] <= geom['x_max'])
+        y = (parent[geom['y']] >= geom['y_min']) & (parent[geom['y']] <= geom['y_max'])
+        pos = parent[x & y]
+        if geom['definition'] == '+':
+            return pos.index.values
+        if geom['definition'] == '-':
+            return parent[~parent.index.isin(pos.index)].index.values
+        raise ValueError('Definition must have a value of "+" or "-" for a rectangular geom')
+
+    @staticmethod
+    def _update_ellipse(geom: dict, parent: pd.DataFrame):
+        keys = ['centroid', 'width', 'height', 'angle']
+        assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
+                                            'if population is the "positive" or "negative"'
+        assert all([c in geom.keys() for c in
+                    keys]), f'Geom must contain keys {keys}; note, centroid must be a tuple and all others a float value'
+        assert geom.get('y'), 'Geom is missing value for "y"'
+        assert all(
+            [t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
+                                                                         'the transform method for the x-axis AND ' \
+                                                                         'a key "transform_y", ' \
+                                                                         'the transform method for the y-axis'
+
+        channels = [geom['x'], geom['y']]
+        mask = inside_ellipse(parent[channels].values,
+                              center=tuple(geom['centroid']),
+                              width=geom['width'],
+                              height=geom['height'],
+                              angle=geom['angle'])
+        pos = parent[mask]
+        if geom['definition'] == '+':
+            return pos.index
+        if geom['definition'] == '-':
+            return parent[~parent.index.isin(pos.index)].index.values
+        raise ValueError('Definition must have a value of "+" or "-" for a ellipse geom')##
+
+    @staticmethod
+    def _update_poly(geom: dict, x: str, y: str, parent: pd.DataFrame):
+        keys = ['cords', 'transform_x', 'transform_y', 'x', 'y']
+        assert all([c in geom.keys() for c in keys]), f'Geom must contain keys {keys}'
+        assert type(geom.get('cords')) == dict, 'Cords should be of type dictionary with keys: x, y'
+        cords = geom.get('cords')
+        assert all([_ in cords.keys() for _ in ['x', 'y']]), 'Cords should contain keys: x, y'
+
+        poly = Polygon([(x, y) for x, y in zip(cords['x'], cords['y'])])
+        pos = inside_polygon(parent, x, y, poly)
+        return pos.index
+
+    def _update_threshold_2d(self, geom: dict, parent: pd.DataFrame):
+        assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
+                                            'if population is the "positive" or "negative"'
+        assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), \
+            'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
+        assert geom.get('y'), 'Geom is missing value for "y"'
+        assert all(
+            [t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
+                                                                         'the transform method for the x-axis AND ' \
+                                                                         'a key "transform_y", ' \
+                                                                         'the transform method for the y-axis'
+
+        if type(geom['definition']) == list:
+            idx = list(map(lambda d: self.geom_bool(geom, d, parent), geom['definition']))
+            return [i for l in idx for i in l]
+        else:
+            return self.geom_bool(geom, geom['definition'], parent)
+
     def _update_index(self, population_name: str, geom: dict):
         """Given some new gating geom and the name of a population to update, update the population index
 
@@ -842,7 +963,8 @@ class Gating:
 
         Returns
         -------
-        None
+        Numpy.array
+
         """
         assert population_name in self.populations.keys(), f'Population {population_name} does not exist'
         parent_name = self.populations[population_name].parent.name
@@ -851,122 +973,29 @@ class Gating:
         x, y = geom.get('x'), geom.get('y')
         assert x, 'Geom is missing value for "x"'
         if transform_x is not None and x is not None:
-            parent = apply_transform(parent, transform_method=transform_x,
+            parent = apply_transform(parent,
+                                     transform_method=transform_x,
                                      features_to_transform=[x])
         if transform_y is not None and y is not None:
-            parent = apply_transform(parent, transform_method=transform_y,
+            parent = apply_transform(parent,
+                                     transform_method=transform_y,
                                      features_to_transform=[y])
 
         if geom['shape'] == 'threshold':
-            assert 'threshold' in geom.keys(), 'Geom must contain a key "threshold" with a float value'
-            assert 'transform_x' in geom.keys(), 'Geom must contain a key "transform_x", ' \
-                                                 'the transform method for the x-axis'
-            assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
-                                                'if population is the "positive" or "negative"'
-            if geom['definition'] == '+':
-                return parent[parent[geom['x']] >= geom['threshold']].index.values
-            if geom['definition'] == '-':
-                return parent[parent[geom['x']] < geom['threshold']].index.values
-            raise ValueError('Definition must have a value of "+" or "-" for a 1D threshold gate')
+            return self._update_threshold_1d(geom=geom, parent=parent)
 
         if geom['shape'] == '2d_threshold':
-            def geom_bool(definition, p):
-                """
-
-                Parameters
-                ----------
-                definition :
-                    
-                p :
-                    
-
-                Returns
-                -------
-
-                """
-                p = p.round(decimals=2)
-                x_, y_ = geom['x'], geom['y']
-                tx, ty = round(geom['threshold_x'], 2), round(geom['threshold_y'], 2)
-                if definition == '++':
-                    return p[(p[x_] > tx) & (p[y_] > ty)].index.values
-                if definition == '--':
-                    return p[(p[x_] < tx) & (p[y_] < ty)].index.values
-                if definition == '+-':
-                    return p[(p[x_] > tx) & (p[y_] < ty)].index.values
-                if definition == '-+':
-                    return p[(p[x_] < tx) & (p[y_] > ty)].index.values
-                raise ValueError('Definition must have a value of "+-", "-+", "--", or "++" for a 2D threshold gate')
-
-            assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
-                                                'if population is the "positive" or "negative"'
-            assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), \
-                'Geom must contain keys "threshold_x" and "threshold_y" both with a float value'
-            assert y, 'Geom is missing value for "y"'
-            assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
-                                                                                    'the transform method for the x-axis AND ' \
-                                                                                    'a key "transform_y", ' \
-                                                                                    'the transform method for the y-axis'
-
-            if type(geom['definition']) == list:
-                idx = list(map(lambda d: geom_bool(d, parent), geom['definition']))
-                return [i for l in idx for i in l]
-            else:
-                return geom_bool(geom['definition'], parent)
+            return self._update_threshold_2d(geom=geom, parent=parent)
 
         if geom['shape'] == 'rect':
-            keys = ['x_min', 'x_max', 'y_min', 'y_max']
-            assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
-                                                'if population is the "positive" or "negative"'
-            assert all([r in geom.keys() for r in keys]), f'Geom must contain keys {keys} both with a float value'
-            assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
-                                                                                    'the transform method for the x-axis AND ' \
-                                                                                    'a key "transform_y", ' \
-                                                                                    'the transform method for the y-axis'
-            assert y, 'Geom is missing value for "y"'
-
-            x = (parent[geom['x']] >= geom['x_min']) & (parent[geom['x']] <= geom['x_max'])
-            y = (parent[geom['y']] >= geom['y_min']) & (parent[geom['y']] <= geom['y_max'])
-            pos = parent[x & y]
-            if geom['definition'] == '+':
-                return pos.index.values
-            if geom['definition'] == '-':
-                return parent[~parent.index.isin(pos.index)].index.values
-            raise ValueError('Definition must have a value of "+" or "-" for a rectangular geom')
+            return self._update_rect(geom=geom, parent=parent)
 
         if geom['shape'] == 'ellipse':
-            keys = ['centroid', 'width', 'height', 'angle']
-            assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
-                                                'if population is the "positive" or "negative"'
-            assert all([c in geom.keys() for c in keys]), f'Geom must contain keys {keys}; note, centroid must be a tuple and all others a float value'
-            assert y, 'Geom is missing value for "y"'
-            assert all([t in geom.keys() for t in ['transform_x', 'transform_y']]), 'Geom must contain a key "transform_x", ' \
-                                                                                    'the transform method for the x-axis AND ' \
-                                                                                    'a key "transform_y", ' \
-                                                                                    'the transform method for the y-axis'
-
-            channels = [geom['x'], geom['y']]
-            mask = inside_ellipse(parent[channels].values,
-                                  center=tuple(geom['centroid']),
-                                  width=geom['width'],
-                                  height=geom['height'],
-                                  angle=geom['angle'])
-            pos = parent[mask]
-            if geom['definition'] == '+':
-                return pos.index
-            if geom['definition'] == '-':
-                return parent[~parent.index.isin(pos.index)].index.values
-            raise ValueError('Definition must have a value of "+" or "-" for a ellipse geom')
+            return self._update_ellipse(geom=geom, parent=parent)
 
         if geom['shape'] == 'poly':
-            keys = ['cords', 'transform_x', 'transform_y', 'x', 'y']
-            assert all([c in geom.keys() for c in keys]), f'Geom must contain keys {keys}'
-            assert type(geom.get('cords')) == dict, 'Cords should be of type dictionary with keys: x, y'
-            cords = geom.get('cords')
-            assert all([_ in cords.keys() for _ in ['x', 'y']]), 'Cords should contain keys: x, y'
+            return self._update_poly(geom=geom, x=x, y=y, parent=parent)
 
-            poly = Polygon([(x, y) for x, y in zip(cords['x'], cords['y'])])
-            pos = inside_polygon(parent, x, y, poly)
-            return pos.index
         raise ValueError('Geom shape not recognised, should be one of: threshold, 2d_threshold, ellipse, rect, poly')
 
     def edit_gate(self, gate_name: str, updated_geom: dict, delete: bool = True):
@@ -1205,7 +1234,9 @@ class Gating:
         self.filegroup.populations = updated_populations
         self.filegroup.save()
 
-    def save(self, overwrite: bool = False, feedback: bool = True) -> bool:
+    def save(self,
+             overwrite: bool = False,
+             feedback: bool = True) -> bool:
         """
         Save all gates and population's to mongoDB
 
