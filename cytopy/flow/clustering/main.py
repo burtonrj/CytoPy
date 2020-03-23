@@ -300,7 +300,7 @@ class Explorer:
 
         Returns
         -------
-        list
+        List
             list of labels
 
         """
@@ -628,7 +628,7 @@ class Clustering:
 
         Returns
         -------
-        list
+        List
             List of valid columns
         """
         f = self.ce.features
