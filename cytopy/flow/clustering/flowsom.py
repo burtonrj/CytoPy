@@ -12,7 +12,7 @@ class FlowSOM:
     ----------
     data : Pandas.DataFrame
         training data
-    features : list
+    features : List
         list of columns to include
     neighborhood_function : str
         name of distribution for initialising weights
