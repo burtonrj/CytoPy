@@ -86,7 +86,20 @@ class Gating:
 
         self.populations = self._construct_tree(fg=fg)
 
-    def _construct_tree(self, fg: FileGroup):
+    def _construct_tree(self,
+                        fg: FileGroup):
+        """
+        Internal function. Called on instantiation and constructs population tree.
+
+        Parameters
+        ----------
+        fg: FileGroup
+            Sample FileGroup object
+        Returns
+        -------
+        Dict
+            Returns dictionary of population Nodes
+        """
         populations = dict()
         if not fg.populations or len(fg.populations) == 1:
             control_cache = None
@@ -122,7 +135,8 @@ class Gating:
         """Remove all currently associated gates."""
         self.gates = dict()
 
-    def fetch_geom(self, population: str) -> dict:
+    def fetch_geom(self,
+                   population: str) -> dict:
         """Given the name of a population, retrieve the geom that defined this population
 
         Parameters
@@ -139,7 +153,8 @@ class Gating:
                                                       f'{self.populations.keys()}'
         return copy.deepcopy(self.populations[population].geom)
 
-    def population_size(self, population: str):
+    def population_size(self,
+                        population: str):
         """
         Returns in integer count for the number of events in a given population
 
@@ -157,7 +172,8 @@ class Gating:
                                                       f'{self.populations.keys()}'
         return len(self.populations[population].index)
 
-    def _deserialise_gate(self, gate: DataGate):
+    def _deserialise_gate(self,
+                          gate: DataGate):
         """
         Given some Gate document from the database, deserialise for use; re-instantiate ChildPopulationCollection
 
@@ -209,10 +225,13 @@ class Gating:
         available_classes = [Static, FMOGate, DensityBasedClustering, DensityThreshold, Quantile, MixtureModel]
         return {x.__name__: x for x in available_classes}
 
-    def get_population_df(self, population_name: str, transform: bool = False,
+    def get_population_df(self,
+                          population_name: str,
+                          transform: bool = False,
                           transform_method: str or None = 'logicle',
                           transform_features: list or str = 'all',
-                          label: bool = False, ctrl_id: str or None = None) -> pd.DataFrame or None:
+                          label: bool = False,
+                          ctrl_id: str or None = None) -> pd.DataFrame or None:
         """
         Retrieve a population as a pandas dataframe
 
@@ -263,7 +282,9 @@ class Gating:
             return apply_transform(data, features_to_transform=transform_features, transform_method=transform_method)
         return data
 
-    def valid_populations(self, populations: list, verbose: bool = True):
+    def valid_populations(self,
+                          populations: list,
+                          verbose: bool = True):
         """
         Given a list of populations, check validity and return list of valid populations
 
@@ -288,7 +309,10 @@ class Gating:
                 valid.append(pop)
         return valid
 
-    def search_ctrl_cache(self, target_population: str, ctrl_id: str, return_dataframe: bool = False):
+    def search_ctrl_cache(self,
+                          target_population: str,
+                          ctrl_id: str,
+                          return_dataframe: bool = False):
         """Search the control cache for a target population. Return either index of events belonging to target
         population in control data or Pandas DataFrame of target population from control data.
 
@@ -316,7 +340,10 @@ class Gating:
             return self.ctrl[ctrl_id].loc[idx]
         return self.populations[target_population].control_idx.get(ctrl_id)
 
-    def _predict_ctrl_population(self, target_population: str, ctrl_id: str, model: SVC or KNeighborsClassifier,
+    def _predict_ctrl_population(self,
+                                 target_population: str,
+                                 ctrl_id: str,
+                                 model: SVC or KNeighborsClassifier,
                                  mappings: dict or None = None):
         """Internal method. Predict a target population for a given control using the primary data as
         training data. Results are assigned to population node.
@@ -789,8 +816,11 @@ class Gating:
                                           control_idx=dict())
         return output
 
-    def apply_many(self, gates: list = None, apply_all: bool = False,
-                   plot_outcome: bool = False, feedback: bool = True) -> None:
+    def apply_many(self,
+                   gates: list = None,
+                   apply_all: bool = False,
+                   plot_outcome: bool = False,
+                   feedback: bool = True) -> None:
         """Apply multiple existing gates sequentially
 
         Parameters
@@ -831,20 +861,28 @@ class Gating:
             print('Complete!')
 
     @staticmethod
-    def geom_bool(geom: dict, definition: str, parent: pd.DataFrame):
+    def _geom_bool(geom: dict,
+                   definition: str,
+                   parent: pd.DataFrame):
         """
+        Internal function. Edit a population defined by two thresholds (in x-axis and y-axis plane).
+        Given some geom dictionary and a parent data-frame, parse the thresholds stored in the geom
+        and return index of parent data-frame when filtered according to thresholds
 
         Parameters
         ----------
-        geom
-        definition :
-
-        parent :
-
+        geom: dict
+            Dictionary of geometric description of gate. Expected to contain keys: x, y, threshold_x, threshold_y
+        definition : str
+            Definition associated to population that is being edited (e.g. '++' relates to a population that is
+            positive in both x and y dimension
+        parent : Pandas.DataFrame
+            Parent DataFrame that relates to the parent of the population being edited
 
         Returns
         -------
-
+        Numpy.array
+            Array of index values for new edited population
         """
         parent = parent.round(decimals=2)
         x_, y_ = geom['x'], geom['y']
@@ -860,7 +898,25 @@ class Gating:
         raise ValueError('Definition must have a value of "+-", "-+", "--", or "++" for a 2D threshold gate')
 
     @staticmethod
-    def _update_threshold_1d(geom: dict, parent: pd.DataFrame):
+    def _update_threshold_1d(geom: dict,
+                             parent: pd.DataFrame):
+        """
+        Internal function. Edit a population defined by a threshold (in x-axis plane).
+        Given some geom dictionary and a parent data-frame, parse the thresholds stored in the geom
+        and return index of parent data-frame when filtered according to thresholds
+
+        Parameters
+        ----------
+        geom: dict
+            Dictionary of geometric description of gate. Expected to contain keys: x, threshold, transform_x
+        parent : Pandas.DataFrame
+            Parent DataFrame that relates to the parent of the population being edited
+
+        Returns
+        -------
+        Numpy.array
+            Array of index values for new edited population
+        """
         assert 'threshold' in geom.keys(), 'Geom must contain a key "threshold" with a float value'
         assert 'transform_x' in geom.keys(), 'Geom must contain a key "transform_x", ' \
                                              'the transform method for the x-axis'
@@ -873,7 +929,26 @@ class Gating:
         raise ValueError('Definition must have a value of "+" or "-" for a 1D threshold gate')
 
     @staticmethod
-    def _update_rect(geom: dict, parent: pd.DataFrame):
+    def _update_rect(geom: dict,
+                     parent: pd.DataFrame):
+        """
+        Internal function. Edit a population defined by a rectangular gate.
+        Given some geom dictionary and a parent data-frame, parse the rectangular gate parameters stored in the geom
+        and return index of parent data-frame when filtered according to geom
+
+        Parameters
+        ----------
+        geom: dict
+            Dictionary of geometric description of gate. Expected to contain keys: x, y, transform_x, transform_y,
+            x_min, x_max, y_min, y_max
+        parent : Pandas.DataFrame
+            Parent DataFrame that relates to the parent of the population being edited
+
+        Returns
+        -------
+        Numpy.array
+            Array of index values for new edited population
+        """
         keys = ['x_min', 'x_max', 'y_min', 'y_max']
         assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
                                             'if population is the "positive" or "negative"'
@@ -895,7 +970,8 @@ class Gating:
         raise ValueError('Definition must have a value of "+" or "-" for a rectangular geom')
 
     @staticmethod
-    def _update_ellipse(geom: dict, parent: pd.DataFrame):
+    def _update_ellipse(geom: dict,
+                        parent: pd.DataFrame):
         keys = ['centroid', 'width', 'height', 'angle']
         assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
                                             'if population is the "positive" or "negative"'
@@ -922,7 +998,28 @@ class Gating:
         raise ValueError('Definition must have a value of "+" or "-" for a ellipse geom')##
 
     @staticmethod
-    def _update_poly(geom: dict, x: str, y: str, parent: pd.DataFrame):
+    def _update_poly(geom: dict,
+                     x: str,
+                     y: str,
+                     parent: pd.DataFrame):
+        """
+         Internal function. Edit a population defined by a polygon gate.
+         Given some geom dictionary and a parent data-frame, parse the polygon gate parameters stored in the geom
+         and return index of parent data-frame when filtered according to geom
+
+         Parameters
+         ----------
+         geom: dict
+             Dictionary of geometric description of gate. Expected to contain keys: x, y, transform_x, transform_y,
+             cords
+         parent : Pandas.DataFrame
+             Parent DataFrame that relates to the parent of the population being edited
+
+         Returns
+         -------
+         Numpy.array
+             Array of index values for new edited population
+         """
         keys = ['cords', 'transform_x', 'transform_y', 'x', 'y']
         assert all([c in geom.keys() for c in keys]), f'Geom must contain keys {keys}'
         assert type(geom.get('cords')) == dict, 'Cords should be of type dictionary with keys: x, y'
@@ -933,7 +1030,27 @@ class Gating:
         pos = inside_polygon(parent, x, y, poly)
         return pos.index
 
-    def _update_threshold_2d(self, geom: dict, parent: pd.DataFrame):
+    def _update_threshold_2d(self,
+                             geom: dict,
+                             parent: pd.DataFrame):
+        """
+        Internal function. Edit a population defined by a two thresholds (in x-axis and y-axis plane).
+        Given some geom dictionary and a parent data-frame, parse the thresholds stored in the geom
+        and return index of parent data-frame when filtered according to thresholds
+
+        Parameters
+        ----------
+        geom: dict
+            Dictionary of geometric description of gate. Expected to contain keys: x, y, threshold_x, threshold_y,
+            transform_x, transform_y
+        parent : Pandas.DataFrame
+            Parent DataFrame that relates to the parent of the population being edited
+
+        Returns
+        -------
+        Numpy.array
+            Array of index values for new edited population
+        """
         assert 'definition' in geom.keys(), 'Geom must contain key "definition", a string value that indicates ' \
                                             'if population is the "positive" or "negative"'
         assert all([t in geom.keys() for t in ['threshold_x', 'threshold_y']]), \
@@ -946,12 +1063,14 @@ class Gating:
                                                                          'the transform method for the y-axis'
 
         if type(geom['definition']) == list:
-            idx = list(map(lambda d: self.geom_bool(geom, d, parent), geom['definition']))
+            idx = list(map(lambda d: self._geom_bool(geom, d, parent), geom['definition']))
             return [i for l in idx for i in l]
         else:
-            return self.geom_bool(geom, geom['definition'], parent)
+            return self._geom_bool(geom, geom['definition'], parent)
 
-    def _update_index(self, population_name: str, geom: dict):
+    def _update_index(self,
+                      population_name: str,
+                      geom: dict):
         """Given some new gating geom and the name of a population to update, update the population index
 
         Parameters
@@ -998,7 +1117,10 @@ class Gating:
 
         raise ValueError('Geom shape not recognised, should be one of: threshold, 2d_threshold, ellipse, rect, poly')
 
-    def edit_gate(self, gate_name: str, updated_geom: dict, delete: bool = True):
+    def edit_gate(self,
+                  gate_name: str,
+                  updated_geom: dict,
+                  delete: bool = True):
         """Manually replace the outcome of a gate by updating the geom of it's child populations.
 
         Parameters
@@ -1035,7 +1157,10 @@ class Gating:
                 self.remove_population(c)
         print('Edit complete!')
 
-    def nudge_threshold(self, gate_name: str, new_x: float, new_y: float or None = None):
+    def nudge_threshold(self,
+                        gate_name: str,
+                        new_x: float,
+                        new_y: float or None = None):
         """
         Given some DensityThreshold gate, update the threshold calculated for child populations
 
@@ -1065,7 +1190,8 @@ class Gating:
                     geoms[c]['threshold_y'] = new_y
         self.edit_gate(gate_name, updated_geom=geoms)
 
-    def find_dependencies(self, population: str) -> list or None:
+    def find_dependencies(self,
+                          population: str) -> list or None:
         """For a given population find all dependencies
 
         Parameters
@@ -1087,7 +1213,9 @@ class Gating:
         node = self.populations[population]
         return [x.name for x in findall(root, filter_=lambda n: node in n.path)]
 
-    def remove_population(self, population_name: str, hard_delete: bool = False) -> None:
+    def remove_population(self,
+                          population_name: str,
+                          hard_delete: bool = False) -> None:
         """
         Remove a population
 
@@ -1114,7 +1242,9 @@ class Gating:
             self.filegroup.delete_populations(downstream_populations)
             self.filegroup = self.filegroup.save()
 
-    def remove_gate(self, gate_name: str, propagate: bool = True) -> list and list or None:
+    def remove_gate(self,
+                    gate_name: str,
+                    propagate: bool = True) -> list and list or None:
         """
         Remove gate
 
@@ -1153,7 +1283,9 @@ class Gating:
             self.gates.pop(g)
         return effected_gates, effected_populations
 
-    def print_population_tree(self, image: bool = False, image_name: str or None = None) -> None:
+    def print_population_tree(self,
+                              image: bool = False,
+                              image_name: str or None = None) -> None:
         """
         Generate a tree diagram of the populations associated to this Gating object and print to stdout
 
@@ -1178,7 +1310,8 @@ class Gating:
         for pre, fill, node in RenderTree(root):
             print('%s%s' % (pre, node.name))
 
-    def _population_to_mongo(self, population_name: str) -> Population:
+    def _population_to_mongo(self,
+                             population_name: str) -> Population:
         """
         Convert a population into a mongoengine Population document
 
@@ -1284,7 +1417,10 @@ class Gating:
             print('Saved successfully!')
         return True
 
-    def _cluster_idx(self, cluster_id: str, clustering_root: str, meta: bool = True):
+    def _cluster_idx(self,
+                     cluster_id: str,
+                     clustering_root: str,
+                     meta: bool = True):
         """Fetch the index of a given cluster/meta-cluster in associated sample
 
         Parameters
@@ -1319,13 +1455,24 @@ class Gating:
             fg.flags = 'invalid'
         fg.save()
 
-    def check_downstream_overlaps(self, root_population: str, population_labels: list) -> bool:
+    def check_downstream_overlaps(self,
+                                  root_population: str,
+                                  population_labels: list) -> bool:
         """
-        Internal method. Check if a chosen root population is downstream of target populations for classification.
-        This is a problem because if the root population is downstream then the model won't have access to the events
-        it needs to classify.
-        :param ref: Gating object whom's populations you wish to check
-        :return: True if overlaps exist, otherwise False
+        Check if a chosen root population is downstream of target populations (population_labels).
+
+        Parameters
+        ----------
+        root_population: str
+            Name of the root population (presumed parent)
+        population_labels: list
+            List of target populations. Each population in this list will be checked, asserting that
+            the population is downstream of the root_population
+
+        Returns
+        -------
+        bool
+            True if one or more populations has the root population downstream of itself, else False
         """
         downstream_overlaps = False
         for pop_i in population_labels:
@@ -1346,7 +1493,9 @@ class Gating:
 
 class Template(Gating):
     """Generate a reusable template for gating. Inherits all functionality of Gating class."""
-    def save_new_template(self, template_name: str, overwrite: bool = True) -> bool:
+    def save_new_template(self,
+                          template_name: str,
+                          overwrite: bool = True) -> bool:
         """Save template structure as a GatingStrategy
 
         Parameters
@@ -1391,7 +1540,8 @@ class Template(Gating):
             self.experiment.save()
             return True
 
-    def load_template(self, template_name: str) -> bool:
+    def load_template(self,
+                      template_name: str) -> bool:
         """Load gates from a template GatingStrategy
 
         Parameters
