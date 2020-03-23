@@ -6,7 +6,6 @@ from cytopy.data.mongo_setup import global_init
 from cytopy.data.panel import NormalisedName, Panel, create_regex
 from cytopy.data.fcs import File, FileGroup, ChannelMap
 from .utilities import make_example_date
-import numpy as np
 import unittest
 import sys
 
