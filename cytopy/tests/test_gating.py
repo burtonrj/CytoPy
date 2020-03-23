@@ -3,7 +3,6 @@ filterwarnings('ignore')
 # Data imports
 from ..data.project import Project
 from ..data.fcs import Population
-from ..data.gating import Gate as DataGate
 from ..data.mongo_setup import global_init
 # Gating imports
 from ..flow.gating.actions import Gating, ChildPopulationCollection
@@ -750,39 +749,164 @@ class TestGating(unittest.TestCase):
         y_hat = g.populations.get('positive').index.values
         self.assertListEqual(list(y), list(y_hat))
 
-
-    def test_update_idx(self):
-        pass
-
     def test_edit_gate(self):
-        pass
+        data = make_example_date(n_samples=100, centers=3, n_features=2)
+        g = self._build()
+        populations = ChildPopulationCollection(gate_type='geom')
+        populations.add_population('positive', definition='++')
+        populations.add_population('negative', definition=['--', '+-', '-+'])
+
+        # Threshold 2D
+        g.create_gate(gate_name='test',
+                      parent='root',
+                      class_='Static',
+                      method='threshold_2d',
+                      kwargs=dict(x='feature0',
+                                  y='feature1',
+                                  transform_x=None,
+                                  transform_y=None,
+                                  threshold_x=2.5,
+                                  threshold_y=-5),
+                      child_populations=populations)
+        g.apply('test', plot_output=False, feedback=False)
+        new_geom = {'positive': {'definition': '++',
+                                 'x': 'feature0',
+                                 'y': 'feature1',
+                                 'threshold_x': -2.5,
+                                 'threshold_y': 5},
+                    'negative': {'definition': ['--', '+-', '-+'],
+                                 'x': 'feature0',
+                                 'y': 'feature1',
+                                 'threshold_x': -2.5,
+                                 'threshold_y': 5}
+                    }
+        g.edit_gate('test', updated_geom=new_geom)
+        y = data[(data.feature0.round(2) >= -2.5) &
+                 (data.feature1.round(2) >= 5)].index.values
+        y_hat = g.populations.get('positive').index.values
+        self.assertListEqual(list(y), list(y_hat))
+
+        # Rectangular gate
+        g.create_gate(gate_name='test',
+                      parent='root',
+                      class_='Static',
+                      method='rect_gate',
+                      kwargs=dict(x='feature0',
+                                  y='feature1',
+                                  transform_x=None,
+                                  transform_y=None,
+                                  x_min=1.5,
+                                  x_max=8.0,
+                                  y_min=-5,
+                                  y_max=5.5),
+                      child_populations=populations)
+        g.apply('test', plot_output=False, feedback=False)
+        new_geom = {'positive': {'definition': '++',
+                                 'x': 'feature0',
+                                 'y': 'feature1',
+                                 'x_min': -12,
+                                 'x_max': -2.5,
+                                 'y_min': -12,
+                                 'y_max': 0},
+                    'negative': {'definition': ['--', '+-', '-+'],
+                                 'x': 'feature0',
+                                 'y': 'feature1',
+                                 'x_min': -12,
+                                 'x_max': -2.5,
+                                 'y_min': -12,
+                                 'y_max': 0}
+                    }
+        g.edit_gate('test', updated_geom=new_geom)
+        y = data[data.blobID == 2.0].index.values
+        y_hat = g.populations.get('positive').index.values
+        self.assertListEqual(list(y), list(y_hat))
+
+        # Ellipse gate
+        g.create_gate(gate_name='test',
+                      parent='root',
+                      class_='Static',
+                      method='ellipse_gate',
+                      kwargs=dict(x='feature0',
+                                  y='feature1',
+                                  transform_x=None,
+                                  transform_y=None,
+                                  centroid=(5.,2.5),
+                                  width=5,
+                                  height=5,
+                                  angle=0),
+                      child_populations=populations)
+        g.apply('test', plot_output=False, feedback=False)
+        new_geom = {'positive': {'definition': '++',
+                                 'x': 'feature0',
+                                 'y': 'feature1',
+                                 'centroid': (-8., -7.5),
+                                 'width': 5,
+                                 'height': 5,
+                                 'angle': 0},
+                    'negative': {'definition': ['--', '+-', '-+'],
+                                 'x': 'feature0',
+                                 'y': 'feature1',
+                                 'centroid': (-8., -7.5),
+                                 'width': 5,
+                                 'height': 5,
+                                 'angle': 0}
+                    }
+        g.edit_gate('test', updated_geom=new_geom)
+        y = data[data.blobID == 2.0].index.values
+        y_hat = g.populations.get('positive').index.values
+        self.assertListEqual(list(y), list(y_hat))
 
     def test_nudge_threshold(self):
-        pass
+        data = make_example_date(n_samples=100, centers=3, n_features=2)
+        g = self._dummy_gate(self._build())
+        g.nudge_threshold('test', new_x=-2.5, new_y=5)
+        y = data[(data.feature0.round(2) >= -2.5) &
+                 (data.feature1.round(2) >= 5)].index.values
+        y_hat = g.populations.get('positive').index.values
+        self.assertListEqual(list(y), list(y_hat))
 
     def test_find_dependencies(self):
-        pass
+        gate = self._build()
+        # Add dummy populations
+        a, b, c, d = self._dummy_pops()
+        gate.filegroup.populations = [gate.populations.get('root'), a, b, c, d]
+        gate.populations = gate._construct_tree(gate.filegroup)
+        self.assertListEqual(gate.find_dependencies('a'),
+                             ['a', 'b', 'c', 'd'])
 
     def test_remove_pop(self):
-        pass
-
-    def test_print_tree(self):
-        pass
+        gate = self._build()
+        a, b, c, d = self._dummy_pops()
+        gate.filegroup.populations = [gate.populations.get('root'), a, b, c, d]
+        gate.populations = gate._construct_tree(gate.filegroup)
+        gate.remove_population('c')
+        self.assertListEqual(list(gate.populations.keys()),
+                             ['root', 'a', 'b'])
 
     def test_pop_to_mongo(self):
-        pass
-
-    def test_save_ctrl_idx(self):
-        pass
+        g = self._add_population(self._build())
+        pop = g._population_to_mongo('positive')
+        self.assertEqual(type(pop), Population)
+        self.assertEqual('positive', pop.population_name)
+        self.assertEqual('root', pop.parent)
+        self.assertEqual(type(pop.geom), list)
 
     def test_save(self):
-        pass
-
-    def test_cluster_idx(self):
-        pass
+        g = self._build()
+        g.save()
+        g = self._build()
+        self.assertEqual(len(g.filegroup.populations), 1)
 
     def test_reg_as_invalid(self):
-        pass
+        g = self._build()
+        g.register_as_invalid()
+        g = self._build()
+        self.assertTrue('invalid' in g.filegroup.flags)
 
     def test_check_downstream_overlaps(self):
-        pass
+        gate = self._build()
+        a, b, c, d = self._dummy_pops()
+        gate.filegroup.populations = [gate.populations.get('root'), a, b, c, d]
+        gate.populations = gate._construct_tree(gate.filegroup)
+        self.assertTrue(gate.check_downstream_overlaps('d', population_labels=['c']))
+        self.assertFalse(gate.check_downstream_overlaps('a', population_labels=['c']))
