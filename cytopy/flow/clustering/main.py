@@ -12,7 +12,6 @@ from anytree import Node
 from matplotlib.colors import LogNorm
 from sklearn import preprocessing
 from sklearn.cluster import AgglomerativeClustering, KMeans
-from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -878,7 +877,8 @@ class SingleClustering(Clustering):
         return None
 
     def cluster(self):
-        """Perform clustering as described by the clustering definition. Results saved to internal attribute 'clusters'."""
+        """Perform clustering as described by the clustering definition.
+        Results saved to internal attribute 'clusters'."""
         cluster_assignments = super().cluster()
         for x in np.unique(cluster_assignments):
             mask = np.where(cluster_assignments == x)[0]
