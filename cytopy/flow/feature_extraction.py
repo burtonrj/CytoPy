@@ -37,6 +37,8 @@ class ControlComparisons:
                  gating_model: str = 'knn',
                  tree_map: dict or None = None,
                  **model_kwargs):
+        if samples is None:
+            samples = experiment.list_samples()
         self.experiment = experiment
         print('---- Preparing for control comparisons ----')
         print('If control files have not been gated prior to initiation, control gating will '

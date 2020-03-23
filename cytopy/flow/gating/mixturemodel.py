@@ -76,36 +76,6 @@ class MixtureModel(Gate):
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
         return self.child_populations
 
-    @staticmethod
-    def optimise_scaller(tp_medoid: tuple or np.array, eigen_val: float,
-                         eigen_vec: np.array, data: pd.DataFrame, channels: list):
-        """
-        Optimise the scaller value to multiply the eigen vector by determining the scale of the
-        confidence ellipse returned by the mixture model gating function - finds the point where
-        population size plateau's (see documentation for details)
-        :param tp_medoid: target population medoid
-        :param eigen_val: eigen value given by the mixture model
-        :param eigen_vec: eigen vector given by the mixture model
-        :param data: data being modelled
-        :param channels: name of columns of interest in data
-        :return: optimal scaller and ellipse index mask for resulting scaller
-        """
-        pop_size = []
-        masks = []
-        optimal_eigen_val = []
-        for scaler in range(1, 11, 1):
-            ev = scaler * np.sqrt(eigen_val)
-            u = eigen_vec[0] / linalg.norm(eigen_vec[0])
-            angle = 180. * np.arctan(u[1] / u[0]) / np.pi
-            optimal_eigen_val.append(ev)
-            m = inside_ellipse(data[channels].values, tuple(tp_medoid), ev[0], ev[1], 180.+angle)
-            masks.append(m)
-            pop_size.append(sum(m))
-        xx = list(range(1, 11, 1))
-        dy = np.diff(pop_size)/np.diff(xx)
-        ddy = np.diff(dy)
-        return optimal_eigen_val[ddy.argmax()], masks[ddy.argmax()]
-
     def create_ellipse(self, data, model, tp_idx):
         """
         Given a mixture model (scikit-learn object) and a desired confidence interval, generate mask for events
