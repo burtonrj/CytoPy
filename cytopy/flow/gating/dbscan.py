@@ -29,13 +29,18 @@ def meta_assignment(df: pd.DataFrame, meta_clusters: pd.DataFrame) -> pd.DataFra
 class DensityBasedClustering(Gate):
     """
     Class for Density based spatial clustering for applications with noise. Implements both DBSCAN and HDBSCAN
+
+    Parameters
+    ----------
+    min_pop_size: int
+        The minimum number of samples ("total weight") in a neighborhood for a point to be considered a core point.
+        (see Scikit-Learn user guide and https://hdbscan.readthedocs.io/en/latest/how_hdbscan_works.html for details)
+    tree: KDTree
+        Nearest neighbours tree used for associating target population to cluster
     """
-    def __init__(self, min_pop_size: int, **kwargs):
-        """
-        Constructor for DensityBasedClustering gating object
-        :param min_pop_size: minimum population size for a population cluster
-        :param kwargs: Gate constructor arguments (see cytopy.flow.gating.base)
-        """
+    def __init__(self,
+                 min_pop_size: int,
+                 **kwargs):
         super().__init__(**kwargs)
         self.min_pop_size = min_pop_size
         self.tree = KDTree(self.data[[self.x, self.y]].values, leaf_size=100)
@@ -44,9 +49,18 @@ class DensityBasedClustering(Gate):
         """
         Given a list of clustered samples, fit a KMeans model to find 'meta-clusters' that will allow for merging
         of samples into a single dataframe
-        :param clustered_chunks: list of pandas dataframes, each clustered using DBSCAN and cluster labels assigned
-        to a column named 'labels'
-        :return: reference dataframe that assigns each sample cluster to a meta-cluster
+
+        Parameters
+        -----------
+
+        clustered_chunks: list
+            list of pandas dataframes, each clustered using DBSCAN and cluster labels assigned
+            to a column named 'labels'
+
+        Returns
+        --------
+        Pandas.DataFrame
+            reference dataframe that assigns each sample cluster to a meta-cluster
         """
         # Calculate K (number of meta clusters) as the number of expected populations OR the median number of
         # clusters found in each sample IF this median is less that the number of expected populations
@@ -67,7 +81,26 @@ class DensityBasedClustering(Gate):
         cluster_centroids['meta_cluster'] = meta.labels_
         return cluster_centroids
 
-    def _dbscan_chunks(self, distance_nn, core_only):
+    def _dbscan_chunks(self,
+                       distance_nn: float,
+                       core_only: bool):
+        """
+        Perform DBSCAN across 'chunks' of original data set and perform meta-clustering to form a consensus.
+
+        Parameters
+        ----------
+        distance_nn: float
+            The maximum distance between two samples for one to be considered as in the neighborhood of the other.
+            (see http://scikit-learn.org/stable/modules/generated/sklearn.cluster.DBSCAN.html)
+        core_only: bool
+            If True, only data-points considered 'core samples' are kept
+            (see https://scikit-learn.org/stable/modules/clustering.html#dbscan)
+
+        Returns
+        -------
+        Pandas.DataFrame, dict
+            Meta-clustering results and polygon objects for each cluster
+        """
         # Break data into workable chunks
         chunks = self.generate_chunks(30000)
 
@@ -106,6 +139,20 @@ class DensityBasedClustering(Gate):
         return data, polygon_shapes
 
     def _post_cluster_checks(self, data):
+        """
+        Internal function. Check validity of clustering results: have distinct populations been found? Does the number
+        of clusters match the number of expected populations?
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Meta-clustering results
+
+        Returns
+        -------
+        Pandas.DataFrame
+            Meta-clustering results
+        """
         # Post clustering error checking
         if len(data['labels'].unique()) == 1:
             self.warnings.append('Failed to identify any distinct populations')
@@ -117,7 +164,26 @@ class DensityBasedClustering(Gate):
             self.warnings.append(f'Expected {n_children} populations, identified {n_clusters}')
         return data
 
-    def _dbscan_knn(self, distance_nn, core_only):
+    def _dbscan_knn(self, distance_nn: float, core_only):
+        """
+        Perform DBSCAN clustering on a sample of the target data. Train a KNN classifier on the clustering results
+        and then predict the cluster assignment for remaining data. Clustering results assigned to column named
+        'labels'.
+
+        Parameters
+        ----------
+        distance_nn: float
+            Maximum distance between two samples for one to be considered as in the neighborhood of the other
+            (see https://scikit-learn.org/stable/modules/clustering.html#dbscan)
+
+        core_only: bool
+            If True, only data-points considered 'core samples' are kept
+            (see https://scikit-learn.org/stable/modules/clustering.html#dbscan)
+
+        Returns
+        -------
+        None
+        """
         sample = self.sampling(self.data, 40000)
         model = DBSCAN(eps=distance_nn,
                        min_samples=self.min_pop_size,
@@ -137,10 +203,26 @@ class DensityBasedClustering(Gate):
 
     def dbscan(self, distance_nn: int or float, core_only: bool = False, chunks: bool =  False):
         """
-        Perform gating with dbscan algorithm
-        :param distance_nn: nearest neighbour distance (smaller value will create tighter clusters)
-        :param core_only: if True, only core samples in density clusters will be included
-        :return: Updated child populations with events indexing complete
+        Perform gating with Scikit-Learn implementation of DBSCAN algorithm
+        (https://scikit-learn.org/stable/modules/generated/sklearn.cluster.DBSCAN.html)
+
+        DBSCAN clustering is performed on a sample of the original data. The results this clustering are used
+        to train a KNN classifier. Remaining data is then assigned to clusters according to their proximity to clusters.
+        Once clusters have been established, target populations are associated to clusters according to how close
+        their approximated centroid is to cluster centroids.
+
+        Parameters
+        -----------
+        distance_nn: float
+            The maximum distance between neighbours for them to be considered part of the same cluster
+            (smaller value will create tighter clusters)
+        core_only: bool
+            if True, only core samples in density clusters will be included (see Scikit-learn documentation)
+
+        Returns
+        --------
+        ChildPopulationCollection
+            Updated child populations with events indexing complete
         """
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
@@ -156,12 +238,26 @@ class DensityBasedClustering(Gate):
         # Update child populations
         return self._assign_clusters(target_predictions, polygon_shapes)
 
-    def hdbscan(self, inclusion_threshold: float or None = None):
+    def hdbscan(self,
+                inclusion_threshold: float or None = None):
         """
-        Perform gating with hdbscan algorithm
-        :param inclusion_threshold: float value for minimum probability threshold for data inclusion; data below this
-        threshold will be classed as noise (Optional)
-        :return: Updated child populations with events indexing complete
+        Perform gating with HDBSCAN algorithm
+        (https://hdbscan.readthedocs.io/en/latest/how_hdbscan_works.html)
+
+        HDBSCAN clustering is performed on either the whole dataset or a sample of the dataset if specified.
+        If clustering is performed on a sample, a call to 'approximate_predict' is made for remaining data.
+        (https://hdbscan.readthedocs.io/en/latest/api.html#hdbscan.prediction.approximate_predict)
+
+        Parameters
+        -----------
+        inclusion_threshold: float, optional
+            float value for minimum probability threshold for data inclusion; data below this
+            threshold will be classed as noise
+
+        Returns
+        --------
+        ChildPopulationCollection
+            Updated child populations with events indexing complete
         """
         sample = None
         # If parent is empty just return the child populations with empty index array
@@ -188,7 +284,26 @@ class DensityBasedClustering(Gate):
         population_predictions = self._predict_pop_clusters(polygon_shapes)
         return self._assign_clusters(population_predictions, polygon_shapes)
 
-    def _match_pop_to_cluster(self, target_population: str, cluster_polygons: dict):
+    def _match_pop_to_cluster(self,
+                              target_population: str,
+                              cluster_polygons: dict):
+        """
+        Internal function. Match target populations to clusters. First target population is checked to
+        ensure that surrounding data-points are not all noise (neighbours checked = 1% of total events or 100 if
+        > 100). If the target has not been associated to noise, then associated population to cluster whom's
+        centroid is closest to the target centroid.
+
+        Parameters
+        ----------
+        target_population: str
+            Name of target population
+        cluster_polygons: dict
+            cluster polygons
+        Returns
+        -------
+        str
+            Label of cluster 'closest' to target population
+        """
         target = np.array(self.child_populations.populations[target_population].properties['target'])
         target_point = Point(target[0], target[1])
         # Check which clusters a target falls into
@@ -211,11 +326,16 @@ class DensityBasedClustering(Gate):
         distance_to_centroids = [(x, np.linalg.norm(target-c)) for x, c in cluster_centroids]
         return min(distance_to_centroids, key=lambda x: x[1])[0]
 
-    def _predict_pop_clusters(self, cluster_polygons):
+    def _predict_pop_clusters(self,
+                              cluster_polygons: dict):
         """
         Internal method. Predict which clusters the expected child populations belong to
         using the their polygon gate or the cluster centroid
-        :return: predictions {child population name: cluster label}
+
+        Returns
+        -------
+        dict
+            Predictions {child population name: cluster label}
         """
         if 'labels' not in self.data.columns:
             raise GateError('Method self.__generate_polygons called before cluster assignment')
@@ -249,11 +369,21 @@ class DensityBasedClustering(Gate):
             final_assignments[population[0]] = cluster
         return final_assignments
 
-    def _assign_clusters(self, target_predictions, polygon_shapes):
+    def _assign_clusters(self,
+                         target_predictions: dict,
+                         polygon_shapes: dict):
         """
         Internal method. Given child population cluster predictions, update index and geom of child populations
-        :param population_predictions: predicted clustering assignments {label: [population names]}
-        :return: child populations with updated index and geom values
+
+        Parameters
+        -----------
+        target_predictions:
+            Predicted clustering assignments {label: [population names]}
+
+        Returns
+        --------
+        ChildPopulationCollection
+            Child populations with updated index and geom values
         """
 
         for population_id, assigned_cluster in target_predictions.items():
