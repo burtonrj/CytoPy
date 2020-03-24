@@ -2,19 +2,30 @@ from .base import Gate, GateError
 
 
 class Quantile(Gate):
-    def __init__(self, q: float = 0.95, **kwargs):
-        """
-        Perform either 1D or 2D quantile gating
-        :param q: quantile for calculating threshold (float value between 0 and 1)
-        :param kwargs: Gate constructor arguments (see cytopy.flow.gating.base)
-        """
+    """
+    Perform either 1D or 2D quantile gating
+
+    Parameters
+    -----------
+    q: float
+        quantile to act as threshold (float value between 0 and 1)
+    kwargs:
+        Gate constructor arguments (see cytopy.flow.gating.base)
+    """
+    def __init__(self,
+                 q: float = 0.95,
+                 **kwargs):
         super().__init__(**kwargs)
         self.q = q
 
     def gate_1d(self):
         """
         Perform quantile gating in 1 dimensional space
-        :return: Updated child populations
+
+        Returns
+        -------
+        ChildPopulationCollection
+            Updated child populations
         """
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
@@ -26,7 +37,11 @@ class Quantile(Gate):
     def gate_2d(self):
         """
         Perform quantile gating in 2 dimensional space
-        :return: Updated child populations
+
+        Returns
+        --------
+        ChildPopulationCollection
+            Updated child populations
         """
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
