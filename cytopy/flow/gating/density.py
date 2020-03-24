@@ -7,21 +7,36 @@ import numpy as np
 
 
 class DensityThreshold(Gate):
-    def __init__(self, kde_bw: float = 0.01, ignore_double_pos: bool = False, std: float or None = None,
-                 q: float or None = 0.95, peak_threshold: float or None = None, **kwargs):
-        """
-        Threshold gating estimated using properties of the KDE of events data
-        :param q: if only 1 peak is found, quantile gating is performed using this argument as the quantile
-        :param std: alternative to quantile gating, the number of standard deviations from the mean can be used to
-        determine the threshold
-        :param kde_bw: bandwidth for gaussian kernel density smoothing
-        :param peak_threshold: if not None, then this value should be a float. This decimal value represents what the
-        minimum height of a peak should be relevant to the highest peak found (e.g. if peak_threshold=0.05, then all peaks
-        with a height < 0.05 of the heighest peak will be ignored)
-        :param ignore_double_pos: if True, in the case that multiple peaks are detected, peaks to the right of
+    """
+    Threshold gating estimated using properties of a Probability Density Function of events data as estimated
+    using Gaussian Kernel Density Estimation
+
+    Parameters
+    ----------
+    kde_bw: float, (default=0.01)
+     Bandwidth to use for gaussian kernel density estimation
+    ignore_double_pos: bool, (default=False)
+        if True, in the case that multiple peaks are detected, peaks to the right of
         the highest peak will be ignored in the local minima calculation
-        :param kwargs: Gate constructor arguments (see cytopy.flow.gating.base)
-        """
+    q: float, optional, (default=0.95)
+        if only 1 peak is found, quartile gating is performed using this argument as the quartile
+    std: float, optional
+        alternative to quartile gating, the number of standard deviations from the mean can be used to
+        determine the threshold
+    peak_threshold: float, optional
+        If not None, this decimal value represents what the minimum height of a peak should be relevant to the highest
+        peak found (e.g. if peak_threshold=0.05, then all peaks with a height < 0.05 of the heighest peak will be
+        ignored)
+    kwargs:
+        Gate constructor arguments (see cytopy.flow.gating.base)
+    """
+    def __init__(self,
+                 kde_bw: float = 0.01,
+                 ignore_double_pos: bool = False,
+                 std: float or None = None,
+                 q: float or None = 0.95,
+                 peak_threshold: float or None = None,
+                 **kwargs):
         super().__init__(**kwargs)
         self.kde_bw = kde_bw
         self.ignore_double_pos = ignore_double_pos
@@ -30,11 +45,20 @@ class DensityThreshold(Gate):
         self.peak_threshold = peak_threshold
         self.sample = self.sampling(self.data, 5000)
 
-    def _find_peaks(self, probs: np.array) -> np.array:
+    def _find_peaks(self,
+                    probs: np.array) -> np.array:
         """
-        Internal method. Perform peak finding (see scipy.signal.find_peaks for details)
-        :param probs: array of probability estimates generated using flow.gating.utilities.kde
-        :return: array of indices specifying location of peaks in `probs`
+        Internal function. Perform peak finding (see scipy.signal.find_peaks for details)
+
+        Parameters
+        -----------
+        probs: Numpy.array
+            array of probability estimates generated using flow.gating.utilities.kde
+
+        Returns
+        --------
+        Numpy.array
+            array of indices specifying location of peaks in `probs`
         """
         # Find peaks
         peaks = find_peaks(probs)[0]
@@ -42,15 +66,31 @@ class DensityThreshold(Gate):
             peaks = check_peak(peaks, probs, self.peak_threshold)
         return peaks
 
-    def _evaluate_peaks(self, data: pd.DataFrame, peaks: np.array, probs: np.array, xx: np.array) -> float and str:
+    def _evaluate_peaks(self,
+                        data: pd.DataFrame,
+                        peaks: np.array,
+                        probs: np.array,
+                        xx: np.array) -> float and str:
         """
-        Internal method. Given the outputs of `__find_peaks` and `__smooth` calculate the threshold to generate
+        Internal function. Given the outputs of `__find_peaks` and `__smooth` calculate the threshold to generate
         for gating. If a single peak (one population) is found use quantile or standard deviation. If multiple peaks
         are found (multiple populations) then look for region of minimum density.
-        :param peaks: array of indices specifying location of peaks in `probs`
-        :param probs: array of probability estimates generated using flow.gating.utilities.kde
-        :param xx: array of linear space kde calculated across
-        :return: threshold, method used to generate threshold
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Events data
+        peaks: Numpy.array
+            array of indices specifying location of peaks in `probs`
+        probs: Numpy.array
+            array of probability estimates generated using flow.gating.utilities.kde
+        xx: Numpy.array
+            array of linear space kde calculated across
+
+        Returns
+        --------
+        float and str
+            (threshold, method used to generate threshold)
         """
         method = ''
         threshold = None
@@ -86,23 +126,43 @@ class DensityThreshold(Gate):
                 method = 'Quantile'
         return threshold, method
 
-    def _calc_threshold(self, data: pd.DataFrame, x: str) -> float and str:
+    def _calc_threshold(self,
+                        data: pd.DataFrame,
+                        x: str) -> float and str:
         """
-        Internal method. Wrapper for calculating threshold for gating.
-        :param x: feature of interest for threshold calculation
-        :return: threshold, method used to generate threshold
+        Internal function Wrapper for calculating threshold for gating.
+
+        data: Pandas.DataFrame
+            Events data
+        x: str
+            feature of interest for threshold calculation
+
+        Returns
+        --------
+        float and str
+            (threshold, method used to generate threshold)
         """
         probs, xx = kde(data, x, self.kde_bw)
         peaks = self._find_peaks(probs)
         return self._evaluate_peaks(data, peaks, probs, xx)
 
-    def gate_1d(self, merge_options: str = 'overwrite') -> ChildPopulationCollection:
+    def gate_1d(self,
+                merge_options: str = 'overwrite') -> ChildPopulationCollection:
         """
-        Perform density based threshold gating in 1 dimensional space
-        :param merge_options: must have value of 'overwrite' or 'merge'. Overwrite: existing index values in child
-        populations will be overwritten by the results of the gating algorithm. Merge: index values generated from
-        the gating algorithm will be merged with index values currently associated to child populations
-        :return: Updated child population collection
+        Perform density based threshold gating in 1 dimensional space using the properties of a Probability
+        Density Function of the events data as estimated using Gaussian Kernel Density Estimation.
+
+        Parameters
+        ----------
+        merge_options: str
+            must have value of 'overwrite' or 'merge'. Overwrite: existing index values in child
+            populations will be overwritten by the results of the gating algorithm. Merge: index values generated from
+            the gating algorithm will be merged with index values currently associated to child populations
+
+        Returns
+        --------
+        ChildPopulationCollection
+            Updated child population collection
         """
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
@@ -119,8 +179,14 @@ class DensityThreshold(Gate):
 
     def gate_2d(self) -> ChildPopulationCollection:
         """
-        Perform density based threshold gating in 2 dimensional space
-        :return: Updated child population collection
+        Perform density based threshold gating in 2 dimensional space using the properties of a Probability
+        Density Function of the events data as estimated using Gaussian Kernel Density Estimation. KDE and threshold
+        calculation performed on each dimension separately.
+
+        Returns
+        --------
+        ChildPopulationCollection
+            Updated child population collection
         """
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
