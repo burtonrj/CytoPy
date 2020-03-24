@@ -6,8 +6,11 @@ import pandas as pd
 import phate
 
 
-def dimensionality_reduction(data: pd.DataFrame, features: list,
-                             method: str, n_components: int, return_embeddings_only: bool = False,
+def dimensionality_reduction(data: pd.DataFrame,
+                             features: list,
+                             method: str,
+                             n_components: int,
+                             return_embeddings_only: bool = False,
                              return_reducer: bool = False,
                              **kwargs) -> pd.DataFrame or np.array:
     """
@@ -15,15 +18,30 @@ def dimensionality_reduction(data: pd.DataFrame, features: list,
     the Scikit-Learn machine learning library.
     Documentation for UMAP can be found here: https://umap-learn.readthedocs.io/en/latest/
     Documentation for PHATE can be found here: https://phate.readthedocs.io/en/stable/
-    :param data: Pandas DataFrame of events to perform dim reduction on
-    :param features: column names for feature space
-    :param method: method to use; either UMAP, PCA, tSNE, or PHATE
-    :param n_components: number of components to generate
-    :param return_embeddings_only: if True, the embeddings are returned as a numpy array, otherwise original dataframe
-    is returned modified with new columns, one for each embedding
-    (column name of format {Method}_{i} where i = 0 to n_components)
-    :param kwargs: keyword arguments to pass to chosen dim reduction method
-    :return: Embeddings as numpy array or original DataFrame with new columns for embeddings
+
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+        Events to perform dim reduction on
+    features: list
+        column names for feature space
+    method: str
+        method to use; either UMAP, PCA, tSNE, or PHATE
+    n_components: int
+        number of components to generate
+    return_embeddings_only: bool, (default=True)
+        if True, the embeddings are returned as a numpy array, otherwise original dataframe
+        is returned modified with new columns, one for each embedding (column name of format {Method}_{i}
+        where i = 0 to n_components)
+    return_reducer: bool, (default=False)
+        If True, returns instance of dimensionality reduction object
+    kwargs:
+        keyword arguments to pass to chosen dim reduction method
+
+    Returns
+    --------
+    (Pandas.DataFrame or Numpy.array) or (Pandas.DataFrame or Numpy.array, Reducer)
+        Embeddings as numpy array or original DataFrame with new columns for embeddings
     """
     data = data.copy()
     if method == 'UMAP':
