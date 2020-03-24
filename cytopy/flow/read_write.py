@@ -7,13 +7,22 @@ import pandas as pd
 import json
 
 
-def chunks(df_list: list, n: int) -> pd.DataFrame:
+def chunks(df_list: list,
+           n: int) -> pd.DataFrame:
     """
     Yield successive n-sized chunks from l.
     ref: https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks
-    :param df_list: list of dataframes to generated 'chunks' from
-    :param n: number of chunks to generate
-    :return: Yields successive n-sized DataFrames
+
+    Parameters
+    -----------
+    df_list: list
+        list of DataFrames to generated 'chunks' from
+    n: int
+        number of chunks to generate
+    Returns
+    --------
+    generator
+        Yields successive n-sized DataFrames
     """
     for i in range(0, len(df_list), n):
         yield df_list[i:i + n]
@@ -22,8 +31,16 @@ def chunks(df_list: list, n: int) -> pd.DataFrame:
 def fcs_mappings(path: str) -> list or None:
     """
     Fetch channel mappings from fcs file.
-    :param path: path to fcs file
-    :return: List of channel mappings. Will return None if file fails to load.
+
+    Parameters
+    ------------
+    path: str
+        path to fcs file
+
+    Returns
+    --------
+    List or None
+        List of channel mappings. Will return None if file fails to load.
     """
     try:
         fo = FCSFile(path)
@@ -33,12 +50,22 @@ def fcs_mappings(path: str) -> list or None:
     return fo.fluoro_mappings
 
 
-def explore_channel_mappings(fcs_dir: str, exclude_comps: bool = True) -> list:
+def explore_channel_mappings(fcs_dir: str,
+                             exclude_comps: bool = True) -> list:
     """
     Given a directory, explore all fcs files and find all permutations of channel/marker mappings
-    :param fcs_dir: root directory to search
-    :param exclude_comps: exclude compentation files (must have 'comp' in filename)
-    :return: list of all unique channel/marker mappings
+
+    Parameters
+    ----------
+    fcs_dir: str
+        root directory to search
+    exclude_comps: bool, (default=True)
+        exclude compentation files (must have 'comp' in filename)
+
+    Returns
+    --------
+    List
+        list of all unique channel/marker mappings
     """
     fcs_files = filter_fcs_files(fcs_dir, exclude_comps)
     pool = Pool(cpu_count())
@@ -51,28 +78,14 @@ def explore_channel_mappings(fcs_dir: str, exclude_comps: bool = True) -> list:
 class FCSFile:
     """
     Utilising FlowIO to generate an object for representing an FCS file
-    Arguments:
-        - filepath: location of fcs file to parse
-        - comp_matrix: csv file containing compensation matrix (optional, not required if a
+
+    Parameters
+    -----------
+    filepath: str
+        location of fcs file to parse
+    comp_matrix: str
+        csv file containing compensation matrix (optional, not required if a
         spillover matrix is already linked to the file)
-    Attributes:
-        filename - embedded filenae
-        sys - name of system data acquired on
-        total_events - total events measured
-        tube_name - name of tube during acquisition
-        exp_name - name of experiment during acquisition
-        cytometer - name of Cytometer
-        creator - name of user that generated fcs file
-        fluoro_mappings - list of channel:marker mappings (list of dictionary objects)
-        cst_pass - True is CS&T registered as successful on day of acquisition
-        data - raw events data
-        event_data - numpy array of events data
-        dataframe - Pandas DataFrame of events data
-        threshold - threshold applied to each channel (list of dictionary {channel : threshold})
-        processing date - date data was acquired
-        spill - Pandas DataFrame corresponding to spillover matrix
-    Methods:
-        compensate - using embedded spillover matrix or provided spillover matrix, compensate the data
     """
     def __init__(self, filepath, comp_matrix=None):
         fcs = flowio.FlowData(filepath)
@@ -121,8 +134,16 @@ class FCSFile:
     def _get_fluoro_mapping(fluoro_dict: dict) -> list:
         """
         Generates a list of dictionary objects that describe the fluorochrome mappings in this FCS file
-        :param fluoro_dict: dictionary object from the channels param of the fcs file
-        :return: array of dict obj with keys 'channel' and 'marker'. Use to map fluorochrome channels to
+
+        Parameters
+        -----------
+        fluoro_dict: dict
+            dictionary object from the channels param of the fcs file
+
+        Returns
+        --------
+        List
+            List of dict obj with keys 'channel' and 'marker'. Use to map fluorochrome channels to
         corresponding marker
         """
         fm = [x for k, x in fluoro_dict.items()]
@@ -140,14 +161,21 @@ class FCSFile:
     def _get_spill_matrix(matrix_string: str) -> pd.DataFrame:
         """
         Generate pandas dataframe for the fluorochrome spillover matrix used for compensation calc
-        :param matrix_string: string value extracted from the 'spill' parameter of the FCS file
-        :return: numpy matrix
 
         Code is modified from: https://github.com/whitews/FlowUtils
         Pedersen NW, Chandran PA, Qian Y, et al. Automated Analysis of Flow Cytometry
         Data to Reduce Inter-Lab Variation in the Detection of Major Histocompatibility
         Complex Multimer-Binding T Cells. Front Immunol. 2017;8:858.
         Published 2017 Jul 26. doi:10.3389/fimmu.2017.00858
+
+        Parameters
+        -----------
+        matrix_string: str
+            string value extracted from the 'spill' parameter of the FCS file
+
+        Returns
+        --------
+        Pandas.DataFrame
         """
         matrix_list = matrix_string.split(',')
         n = int(matrix_list[0])
@@ -163,7 +191,10 @@ class FCSFile:
     def compensate(self):
         """
         Apply compensation to event data
-        :return: None
+
+        Returns
+        -------
+        None
         """
         # Remove FSC, SSC, and Time data for compensation
         assert self.spill is not None, f'Unable to locate spillover matrix, please provide a compensation matrix'
