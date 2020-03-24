@@ -4,19 +4,30 @@ from scipy.stats import norm
 import pandas as pd
 
 
-class FMOGate(DensityThreshold):
-    def __init__(self, fmo_x: pd.DataFrame, fmo_y: pd.DataFrame or None = None, fmo_z: pd.DataFrame or None = None,
-                 z_score_threshold: float = 2, **kwargs):
-        """
-        FMO guided density threshold gating
-        :param fmo_x: pandas dataframe of fcs data for x-dimensional FMO
-        :param fmo_y: pandas dataframe of fcs data for y-dimensional FMO (optional)
-        :param z_score_threshold: when multiple populations are identified in the whole panel sample the FMO gate
+class ControlGate(DensityThreshold):
+    """
+    Density threshold gating guided by a control (e.g. FMO or isotype control)
+
+    Parameters
+    -----------
+    fmo_x: Pandas.DataFrame
+        pandas dataframe of fcs data for x-dimensional control
+    fmo_y: Pandas.DataFrame, optional
+        pandas dataframe of fcs data for y-dimensional control
+    z_score_threshold: float (default=2.0)
+        when multiple populations are identified in the whole panel sample the control gate
         is used a guide for gating. A normal distribution is fitted to the data, with the mean set as the threshold
         calculated on the whole panel sample and an std of 1. Using this distribution a z-score is calculated for the
-        FMO threshold. If the z score exceeds z_score_threshold a warning is logged and the fmo is ignored.
-        :param kwargs: DensityThreshold constructor arguments (see cytopy.gating.density)
-        """
+        control threshold. If the z score exceeds z_score_threshold a warning is logged and the fmo is ignored.
+    kwargs:
+        DensityThreshold constructor arguments (see cytopy.gating.density)
+    """
+    def __init__(self,
+                 fmo_x: pd.DataFrame,
+                 fmo_y: pd.DataFrame or None = None,
+                 z_score_threshold: float = 2.,
+                 **kwargs):
+
         super().__init__(**kwargs)
         self.z_score_t = z_score_threshold
         self.fmo_x = fmo_x.copy()
@@ -29,13 +40,23 @@ class FMOGate(DensityThreshold):
             self.fmo_y = None
             self.sample_fmo_y = None
 
-    def fmo_1d(self, merge_options: str = 'overwrite') -> ChildPopulationCollection:
+    def fmo_1d(self,
+               merge_options: str = 'overwrite') -> ChildPopulationCollection:
         """
-        Perform FMO gating in 1 dimensional space
-        :param merge_options: must have value of 'overwrite' or 'merge'. Overwrite: existing index values in child
-        populations will be overwritten by the results of the gating algorithm. Merge: index values generated from
-        the gating algorithm will be merged with index values currently associated to child populations
-        :return: Updated child population collection
+        Perform control guided density based threshold gating in 1 dimensional space using the properties of a
+        Probability Density Function of the events data as estimated using Gaussian Kernel Density Estimation.
+
+        Parameters
+        ----------
+        merge_options: str
+            must have value of 'overwrite' or 'merge'. Overwrite: existing index values in child
+            populations will be overwritten by the results of the gating algorithm. Merge: index values generated from
+            the gating algorithm will be merged with index values currently associated to child populations
+
+        Returns
+        --------
+        ChildPopulationCollection
+            Updated child population collection
         """
         if self.empty_parent:
             return self.child_populations
@@ -54,13 +75,26 @@ class FMOGate(DensityThreshold):
         self.child_update_1d(threshold, method, merge_options)
         return self.child_populations
 
-    def __1d(self, whole: pd.DataFrame, fmo: pd.DataFrame, feature: str) -> float and str:
+    def __1d(self,
+             whole: pd.DataFrame,
+             fmo: pd.DataFrame,
+             feature: str) -> float and str:
         """
-        Internal method. Calculate FMO guided threshold gate in 1 dimensional space.
-        :param whole: pandas dataframe for events data in whole panel sample
-        :param fmo: pandas dataframe for events data in fmo sample
-        :param feature: name of the feature to perform gating on
-        :return: threshold, method used to obtain threshold
+        Internal function. Calculate control guided threshold gate in 1 dimensional space.
+
+        Parameters
+        -----------
+        whole: Pandas.DataFrame
+            pandas dataframe for events data in whole panel sample
+        fmo: Pandas.DataFrame
+            pandas dataframe for events data in control sample
+        feature: str
+            name of the feature to perform gating on
+
+        Returns
+        --------
+        float and str
+            (threshold, method used to obtain threshold)
         """
         if fmo.shape[0] == 0:
             raise GateError('No events in parent population in FMO!')
@@ -87,8 +121,14 @@ class FMOGate(DensityThreshold):
 
     def fmo_2d(self) -> ChildPopulationCollection:
         """
-        Perform FMO gating in 2-dimensional space
-        :return: Updated child populations
+        Perform control guided density based threshold gating in 2 dimensional space using the properties of a
+        Probability  Density Function of the events data as estimated using Gaussian Kernel Density Estimation.
+        KDE and threshold calculation performed on each dimension separately.
+
+        Returns
+        --------
+        ChildPopulationCollection
+            Updated child population collection
         """
         # If parent is empty just return the child populations with empty index array
         if self.empty_parent:
