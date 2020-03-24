@@ -1,4 +1,4 @@
-from cytopy.flow.gating.base import Gate, GateError
+from .base import Gate, GateError
 
 
 class Quantile(Gate):

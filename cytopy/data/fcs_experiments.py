@@ -3,7 +3,7 @@ from .subject import Subject
 from .gating import GatingStrategy
 from .utilities import data_from_file
 from .panel import Panel, ChannelMap
-from cytopy.flow.read_write import FCSFile
+from ..flow.read_write import FCSFile
 from multiprocessing import Pool, cpu_count
 from functools import partial
 import mongoengine

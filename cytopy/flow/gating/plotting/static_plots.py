@@ -1,7 +1,6 @@
 from ....data.gating import Gate
 from ....data.fcs import FileGroup
 from ...transforms import apply_transform
-from ..utilities import centroid
 from scipy.spatial import ConvexHull
 import matplotlib
 import matplotlib.pyplot as plt
