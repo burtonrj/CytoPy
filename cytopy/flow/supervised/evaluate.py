@@ -1,4 +1,4 @@
-from cytopy.flow.supervised.utilities import predict_class
+from .utilities import predict_class
 from sklearn.metrics import balanced_accuracy_score, precision_score, recall_score, f1_score, \
     label_ranking_average_precision_score, label_ranking_loss, classification_report, plot_confusion_matrix, \
     confusion_matrix

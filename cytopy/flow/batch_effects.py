@@ -1,7 +1,7 @@
-from cytopy.data.fcs_experiments import FCSExperiment
-from cytopy.flow.utilities import kde_multivariant, hellinger_dot, ordered_load_transform
-from flow.feedback import progress_bar
-from cytopy.flow.dim_reduction import dimensionality_reduction
+from ..data.fcs_experiments import FCSExperiment
+from .utilities import kde_multivariant, hellinger_dot, ordered_load_transform
+from .feedback import progress_bar
+from .dim_reduction import dimensionality_reduction
 from multiprocessing import Pool, cpu_count
 from functools import partial
 from scipy.stats import entropy as kl

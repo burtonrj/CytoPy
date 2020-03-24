@@ -1,6 +1,6 @@
-from cytopy.flow.gating.utilities import kde, check_peak, find_local_minima
-from cytopy.flow.gating.defaults import ChildPopulationCollection
-from cytopy.flow.gating.base import Gate, GateError
+from .utilities import kde, check_peak, find_local_minima
+from .defaults import ChildPopulationCollection
+from .base import Gate, GateError
 from scipy.signal import find_peaks
 import pandas as pd
 import numpy as np

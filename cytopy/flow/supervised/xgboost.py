@@ -1,4 +1,4 @@
-from cytopy.flow.supervised.cell_classifier import CellClassifier
+from .cell_classifier import CellClassifier
 from xgboost import XGBClassifier
 
 

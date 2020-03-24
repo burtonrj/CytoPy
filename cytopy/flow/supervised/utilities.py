@@ -1,4 +1,4 @@
-from cytopy.data.fcs_experiments import FCSExperiment
+from ...data.fcs_experiments import FCSExperiment
 from multiprocessing import Pool, cpu_count
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler
 from imblearn.over_sampling import RandomOverSampler

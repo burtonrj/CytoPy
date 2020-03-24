@@ -1,5 +1,5 @@
-from cytopy.flow.gating.base import Gate, GateError
-from cytopy.flow.gating.utilities import rectangular_filter, inside_ellipse
+from .base import Gate, GateError
+from .utilities import rectangular_filter, inside_ellipse
 
 
 class Static(Gate):
