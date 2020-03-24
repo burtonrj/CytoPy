@@ -8,8 +8,6 @@ from ..flow.clustering import main
 # Other tools
 from .utilities import make_example_date
 from sklearn.cluster import AgglomerativeClustering, KMeans
-import numpy as np
-import pandas as pd
 import unittest
 import sys
 
