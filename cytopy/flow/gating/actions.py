@@ -7,7 +7,7 @@ from ...data.fcs_experiments import FCSExperiment
 from ..transforms import apply_transform
 from .base import GateError
 from .static import Static
-from .fmo import FMOGate
+from .control import ControlGate
 from .density import DensityThreshold
 from .dbscan import DensityBasedClustering
 from .quantile import Quantile
@@ -222,7 +222,7 @@ class Gating:
         dict
             Class look-up dictionary
         """
-        available_classes = [Static, FMOGate, DensityBasedClustering, DensityThreshold, Quantile, MixtureModel]
+        available_classes = [Static, ControlGate, DensityBasedClustering, DensityThreshold, Quantile, MixtureModel]
         return {x.__name__: x for x in available_classes}
 
     def get_population_df(self,
