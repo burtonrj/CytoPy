@@ -1,5 +1,5 @@
-from cytopy.flow.gating.defaults import ChildPopulationCollection
-from cytopy.flow.gating.density import DensityThreshold, GateError
+from .defaults import ChildPopulationCollection
+from .density import DensityThreshold, GateError
 from scipy.stats import norm
 import pandas as pd
 
