@@ -3,21 +3,41 @@ from .utilities import rectangular_filter, inside_ellipse
 
 
 class Static(Gate):
-    def __init__(self, **kwargs):
-        """
-        Gating with static geometric objects
-        :param kwargs: Gate constructor arguments (see cytopy.flow.gating.base)
-        """
+    """
+    Gating with static geometric objects
+    
+    Parameters
+    -----------
+    kwargs: 
+        Gate constructor arguments (see cytopy.flow.gating.base)
+    """
+    def __init__(self,
+                 **kwargs):
         super().__init__(**kwargs)
 
-    def rect_gate(self, x_min: int or float, x_max: int or float, y_min: int or float, y_max: int or float):
+    def rect_gate(self,
+                  x_min: int or float,
+                  x_max: int or float,
+                  y_min: int or float,
+                  y_max: int or float):
         """
         Gate with a static rectangular gate
-        :param x_min: left x coordinate
-        :param x_max: right x coordinate
-        :param y_min: bottom y coordinate
-        :param y_max: top y coordinate
-        :return: Updated child populations
+        
+        Parameters
+        -----------
+        x_min: int or float
+            left x coordinate
+        x_max: int or float
+            right x coordinate
+        y_min:  int or float
+            bottom y coordinate
+        y_max:  int or float
+            top y coordinate
+
+        Returns
+        --------
+        ChildPopulationCollection
+            Updated child populations
         """
         if self.y is None:
             raise GateError('For a rectangular filter gate a value for `y` must be given')
@@ -35,7 +55,24 @@ class Static(Gate):
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
         return self.child_populations
 
-    def threshold_2d(self, threshold_x: float, threshold_y: float):
+    def threshold_2d(self,
+                     threshold_x: float,
+                     threshold_y: float):
+        """
+        Static two-dimensional threshold gate
+
+        Parameters
+        ----------
+        threshold_x: float
+            Threshold in x-axis plane
+        threshold_y: float
+            Threshold in y-axis plane
+
+        Returns
+        -------
+        ChildPopulationCollection
+            Updated child populations
+        """
         if self.empty_parent:
             return self.child_populations
         if self.y is None:
@@ -44,7 +81,30 @@ class Static(Gate):
         self.child_update_2d(threshold_x, threshold_y, method)
         return self.child_populations
 
-    def ellipse_gate(self, centroid: tuple, width: int or float, height: int or float, angle: int or float):
+    def ellipse_gate(self,
+                     centroid: tuple,
+                     width: int or float,
+                     height: int or float,
+                     angle: int or float):
+        """
+        Static elliptical gate
+
+        Parameters
+        ----------
+        centroid: tuple
+            Center of ellipse
+        width: int or float
+            Width of ellipse
+        height: int or float
+            Height of ellipse
+        angle: int or float
+            Angle of ellipse
+
+        Returns
+        -------
+        ChildPopulationCollection
+            Updated child populations
+        """
         if self.y is None:
             raise GateError('For a ellipse filter gate a value for `y` must be given')
         pos_mask = inside_ellipse(self.data[[self.x, self.y]].values, centroid, width, height, angle)
@@ -61,7 +121,25 @@ class Static(Gate):
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
         return self.child_populations
 
-    def border_gate(self, bottom_cutoff: float = 0.01, top_cutoff: float = 0.99):
+    def border_gate(self,
+                    bottom_cutoff: float = 0.01,
+                    top_cutoff: float = 0.99):
+        """
+        Generates a static boarder gate; a rectangular gate whom's height and width are upper and lower
+        quantiles of the underlying data
+
+        Parameters
+        ----------
+        bottom_cutoff: float, (default=0.01)
+            Lower quantile
+        top_cutoff: float, (default=0.99)
+            Upper quanitle
+
+        Returns
+        -------
+        ChildPopulationCollection
+            Updated child populations
+        """
         if self.y is None:
             raise GateError('For a border filter gate a value for `y` must be given')
         pos_pop = self.data.copy()
