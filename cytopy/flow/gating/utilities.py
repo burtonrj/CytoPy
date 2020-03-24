@@ -1,4 +1,4 @@
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
 from functools import partial
 from sklearn.neighbors import KernelDensity, KDTree
 import pandas as pd
@@ -6,12 +6,26 @@ import numpy as np
 import inspect
 
 
-def check_peak(peaks: np.array, probs: np.array, t=0.05) -> np.array:
-    """Check peaks against largest peak in list,
-    if peak < t*largest peak, then peak is removed
-    :param peaks: array of indices for peaks
-    :param probs: array of probability values of density estimate
-    :param t: height threshold as a percentage of highest peak"""
+def check_peak(peaks: np.array, 
+               probs: np.array,
+               t: float = 0.05) -> np.array:
+    """
+    Check peaks against largest peak in list, if peak < t*largest peak, then peak is removed
+
+    Parameters
+    -----------
+    peaks: Numpy.array
+        array of indices for peaks
+    probs: Numpy.array
+        array of probability values of density estimate
+    t: float, (default=0.05)
+        height threshold as a percentage of highest peak
+
+    Returns
+    --------
+    Numpy.array
+        Sorted peaks
+    """
     assert len(peaks) > 0, '"peak" array is empty'
     if peaks.shape[0] == 1:
         return peaks
@@ -24,13 +38,25 @@ def check_peak(peaks: np.array, probs: np.array, t=0.05) -> np.array:
     return np.sort(np.array(real_peaks))
 
 
-def find_local_minima(probs: np.array, xx: np.array, peaks: np.array) -> float:
+def find_local_minima(probs: np.array,
+                      xx: np.array,
+                      peaks: np.array) -> float:
     """
     Find local minima between the two highest peaks in the density distribution provided
-    :param probs: probability for density estimate
-    :param xx: x values for corresponding probabilities
-    :param peaks: array of indices for identified peaks
-    :return: local minima between highest peaks
+
+    Parameters
+    -----------
+    probs: Numpy.array
+        probability for density estimate
+    xx: Numpy.array
+        x values for corresponding probabilities
+    peaks: Numpy.array
+        array of indices for identified peaks
+
+    Returns
+    --------
+    float
+        local minima between highest peaks
     """
     sorted_peaks = np.sort(probs[peaks])[::-1]
     if sorted_peaks[0] == sorted_peaks[1]:
@@ -46,15 +72,28 @@ def find_local_minima(probs: np.array, xx: np.array, peaks: np.array) -> float:
     return xx[np.where(probs == local_min)[0][0]]
 
 
-def kde(data: pd.DataFrame, x: str,
-        kde_bw: float, kernel: str='gaussian') -> np.array:
+def kde(data: pd.DataFrame,
+        x: str,
+        kde_bw: float,
+        kernel: str = 'gaussian') -> np.array:
     """
     Generate a 1D kernel density estimation using the scikit-learn implementation
-    :param data: data for smoothing
-    :param x: column name for density estimation
-    :param kde_bw: bandwidth
-    :param kernel: kernel to use for estimation (see scikit-learn documentation)
-    :return: probability densities for array of 1000 x-axis values between min and max of data
+
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+        Data for smoothing
+    x: str
+        column name for density estimation
+    kde_bw: float
+        bandwidth
+    kernel: str, (default='gaussian')
+        kernel to use for estimation (see scikit-learn documentation)
+
+    Returns
+    --------
+    np.array
+        Probability density function for array of 1000 x-axis values between min and max of data
     """
     density = KernelDensity(bandwidth=kde_bw, kernel=kernel)
     d = data[x].values
@@ -64,18 +103,32 @@ def kde(data: pd.DataFrame, x: str,
     return np.exp(logprob), x_d
 
 
-def inside_ellipse(data: np.array, center: tuple,
-                   width: int or float, height: int or float,
+def inside_ellipse(data: np.array,
+                   center: tuple,
+                   width: int or float,
+                   height: int or float,
                    angle: int or float) -> object:
     """
     Return mask of two dimensional matrix specifying if a data point (row) falls
     within an ellipse
-    :param data - two dimensional matrix (x,y)
-    :param center - tuple of x,y coordinate corresponding to center of elipse
-    :param width - semi-major axis of eplipse
-    :param height - semi-minor axis of elipse
-    :param angle - angle of ellipse
-    :return numpy array of indices for values inside specified ellipse
+
+    Parameters
+    -----------
+    data: Numpy.array
+        two dimensional matrix (x,y)
+    center: tuple
+        x,y coordinate corresponding to center of elipse
+    width: int or float
+        semi-major axis of eplipse
+    height: int or float
+        semi-minor axis of elipse
+    angle: int or float
+        angle of ellipse
+
+    Returns
+    --------
+    Numpy.array
+        numpy array of indices for values inside specified ellipse
     """
     cos_angle = np.cos(np.radians(180.-angle))
     sin_angle = np.sin(np.radians(180.-angle))
@@ -103,16 +156,30 @@ def inside_ellipse(data: np.array, center: tuple,
     return in_ellipse
 
 
-def rectangular_filter(data: pd.DataFrame, x: str, y: str, definition: dict) -> pd.DataFrame or str:
+def rectangular_filter(data: pd.DataFrame,
+                       x: str,
+                       y: str,
+                       definition: dict) -> pd.DataFrame or str:
     """
     Given a pandas dataframe of fcs events data and a definition for a rectangular geom,
     filter the pandas dataframe and return only data contained within the rectangular geometric 2D plane
-    :param data: pandas dataframe of fcs data to filter
-    :param y: name of Y dimension (channel/marker name for column)
-    :param x: name of X dimension (channel/marker name for column)
-    :param definition: dictionary with keys: ['xmin', 'xmax', 'ymin', 'ymax'] each of integer/float value; see
-    static.rect_gate for conventions
-    :return: filtered pandas dataframe
+
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+        pandas dataframe of fcs data to filter
+    y: str
+        name of Y dimension (channel/marker name for column)
+    x: str
+        name of X dimension (channel/marker name for column)
+    definition: dict
+        dictionary with keys: ['xmin', 'xmax', 'ymin', 'ymax'] each of integer/float value; see
+        static.rect_gate for conventions
+
+    Returns
+    --------
+    Pandas.DataFrame
+        filtered pandas dataframe
     """
     data = data.copy()
     if not all([x in ['xmin', 'xmax', 'ymin', 'ymax'] for x in definition.keys()]):
@@ -123,6 +190,21 @@ def rectangular_filter(data: pd.DataFrame, x: str, y: str, definition: dict) -> 
 
 
 def multi_centroid_calculation(data: pd.DataFrame):
+    """
+    Given a DataFrame with column 'labels', pass over each unique value for 'labels' and subset data. For each
+    subset generate calculate the centroid.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+        Dataframe - must contain column name 'labels' and 'chunk_idx'
+
+    Returns
+    -------
+    Pandas.DataFrame
+        DataFrame with columns 'chunk_idx', 'cluster', 'x', and 'y', where 'x' and 'y' correspond
+        to the coordinates of the centroid.
+    """
     centroids = list()
     for c in data['labels'].unique():
         d = data[data['labels'] == c].values
@@ -132,36 +214,69 @@ def multi_centroid_calculation(data: pd.DataFrame):
     return pd.DataFrame(centroids)
 
 
-def __multiprocess_point_in_poly(df, x, y, poly):
+def __multiprocess_point_in_poly(df: pd.DataFrame,
+                                 x: str,
+                                 y: str,
+                                 poly: Polygon):
     """
     Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
-    :param df:
-    :param x:
-    :param y:
-    :param poly:
-    :return:
+
+    Parameters
+    ----------
+    df: Pandas.DataFrame
+        Data to query
+    x: str
+        name of x-axis plane
+    y: str
+        name of y-axis plane
+    poly: shapely.geometry.Polygon
+        Polygon object to search
+
+    Returns
+    --------
+    Pandas.DataFrame
+        Masked DataFrame containing only those rows that fall within the Polygon
     """
     mask = df.apply(lambda r: poly.contains(Point(r[x], r[y])), axis=1)
     return df.loc[mask]
 
 
-def inside_polygon(df, x, y, poly):
+def inside_polygon(df: pd.DataFrame,
+                   x: str,
+                   y: str,
+                   poly: Polygon):
     """
     Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
-    :param df:
-    :param x:
-    :param y: S
-    :param poly:
-    :return:
+
+    Parameters
+    ----------
+    df: Pandas.DataFrame
+        Data to query
+    x: str
+        name of x-axis plane
+    y: str
+        name of y-axis plane
+    poly: shapely.geometry.Polygon
+        Polygon object to search
+
+    Returns
+    --------
+    Pandas.DataFrame
+        Masked DataFrame containing only those rows that fall within the Polygon
     """
     xy = df[[x, y]].values
     pos_idx = list(map(lambda i: poly.contains(Point(i)), xy))
     return df.iloc[pos_idx]
 
 
-def density_dependent_downsample(data: pd.DataFrame, features: list, frac: float = 0.1, sample_n: int or None = None,
-                                 alpha: int = 5, mmd_sample_n: int = 2000,
-                                 outlier_dens: float = 1, target_dens: float = 5):
+def density_dependent_downsample(data: pd.DataFrame,
+                                 features: list,
+                                 frac: float = 0.1,
+                                 sample_n: int or None = None,
+                                 alpha: int = 5,
+                                 mmd_sample_n: int = 2000,
+                                 outlier_dens: float = 1,
+                                 target_dens: float = 5):
     """
     Perform density dependent down-sampling to remove risk of under-sampling rare populations;
     adapted from SPADE*
@@ -170,18 +285,34 @@ def density_dependent_downsample(data: pd.DataFrame, features: list, frac: float
     Peng Qiu-Erin Simonds-Sean Bendall-Kenneth Gibbs-Robert
     Bruggner-Michael Linderman-Karen Sachs-Garry Nolan-Sylvia Plevritis - Nature Biotechnology - 2011
 
-    :param features:
-    :param frac:fraction of dataset to return as a sample
-    :param alpha: used for estimating distance threshold between cell and nearest neighbour (default = 5 used in
-    original paper)
-    :param mmd_sample_n: number of cells to sample for generation of KD tree
-    :param outlier_dens: used to exclude cells with the lowest local densities; int value as a percentile of the
-    lowest local densities e.g. 1 (the default value) means the bottom 1% of cells with lowest local densities
-    are regarded as noise
-    :param target_dens: determines how many cells will survive the down-sampling process; int value as a
-    percentile of the lowest local densities e.g. 5 (the default value) means the density of bottom 5% of cells
-    will serve as the density threshold for rare cell populations
-    :return: Down-sampled pandas dataframe
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+        Data to sample
+    features: list
+        Name of columns to be used as features in down-sampling algorithm
+    frac: float, (default=0.1)
+        fraction of dataset to return as a sample
+    sample_n: int, optional
+        number of events to return in sample (used as alternative to frac)
+    alpha: int, (default=5)
+        used for estimating distance threshold between cell and nearest neighbour (default = 5 used in
+        original paper)
+    mmd_sample_n: int, (default=2000)
+        number of cells to sample for generation of KD tree
+    outlier_dens: float, (default=1)
+        used to exclude cells with the lowest local densities; int value as a percentile of the
+        lowest local densities e.g. 1 (the default value) means the bottom 1% of cells with lowest local densities
+        are regarded as noise
+    target_dens: float, (default=5)
+        determines how many cells will survive the down-sampling process; int value as a
+        percentile of the lowest local densities e.g. 5 (the default value) means the density of bottom 5% of cells
+        will serve as the density threshold for rare cell populations
+
+    Returns
+    -------
+    Pandas.DataFrame
+        Down-sampled pandas dataframe
     """
 
     def prob_downsample(local_d, target_d, outlier_d):
@@ -214,7 +345,26 @@ def density_dependent_downsample(data: pd.DataFrame, features: list, frac: float
     return df.sample(frac=frac, weights=prob)
 
 
-def get_params(klass, required_only=False, exclude_kwargs=True):
+def get_params(klass: object,
+               required_only: bool = False,
+               exclude_kwargs: bool = True):
+    """
+    Generate a list of parameters belonging to given class (klass).
+
+    Parameters
+    ----------
+    klass: class
+        Python class to extract parameters from
+    required_only: bool, (default=False)
+        If True, returns only parameters with no pre-defined default
+    exclude_kwargs: bool, (default=True)
+        If True, excludes **kwargs
+
+    Returns
+    -------
+    list
+        List of parameters (list of strings)
+    """
     if required_only:
         required_params = list(map(lambda x: [k for k, v in inspect.signature(x).parameters.items()
                                               if v.default is inspect.Parameter.empty],
@@ -228,7 +378,25 @@ def get_params(klass, required_only=False, exclude_kwargs=True):
     return required_params
 
 
-def centroid(data: np.array):
-    x = np.median(data[:, 0])
-    y = np.median(data[:, 1])
+def centroid(data: np.array,
+             method: callable or None = None):
+    """
+    Calculate centroid of a given 2-dimensional array
+
+    Parameters
+    ----------
+    data: Numpy.array
+        Data to calculate centroid for (must be 2-dimensional)
+    method: callable, (default=Numpy.median)
+        Method used to find center of each dimension
+
+    Returns
+    -------
+    Numpy.array
+        Centroid [x, y]
+    """
+    if method is None:
+        method = np.median
+    x = method(data[:, 0])
+    y = method(data[:, 1])
     return np.array([x, y])
