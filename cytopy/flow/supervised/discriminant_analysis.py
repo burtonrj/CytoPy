@@ -5,9 +5,10 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticD
 class DiscriminantAnalysis(CellClassifier):
     """
     Implement a discriminant analysis classifier for the purpose of predicting cell classification in
-    flow cytometry data
+    cytometry data
     """
-    def __init__(self, **kwargs):
+    def __init__(self,
+                 **kwargs):
         super().__init__(**kwargs)
         self.prefix = 'DiscriminantAnalysis'
         if self.class_weights is not None:
@@ -18,8 +19,15 @@ class DiscriminantAnalysis(CellClassifier):
         """
         Build LDA model. Implements Scikit-Learn's  Linear Discriminant Analysis classifier, see
         https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html
-        :param kwargs: additional keyword arguments for LinearDiscriminantAnalysis (see sklearn documentation)
-        :return: None
+
+        Parameters
+        -----------
+        kwargs:
+            additional keyword arguments for LinearDiscriminantAnalysis (see sklearn documentation)
+
+        Returns
+        --------
+        None
         """
         self.classifier = LinearDiscriminantAnalysis(**kwargs)
 
@@ -27,7 +35,14 @@ class DiscriminantAnalysis(CellClassifier):
         """
         Build QDA model. Implements Scikit-Learn's  Quadratic Discriminant Analysis classifier, see
         https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.QuadraticDiscriminantAnalysis.html
-        :param kwargs: additional keyword arguments for QuadraticDiscriminantAnalysis (see sklearn documentation)
-        :return: None
+
+        Parameters
+        ----------
+        kwargs:
+            additional keyword arguments for QuadraticDiscriminantAnalysis (see sklearn documentation)
+
+        Returns
+        --------
+        None
         """
         self.classifier = QuadraticDiscriminantAnalysis(**kwargs)
