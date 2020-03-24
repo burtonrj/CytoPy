@@ -48,7 +48,11 @@ class ControlComparisons:
         print('\n')
         self.samples = self._gate_samples(self._check_samples(samples), tree_map, gating_model, **model_kwargs)
 
-    def _gate_samples(self, samples: dict, tree_map, gating_model, **model_kwargs) -> dict:
+    def _gate_samples(self,
+                      samples: dict,
+                      tree_map,
+                      gating_model,
+                      **model_kwargs) -> dict:
         """
         Internal function. Pass samples in experiment. If they have not been previously gated, perform control gating.
 
@@ -92,7 +96,8 @@ class ControlComparisons:
                 samples[s]['gated'].append(ctrl)
         return {s: ctrls['gated'] for s, ctrls in samples.items()}
 
-    def _check_samples(self, samples: list):
+    def _check_samples(self,
+                       samples: list):
         """
         Internal function. Parses samples and checks that they are valid, that they have associated
         control data, and then returns a dictionary where the key is the sample name and the value a list
@@ -128,7 +133,27 @@ class ControlComparisons:
         return {s: {'all': self.experiment.pull_sample(s).list_controls(),
                     'gated': self.experiment.pull_sample(s).list_gated_controls()} for s in filtered_samples}
 
-    def _has_control_data(self, sample_id: str, marker: str, verbose: bool = False) -> bool:
+    def _has_control_data(self,
+                          sample_id: str,
+                          marker: str,
+                          verbose: bool = False) -> bool:
+        """
+        Check if a sample has control data
+
+        Parameters
+        ----------
+        sample_id: str
+            Sample ID of sample to check
+        marker: str
+            Name of control to check
+        verbose: bool, (default=False)
+            Feedback
+
+        Returns
+        -------
+        bool
+            True if control data present, else False
+        """
         assert sample_id in self.samples.keys(), 'Invalid sample_id'
         present_ctrls = self.samples.get(sample_id)
         if marker in present_ctrls:
@@ -137,16 +162,20 @@ class ControlComparisons:
             print(f'Warning: {sample_id} missing control data for {marker}')
         return False
 
-    def _fetch_data(self, sample_id: str, markers: list, population: str,
-                    transform: bool = True, transform_method: str = 'logicle') -> pd.DataFrame:
+    def _fetch_data(self,
+                    sample_id: str,
+                    markers: list,
+                    population: str,
+                    transform: bool = True,
+                    transform_method: str = 'logicle') -> dict:
         """
         Internal function. Parse all samples and fetch the given population, collecting data from both
-        the control(s) and the primary data. Return a Pandas DataFrame, where samples are identifiable by
-        the 'sample_id' column, controls from the 'data_source' column, and the events data itself transformed
-        as specified.
+        the control(s) and the primary data. Return a dictionary of Pandas DataFrames, where the key is the data type
+        (either primary or control) and the value the DataFrame of events data.
 
         Parameters
         ----------
+        sample_id: str
         markers: list
             List of one or many controls to fetch for each sample
         population: str
@@ -158,7 +187,7 @@ class ControlComparisons:
 
         Returns
         -------
-        Pandas.DataFrame
+        dict
             Pandas DataFrame, where samples are identifiable by
             the 'sample_id' column, controls from the 'data_source' column, and the events data itself transformed
             as specified.
@@ -189,7 +218,10 @@ class ControlComparisons:
         return reduce(lambda left, right: pd.merge(left, right, on=['marker'],
                                                    how='outer'), summary)
 
-    def _fold_change(self, data: dict, center_func: callable or None = None, sample_id: str or None = None) -> pd.DataFrame:
+    def _fold_change(self,
+                     data: dict,
+                     center_func: callable or None = None,
+                     sample_id: str or None = None) -> pd.DataFrame:
         """
         Internal function. Calculates the relative fold change in MFI between a control and
         the primary data. NOTE: this function expects only one control present in data.
@@ -198,7 +230,9 @@ class ControlComparisons:
         ----------
         data: Pandas.DataFrame
             As generated from self._get_data
-
+        center_func: callable, (default=Numpy.mean)
+            Function for calculating center of data
+        sample_id: str
         Returns
         -------
         Pandas.DataFrame
@@ -223,15 +257,25 @@ class ControlComparisons:
                      transform: bool = True,
                      transform_method: str = 'logicle',
                      stat: str = 'fold_change',
-                     center_function: callable or None =  None) -> pd.DataFrame:
+                     center_function: callable or None = None) -> pd.DataFrame:
         """
         Calculate a desired statistic for each marker currently acquired
 
         Parameters
         ----------
+        markers: list
+            List of markers to calculate statistic for
+        population: str
+            Population to calculate statistic for
+        transform: bool, (default=True)
+            If True, apply transfomration to data
+        transform_method: str, (default='logicle')
+            Transformation method to apply
         stat: str, (default = 'fold_change')
             Name of the statistic to calculate. Currently CytoPy version 0.0.1 only supports fold_change, which is
             the relative fold change in MFI between control and primary data. Future releases hope to include more.
+        center_function: callable, (default=Numpy.mean)
+            Function to use for calculating center of data
 
         Returns
         -------
@@ -254,7 +298,9 @@ class ControlComparisons:
         return results
 
 
-def meta_labelling(experiment: FCSExperiment, dataframe: pd.DataFrame, meta_label: str):
+def meta_labelling(experiment: FCSExperiment,
+                   dataframe: pd.DataFrame,
+                   meta_label: str):
     """
     Given a Pandas DataFrame and an FCSExperiment object, on the assumption that the DataFrame contains
     a column named 'sample_id' with the ID of samples associated to the given FCSExperiment, parse the sample
@@ -296,7 +342,19 @@ def meta_labelling(experiment: FCSExperiment, dataframe: pd.DataFrame, meta_labe
 
 
 class ExperimentProportions:
-    def __init__(self, experiment: FCSExperiment, samples: list or None = None):
+    """
+    Calculate proportion of populations/clusters for an experiment
+
+    Parameters
+    -----------
+    experiment: FCSExperiment
+        Experiment to calculate proportions for
+    samples: list, optional
+        List of samples to include, if not provided, will analyse all samples in experiment
+    """
+    def __init__(self,
+                 experiment: FCSExperiment,
+                 samples: list or None = None):
         self.experiment = experiment
         if not samples:
             self.samples = self.experiment.list_samples()
@@ -306,7 +364,21 @@ class ExperimentProportions:
                                                                            'given experiment'
             self.samples = samples
 
-    def raw_counts(self, populations: list):
+    def raw_counts(self,
+                   populations: list):
+        """
+        Collect raw counts of events in populations. Returns a DataFrame with columns 'sample_id',
+        '{population_name}'. Where the population column contains the raw counts.
+
+        Parameters
+        ----------
+        populations: list
+            Population names to collect raw counts of
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         populations = list(set(populations))
         results = {p: list() for p in populations}
         for s in self.samples:
@@ -318,8 +390,25 @@ class ExperimentProportions:
             except AssertionError as e:
                 print(f'Failed to retrieve data for {s}: {e}')
                 continue
+        return pd.DataFrame(results)
 
-    def population_proportions(self, parent: str, populations_of_interest: list):
+    def population_proportions(self,
+                               parent: str,
+                               populations_of_interest: list):
+        """
+        Retrieve the proportion of populations relative to some parent population
+
+        Parameters
+        ----------
+        parent: str
+            Name of parent population; proportion = population/parent
+        populations_of_interest: list
+            List of populations to retrieve proportional data for
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         populations_of_interest = list(set(populations_of_interest))
         results = pd.DataFrame()
         for s in self.samples:
@@ -330,9 +419,30 @@ class ExperimentProportions:
                 print(f'Failed to retrieve data for {s}: {e}')
         return results
 
-    def cluster_proportions(self, comparison_population: str, clusters_of_interest: list,
+    def cluster_proportions(self,
+                            comparison_population: str,
+                            clusters_of_interest: list,
                             clustering_definition: ClusteringDefinition,
                             merge_associated_clusters: bool = False):
+        """
+        Retrieve proportion of clusters relative to some comparison population
+
+        Parameters
+        ----------
+        comparison_population: str
+            Population to compare clusters to: proportion = cluster/comparison_population
+        clusters_of_interest: list
+            Clusters to collect proportions for
+        clustering_definition: ClusteringDefinition
+            ClusteringDefinition for clusters of interest
+        merge_associated_clusters: bool, (default=False)
+            If True, values in clusters_of_interest treated as like terms and clusters are merged on like terms
+            e.g. a value of 'CD4' would result in all clusters containing the term 'CD4' into one cluster
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         clusters_of_interest = list(set(clusters_of_interest))
         results = pd.DataFrame()
         for s in self.samples:
@@ -348,18 +458,63 @@ class ExperimentProportions:
 
 
 class Proportions:
-    def __init__(self, experiment: FCSExperiment, sample_id: str):
+    """
+    Calculate proportion of populations/clusters for a single sample
+
+    Parameters
+    -----------
+    experiment: FCSExperiment
+        Experiment sample associate to
+    sample_id: str
+    """
+    def __init__(self,
+                 experiment: FCSExperiment,
+                 sample_id: str):
         assert sample_id in experiment.list_samples(), f'{sample_id} not found for {experiment.experiment_id}, ' \
                                                        f'are you sure this is a valid sample?'
         self.experiment = experiment
         self.sample_id = sample_id
         self.file_group: FileGroup = self.experiment.pull_sample(self.sample_id)
 
-    def get_population_n(self, population: str):
+    def get_population_n(self,
+                         population: str):
+        """
+        Get raw counts of a single population
+
+        Parameters
+        ----------
+        population: str
+            Name of population
+
+        Returns
+        -------
+        Int
+            N events
+        """
         return self.file_group.get_population(population).n
 
-    def get_cluster_n(self, clustering_definition: ClusteringDefinition, cluster_id: str,
+    def get_cluster_n(self,
+                      clustering_definition: ClusteringDefinition,
+                      cluster_id: str,
                       merge_on_like_term: bool = False):
+        """
+        Get number of events in a single cluster
+
+        Parameters
+        ----------
+        clustering_definition: ClusteringDefinition
+            ClusteringDefinition for cluster of interest
+        cluster_id: str
+            ID for cluster of interest
+        merge_on_like_term: bool, (default=False)
+            If True, cluster_id treated as like terms and clusters are merged on like terms
+            e.g. a value of 'CD4' would result in all clusters containing the term 'CD4' into one cluster
+
+        Returns
+        -------
+        Int
+            N events
+        """
         root = self.file_group.get_population(clustering_definition.root_population)
         if merge_on_like_term:
             # Get a list of meta cluster IDs that contain the term of interest
@@ -377,7 +532,20 @@ class Proportions:
         except AssertionError:
             return 0
 
-    def _as_dataframe(self, results: dict):
+    def _as_dataframe(self,
+                      results: dict):
+        """
+        Convert results to DataFrame
+
+        Parameters
+        ----------
+        results: dict
+            Dictionary of results
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         results['sample_id'] = [self.sample_id]
         try:
             return pd.DataFrame(results)
@@ -385,7 +553,23 @@ class Proportions:
             print(f'Unable to convert dictionary to DataFrame: {results}')
             raise ValueError(e)
 
-    def get_pop_proportions(self, parent: str, populations_of_interest: list):
+    def get_pop_proportions(self,
+                            parent: str,
+                            populations_of_interest: list):
+        """
+        Get the proportion of events for populations
+
+        Parameters
+        ----------
+        parent: str
+            Parent population for comparison; proportion = population/parent
+        populations_of_interest: list
+            List of populations to calculate proportions for
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         results = {i: list() for i in populations_of_interest}
         population_n = {p: self.get_population_n(p) for p in populations_of_interest}
         parent_n = self.get_population_n(parent)
@@ -395,8 +579,30 @@ class Proportions:
             results[p].append(population_n.get(p)/parent_n)
         return self._as_dataframe(results)
 
-    def get_cluster_proportions(self, comparison_population: str, clusters_of_interest: list,
-                                clustering_definition: ClusteringDefinition, merge_associated_clusters: bool = False):
+    def get_cluster_proportions(self,
+                                comparison_population: str,
+                                clusters_of_interest: list,
+                                clustering_definition: ClusteringDefinition,
+                                merge_associated_clusters: bool = False):
+        """
+        Retrieve proportion of clusters relative to some comparison population
+
+        Parameters
+        ----------
+        comparison_population: str
+            Population to compare clusters to: proportion = cluster/comparison_population
+        clusters_of_interest: list
+            Clusters to collect proportions for
+        clustering_definition: ClusteringDefinition
+            ClusteringDefinition for clusters of interest
+        merge_associated_clusters: bool, (default=False)
+            If True, values in clusters_of_interest treated as like terms and clusters are merged on like terms
+            e.g. a value of 'CD4' would result in all clusters containing the term 'CD4' into one cluster
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         results = {i: list() for i in clusters_of_interest}
         cluster_n = {c: self.get_cluster_n(clustering_definition,
                                            cluster_id=c,
