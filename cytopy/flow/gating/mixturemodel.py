@@ -1,5 +1,5 @@
-from cytopy.flow.gating.utilities import inside_ellipse, rectangular_filter
-from cytopy.flow.gating.base import Gate, GateError
+from .utilities import inside_ellipse, rectangular_filter
+from .base import Gate, GateError
 from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
 from scipy import linalg, stats
 import pandas as pd
@@ -8,18 +8,38 @@ import math
 
 
 class MixtureModel(Gate):
-    def __init__(self, target: tuple = None, k: int = None, algo: str = 'gmm', conf: float = 0.95,
-                 rect_filter: dict or None = None, covar: str = 'full', **kwargs):
-        """
-        Gating using mixture models
-        :param target: centroid of target population (a rough estimate is fine)
-        :param k: estimated number of populations in data
-        :param method: mixture model method to use; can be either 'gmm' (gaussian) or 'bayesian'
-        :param conf: confidence interval for generating elliptical gate (small = tighter gate)
-        :param rect_filter: rectangular filter to apply to data prior to gating (optional)
-        :param covar: string describing the type of covariance parameters to use (see sklearn documentation for details)
-        :param kwargs: Gate constructor arguments (see cytopy.flow.gating.base)
-        """
+    """
+    Gating using Scikit-Learn implementations of mixture models (https://scikit-learn.org/stable/modules/mixture.html).
+    Algorithm fits one or more components to underlying distributions, selecting the component most inline with
+    the expected target population. An elliptical gate is generated that mirrors the probability surface of the fitted 
+    model.
+    
+    Parameters
+    ----------- 
+    target: tuple, optional
+        centroid of target population (a rough estimate is fine). If None, the component that describing the most
+        events will be chosen (i.e. the larget population will be captured by the elliptical gate)
+    k: int
+        estimated number of populations in data (i.e. the number of components)
+    method: str, (default='gmm')
+        mixture model method to use; can be either 'gmm' (gaussian) or 'bayesian'
+    conf: float, (default=0.95)
+        confidence interval for generating elliptical gate (small = tighter gate)
+    rect_filter: dict, optional
+        rectangular filter to apply to data prior to gating (see flow.gating.utilities.rectangular_filter)
+    covar: str, (default='full')
+        string describing the type of covariance parameters to use (see sklearn documentation for details)
+    kwargs:
+        Gate constructor arguments (see flow.gating.base)
+    """
+    def __init__(self,
+                 target: tuple = None,
+                 k: int = None,
+                 algo: str = 'gmm',
+                 conf: float = 0.95,
+                 rect_filter: dict or None = None,
+                 covar: str = 'full',
+                 **kwargs):
         super().__init__(**kwargs)
         self.sample = self.sampling(self.data, 5000)
         self.target = target
@@ -31,8 +51,12 @@ class MixtureModel(Gate):
 
     def gate(self):
         """
-        Apply gate
-        :return: Updated child populations
+        Calculate mixture model, generating gate and resulting populations.
+
+        Returns
+        -------
+        ChildPopulationCollection
+            Updated child population collection
         """
         data = self.data[[self.x, self.y]]
 
@@ -76,15 +100,25 @@ class MixtureModel(Gate):
         self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
         return self.child_populations
 
-    def create_ellipse(self, data, model, tp_idx):
+    def create_ellipse(self, data: pd.DataFrame,
+                       model: GaussianMixture or BayesianGaussianMixture,
+                       tp_idx: np.array) -> np.array and dict:
         """
         Given a mixture model (scikit-learn object) and a desired confidence interval, generate mask for events
         that fall inside the 'confidence' ellipse and a 'geom' object
-        :param data: parent population upon which the gate has been applied
-        :param model: scikit-learn object defining mixture model
-        :param tp_idx: index of component that corresponds to positive (target) population
-        :return: numpy array 'mask' of events that fall within the confidence ellipse and a parameters of ellipse
-        geom
+
+         data: Pandas.DataFrame
+            parent population upon which the gate has been applied
+         model: GaussianMixture or BayesianGaussianMixture
+            scikit-learn object defining mixture model
+         tp_idx: Numpy.array
+            index of component that corresponds to positive (target) population
+
+        Returns
+        -------
+        Numpy.array and dict
+            numpy array 'mask' of events that fall within the confidence ellipse and a parameters of ellipse
+            geom
         """
         eigen_val, eigen_vec = linalg.eigh(model.covariances_[tp_idx])
         tp_medoid = tuple(model.means_[tp_idx])
