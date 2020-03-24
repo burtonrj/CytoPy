@@ -1,6 +1,6 @@
-from cytopy.flow.supervised.cell_classifier import CellClassifier
+from .cell_classifier import CellClassifier
 from keras.models import Sequential
-from keras.layers import Input, Dense
+from keras.layers import Dense
 from keras.models import load_model
 from keras.regularizers import l2
 from keras import callbacks as cb

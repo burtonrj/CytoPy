@@ -1,7 +1,7 @@
 from mongoengine.base.datastructures import EmbeddedDocumentList
-from cytopy.data.fcs_experiments import FCSExperiment
-from cytopy.data.subject import Subject, MetaDataDictionary, gram_status, bugs, hmbpp_ribo, biology
-from cytopy.data.fcs import Cluster, Population, ClusteringDefinition
+from ...data.fcs_experiments import FCSExperiment
+from ...data.subject import Subject, MetaDataDictionary, gram_status, bugs, hmbpp_ribo, biology
+from ...data.fcs import Cluster, Population, ClusteringDefinition
 from ..supervised.utilities import scaler
 from ..gating.actions import Gating
 from ..feedback import progress_bar

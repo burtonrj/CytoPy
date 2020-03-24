@@ -1,5 +1,5 @@
 from multiprocessing import Pool, cpu_count
-from cytopy.data.utilities import filter_fcs_files
+from ..data.utilities import filter_fcs_files
 import flowio
 import dateutil.parser as date_parser
 import numpy as np

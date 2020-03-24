@@ -1,5 +1,5 @@
-from cytopy.data.fcs_experiments import FCSExperiment
-from cytopy.flow.transforms import apply_transform
+from ...data.fcs_experiments import FCSExperiment
+from ..transforms import apply_transform
 from .utilities import find_common_features
 from multiprocessing import Pool, cpu_count
 from functools import partial
