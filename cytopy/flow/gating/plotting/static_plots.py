@@ -85,7 +85,7 @@ class Plot:
 
     Parameters
     ----------
-    gating: Gating
+    gating_object: Gating
         Gating object to retrieve data from for plotting
     default_axis: str
         default value to attribute to y-axis

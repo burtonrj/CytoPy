@@ -22,13 +22,23 @@ import pandas as pd
 import numpy as np
 
 
-def _check_columns(data: pd.DataFrame, features: list) -> pd.DataFrame:
+def _check_columns(data: pd.DataFrame, 
+                   features: list) -> pd.DataFrame:
     """
     Given a dataframe and a list of expected features, print missing columns and return new dataframe
     with only valid features
-    :param data: DataFrame for checking
-    :param features: list of features (column names)
-    :return: new 'valid' DataFrame
+
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+        DataFrame for checking
+    features: list
+        list of features (column names)
+
+    Returns
+    ---------
+    Pandas.DataFrame
+        new 'valid' DataFrame
     """
     valid_features = [f for f in features if f in data.columns]
     if len(valid_features) < len(features):
@@ -37,17 +47,29 @@ def _check_columns(data: pd.DataFrame, features: list) -> pd.DataFrame:
     return data[valid_features]
 
 
-def multi_process_ordered(func: callable, x: iter, chunksize: int = 100) -> list:
+def multi_process_ordered(func: callable,
+                          x: iter,
+                          chunksize: int = 100) -> list:
     """
     Map a function (func) to some iterable (x) using multiprocessing. Iterable will be divided into chunks
     of size `chunksize`. The chunks will be given as a list of tuples, where the first value is the index of
     the chunk and the second value the chunk itself; this allows for ordered reassembly once processing has
     completed. For this reason, the function `func` MUST handle and return the index of the chunk upon which
     it acts.
-    :param func: callable function to applied in parallel
-    :param x: some iterable to apply the function to
-    :param chunksize: size of chunks for multiprocessing
-    :return: ordered list of funciton output
+
+    Parameters
+    -----------
+    func: callable
+        callable function to applied in parallel
+    x: iterable
+        some iterable to apply the function to
+    chunksize: int, (default=100)
+        size of chunks for multiprocessing
+
+    Returns
+    --------
+    list
+        ordered list of funciton output
     """
     def chunks(l: iter):
         for i in range(0, len(l), chunksize):
@@ -62,24 +84,44 @@ def multi_process_ordered(func: callable, x: iter, chunksize: int = 100) -> list
     return results
 
 
-def _assign_labels(x: tuple, labels: dict) -> tuple:
+def _assign_labels(x: tuple,
+                   labels: dict) -> tuple:
     """
     Internal function. Used for assigning a unique 'fake' label to each multi-label sequence in a set in
     a parallel process
-    :param x: tuple; (index of chunk, list of multi-label sequence's)
-    :param labels: dicitonary; {multi-label sequence: unique 'fake' label}
-    :return: tuple; (index of chunk, list of 'fake' labels)
+
+    Parameters
+    -----------
+    x: tuple
+        (index of chunk, list of multi-label sequence's)
+    labels: dict
+        {multi-label sequence: unique 'fake' label}
+
+    Returns
+    ---------
+    tuple
+        (index of chunk, list of 'fake' labels)
     """
     return x[0], [labels[np.array_str(s)] for s in x[1]]
 
 
-def __channel_mappings(features: list, panel: Panel) -> list:
+def _channel_mappings(features: list,
+                      panel: Panel) -> list:
     """
     Internal function. Given a list of features and a Panel object, return a list of ChannelMapping objects
     that correspond with the given Panel.
-    :param features: list of features to compare to Panel object
-    :param panel: Panel object of channel mappings
-    :return: list of ChannelMappings
+
+    Parameters
+    -----------
+    features: list
+        list of features to compare to Panel object
+    panel: Panel
+        Panel object of channel mappings
+
+    Returns
+    --------
+    list
+        list of ChannelMappings
     """
     mappings = list()
     panel_mappings = panel.mappings
@@ -107,20 +149,36 @@ def create_reference_sample(experiment: FCSExperiment,
                             sampling_method: str = 'uniform',
                             sample_n: int or float = 1000,
                             include_population_labels: bool = False,
-                            verbose=True) -> None:
+                            verbose: bool = True) -> None:
     """
     Given some experiment and a root population that is common to all fcs file groups within this experiment, take
     a sample from each and create a new file group from the concatenation of these data. New file group will be created
     and associated to the given FileExperiment object.
     If no file name is given it will default to '{Experiment Name}_sampled_data'
-    :param experiment: FCSExperiment object for corresponding experiment to sample
-    :param root_population: if the files in this experiment have already been gated, you can specify to sample
-    from a particular population e.g. Live CD3+ cells or Live CD45- cells
-    :param exclude: list of sample IDs for samples to be excluded from sampling process
-    :param new_file_name: name of file group generated
-    :param sampling_method: method to use for sampling files (currently only supports 'uniform')
-    :param sample_n: number or fraction of events to sample from each file
-    :return: None
+
+    Parameters
+    -----------
+    experiment: FCSExperiment
+        FCSExperiment object for corresponding experiment to sample
+    root_population: str
+        if the files in this experiment have already been gated, you can specify to sample
+        from a particular population e.g. Live CD3+ cells or Live CD45- cells
+    samples: list, optional
+        list of sample IDs for samples to be included (default = all samples in experiment)
+    new_file_name: str
+        name of file group generated
+    sampling_method: str, (default='uniform')
+        method to use for sampling files (currently only supports 'uniform')
+    sample_n: int, (default=1000)
+        number or fraction of events to sample from each file
+    include_population_labels: bool, (default=False)
+        If True, populations in the new file generated are inferred from the existing samples
+    verbose: bool, (default=True)
+        Whether to provide feedback
+
+    Returns
+    --------
+    None
     """
     def sample(d):
         if sampling_method == 'uniform':
@@ -138,8 +196,8 @@ def create_reference_sample(experiment: FCSExperiment,
         new_file_name = f'{experiment.experiment_id}_sampled_data'
     vprint('Finding features common to all fcs files...')
     features = find_common_features(experiment=experiment, samples=samples)
-    channel_mappings = __channel_mappings(features,
-                                          experiment.panel)
+    channel_mappings = _channel_mappings(features,
+                                         experiment.panel)
     data = pd.DataFrame()
     if include_population_labels:
         features.append('label')
@@ -187,33 +245,62 @@ def create_reference_sample(experiment: FCSExperiment,
 
 class CellClassifier:
     """
-    Class for performing classification of cells by supervised machine learning.
-    """
-    def __init__(self, experiment: FCSExperiment, reference_sample: str, population_labels: list, features: list,
-                 multi_label: bool = True, transform: str = 'logicle', root_population: str = 'root',
-                 threshold: float = 0.5, scale: str or None = 'standard',
-                 balance_method: None or str or dict = None, frac: float or None = None,
-                 downsampling_kwargs: dict or None = None, scale_kwargs: dict or None = None,
-                 verbose=True):
-        """
-        Constructor for CellClassifier
-        :param experiment: FCSExperiment for classification
-        :param reference_sample: sample ID for training sample (see 'create_reference_sample')
-        :param population_labels: list of populations for prediction (populations must be valid gated populations
+    Base class for performing classification of cells by supervised machine learning.
+
+    Parameters
+    -----------
+    experiment: FCSExperiment
+        FCSExperiment for classification
+    reference_sample: str
+        sample ID for training sample (see 'create_reference_sample')
+    population_labels: list
+        list of populations for prediction (populations must be valid gated populations
         that exist in the reference sample)
-        :param features: list of features (channel/marker column names) to include
-        :param multi_label: If True, cells can belong to multiple classes and the problem is treated as a
+    features: list
+        list of features (channel/marker column names) to include
+    multi_label: bool, (default=True)
+        If True, cells can belong to multiple classes and the problem is treated as a
         'multi-label' classification task. Labels will be binarised and a new 'fake' label generated for each
         unique instance of a cell label. This is important to account for correlations between individual labels.
-        :param transform: name of transform method to use (see flow.gating.transforms for info)
-        :param root_population: name of root population i.e. the population to derive training and test data from
-        :param threshold: minimum probability threshold to class as positive (default = 0.5)
-        :param scale: how to scale the data prior to learning; either 'Standardise', 'Normalise' or None.
+    transform: str, (default='logicle')
+        name of transform method to use (see flow.gating.transforms for info)
+    root_population: str, (default='root')
+        name of root population i.e. the population to derive training and test data from
+    threshold: float, (default=0.5)
+        minimum probability threshold to class as positive
+    scale: str, (default='standard')
+        how to scale the data prior to learning; either 'Standardise', 'Normalise' or None.
         Standardise scales using the standard score, removing the mean and scaling to unit variance
         (https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html)
         Normalise scales data between 0 and 1 using the MinMaxScaler
         (https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html)
-        """
+    balance_method: str or dict, optional
+        Methodology to use to combat class imbalance; either a dictionary of class weights or one of the following:
+        - 'density': density dependent downsampling is performed using keyword arguments provided in 'downsample_kwargs'
+        - 'oversample': classes balanced by oversampling underrepresented classes
+        'auto_weights': weights are calculated automatically using scikit-learn compute_class_weight function
+    scale_kwargs: dict, optional
+        keyword arguments to pass to scaling function
+    frac: float, optional
+        If provided, data will be downsampled to given fraction prior to classification
+    downsample_kwargs: dict, optional
+        keyword arguments to be passed to density dependent downsampling
+    """
+    def __init__(self,
+                 experiment: FCSExperiment,
+                 reference_sample: str,
+                 population_labels: list,
+                 features: list,
+                 multi_label: bool = True,
+                 transform: str = 'logicle',
+                 root_population: str = 'root',
+                 threshold: float = 0.5,
+                 scale: str or None = 'standard',
+                 balance_method: None or str or dict = None,
+                 frac: float or None = None,
+                 downsampling_kwargs: dict or None = None,
+                 scale_kwargs: dict or None = None,
+                 verbose=True):
         self.vprint = print if verbose else lambda *a, **k: None
         self.vprint('Constructing cell classifier object...')
         self.experiment = experiment
@@ -270,15 +357,29 @@ class CellClassifier:
             self.class_weights = list(map(lambda x: balance_method[x], self.train_y))
         self.vprint('Ready for training!')
 
-    def _binarize_labels(self, ref: Gating, features: list, root_pop: str) -> (pd.DataFrame, np.array):
+    def _binarize_labels(self,
+                         ref: Gating,
+                         features: list,
+                         root_pop: str) -> (pd.DataFrame, np.array):
         """
         Generate feature space and labels when a cell can belong to multiple populations. Labels are returned as a
         one-hot encoded sequence for each cell that represents the populations that cell belongs to (e.g for the
         population labels ['CD3+', 'CD4+', 'CD8+'] an encoding of [1,0,1] would be a CD3+CD8+ cell type.
         (multi-label learning)
-        :param ref: Gating object to retrieve data from
-        :param features: list of features for training
-        :return: DataFrame of feature space, array of target labels
+
+        Parameters
+        -----------
+        ref: Gating
+            Gating object to retrieve data from
+        features: list
+            list of features for training
+        root_pop: str
+            name of the root population
+
+        Returns
+        --------
+        Pandas.DataFrame
+            DataFrame of feature space, array of target labels
         """
         root = _check_columns(ref.get_population_df(root_pop,
                                                     transform=True,
@@ -290,7 +391,10 @@ class CellClassifier:
             root.loc[ref.populations[pop].index, pop] = 1
         return root[self.features].values, root[self.population_labels].values
 
-    def multiclass_labels(self, ref: Gating, features: list, root_pop: str) -> (pd.DataFrame, np.array, dict):
+    def multiclass_labels(self,
+                          ref: Gating,
+                          features: list,
+                          root_pop: str) -> (pd.DataFrame, np.array, dict):
         """
         Generate feature space and labels for a multi-label multi-class classification problem and handle the
         multi-label aspect of this problem by converting multi-label signatures to single labels. This can be important
@@ -298,9 +402,20 @@ class CellClassifier:
         a cell that is CD4+, CD3- will have a very different meaning to a cell that is CD4+ CD3+. The problem is
         converted to a multi class, single label classification by converting each unique one-hot encoded representation
         to a 'fake label'.
-        :param ref: Gating object to retrieve data from
-        :param features: list of features for training
-        :return: DataFrame of feature space, array of target labels, and a dictionary of cell population mappings
+
+        Parameters
+        -----------
+        ref: Gating
+            Gating object to retrieve data from
+        features: list
+            list of features for training
+        root_pop: str
+            name of the root population
+
+        Returns
+        --------
+        Pandas.DataFrame
+            DataFrame of feature space, array of target labels, and a dictionary of cell population mappings
         """
         train_X, train_y = self._binarize_labels(ref, features, root_pop)
         labels = {np.array2string(x): i for i, x in enumerate(np.unique(train_y, axis=0))}
@@ -313,12 +428,24 @@ class CellClassifier:
         mappings = {k: v if len(v) > 0 else np.array(['None']) for k, v in mappings.items()}
         return train_X, train_y, mappings
 
-    def singleclass_labels(self, ref: Gating, features: list, root_pop: str) -> (pd.DataFrame, np.array, dict):
+    def singleclass_labels(self,
+                           ref: Gating,
+                           features: list,
+                           root_pop: str) -> (pd.DataFrame, np.array, dict):
         """
         Generate feature space and labels where a cell can belong to only one population
-        :param ref: Gating object to retrieve data from
-        :param features: list of features for training
-        :return: DataFrame of feature space, array of target labels, mappings of cell population labels
+
+        ref: Gating
+            Gating object to retrieve data from
+        features: list
+            list of features for training
+        root_pop: str
+            name of the root population
+
+        Returns
+        --------
+        (Pandas.DataFrame, Numpy.array, dict)
+            DataFrame of feature space, array of target labels, mappings of cell population labels
         """
         if ref.check_downstream_overlaps(root_pop, self.population_labels):
             raise ValueError('Error: one or more population dependency errors')
@@ -331,16 +458,44 @@ class CellClassifier:
             mappings[i+1] = np.array([pop])
         return root, y, mappings
 
-    def train_test_split(self, test_size=0.3) -> list:
+    def train_test_split(self,
+                         test_size: float = 0.3) -> list:
         """
         Create train/test split of data using Sklearn's train_test_split function
         (https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.html)
-        :param test_size: size of test population as a proportion of the the dataset (default = 0.3)
-        :return: List containing train-test split of inputs.
+
+        Parameters
+        -----------
+        test_size: float
+            size of test population as a proportion of the the dataset (default = 0.3)
+
+        Returns
+        --------
+        list
+            List containing train-test split of inputs.
         """
         return train_test_split(self.train_X, self.train_y, test_size=test_size, random_state=42)
 
-    def _build_tree(self, label, tree, root_pop):
+    def _build_tree(self,
+                    label: str,
+                    tree: dict,
+                    root_pop: str):
+        """
+        Internal function. Build population tree as a valid dictionary of anytree objects
+
+        Parameters
+        ----------
+        label: str
+            Name of population
+        tree: dict
+            Classification tree
+        root_pop: str
+            Name of the root population
+
+        Returns
+        -------
+        dict
+        """
         if not tree.get(f'{self.prefix}_{label[0]}'):
             tree[f'{self.prefix}_{label[0]}'] = Node(f'{self.prefix}_{label[0]}',
                                                      parent=tree[root_pop],
@@ -353,7 +508,30 @@ class CellClassifier:
                                                     collection=ChildPopulationCollection(gate_type='sml'))
         return tree
 
-    def _create_populations(self, tree, branch, y_hat, target, root_pop, mappings, parent_idx=None):
+    def _create_populations(self,
+                            tree: dict,
+                            branch: Node,
+                            y_hat: np.array,
+                            target: Gating,
+                            root_pop: str,
+                            mappings: dict):
+        """
+        Internal function. Recursively transverse population tree and update index
+
+        Parameters
+        ----------
+        tree: dict
+        branch: Node
+        y_hat: Numpy.array
+        target: Gating
+        root_pop: str
+        mappings: dict
+
+        Returns
+        -------
+        dict
+            Completed tree
+        """
         tree[branch.name].collection.add_population(name=branch.name)
         tree[branch.name].collection.populations[branch.name].update_geom(shape='sml', x=None, y=None)
         labels = [x[0] for x in mappings.items() if any([branch.name == l for l in x[1]])]
@@ -367,13 +545,27 @@ class CellClassifier:
             tree = self._create_populations(tree, child, y_hat, target, root_pop, mappings)
         return tree
 
-    def _save_gating(self, target: Gating, y_hat: np.array, root_pop: str) -> Gating:
+    def _save_gating(self,
+                     target: Gating,
+                     y_hat: np.array,
+                     root_pop: str) -> Gating:
         """
         Internal method. Given some Gating object of the target file for prediction and the predicted labels,
         generate new population objects and insert them into the Gating object
-        :param target: Gating object of the target file
-        :param y_hat: array of predicted population labels
-        :return: None
+
+        Parameters
+        -----------
+
+        target: Gating
+            Gating object of the target file
+        y_hat: Numpy.array
+            array of predicted population labels
+        root_pop: str
+            Name of the root population
+
+        Returns
+        --------
+        Gating
         """
         tree = {root_pop: Node(root_pop)}
         for pops in self.mappings.values():
@@ -390,15 +582,27 @@ class CellClassifier:
             target.update_populations(tree[node].collection, parent, parent_name=parent_name, warnings=[])
         return target
 
-    def predict(self, target_sample: str, return_gating: bool = True,
+    def predict(self,
+                target_sample: str,
+                return_gating: bool = True,
                 root_population: str or None = None) -> Gating or (np.array, np.array):
         """
         Given a sample ID, predict cell populations. Model must already be trained. Results are saved as new
         populations in a Gating object returned to the user.
-        :param return_gating:
-        :param root_population:
-        :param target_sample: Name of file for prediction. Must belong to experiment associated to CellClassifier obj.
-        :return: Gating object containing new predicted populations.
+
+        Parameters
+        ------------
+        target_sample: str
+            Name of file for prediction. Must belong to experiment associated to CellClassifier obj.
+        return_gating: bool, (default=True)
+            If True, returns the modified Gating object with predicted populations contained within
+        root_population: str
+            Name of root population
+
+        Returns
+        --------
+        Gating or (Numpy.array, Numpy.array)
+            Gating object containing new predicted populations or tuple of (predicted probabilities, predicted labels)
         """
         assert self.classifier is not None, 'Model must be trained prior to prediction'
         root_pop = root_population
@@ -417,32 +621,46 @@ class CellClassifier:
             return self._save_gating(target, y_hat, root_pop)
         return y_probs, y_hat
 
-    @staticmethod
-    def _exclude_class(x, y, mappings, exclude_class):
-        exclude_class = [np.array(x) for x in exclude_class]
-        mappings = {k: v for k, v in mappings.items() if not any([np.array2string(v) == np.array2string(x) for x in exclude_class])}
-        mask = [c in mappings.keys() for c in y]
-        y = y[mask]
-        x = x[mask]
-        return x, y, mappings
-
-    def _fit(self, x, y, **kwargs):
+    def _fit(self,
+             x: np.array,
+             y: np.array,
+             **kwargs):
         """
         Fit the model. Should be called internally.
-        :param x: feature space
-        :param y: target labels
-        :param kwargs: keyword arguments t
-        :return:
+
+        Parameters
+        -----------
+        x: Numpy.array
+            feature space
+        y: Numpy.array
+            target labels
+        kwargs:
+            keyword arguments to pass to call to MODEL.fit()
+
+        Returns
+        --------
+        None
         """
         assert self.classifier is not None, 'Must construct classifier prior to calling `fit` using the `build` method'
         self.classifier.fit(x, y, **kwargs)
 
-    def train_cv(self, k: int = 5, **kwargs) -> pd.DataFrame:
+    def train_cv(self,
+                 k: int = 5,
+                 **kwargs) -> pd.DataFrame:
         """
         Fit classifier to training data using cross-validation
-        :param k: Number of folds for cross-validation (default = 5)
-        :param kwargs: kwargs: Optional additional kwargs for model fit.
-        :return: Pandas DataFrame detailing performance
+
+        Parameters
+        -----------
+        k: int, (default=5)
+            Number of folds for cross-validation (default = 5)
+        kwargs:
+            Optional additional kwargs for model fit.
+
+        Returns
+        --------
+        Pandas.DataFrame
+            Pandas DataFrame detailing performance
         """
         kf = KFold(n_splits=k)
         train_performance = list()
@@ -468,7 +686,32 @@ class CellClassifier:
         test_performance['test_train'] = 'test'
         return pd.concat([train_performance, test_performance])
 
-    def gridsearch(self, param_grid, scoring='f1_weighted', n_jobs=-1, cv=5, **kwargs):
+    def gridsearch(self,
+                   param_grid: dict or list,
+                   scoring: str = 'f1_weighted',
+                   n_jobs: int = -1,
+                   cv: int = 5,
+                   **kwargs):
+        """
+        Perform Grid-Search for hyper-parameter optimisation using Scikit-Learn GridSearchCV class.
+
+        Parameters
+        ----------
+        param_grid: dict or list
+            (see https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html)
+        scoring: str, (default='f1_weighted')
+            Scaring function to use
+        n_jobs: int, (default=-1)
+            Number of jobs to run in parallel (-1 will use all available cores)
+        cv: int, (default=5)
+            Number of folds for cross-validation
+        kwargs:
+            Keyword arguments to be passed to GridSearchCV
+
+        Returns
+        -------
+        GridSearchCV
+        """
         assert self.classifier, 'Call to build_model must be made prior to grid search'
         grid = GridSearchCV(estimator=self.classifier, param_grid=param_grid,
                             scoring=scoring, n_jobs=n_jobs, cv=cv, **kwargs)
@@ -476,22 +719,61 @@ class CellClassifier:
         return grid
 
     def train(self, **kwargs):
+        """
+        Train classifier
+
+        Parameters
+        ----------
+        kwargs:
+            Additional keyword arguments to be passed to call to MODEL.train()
+
+        Returns
+        -------
+        None
+        """
         self._fit(self.train_X, self.train_y, **kwargs)
 
     @staticmethod
-    def _flatten_one_hot(test, train):
+    def _flatten_one_hot(test: np.array,
+                         train: np.array):
+        """
+        Internal function. Flatten one-hot-encoded array
+
+        Parameters
+        ----------
+        test: Numpy.array
+        train: Numpy.array
+
+        Returns
+        -------
+        Numpy.array
+            Flattened train and test array
+        """
         if train.ndim != 1:
             train = np.argmax(train, axis=1)
         if test.ndim != 1:
             test = np.argmax(test, axis=1)
         return test, train
 
-    def train_holdout(self, holdout_frac: float = 0.3, print_report_card: bool = False, **kwargs) -> pd.DataFrame:
+    def train_holdout(self, holdout_frac: float = 0.3,
+                      print_report_card: bool = False,
+                      **kwargs) -> pd.DataFrame:
         """
         Fit classifier to training data and evaluate on holdout data.
-        :param holdout_frac: Proportion of data to keep as holdout
-        :param kwargs: kwargs: Optional additional kwargs for model fit.
-        :return: Pandas DataFrame detailing performance
+
+        Parameters
+        -----------
+        holdout_frac: float, (default=0.3)
+            Proportion of data to keep as holdout
+        print_report_card: bool, (default=False)
+            If True, detailed classification report printed to stdout
+        kwargs:
+            Optional additional kwargs for model fit.
+
+        Returns
+        --------
+        Pandas.DataFrame
+            Pandas DataFrame detailing performance
         """
         train_x, test_x, train_y, test_y = self.train_test_split(test_size=holdout_frac)
         self._fit(train_x, train_y, **kwargs)
@@ -507,15 +789,27 @@ class CellClassifier:
         self.vprint('HOLDOUT PERFORMANCE')
         report_card(self.classifier, test_x, test_y, mappings=self.mappings, threshold=self.threshold)
 
-    def manual_validation(self, sample_id: str, print_report_card: bool = False,
+    def manual_validation(self,
+                          sample_id: str,
+                          print_report_card: bool = False,
                           root_population: str or None = None) -> pd.DataFrame or None:
         """
         Perform manual validation of the classifier using a sample associated to the same experiment as the
         training data. Important: the sample given MUST be pre-gated with the same populations as the training dataset
-        :param root_population:
-        :param sample_id: sample ID for file group to classify
-        :param print_report_card:
-        :return: Pandas DataFrame of classification performance
+
+        Parameters
+        -----------
+        root_population: str, (optional)
+            Name of root population. If none given, defaults to root population used in training.
+        sample_id: str
+            sample ID for file group to classify
+        print_report_card: bool
+            If True, detailed classification report printed to stdout
+
+        Returns
+        --------
+        Pandas.DataFrame
+            Pandas DataFrame of classification performance
         """
         assert self.classifier is not None, 'Model must be trained prior to prediction'
         root_pop = root_population
@@ -542,21 +836,32 @@ class CellClassifier:
             return performance
         report_card(self.classifier, x, y, threshold=self.threshold, mappings=mappings)
 
-    def balance_dataset(self, method: str = 'oversample', frac: float = 0.5,
+    def balance_dataset(self,
+                        method: str = 'oversample',
+                        frac: float = 0.5,
                         downsampling_kwargs: dict or None = None) -> (pd.DataFrame or np.array, np.array):
         """
         Given an imbalanced dataset, generate a new dataset with class balance attenuated. Method can either be
         'oversample' whereby the RandomOverSampler class of Imbalance Learn is implemented to sample with replacement
         in such a way that classes become balanced, or 'density' where density dependent downsampling is performed;
         see cytopy.flow.gating.utilities.density_dependent_downsampling.
-        :param x: Feature space
-        :param y: Target labels
-        :param method: Either 'oversample' or 'density' (default = 'oversample'
-        :param frac: Ignored if method = 'oversample'. Density dependent downsampling is an absolute sampling technique
-        that reduces the size of the dataset, this parameter indicates how large the resulting feature space (as a
-        percentage of the original) should be
-        :param kwargs: Keyword arguments to pass to density_dependent_downsample
-        :return: Balanced feature space and labels
+
+        Parameters
+        -----------
+        method: str
+            Either 'oversample' or 'density' (default = 'oversample'
+            frac: Ignored if method = 'oversample'. Density dependent downsampling is an absolute sampling technique
+            that reduces the size of the dataset, this parameter indicates how large the resulting feature space (as a
+            percentage of the original) should be
+        frac: float, (default=0.5)
+            If 'density' given for method, this is passed as the fraction of data to be sampled
+        downsampling_kwargs: dict
+            Additional keyword arguments passed to call to density_dependent_downsample
+
+        Returns
+        --------
+        Pandas.DataFrame or (Numpy.array, Numpy.array)
+            Balanced feature space and labels
         """
         if method == 'oversample':
             return random_oversampling(self.train_X, self.train_y)
@@ -571,9 +876,34 @@ class CellClassifier:
                                                  **downsampling_kwargs)
             return x[self.features], x['labels'].values
 
-    def compare_to_training_set(self, sample_id: str, plot_umap: bool = False,
-                                plot_phate: bool = False, root_population: str or None = None,
+    def compare_to_training_set(self,
+                                sample_id: str,
+                                plot_umap: bool = False,
+                                plot_phate: bool = False,
+                                root_population: str or None = None,
                                 sample_n: int = 50000):
+        """
+        Utility function. Given some sample ID for a sample associated to experiment, compare the outcome to
+        the training data; outcome given as a labelled scatter plot, with classified single cell data shown as
+        components following some dimensionality reduction procedure (default = PCA).
+
+        Parameters
+        ----------
+        sample_id: str
+            Name of sample to classify and compare to training data
+        plot_umap: bool, (default=False)
+            If True, plot UMAP instead of PCA
+        plot_phate: bool, (default=False)
+            If True, plot PHATE instead of PCA
+        root_population: str, optional
+            Name of root population. If none given, use same population as training data
+        sample_n: int, (default=50000)
+            Number of cells to sample prior to dimensionality reduction procedure
+
+        Returns
+        -------
+        None
+        """
 
         def scatter_plot(te, ve, title):
             fig, ax = plt.subplots(figsize=(5, 5))
