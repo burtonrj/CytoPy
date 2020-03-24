@@ -176,7 +176,7 @@ class FCSExperiment(mongoengine.Document):
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
         return file_grp.id.__str__()
     
-    def pull_sample_mappings(self, sample_id):
+    def pull_sample_mappings(self, sample_id: str):
         """
         Given a sample ID, return a dictionary of channel/marker mappings for all associated fcs files
 
