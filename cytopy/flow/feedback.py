@@ -2,12 +2,21 @@ from IPython import get_ipython
 from tqdm import tqdm_notebook, tqdm
 
 
-def progress_bar(x: iter, verbose: bool = True, **kwargs) -> callable:
+def progress_bar(x: iter,
+                 verbose: bool = True,
+                 **kwargs) -> callable:
     """
     Generate a progress bar using the tqdm library. If execution environment is Jupyter, return tqdm_notebook
     otherwise used tqdm.
-    :param x: some iterable to pass to tqdm function
-    :param kwargs: additional keyword arguments for tqdm
+
+    Parameters
+    -----------
+    x: iterable
+        some iterable to pass to tqdm function
+    verbose: bool, (default=True)
+        Provide feedback (if False, no progress bar produced)
+    kwargs:
+        additional keyword arguments for tqdm
     :return: tqdm or tqdm_notebook, depending on environment
     """
     if not verbose:
@@ -20,7 +29,11 @@ def progress_bar(x: iter, verbose: bool = True, **kwargs) -> callable:
 def which_environment() -> str:
     """
     Test if module is being executed in the Jupyter environment.
-    :return: environment name
+
+    Returns
+    -------
+    str
+        'jupyter', 'ipython' or 'terminal'
     """
     try:
         ipy_str = str(type(get_ipython()))
