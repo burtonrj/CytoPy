@@ -11,9 +11,19 @@ import math
 import os
 
 
-def step_decay(epoch):
+def step_decay(epoch: int):
     """
     Learning rate scheduler.
+
+    Parameters
+    -----------
+    epoch: int
+        Number of epochs to perform
+
+    Returns
+    --------
+    float
+        Learning rate
     """
     initial_lrate = 1e-3
     drop = 0.5
@@ -24,11 +34,35 @@ def step_decay(epoch):
 
 class DeepGating(CellClassifier):
     """
-    DeepGating class for performing an adaption of DeepCyTOF in Immmunova.
+    Identify populations using a supervised multi-layer feed-forward neural network, inspired by the work
+    of Li, H et al (https://doi.org/10.1093/bioinformatics/btx448). Neural network is implemented using Keras
+    and Tensorflow
+
+    Parameters
+    -----------
+    hidden_layer_sizes: List
+        Size of hidden layers (length must equal number of layers)
+    n_layer: int, (default=3)
+        Number of layers in neural network
+    l2_penalty: float, (default=1e-4)
+        Parameter for L2 regularisation
+    activation_func: str, (default='softplus')
+        Name of activation function to use of hidden layers
+    loss_func: str, (default='sparse_categorical_crossentropy')
+        Name of loss function to use for updating weights
+    output_activation_func: str, (default='softmax')
+        Name of activation function to use on outer layer
+    kwargs:
+        Keyword arguments for CellClassifier
     """
-    def __init__(self, hidden_layer_sizes: list or None = None, n_layers: int = 3, l2_penalty: float = 1e-4,
-                 activation_func: str = 'softplus', loss_func: str = 'sparse_categorical_crossentropy',
-                 output_activation_func: str = 'softmax', **kwargs):
+    def __init__(self,
+                 hidden_layer_sizes: list or None = None,
+                 n_layers: int = 3,
+                 l2_penalty: float = 1e-4,
+                 activation_func: str = 'softplus',
+                 loss_func: str = 'sparse_categorical_crossentropy',
+                 output_activation_func: str = 'softmax',
+                 **kwargs):
         super().__init__(**kwargs)
         self.l2_penalty = l2_penalty
         self.activation_func = activation_func
@@ -51,12 +85,32 @@ class DeepGating(CellClassifier):
                 self.n_layers = n_layers
             self.hidden_layer_sizes = hidden_layer_sizes
 
-    def load_model(self, path: str):
+    def load_model(self,
+                   path: str):
+        """
+        Load existing model
+
+        Parameters
+        ----------
+        path: str
+            Path to existing Kera model
+
+        Returns
+        -------
+        None
+        """
         assert os.path.isfile(path), f'Invalid file name passed to load_model {path}'
         self.classifier = load_model(path)
         print('Classifier loaded successfully!')
 
     def build_model(self):
+        """
+        Build model (must be called prior to fit)
+
+        Returns
+        -------
+        None
+        """
         # Expand labels, to work with sparse categorical cross entropy.
         if self.loss_func == 'sparse_categorical_crossentropy':
             self.train_y = np.expand_dims(self.train_y, -1)
@@ -85,7 +139,26 @@ class DeepGating(CellClassifier):
         model.compile(optimizer=optimizer, loss=self.loss_func)
         self.classifier = model
 
-    def _fit(self, x, y, **kwargs):
+    def _fit(self,
+             x: np.array,
+             y: np.array,
+             **kwargs):
+        """
+        Should be called internally. Overwrites base class fit method. Fit's data to model.
+
+        Parameters
+        ----------
+        x: Numpy.array
+            feature space
+        y: Numpy.array
+            labels
+        kwargs:
+            Additional keyword arguments to pass to fit call
+
+        Returns
+        -------
+        None
+        """
         lrate = LearningRateScheduler(step_decay)
         epochs = kwargs.get('epochs', 80)
         batch_size = kwargs.get('batch_size', 128)
@@ -100,6 +173,18 @@ class DeepGating(CellClassifier):
                                 validation_split=validation_split, callbacks=callbacks, **kwargs)
 
     def save_classifier(self, path):
+        """
+        Save classifier to disk
+
+        Parameters
+        ----------
+        path: str
+            File path
+
+        Returns
+        -------
+        None
+        """
         self.classifier.save(path)
         print(f'Classifier saved to {path}')
 
