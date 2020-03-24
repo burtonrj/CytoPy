@@ -6,8 +6,35 @@ from functools import partial
 import numpy as np
 
 
-def calculate_ref_sample_fast(experiment, exclude_samples: list or None = None,
-                              sample_n=1000, verbose=True):
+def calculate_ref_sample_fast(experiment: FCSExperiment,
+                              exclude_samples: list or None = None,
+                              sample_n: int = 1000,
+                              verbose: bool = True):
+    """
+    Given an FCS Experiment with multiple FCS files, calculate the optimal reference file.
+
+    This is performed as described in Li et al paper (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5860171/) on
+    DeepCyTOF: for every 2 samples i, j compute the Frobenius norm of the difference between their covariance matrics
+    and then select the sample with the smallest average distance to all other samples.
+
+    This is an optimised version of supervised.ref.calculate_red_sample that leverages the multi-processing library
+    to speed up operations
+
+    Parameters
+    ----------
+    experiment: FCSExperiment
+        Experiment to find reference sample for
+    exclude_samples: list, optional
+        If given, any samples in list will be excluded
+    sample_n: int, (default=1000)
+        Data is downsampled prior to running algorithm, this specifies how many observations to sample from each
+    verbose: bool, (default=True)
+        Feedback
+    Returns
+    -------
+    str
+        Sample ID of reference sample
+    """
     vprint = print if verbose else lambda *a, **k: None
     if exclude_samples is None:
         exclude_samples = []
@@ -48,29 +75,91 @@ def calculate_ref_sample_fast(experiment, exclude_samples: list or None = None,
     return all_samples[int(ref_ind)]
 
 
-def pull_data_hashtable(sid, experiment, features, sample_n):
+def pull_data_hashtable(sid: str,
+                        experiment: FCSExperiment,
+                        features: list,
+                        sample_n: int):
+    """
+    Wrapper for pull_data that returns sample data as a dictionary where the key is the sample ID
+    and the value is the sample DataFrame
+
+    Parameters
+    ----------
+    sid: str
+        Sample ID for data retrieval
+    experiment: FCSExperiment
+        Experiment for data retrieval
+    features: list
+        List of features to retrieve
+    sample_n: int
+        Total number of events to sample
+
+    Returns
+    -------
+    dict
+        {sample ID: Pandas.DataFrame}
+    """
     return {sid: pull_data(sid, experiment, features, sample_n=sample_n)}
 
 
-def pull_data(sid, experiment, features, sample_n=None):
+def pull_data(sid: str,
+              experiment: FCSExperiment,
+              features: list,
+              sample_n: int or None = None,
+              transform: str or None = 'logicle'):
+    """
+    Given a sample ID and experiment that the sample belongs too, fetch a DataFrame of associated single cell
+    data including the given features and (if provided) down-sample the data to the value of sample_n.
+
+    Parameters
+    ----------
+    sid: str
+        Sample ID
+    experiment: FCSExperiment
+        Experiment to retrieve data from
+    features: list
+        List of valid features (variables measured e.g. CD4 or FSC-A)
+    sample_n: int, optional
+        If given, data is down-sampled to the given value
+    transform: str, optional, (default='logicle')
+        If given, data is transformed according to given method, see flow.transforms
+    Returns
+    -------
+    Pandas.DataFrame
+    """
     d = experiment.pull_sample_data(sample_id=sid, include_controls=False,
                                     sample_size=sample_n)
     if d is None:
         return None
     d = [x for x in d if x['typ'] == 'complete'][0]['data'][features]
     d = d[[x for x in d.columns if x != 'Time']]
-    return apply_transform(d, transform_method='logicle')
+    if transform is not None:
+        return apply_transform(d, transform_method=transform)
+    return d
 
 
-def calculate_reference_sample(experiment: FCSExperiment, exclude_samples: list, sample_n=1000) -> str:
+def calculate_reference_sample(experiment: FCSExperiment,
+                               exclude_samples: list) -> str:
     """
     Given an FCS Experiment with multiple FCS files, calculate the optimal reference file.
 
     This is performed as described in Li et al paper (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5860171/) on
     DeepCyTOF: for every 2 samples i, j compute the Frobenius norm of the difference between their covariance matrics
     and then select the sample with the smallest average distance to all other samples.
-    :param experiment: FCSExperiment with multiple FCS samples
-    :return: sample ID for optimal reference sample
+
+    This is an optimised version of supervised.ref.calculate_red_sample that leverages the multi-processing library
+    to speed up operations
+
+    Parameters
+    ----------
+    experiment: FCSExperiment
+        Experiment to find reference sample for
+    exclude_samples: list, optional
+        If given, any samples in list will be excluded
+    Returns
+    -------
+    str
+        Sample ID of reference sample
     """
     features = find_common_features(experiment)
     samples = experiment.list_samples()
