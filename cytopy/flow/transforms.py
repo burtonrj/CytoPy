@@ -7,13 +7,22 @@ class TransformError(Exception):
     pass
 
 
-def percentile_rank_transform(data: pd.DataFrame, features_to_transform: list) -> pd.DataFrame:
+def percentile_rank_transform(data: pd.DataFrame, 
+                              features_to_transform: list) -> pd.DataFrame:
     """
     Calculate percentile rank transform of data-frame. Each event is ranked as the average according to the
     column, then divided by the total number of events and multiplied by 100 to give the percentile.
-    :param data: pandas dataframe of events
-    :param features_to_transform: features to perform transformation on
-    :return: Transformed dataframe
+    
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+        Pandas DataFrame of events
+    features_to_transform: list 
+        features to perform transformation on
+    Returns
+    --------
+    Pandas.DataFrame
+        Transformed DataFrame
     """
     data = data.copy()
     transform = data[features_to_transform].rank(axis=0, method='average')
@@ -22,16 +31,20 @@ def percentile_rank_transform(data: pd.DataFrame, features_to_transform: list) -
     return data
 
 
-def apply_transform(data: pd.DataFrame, features_to_transform: list or str = 'all',
-                    transform_method: str = 'logicle', prescale=1) -> pd.DataFrame:
+def apply_transform(data: pd.DataFrame, 
+                    features_to_transform: list or str = 'all',
+                    transform_method: str = 'logicle',
+                    prescale: int = 1) -> pd.DataFrame:
     """
     Apply a transformation to the given dataset; valid transformation methods are:
     logicle, hyperlog, log_transform, or asinh
-    :param data: pandas dataframe
-    :param features_to_transform: a list of features to transform
-    :param transform_method: string value indicating transformation method
-    :param prescale: if using asinh transformaion this value is passed as the scalling argument
-    :return: transformed pandas dataframe
+    
+    
+    data: pandas dataframe
+    features_to_transform: a list of features to transform
+    transform_method: string value indicating transformation method
+    prescale: if using asinh transformaion this value is passed as the scalling argument
+    transformed pandas dataframe
     """
 
     if features_to_transform == 'all':
@@ -66,14 +79,28 @@ def apply_transform(data: pd.DataFrame, features_to_transform: list or str = 'al
                          " 'asinh', 'percentile rank', 'Yeo-Johnson', 'RobustScale'")
 
 
-def sklearn_scaler(data: pd.DataFrame, features_to_transform: list, scale_method: str, **kwargs) -> pd.DataFrame:
+def sklearn_scaler(data: pd.DataFrame,
+                   features_to_transform: list,
+                   scale_method: str,
+                   **kwargs) -> pd.DataFrame:
     """
     Wrapper function for transforming single cell data using Sklearn scaler functions
-    :param data: dataframe of data to apply scale function too
-    :param features_to_transform: list of features (columns) to scale
-    :param scale_method: name of scaler method to use (see cytopy.flow.supervised.utilities.scaler_for available methods)
-    :param kwargs: keyword arguments to pass to scaler function (see cytopy.flow.supervised.utilities.scaler)
-    :return: DataFrame with scaler applied
+    data: dataframe of data to apply scale function too
+
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+    features_to_transform: list
+        list of features (columns) to scale
+    scale_method: str
+        name of scaler method to use (see cytopy.flow.supervised.utilities.scaler_for available methods)
+    kwargs:
+        keyword arguments to pass to scaler function (see cytopy.flow.supervised.utilities.scaler)
+
+    Returns
+    --------
+    Pandas.DataFrame
+        DataFrame with scaler applied
     """
     data = data.copy()
     transform, _ = scaler(data[features_to_transform], scale_method=scale_method, **kwargs)
