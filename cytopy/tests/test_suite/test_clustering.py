@@ -1,10 +1,10 @@
 from warnings import filterwarnings
 filterwarnings('ignore')
 # Data imports
-from ..data.subject import Subject
-from ..data.mongo_setup import global_init
+from data.subject import Subject
+from data.mongo_setup import global_init
 # Gating imports
-from ..flow.clustering import main
+from flow.clustering import main
 # Other tools
 from .utilities import make_example_date
 from sklearn.cluster import AgglomerativeClustering, KMeans

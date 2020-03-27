@@ -1,18 +1,18 @@
 from warnings import filterwarnings
 filterwarnings('ignore')
 # Data imports
-from ..data.project import Project
-from ..data.fcs import Population
-from ..data.mongo_setup import global_init
+from data.project import Project
+from data.fcs import Population
+from data.mongo_setup import global_init
 # Gating imports
-from ..flow.gating.actions import Gating, ChildPopulationCollection
-from ..flow.gating.base import Gate
-from ..flow.gating import dbscan
-from ..flow.gating import density
-from ..flow.gating import utilities
-from ..flow.gating import mixturemodel
-from ..flow.gating import quantile
-from ..flow.gating import static
+from flow.gating.actions import Gating, ChildPopulationCollection
+from flow.gating.base import Gate
+from flow.gating import dbscan
+from flow.gating import density
+from flow.gating import utilities
+from flow.gating import mixturemodel
+from flow.gating import quantile
+from flow.gating import static
 # Other tools
 from .utilities import make_example_date
 from sklearn.neighbors import KernelDensity

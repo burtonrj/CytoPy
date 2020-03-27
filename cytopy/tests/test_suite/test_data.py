@@ -10,7 +10,7 @@ import unittest
 import sys
 
 unittest.TestLoader.sortTestMethodsUsing = None
-sys.path.append('/home/rossc/CytoPy')
+sys.path.append('/home/ross/CytoPy')
 global_init('test')
 
 
@@ -96,7 +96,7 @@ class TestCreate(unittest.TestCase):
         self.assertEqual(test_exp.experiment_id, 'test_experiment_aml')
         self.assertEqual(test_exp.panel.panel_name, 'test')
         test_exp.add_new_sample(sample_id='test_sample',
-                                file_path='test_data/test.FCS',
+                                file_path='../test_data/test.FCS',
                                 controls={'path': 'test_data/test.FCS', 'control_id': 'test_control'},
                                 subject_id='test_subject')
         self.assertEqual(test_exp.list_samples(), ['test_sample'])
