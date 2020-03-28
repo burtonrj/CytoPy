@@ -1,4 +1,5 @@
-from .fcs import File
+from mongoengine import connection
+from .fcs import File, FileGroup
 import pandas as pd
 import numpy as np
 import os
@@ -74,7 +75,11 @@ def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_c
     return file_tree
 
 
-def data_from_file(file: File, sample_size: int or None, output_format: str = 'dataframe',
+def data_from_file(file_id: str,
+                   filegrp_id: str,
+                   db_name: str,
+                   sample_size: int or None,
+                   output_format: str = 'dataframe',
                    columns_default: str = 'marker') -> None or dict:
     """
     Pull data from a given file document (Used for multi-process pull)
@@ -94,10 +99,23 @@ def data_from_file(file: File, sample_size: int or None, output_format: str = 'd
     dict
         Dictionary output {id: file_id, typ: file_type, data: dataframe/matrix}
     """
-    data = file.pull(sample=sample_size)
+    db = connection.connect(db_name, alias='core')
+
+    fg = FileGroup.objects(id=filegrp_id).get()
+    file = [f for f in fg.files if f.file_id == file_id]
+    assert file, f'Invalid file ID {file_id} for FileGroup {fg.primary_id}'
+    assert len(file) == 1, f'Multiple files of ID {file_id} found in FileGroup {fg.primary_id}'
+    data = file[0].pull(sample=sample_size)
     if output_format == 'dataframe':
-        data = as_dataframe(data, column_mappings=file.channel_mappings, columns_default=columns_default)
-    return dict(id=file.file_id, typ=file.file_type, data=data)
+        data = as_dataframe(data, column_mappings=file[0].channel_mappings, columns_default=columns_default)
+    data = dict(id=file[0].file_id, typ=file[0].file_type, data=data)
+    db.close()
+    connection._connections = {}
+    connection._connection_settings = {}
+    connection._dbs = {}
+    FileGroup._collection = None
+
+    return data
 
 
 def as_dataframe(matrix: np.array, column_mappings: list, columns_default: str = 'marker'):

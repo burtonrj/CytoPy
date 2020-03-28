@@ -1,3 +1,4 @@
+from mongoengine import connection
 from .fcs import FileGroup, File
 from .subject import Subject
 from .gating import GatingStrategy
@@ -168,7 +169,7 @@ class FCSExperiment(mongoengine.Document):
 
         Returns
         --------
-        str
+        str or None
             string value for ObjectID
         """
         if not self.sample_exists(sample_id):
@@ -220,26 +221,51 @@ class FCSExperiment(mongoengine.Document):
 
         Returns
         --------
-        list
+        list or None
             List of dictionaries {id: file id, typ: data type, either raw or normalised, data: dataframe/matrix}
         """
+        db = connection.get_db(alias='core')
+        db_name = db.name
         file_grp = self.pull_sample(sample_id)
         if not file_grp:
             return None
         files = file_grp.files
         # Fetch data
         if not include_controls:  # Fetch data for primary file only
-            f = [f for f in files if f.file_type == 'complete'][0]
-            complete = data_from_file(file=f, sample_size=sample_size, output_format=output_format,
+            file_id = [f for f in files if f.file_type == 'complete'][0].file_id
+            connection.disconnect('core')
+            connection._connections = {}
+            connection._connection_settings = {}
+            connection._dbs = {}
+            FileGroup._collection = None
+
+            complete = data_from_file(file_id=file_id,
+                                      filegrp_id=file_grp.id,
+                                      db_name=db_name,
+                                      sample_size=sample_size,
+                                      output_format=output_format,
                                       columns_default=columns_default)
+            connection.connect(db=db_name, alias='core')
             return [complete]
         # Fetch data for primary file & controls
+        files = [f.file_id for f in file_grp.files]
+        connection.disconnect('core')
+        connection._connections = {}
+        connection._connection_settings = {}
+        connection._dbs = {}
+        FileGroup._collection = None
+
         pool = Pool(cpu_count())
-        f = partial(data_from_file, sample_size=sample_size, output_format=output_format,
+        f = partial(data_from_file,
+                    filegrp_id=file_grp.id,
+                    db_name=db_name,
+                    sample_size=sample_size,
+                    output_format=output_format,
                     columns_default=columns_default)
         data = pool.map(f, files)
         pool.close()
         pool.join()
+        connection.connect(db=db_name, alias='core')
         return data
 
     def remove_sample(self, sample_id: str) -> bool:
