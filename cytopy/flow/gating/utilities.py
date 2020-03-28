@@ -362,7 +362,7 @@ def get_params(klass: object,
 
     Returns
     -------
-    list
+    List
         List of parameters (list of strings)
     """
     if required_only:
