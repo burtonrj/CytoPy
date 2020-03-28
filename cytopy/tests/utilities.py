@@ -1,3 +1,5 @@
+from cytopy.data.panel import Panel
+from cytopy.data.project import Project
 from sklearn.datasets import make_blobs
 import numpy as np
 import pandas as pd
@@ -13,3 +15,16 @@ def make_example_date(n_samples=100, centers=3, n_features=2):
     example_data = pd.DataFrame(np.hstack((blobs[0], blobs[1].reshape(-1, 1))),
                                 columns=columns)
     return example_data
+
+
+def basic_setup():
+    # Create panel
+    test = Panel(panel_name='test')
+    test.create_from_excel('../data/test_panel.xlsx')
+    test.save()
+    # Create Project
+    test_project = Project(project_id='test', owner='test')
+    test_project.add_experiment('test_experiment_aml', panel_name='test')
+    test_project.add_experiment('test_experiment_dummy', panel_name='test')
+    test_project.add_subject('test_subject', testing=True)
+    test_project.save()
