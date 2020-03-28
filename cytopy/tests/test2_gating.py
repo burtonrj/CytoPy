@@ -1,5 +1,3 @@
-from warnings import filterwarnings
-filterwarnings('ignore')
 # Data imports
 from data.project import Project
 from data.fcs import Population
