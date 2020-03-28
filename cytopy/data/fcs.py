@@ -454,6 +454,7 @@ class File(mongoengine.EmbeddedDocument):
         Numpy.array
             Array of single cell data
         """
+        self.data.seek(0)
         data = pickle.loads(self.data.read())
         if sample and sample < data.shape[0]:
             idx = np.random.randint(0, data.shape[0], size=sample)

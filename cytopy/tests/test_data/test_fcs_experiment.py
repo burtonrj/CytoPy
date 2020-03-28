@@ -4,24 +4,13 @@ sys.path.append('/home/ross/CytoPy')
 from cytopy.data.project import Project
 from cytopy.data.mongo_setup import global_init
 from cytopy.data.panel import Panel
+from cytopy.tests.utilities import basic_setup
 from mongoengine import connect
 import unittest
 
 db = connect('test')
 db.drop_database('test')
 global_init('test')
-
-
-def _setup():
-    # Create panel
-    test = Panel(panel_name='test')
-    test.create_from_excel('../data/test_panel.xlsx')
-    test.save()
-    # Create Project
-    test_project = Project(project_id='test', owner='test')
-    test_project.add_experiment('test_experiment_aml', panel_name='test')
-    test_project.add_subject('test_subject', testing=True)
-    test_project.save()
 
 
 class TextFCSExperiment(unittest.TestCase):
@@ -65,5 +54,5 @@ class TextFCSExperiment(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    _setup()
+    basic_setup()
     unittest.main()
