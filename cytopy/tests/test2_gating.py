@@ -1,18 +1,18 @@
 # Data imports
-from data.project import Project
-from data.fcs import Population
-from data.mongo_setup import global_init
+from cytopy.data.project import Project
+from cytopy.data.fcs import Population
+from cytopy.data.mongo_setup import global_init
 # Gating imports
-from flow.gating.actions import Gating, ChildPopulationCollection
-from flow.gating.base import Gate
-from flow.gating import dbscan
-from flow.gating import density
-from flow.gating import utilities
-from flow.gating import mixturemodel
-from flow.gating import quantile
-from flow.gating import static
+from cytopy.flow.gating.actions import Gating, ChildPopulationCollection
+from cytopy.flow.gating.base import Gate
+from cytopy.flow.gating import dbscan
+from cytopy.flow.gating import density
+from cytopy.flow.gating import utilities
+from cytopy.flow.gating import mixturemodel
+from cytopy.flow.gating import quantile
+from cytopy.flow.gating import static
 # Other tools
-from .utilities import make_example_date
+from cytopy.tests.utilities import make_example_date
 from sklearn.neighbors import KernelDensity
 from scipy.signal import find_peaks
 import numpy as np
@@ -65,72 +65,6 @@ def _build_density_gate(dimensions: int or float = 1.,
     if return_data:
         return gate, example_data
     return gate
-
-
-class TestUtilities(unittest.TestCase):
-    def test_check_peak(self):
-        probs = np.array([0, 0, 0, 0.01, 0, 0, 2, 0, 0, 3, 0, 0, 0.01])
-        peaks = np.where(np.array(probs) > 0)
-        self.assertEqual(len(utilities.check_peak(peaks, probs, t=0.05)), 2)
-        self.assertEqual(len(utilities.check_peak(peaks, probs, t=0.5)), 4)
-
-    def test_find_local_minima(self):
-        data = make_example_date()
-        data = pd.concat([data[data.blobID != 2],
-                          data[data.blobID == 2].sample(frac=0.25)])
-        d = data['feature0'].values
-        density = KernelDensity(bandwidth=0.5, kernel='gaussian')
-        density.fit(d[:, None])
-        x_d = np.linspace(min(d), max(d), 1000)
-        prob = np.exp(density.score_samples(x_d[:, None]))
-        peaks = find_peaks(prob)[0]
-        self.assertAlmostEqual(utilities.find_local_minima(prob, x_d, peaks),
-                               0.592, places=2)
-
-    def test_inside_ellipse(self):
-        data = make_example_date()
-        mask = utilities.inside_ellipse(data[['feature0', 'feature1']].values,
-                                        center=(4.5, 2.5),
-                                        width=2.3,
-                                        height=3,
-                                        angle=0)
-        correct = all(x == 1 for x in data.loc[mask].blobID.values)
-        self.assertTrue(correct)
-
-    def test_rectangular_filter(self):
-        data = make_example_date()
-        rect = dict(xmin=0, xmax=8, ymin=-2.5, ymax=6.0)
-        self.assertTrue(all(x == 1 for x in utilities.rectangular_filter(data,
-                                                                         x='feature0',
-                                                                         y='feature1',
-                                                                         definition=rect).blobID.values))
-
-    def test_dds(self):
-        def equal_ratio(d):
-            from itertools import combinations
-            ratios = [d[d.blobID == x[0]].shape[0] / d[d.blobID == x[1]].shape[0]
-                      for x in combinations(samples.blobID.unique(), 2)]
-            return combinations(ratios, 2)
-
-        data = make_example_date(n_samples=10000)
-        samples = utilities.density_dependent_downsample(data=data,
-                                                         features=['feature0', 'feature1'],
-                                                         mmd_sample_n=2000)
-        for x, y in equal_ratio(samples):
-            self.assertAlmostEqual(x, y, places=1)
-
-    def test_get_params(self):
-        class MakeshiftClass:
-            def __init__(self, a, b, c, d='test', **kwargs):
-                pass
-        self.assertListEqual(utilities.get_params(MakeshiftClass),
-                             ['a', 'b', 'c', 'd', 'kwargs'])
-        self.assertListEqual(utilities.get_params(MakeshiftClass, required_only=True),
-                             ['a', 'b', 'c', 'kwargs'])
-        self.assertListEqual(utilities.get_params(MakeshiftClass,
-                                                  required_only=True,
-                                                  exclude_kwargs=True),
-                             ['a', 'b', 'c'])
 
 
 class TestChildPopulationColleciton(unittest.TestCase):
