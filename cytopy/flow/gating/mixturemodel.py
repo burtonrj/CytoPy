@@ -96,8 +96,8 @@ class MixtureModel(Gate):
             self.child_populations.populations[x].update_geom(shape='ellipse', x=self.x, y=self.y,
                                                               definition=definition, transform_x=self.transform_x,
                                                               transform_y=self.transform_y, **geom)
-        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options='overwrite')
-        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
+        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values)
+        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values)
         return self.child_populations
 
     def create_ellipse(self, data: pd.DataFrame,
