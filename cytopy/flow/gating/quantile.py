@@ -31,7 +31,7 @@ class Quantile(Gate):
         if self.empty_parent:
             return self.child_populations
         threshold = float(self.data[self.x].quantile(self.q, interpolation='nearest'))
-        self.child_update_1d(threshold, 'Quantile', 'overwrite')
+        self.child_update_1d(threshold, 'Quantile')
         return self.child_populations
 
     def gate_2d(self):
