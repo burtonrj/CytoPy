@@ -16,10 +16,11 @@ global_init('test')
 
 class TestCheckPeak(unittest.TestCase):
     def test(self):
-        probs = np.array([0, 0, 0, 0.01, 0, 0, 2, 0, 0, 3, 0, 0, 0.01])
-        peaks = np.where(np.array(probs) > 0)
-        self.assertEqual(len(utilities.check_peak(peaks, probs, t=0.05)), 2)
-        self.assertEqual(len(utilities.check_peak(peaks, probs, t=0.5)), 4)
+        probs = np.array([0, 0, 0, 0.05, 0, 0, 2, 0, 0, 3, 0, 0, 0.05])
+        peaks = np.where(np.array(probs) > 0)[0]
+        self.assertEqual(len(utilities.check_peak(peaks, probs, t=0.5)), 2)
+        self.assertEqual(len(utilities.check_peak(peaks, probs, t=0.1)), 2)
+        self.assertEqual(len(utilities.check_peak(peaks, probs, t=0.01)), 4)
 
 
 class TestFindLocalMinima(unittest.TestCase):
@@ -38,7 +39,8 @@ class TestFindLocalMinima(unittest.TestCase):
 
     def test(self):
         prob, peaks, x_d = self._build()
-        self.assertAlmostEqual(utilities.find_local_minima(prob, x_d, peaks), 0.592, places=2)
+        threshold = utilities.find_local_minima(prob, x_d, peaks)
+        self.assertTrue(0.58 <= threshold <= 0.6)
 
 
 class TestInsideEllipse(unittest.TestCase):
@@ -91,14 +93,22 @@ class TestGetParams(unittest.TestCase):
 
     def test_basic(self):
         self.assertListEqual(utilities.get_params(self.MakeshiftClass),
+                             ['a', 'b', 'c', 'd'])
+
+    def include_kwargs(self):
+        self.assertListEqual(utilities.get_params(self.MakeshiftClass, exclude_kwargs=False),
                              ['a', 'b', 'c', 'd', 'kwargs'])
 
     def test_requied_only(self):
         self.assertListEqual(utilities.get_params(self.MakeshiftClass, required_only=True),
-                             ['a', 'b', 'c', 'kwargs'])
+                             ['a', 'b', 'c'])
 
     def test_required_only_exclude_kwargs(self):
         self.assertListEqual(utilities.get_params(self.MakeshiftClass,
                                                   required_only=True,
                                                   exclude_kwargs=True),
                              ['a', 'b', 'c'])
+
+
+if __name__ == '__main__':
+    unittest.main()
