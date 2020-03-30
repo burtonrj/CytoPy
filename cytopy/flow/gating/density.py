@@ -146,18 +146,10 @@ class DensityThreshold(Gate):
         peaks = self._find_peaks(probs)
         return self._evaluate_peaks(data, peaks, probs, xx)
 
-    def gate_1d(self,
-                merge_options: str = 'overwrite') -> ChildPopulationCollection:
+    def gate_1d(self) -> ChildPopulationCollection:
         """
         Perform density based threshold gating in 1 dimensional space using the properties of a Probability
         Density Function of the events data as estimated using Gaussian Kernel Density Estimation.
-
-        Parameters
-        ----------
-        merge_options: str
-            must have value of 'overwrite' or 'merge'. Overwrite: existing index values in child
-            populations will be overwritten by the results of the gating algorithm. Merge: index values generated from
-            the gating algorithm will be merged with index values currently associated to child populations
 
         Returns
         --------

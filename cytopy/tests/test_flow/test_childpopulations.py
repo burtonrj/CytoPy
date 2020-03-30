@@ -110,9 +110,9 @@ class TestChildPopulation(unittest.TestCase):
         test = ChildPopulation(gate_type='geom', definition='+', name='test')
         test.update_index(np.array([0, 1, 2, 3]))
         self.assertListEqual([0, 1, 2, 3], list(test.index))
-        test.update_index(np.array([2, 3, 4, 5]), merge_options='overwrite')
+        test.update_index(np.array([2, 3, 4, 5]))
         self.assertListEqual([2, 3, 4, 5], list(test.index))
-        test.update_index(np.array([4, 5, 6, 7]), merge_options='merge')
+        test.update_index(np.array([4, 5, 6, 7]))
         self.assertListEqual([2, 3, 4, 5, 6, 7], list(test.index))
 
 

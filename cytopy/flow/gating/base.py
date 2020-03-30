@@ -141,10 +141,6 @@ class Gate:
             threshold value for gate
         method: str
             method used for generating threshold
-        merge_options: str
-            must have value of 'overwrite' or 'merge'. Overwrite: existing index values in child
-            populations will be overwritten by the results of the gating algorithm. Merge: index values generated from
-            the gating algorithm will be merged with index values currently associated to child populations
 
         Returns
         --------
