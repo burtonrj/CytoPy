@@ -33,9 +33,9 @@ class Gate:
         If frac is not None, method used for downsampling (must be either 'uniform' or 'density')
     density_downsample_kwargs: dict, optional
         Keyword arguments to pass to flow.utilitis.density_dependent_downsample if downsample_method is 'density'
-    transform_x: str, (default='logicle')
+    transform_x: str or None, (default='logicle')
         Method used to transform x-axis
-    transform_y: str, (default='logicle')
+    transform_y: str or None, (default='logicle')
         Method used to transform y-axis
     low_memory: bool, (default=False)
         If True, frac is adjusted according to the size of the DataFrame
@@ -130,8 +130,7 @@ class Gate:
             raise ValueError('No events in parent population!')
 
     def child_update_1d(self, threshold: float,
-                        method: str,
-                        merge_options: str) -> None:
+                        method: str) -> None:
         """
         Internal method. Given a threshold and method generated from 1 dimensional threshold gating, update the objects child
         population collection.
@@ -161,8 +160,8 @@ class Gate:
             self.child_populations.populations[x].update_geom(shape='threshold', x=self.x, y=self.y,
                                                               method=method, threshold=float(threshold),
                                                               definition=definition, transform_x=self.transform_x)
-        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options=merge_options)
-        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options=merge_options)
+        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values)
+        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values)
 
     def child_update_2d(self,
                         x_threshold: float,
@@ -185,38 +184,52 @@ class Gate:
         --------
         None
         """
+        # Validate 2D threshold gate
+        populations = [self.child_populations.fetch_by_definition(d) for d in ['--', '++', '+-', '-+']]
+        if any([x is None for x in populations]):
+            GateError('Invalid ChildPopulationCollection; must contain definitions for --, -+, +-, and ++ populations')
+
+        # Get index according to threshold
         xp_idx = self.data[self.data[self.x].round(decimals=2) >= round(x_threshold, 2)].index.values
         yp_idx = self.data[self.data[self.y].round(decimals=2) >= round(y_threshold, 2)].index.values
         xn_idx = self.data[self.data[self.x].round(decimals=2) < round(x_threshold, 2)].index.values
         yn_idx = self.data[self.data[self.y].round(decimals=2) < round(y_threshold, 2)].index.values
 
-        negneg = self.child_populations.fetch_by_definition('--')
-        pospos = self.child_populations.fetch_by_definition('++')
-        posneg = self.child_populations.fetch_by_definition('+-')
-        negpos = self.child_populations.fetch_by_definition('-+')
-        definitions = defaultdict(list)
-        for name, definition in zip([negneg, negpos, posneg, pospos], ['--', '-+', '+-', '++']):
-            definitions[name].append(definition)
+        negneg_idx = np.intersect1d(xn_idx, yn_idx)
+        pospos_idx = np.intersect1d(xp_idx, yp_idx)
+        posneg_idx = np.intersect1d(xp_idx, yn_idx)
+        negpos_idx = np.intersect1d(xn_idx, yp_idx)
 
-        if any([x is None for x in [negneg, negpos, posneg, pospos]]):
-            GateError('Invalid ChildPopulationCollection; must contain definitions for --, -+, +-, and ++ populations')
+        # Create a list of population definitions, with keys for the definition, population it is associated to
+        # and the relative index
+        populations_idx = list()
+        i = zip(populations, [negneg_idx, pospos_idx, posneg_idx, negpos_idx], ['--', '++', '+-', '-+'])
+        for pop_name, index, d in i:
+            populations_idx.append(dict(pop_name=pop_name, index=index, definition=d))
 
-        pos_idx = np.intersect1d(xn_idx, yn_idx)
-        self.child_populations.populations[negneg].update_index(idx=pos_idx, merge_options='merge')
-        pos_idx = np.intersect1d(xp_idx, yp_idx)
-        self.child_populations.populations[pospos].update_index(idx=pos_idx, merge_options='merge')
-        pos_idx = np.intersect1d(xn_idx, yp_idx)
-        self.child_populations.populations[negpos].update_index(idx=pos_idx, merge_options='merge')
-        pos_idx = np.intersect1d(xp_idx, yn_idx)
-        self.child_populations.populations[posneg].update_index(idx=pos_idx, merge_options='merge')
+        # Now merge the dictionaries on the population name
+        merged_poulation_idx = dict()
+        for pop in set(d.get('pop_name') for d in populations_idx):
+            matching_populations = [d for d in populations_idx if d.get('pop_name') == pop]
+            definition = [d.get('definition') for d in matching_populations]
+            index = np.unique(np.concatenate([d.get('index') for d in matching_populations]))
+            merged_poulation_idx[pop] = dict(definition=definition, index=index)
 
-        for name, definition in definitions.items():
+        # Update index and geom for child populations
+        for pop_name in merged_poulation_idx.keys():
+            self.child_populations.populations[pop_name].update_index(idx=merged_poulation_idx[pop_name].get('index'))
+            definition = merged_poulation_idx[pop_name].get('definition')
             if len(definition) == 1:
                 definition = definition[0]
-            self.child_populations.populations[name].update_geom(shape='2d_threshold', x=self.x,
-                                                                 y=self.y, method=method, threshold_x=float(x_threshold),
-                                                                 threshold_y=float(y_threshold), definition=definition,
-                                                                 transform_x=self.transform_x, transform_y=self.transform_y)
+            self.child_populations.populations[pop_name].update_geom(shape='2d_threshold',
+                                                                     x=self.x,
+                                                                     y=self.y,
+                                                                     method=method,
+                                                                     threshold_x=float(x_threshold),
+                                                                     threshold_y=float(y_threshold),
+                                                                     definition=definition,
+                                                                     transform_x=self.transform_x,
+                                                                     transform_y=self.transform_y)
 
     def uniform_downsample(self,
                            sample_size: int or float = 0.1,
@@ -263,7 +276,7 @@ class Gate:
         chunksize = int(np.ceil(self.data.shape[0] / d))
 
         if self.downsample_method == 'uniform':
-            sampling_func = partial(self.uniform_downsample, frac=None, sample_n=chunksize)
+            sampling_func = partial(self.uniform_downsample, sample_size=chunksize)
         else:
             if self.density_downsample_kwargs is not None:
                 kwargs = dict(sample_n=chunksize, features=[self.x, self.y], **self.density_downsample_kwargs)
