@@ -51,8 +51,8 @@ class Static(Gate):
                                                               x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max,
                                                               definition=d, transform_x=self.transform_x,
                                                               transform_y=self.transform_y)
-        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options='overwrite')
-        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
+        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values)
+        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values)
         return self.child_populations
 
     def threshold_2d(self,
@@ -117,8 +117,8 @@ class Static(Gate):
                                                               centroid=centroid, width=width, height=height,
                                                               angle=angle, definition=d, transform_x=self.transform_x,
                                                               transform_y=self.transform_y)
-        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values, merge_options='overwrite')
-        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values, merge_options='overwrite')
+        self.child_populations.populations[pos].update_index(idx=pos_pop.index.values)
+        self.child_populations.populations[neg].update_index(idx=neg_pop.index.values)
         return self.child_populations
 
     def border_gate(self,

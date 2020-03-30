@@ -82,7 +82,6 @@ class TestGate(unittest.TestCase):
         gate2.child_update_2d(x_threshold=2, y_threshold=-2.5, method='test')
         self._index_updates(gate2, pos_idx, data)
 
-
     def test_generate_chunks(self):
         example_data = make_example_date(n_samples=100)
         populations = ChildPopulationCollection()
