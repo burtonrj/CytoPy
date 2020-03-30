@@ -25,11 +25,9 @@ class Geom(dict):
                  y: str or None = None,
                  **kwargs):
         super().__init__()
-        try:
-            assert shape in ['ellipse', 'rect', 'threshold', '2d_threshold', 'poly', 'sml', 'sub']
-            self.shape = shape
-        except AssertionError:
-            print('Invalid shape, must be one of: ellipse, rect, threshold, 2d_threshold', 'poly')
+        err = 'Invalid shape, must be one of: ellipse, rect, threshold, 2d_threshold', 'poly'
+        assert shape in ['ellipse', 'rect', 'threshold', '2d_threshold', 'poly', 'sml', 'sub'], err
+        self.shape = shape
         self.x = x
         self.y = y
         for k, v in kwargs.items():
@@ -71,8 +69,8 @@ def _validate_input(gate_type: str,
         assert kwargs.keys() == {'definition', 'name'}, err
     if gate_type in ['threshold_1d', 'geom']:
         definition = kwargs.get('definition')
-        assert type(definition) == list, f'ChildPopulation definition should be of type str; ' \
-                                         f'invalid definition {definition}'
+        assert type(definition) == str, f'ChildPopulation definition should be of type str; ' \
+                                        f'invalid definition {definition}'
         assert definition in ['-', '+'], f'For a threshold_1d `definition` must be one of [+, -] ' \
                                          f'not {kwargs["definition"]}'
 
@@ -81,7 +79,7 @@ def _validate_input(gate_type: str,
         err = 'Invalid definition for threshold_2d, must be a string or list of strings where valid values are' \
               '[++, --, -+, +-]'
         if type(definition) == list or type(definition) == mongoengine.base.datastructures.BaseList:
-
+            assert len(definition) > 0, err
             assert all(x in ['++', '--', '-+', '+-'] for x in definition), err
         else:
             assert definition in ['++', '--', '-+', '+-'], err
@@ -89,6 +87,7 @@ def _validate_input(gate_type: str,
     if gate_type == 'cluster':
         assert kwargs.keys() == {'target', 'weight', 'name'}, f'For cluster gating child population must contain ' \
                                                               f'keys [target, weight, name]; {kwargs.keys()} provided'
+        assert type(kwargs.get('weight')) in [float, int], 'Weight must be of type int or float'
         target = kwargs.get('target')
         err = f'Invalid target provided for child population, must be a tuple or list of values of type float or in ' \
               f'and of length 2, not {target}'
@@ -228,8 +227,7 @@ class ChildPopulationCollection:
         """
         self.gate_type = json_dict['gate_type']
         for pop in json_dict['populations']:
-            name = pop.pop('name')
-            self.add_population(name=name, **pop)
+            self.add_population(**pop)
 
     def add_population(self,
                        name: str,
