@@ -174,7 +174,7 @@ class DensityThreshold(Gate):
         if not threshold:
             raise GateError('Unexpected error whilst performing threshold gating. Calculated threshold is Null.')
         # Update child populations
-        self.child_update_1d(threshold, method, merge_options)
+        self.child_update_1d(threshold, method)
         return self.child_populations
 
     def gate_2d(self) -> ChildPopulationCollection:
