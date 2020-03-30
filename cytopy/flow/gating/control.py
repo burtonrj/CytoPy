@@ -72,7 +72,7 @@ class ControlGate(DensityThreshold):
             fmo = self.fmo_x
         threshold, method = self.__1d(data, fmo, self.x)
 
-        self.child_update_1d(threshold, method, merge_options)
+        self.child_update_1d(threshold, method)
         return self.child_populations
 
     def __1d(self,

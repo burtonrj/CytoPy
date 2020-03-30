@@ -119,8 +119,7 @@ class ChildPopulation:
         self.geom = None
 
     def update_index(self,
-                     idx: np.array,
-                     merge_options: str = 'merge') -> None:
+                     idx: np.array) -> None:
         """
         Update the index values of this population
 
@@ -128,19 +127,12 @@ class ChildPopulation:
         -----------
         idx: Numpy.array
             index values corresponding to events data
-        merge_options: str
-            how to handle existing data; either overwrite or merge
 
         Returns
         --------
         None
         """
-        if merge_options == 'overwrite':
-            self.index = np.array(idx, dtype=np.int)
-        elif merge_options == 'merge':
-            self.index = np.array(np.unique(np.concatenate((self.index, idx))), dtype=np.int)
-        else:
-            print('Invalid input for merge_options, must be one of: merge, overwrite')
+        self.index = np.array(idx, dtype=np.int)
 
     def update_geom(self,
                     x: str or None,
