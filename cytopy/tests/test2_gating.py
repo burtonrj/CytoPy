@@ -8,9 +8,9 @@ from cytopy.flow.gating.base import Gate
 from cytopy.flow.gating import dbscan
 
 from cytopy.flow.gating import utilities
-from cytopy.flow.gating import mixturemodel
 
-from cytopy.flow.gating import static
+
+
 # Other tools
 from cytopy.tests.utilities import make_example_date
 import pandas as pd
@@ -20,100 +20,6 @@ import sys
 unittest.TestLoader.sortTestMethodsUsing = None
 sys.path.append('/home/rossco/CytoPy')
 global_init('test')
-
-
-class TestMixtureModel(unittest.TestCase):
-
-    @staticmethod
-    def _build(return_data: bool = False,
-               blobs=3,
-               **kwargs):
-        example_data = make_example_date(n_samples=1000, centers=blobs)
-        example_data['labels'] = example_data['blobID']
-
-        populations = ChildPopulationCollection(gate_type='geom')
-        populations.add_population('positive', definition='+')
-        populations.add_population('negative', definition='-')
-
-        gate = mixturemodel.MixtureModel(data=example_data,
-                                         child_populations=populations,
-                                         x='feature0',
-                                         y='feature1',
-                                         transform_x=None,
-                                         transform_y=None,
-                                         **kwargs)
-        if return_data:
-            return gate, example_data
-        return gate
-
-    def test_create_ellipse(self):
-        gate, data = self._build(return_data=True,
-                                 target=(-2.5, 10),
-                                 k=3)
-        pos_idx = data[data.blobID == 0].index.values
-        populations = gate.gate()
-        tp = [i for i in pos_idx if i in populations.populations['positive'].index]
-        self.assertTrue(len(tp)/len(pos_idx) > 0.8)
-
-
-
-
-
-class TestStatic(unittest.TestCase):
-
-    @staticmethod
-    def _build(populations: ChildPopulationCollection,
-               return_data: bool = False,
-               **kwargs):
-        example_data = make_example_date(n_samples=1000, centers=3)
-
-        gate = static.Static(data=example_data,
-                             child_populations=populations,
-                             x='feature0',
-                             y='feature1',
-                             transform_x=None,
-                             transform_y=None,
-                             **kwargs)
-        if return_data:
-            return gate, example_data
-        return gate
-
-    def test_rect_gate(self):
-        populations = ChildPopulationCollection(gate_type='geom')
-        populations.add_population('positive', definition='+')
-        populations.add_population('negative', definition='-')
-        gate, data = self._build(populations=populations,
-                                 return_data=True)
-        y = data[(data.feature0.round(2) >= 2.5) & (data.feature0.round(2) < 8) &
-                 (data.feature1.round(2) >= -5) & (data.feature1.round(2) < 5)].index.values
-        populations = gate.rect_gate(x_min=2.5, x_max=8, y_min=-5, y_max=5)
-        y_hat = list(populations['positive'].index.values)
-        self.assertListEqual(list(y), y_hat)
-
-    def test_threshold_2d(self):
-        populations = ChildPopulationCollection(gate_type='threshold_2d')
-        populations.add_population('positive', definition='++')
-        populations.add_population('negative', definition=['--', '+-', '-+'])
-        gate, data = self._build(populations=populations,
-                                 return_data=True)
-        y = data[(data.feature0.round(2) >= 2.5) &
-                 (data.feature1.round(2) >= -5)].index.values
-        populations = gate.threshold_2d(threshold_x=2.5, threshold_y=-5)
-        y_hat = list(populations['positive'].index.values)
-        self.assertListEqual(list(y), y_hat)
-
-    def test_ellipse(self):
-        populations = ChildPopulationCollection(gate_type='geom')
-        populations.add_population('positive', definition='+')
-        populations.add_population('negative', definition='-')
-        gate, data = self._build(populations=populations,
-                                 return_data=True)
-        y = data[data.blobID == 1.0].index.values
-        y_hat = gate.ellipse_gate(centroid=(4., 1.),
-                                  width=5,
-                                  height=5,
-                                  angle=0).populations['positive'].index.values
-        self.assertListEqual(list(y), list(y_hat))
 
 
 class TestGating(unittest.TestCase):
