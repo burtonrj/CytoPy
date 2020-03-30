@@ -150,5 +150,3 @@ class TestQuantile(unittest.TestCase):
         self.assertListEqual(y, y_hat)
 
 
-if __name__ == '__main__':
-    unittest.main()
