@@ -3,10 +3,6 @@ import numpy as np
 import mongoengine
 
 
-class ChildConstructError(Exception):
-    pass
-
-
 class Geom(dict):
     """
     Geometric object defining a population e.g. a threshold or rectangular gate
@@ -51,6 +47,58 @@ class Geom(dict):
         return self
 
 
+def _validate_input(gate_type: str,
+                    **kwargs) -> dict:
+    """
+    Called on init to validate input for child population definition. If valid, keyword arguments
+    returned as dictionary. If invalid an assertion error is raised.
+
+    gate_type: str
+        the gate type of the intended gate to generate this child population. Must be one of:
+        'threshold', 'threshold_2d', 'cluster', 'geom'.
+    kwargs:
+        arguments for population definition
+
+    Returns
+    --------
+    dict
+        True if valid else False
+    """
+    # Check keyword arguments
+    err = f'For a {gate_type} gate child population must be defined with keys `definition` and `name`; ' \
+          f'{kwargs.keys()} provided'
+    if gate_type in ['threshold_1d', 'threshold_2d', 'geom']:
+        assert kwargs.keys() == {'definition', 'name'}, err
+    if gate_type in ['threshold_1d', 'geom']:
+        definition = kwargs.get('definition')
+        assert type(definition) == list, f'ChildPopulation definition should be of type str; ' \
+                                         f'invalid definition {definition}'
+        assert definition in ['-', '+'], f'For a threshold_1d `definition` must be one of [+, -] ' \
+                                         f'not {kwargs["definition"]}'
+
+    if gate_type == 'threshold_2d':
+        definition = kwargs.get('definition')
+        err = 'Invalid definition for threshold_2d, must be a string or list of strings where valid values are' \
+              '[++, --, -+, +-]'
+        if type(definition) == list or type(definition) == mongoengine.base.datastructures.BaseList:
+
+            assert all(x in ['++', '--', '-+', '+-'] for x in definition), err
+        else:
+            assert definition in ['++', '--', '-+', '+-'], err
+
+    if gate_type == 'cluster':
+        assert kwargs.keys() == {'target', 'weight', 'name'}, f'For cluster gating child population must contain ' \
+                                                              f'keys [target, weight, name]; {kwargs.keys()} provided'
+        target = kwargs.get('target')
+        err = f'Invalid target provided for child population, must be a tuple or list of values of type float or in ' \
+              f'and of length 2, not {target}'
+        assert len(target) == 2, err
+        assert all(isinstance(x, int) or isinstance(x, float) for x in target), err
+        assert isinstance(kwargs.get('weight'), int), f'Invalid data type provided for weight of child population, ' \
+                                                      f'must be of type Integer'
+    return kwargs
+
+
 class ChildPopulation:
     def __init__(self,
                  gate_type: str,
@@ -67,9 +115,7 @@ class ChildPopulation:
             Additional keyword arguments for generating population
         """
         self.gate_type = gate_type
-        x = self._validate_input(gate_type, **kwargs)
-        if x is False:
-            raise ChildConstructError('Aborting; invalid child population construct')
+        self.properties = _validate_input(gate_type, **kwargs)
         self.index = np.array([])
         self.geom = None
 
@@ -123,68 +169,6 @@ class ChildPopulation:
         None
         """
         self.geom = Geom(shape, x, y, **kwargs)
-
-    def _validate_input(self,
-                        gate_type: str,
-                        **kwargs) -> bool:
-        """
-        Internal function. Called on init to validate input for child population definition. If valid, kwargs will
-        population the properties attribute of this child population. If invalid an ChildConstructError will be
-        generated.
-
-        gate_type: str
-            the gate type of the intended gate to generate this child population. Must be one of:
-            'threshold', 'threshold_2d', 'cluster', 'geom'.
-        kwargs:
-            arguments for population definition
-
-        Returns
-        --------
-        bool
-            True if valid else False
-        """
-        try:
-            if gate_type == 'threshold_1d' or gate_type == 'geom':
-                if not kwargs.keys() == {'definition', 'name'}:
-                    raise ChildConstructError(f'For a threshold_1d gate child population must'
-                                              f' be defined with keys `definition` and `name`; {kwargs.keys()} '
-                                              f'provided')
-                if not kwargs['definition'] in ['-', '+']:
-                    raise ChildConstructError(f'For a threshold_1d `definition` must be one of [+, -]'
-                                              f' not {kwargs["definition"]}')
-            if gate_type == 'threshold_2d':
-                if not kwargs.keys() == {'definition', 'name'}:
-                    raise ChildConstructError(f'For a threshold_2d gate child population must'
-                                              f' be defined with keys `definition` and `name`; {kwargs.keys()} '
-                                              f'provided')
-                if type(kwargs['definition']) == list or \
-                        type(kwargs['definition']) == mongoengine.base.datastructures.BaseList:
-                    for x in kwargs['definition']:
-                        if x not in ['++', '--', '-+', '+-']:
-                            raise ChildConstructError(f'Invalid definition {x}, must be one of '
-                                                      f'[++, --, -+, +-]')
-                else:
-                    if not kwargs['definition'] in ['++', '--', '-+', '+-']:
-                        raise ChildConstructError(f'Invalid definition {kwargs["definition"]}, must be '
-                                                  f'one of [++, --, -+, +-]')
-            if gate_type == 'cluster':
-                if not kwargs.keys() == {'target', 'weight', 'name'}:
-                    ChildConstructError(f'For cluster gating child population must contain keys [target, weight, '
-                                        f'name]; {kwargs.keys()} provided')
-                if len(kwargs['target']) != 2:
-                    ChildConstructError('Invalid target provided for child population, must be a tuple or list '
-                                        f'of length two, not {kwargs["target"]}')
-                if not all([isinstance(x, int) or isinstance(x, float) for x in kwargs['target']]):
-                    ChildConstructError('Invalid data type for target provided for child population, must be list '
-                                        f'or tuple of floats or integers not {kwargs["target"]}')
-                if not isinstance(kwargs['weight'], int):
-                    ChildConstructError('Invalid data type provided for weight of child population, must be '
-                                        f'of type Integer not {kwargs["weight"]}')
-        except ChildConstructError as e:
-            print(e)
-            return False
-        self.properties = kwargs
-        return True
 
 
 class ChildPopulationCollection:
