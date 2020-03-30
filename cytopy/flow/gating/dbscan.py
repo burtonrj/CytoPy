@@ -11,6 +11,16 @@ import collections
 import hdbscan
 
 
+def _meta_assignment_df(label: str or int, ref_df: pd.DataFrame) -> str or int:
+    ref_df = ref_df.copy()
+    if label == -1:
+        return -1
+    ref_df = ref_df[ref_df['cluster'] == label]
+    assert ref_df.shape[0] > 0, f'No associated meta-cluster for {label}'
+    assert ref_df.shape[0] == 1, f'More than one meta-cluster found for {label}'
+    return ref_df['meta_cluster'].values[0]
+
+
 def meta_assignment(df: pd.DataFrame, meta_clusters: pd.DataFrame) -> pd.DataFrame:
     """
     Given a reference dataframe of meta-cluster assignments, update the target dataframes cluster
@@ -21,8 +31,7 @@ def meta_assignment(df: pd.DataFrame, meta_clusters: pd.DataFrame) -> pd.DataFra
     """
     df = df.copy()
     ref_df = meta_clusters[meta_clusters['chunk_idx'] == df['chunk_idx'].values[0]]
-    df['labels'] = df['labels'].apply(lambda x:
-                                      -1 if x == -1 else ref_df[ref_df['cluster'] == x]['meta_cluster'].values[0])
+    df['labels'] = df['labels'].apply(lambda x: _meta_assignment_df(label=x, ref_df=ref_df))
     return df
 
 
@@ -184,6 +193,10 @@ class DensityBasedClustering(Gate):
         -------
         None
         """
+        if self.frac is None:
+            print('Warning: no value given for frac, defaulting to 10% to perform downsampling prior to fitting model')
+            self.frac = 0.1
+
         sample = self.sampling(self.data, 40000)
         model = DBSCAN(eps=distance_nn,
                        min_samples=self.min_pop_size,
@@ -388,7 +401,7 @@ class DensityBasedClustering(Gate):
 
         for population_id, assigned_cluster in target_predictions.items():
             idx = self.data[self.data['labels'] == assigned_cluster].index.values
-            self.child_populations.populations[population_id].update_index(idx=idx, merge_options='overwrite')
+            self.child_populations.populations[population_id].update_index(idx=idx)
             if assigned_cluster != -1:
                 x, y = polygon_shapes[assigned_cluster].exterior.xy
             else:
