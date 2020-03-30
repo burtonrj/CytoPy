@@ -67,25 +67,6 @@ def _build_density_gate(dimensions: int or float = 1.,
     return gate
 
 
-class TestChildPopulationColleciton(unittest.TestCase):
-
-    def testChildPopulationCollection(self):
-        test1d = ChildPopulationCollection(gate_type='threshold_1d')
-        test1d.add_population('positive', definition='+')
-        test1d.add_population('negative', definition='-')
-        self.assertEqual(test1d.fetch_by_definition('+'), 'positive')
-        self.assertEqual(test1d.fetch_by_definition('++'), None)
-        test1d.remove_population('positive')
-        self.assertListEqual(list(test1d.populations.keys()), ['negative'])
-
-        test2d = ChildPopulationCollection(gate_type='threshold_2d')
-        test2d.add_population('pospos', definition='++')
-        test2d.add_population('other', definition=['--', '-+', '+-'])
-        self.assertEqual(test1d.fetch_by_definition('+'), None)
-        self.assertEqual(test1d.fetch_by_definition('++'), 'pospos')
-        self.assertEqual(test1d.fetch_by_definition('--'), 'other')
-
-
 class TestGate(unittest.TestCase):
 
     @staticmethod
