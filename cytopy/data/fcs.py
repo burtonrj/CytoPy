@@ -675,3 +675,20 @@ class FileGroup(mongoengine.Document):
         assert p, f'Population {population_name} does not exist'
         return p[0]
 
+    def get_population_by_parent(self, parent: str):
+        """
+        Given the name of some parent population, return a list of Population object whom's parent matches
+
+        Parameters
+        ----------
+        parent: str
+            Name of the parent population to search for
+
+        Returns
+        -------
+        List
+            List of Populations
+        """
+        return [p for p in self.populations if p.parent == parent]
+
+

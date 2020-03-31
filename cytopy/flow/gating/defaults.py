@@ -71,7 +71,7 @@ def _validate_input(gate_type: str,
         definition = kwargs.get('definition')
         assert type(definition) == str, f'ChildPopulation definition should be of type str; ' \
                                         f'invalid definition {definition}'
-        assert definition in ['-', '+'], f'For a threshold_1d `definition` must be one of [+, -] ' \
+        assert definition in ['-', '+'], f'For a {gate_type} `definition` must be one of [+, -] ' \
                                          f'not {kwargs["definition"]}'
 
     if gate_type == 'threshold_2d':
