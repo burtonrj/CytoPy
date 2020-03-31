@@ -45,7 +45,7 @@ class Gating:
     sample: int, optional
         number of events to sample from FCS file(s) (optional)
     include_controls: bool, (default=True)
-        if True and FMOs are inclued for specified samples, the FMO data will also be loaded into the Gating object
+        if True and FMOs are included for specified samples, the FMO data will also be loaded into the Gating object
     default_axis: str, (default='FSC-A')
         default value for y-axis for all plots
     """
@@ -86,6 +86,18 @@ class Gating:
 
         self.populations = self._construct_tree(fg=fg)
 
+    @staticmethod
+    def _construct_unordered(tree: dict, new_population: dict):
+        parent = new_population.get('parent')
+        if parent is None:
+            tree[new_population.get('name')] = Node(parent=None, **new_population)
+            return tree
+        if parent not in tree.keys():
+            return False
+        parent = new_population.pop('parent')
+        tree[new_population.get('name')] = Node(**new_population, parent=tree.get(parent))
+        return tree
+
     def _construct_tree(self,
                         fg: FileGroup):
         """
@@ -111,20 +123,24 @@ class Gating:
                                        index=self.data.index.values,
                                        parent=None, control_idx=control_cache)
             return populations
+
         # Reconstruct tree and populate control cache is necessary
-        assert 'root' in [p.population_name for p in fg.populations], 'Root population missing!'
-        parents = [p.parent for p in fg.populations]
-        pops = [p.to_python() for p in fg.populations]
-        structured = dict()
-        for parent in parents:
-            structured[parent] = [p for p in pops if p.get('parent') == parent]
-        for name, pops in structured.items():
-            for p in pops:
-                parent = p.pop('parent', None)
-                if not parent:
-                    populations[p.get('name')] = Node(**p)
-                else:
-                    populations[p.get('name')] = Node(**p, parent=populations.get(parent))
+        root = fg.get_population('root').to_python()
+        root.pop('parent')
+        populations['root'] = Node(**root, parent=None)
+        database_populations = [p.to_python() for p in fg.populations if p.population_name != 'root']
+        i = 0
+        while len(database_populations) > 0:
+            if i >= len(database_populations):
+                i = 0
+            tree = self._construct_unordered(populations, database_populations[i])
+            if tree:
+                populations = tree
+                database_populations = [p for p in database_populations
+                                        if p.get('name') != database_populations[i].get('name')]
+            else:
+                i = i + 1
+
         if self.ctrl:
             if not populations['root'].control_idx:
                 populations['root'].control_idx = {control_id: control_data.index.values for
@@ -566,7 +582,7 @@ class Gating:
                     parent: str,
                     new_population_name: str) -> None:
         """
-        Given a target population and a parent population, generate a new population by subtraction of the
+        Given a target population(s) and a parent population, generate a new population by subtraction of the
         target population from the parent
 
         Parameters
@@ -583,6 +599,8 @@ class Gating:
         None
         """
         assert parent in self.populations.keys(), 'Error: parent population not recognised'
+        assert type(target) == list, 'Target should be a list (if only one population, ' \
+                                     'should be a list with one element)'
         assert all([t in self.populations.keys() for t in target]), 'Error: target population not recognised'
         assert new_population_name not in self.populations.keys(), f'Error: a population with name ' \
                                                                    f'{new_population_name} already exists'
@@ -1086,6 +1104,7 @@ class Gating:
 
         """
         assert population_name in self.populations.keys(), f'Population {population_name} does not exist'
+        assert 'shape' in geom, 'Geom missing key argument "shape"'
         parent_name = self.populations[population_name].parent.name
         parent = self.get_population_df(parent_name, transform=False)
         transform_x, transform_y = geom.get('transform_x'), geom.get('transform_y')
@@ -1178,7 +1197,8 @@ class Gating:
         None
         """
         assert gate_name in self.gates.keys(), 'Invalid gate name'
-        assert self.gates[gate_name].class_ == 'DensityThreshold', 'Can only nudge threshold gates'
+        class_, method = self.gates[gate_name].class_.lower(), self.gates[gate_name].method.lower()
+        assert 'threshold' in class_ or 'threshold' in method, 'Can only nudge threshold gates'
         children = self.gates[gate_name].children
         geoms = {c: self.fetch_geom(c) for c in children}
         for c in children:
