@@ -1,39 +1,36 @@
+import sys
+sys.path.append('/home/ross/CytoPy')
+
 # Data imports
+from cytopy.data.mongo_setup import global_init
 from cytopy.data.project import Project
 from cytopy.data.fcs import Population
-from cytopy.data.mongo_setup import global_init
-# Gating imports
-from cytopy.flow.gating.actions import Gating, ChildPopulationCollection
-from cytopy.flow.gating.base import Gate
+from cytopy.flow.gating.defaults import ChildPopulationCollection
+from cytopy.flow.gating.actions import Gating
 from cytopy.flow.gating import dbscan
-
-from cytopy.flow.gating import utilities
-
-
-
-# Other tools
-from cytopy.tests.utilities import make_example_date
-import pandas as pd
+from cytopy.tests.utilities import make_example_date, setup_with_dummy_data
+from mongoengine.connection import connect
+from mongoengine.base import datastructures
 import unittest
-import sys
-
-unittest.TestLoader.sortTestMethodsUsing = None
-sys.path.append('/home/rossco/CytoPy')
-global_init('test')
 
 
 class TestGating(unittest.TestCase):
-
-    def _build(self):
+    @staticmethod
+    def _build(dump=True):
         # Initiate Gating object
+        if dump:
+            db = connect('test')
+            db.drop_database('test')
+            global_init('test')
+            setup_with_dummy_data()
         project = Project.objects(project_id='test').get()
-        gate = Gating(experiment=project.load_experiment('test'),
-                      sample_id='test_experiment_dummy')
+        gate = Gating(experiment=project.load_experiment('test_experiment_dummy'),
+                      sample_id='dummy_test')
         return gate
 
     def test_build(self):
         gate = self._build()
-        self.assertEqual(gate.data.shape, (1000, 3))
+        self.assertEqual(gate.data.shape, (100, 3))
         self.assertEqual(gate.ctrl.get('dummy_ctrl').shape, (100, 3))
         self.assertEqual(len(gate.populations), 1)
 
@@ -54,25 +51,24 @@ class TestGating(unittest.TestCase):
         data = make_example_date(n_samples=100, centers=3, n_features=2)
         pos_idx = data[data.blobID == 0].index.values
         neg_idx = data[data.blobID != 0].index.values
-        populations = ChildPopulationCollection(gate_type='geom')
+        populations = ChildPopulationCollection(gate_type='threshold_1d')
         populations.add_population('positive', definition='+')
         populations.add_population('negative', definition='-')
         populations.populations['positive'].update_index(pos_idx)
         populations.populations['negative'].update_index(neg_idx)
-        populations.populations['positive'].update_geom(shape='test',
+        populations.populations['positive'].update_geom(shape='threshold',
                                                         x='feature0',
                                                         y='feature1')
-        populations.populations['negative'].update_geom(shape='test',
+        populations.populations['negative'].update_geom(shape='threshold',
                                                         x='feature0',
                                                         y='feature1')
         g.update_populations(output=populations,
-                             parent_name='root')
+                             parent_name='root',
+                             warnings=['this is a test'])
         return g
 
     def test_construct_tree(self):
         def _test(pops):
-            self.assertListEqual(list(pops.keys()),
-                                 ['root', 'a', 'b', 'c', 'd'])
             self.assertEqual(pops.get('a').parent.name, 'root')
             self.assertEqual(pops.get('b').parent.name, 'a')
             self.assertEqual(pops.get('c').parent.name, 'a')
@@ -82,11 +78,11 @@ class TestGating(unittest.TestCase):
         self.assertTrue(len(gate.populations) == 1)
         # Add dummy populations
         a, b, c, d = self._dummy_pops()
-        gate.filegroup.populations = [gate.populations.get('root'), a, b, c, d]
+        gate.filegroup.populations = [Population(population_name='root'), a, b, c, d]
         populations = gate._construct_tree(gate.filegroup)
         _test(populations)
 
-        gate.filegroup.populations = [gate.populations.get('root'), d, c, b, a]
+        gate.filegroup.populations = [Population(population_name='root'), d, c, b, a]
         populations = gate._construct_tree(gate.filegroup)
         _test(populations)
 
@@ -118,7 +114,7 @@ class TestGating(unittest.TestCase):
         gate = self._build()
         # Add dummy populations
         a, b, c, d = self._dummy_pops()
-        gate.filegroup.populations = [gate.populations.get('root'), a, b, c, d]
+        gate.filegroup.populations = [Population(population_name='root'), a, b, c, d]
         gate.populations = gate._construct_tree(gate.filegroup)
         valid = gate.valid_populations(populations=['root', 'a', 'c', 'f', 'd'],
                                        verbose=False)
@@ -153,12 +149,12 @@ class TestGating(unittest.TestCase):
                          len(neg_idx)/data.shape[0])
         self.assertEqual(g.populations.get('negative').prop_of_total,
                          len(neg_idx)/data.shape[0])
-        self.assertEqual(g.populations.get('positive').parent, 'root')
-        self.assertEqual(g.populations.get('negative').parent, 'root')
+        self.assertEqual(g.populations.get('positive').parent.name, 'root')
+        self.assertEqual(g.populations.get('negative').parent.name, 'root')
         self.assertDictEqual(g.populations.get('positive').geom,
-                             {'shape': 'test', 'x': 'feature0', 'y': 'feature1'})
+                             {'shape': 'threshold', 'x': 'feature0', 'y': 'feature1'})
         self.assertDictEqual(g.populations.get('negative').geom,
-                             {'shape': 'test', 'x': 'feature0', 'y': 'feature1'})
+                             {'shape': 'threshold', 'x': 'feature0', 'y': 'feature1'})
 
     def test_predict_ctrl_pop(self):
         from sklearn.neighbors import KNeighborsClassifier
@@ -195,17 +191,17 @@ class TestGating(unittest.TestCase):
                 new_population_name='merged')
         data = make_example_date(n_samples=100, centers=3, n_features=2)
         self.assertTrue('merged' in g.populations.keys())
-        self.assertListEqual(list(g.populations.get('merged').index.values),
+        self.assertListEqual(list(g.populations.get('merged').index),
                              list(data.index.values))
 
     def test_subtraction(self):
         g = self._add_population(self._build())
-        g.subtraction(target='positive',
+        g.subtraction(target=['positive'],
                       parent='root',
                       new_population_name='subtraction')
         self.assertTrue('subtraction' in g.populations.keys())
-        y = g.populations.get('negative').index.values
-        y_hat = g.populations.get('subtraction').index.values
+        y = g.populations.get('negative').index
+        y_hat = g.populations.get('subtraction').index
         self.assertListEqual(list(y), list(y_hat))
 
     @staticmethod
@@ -245,25 +241,27 @@ class TestGating(unittest.TestCase):
         self.assertIsNone(g._apply_checks('test'))
         g = self._dummy_gate(self._add_population(self._build()))
         self.assertIsNone(g._apply_checks('test'))
+        g = self._build()
         g = self._dummy_gate(g, parent='root')
         self.assertIsNotNone(g._apply_checks('test'))
 
     def test_apply_gate(self):
         data = make_example_date(n_samples=100, centers=3, n_features=2)
         g = self._dummy_gate(self._build())
-        self.assertTrue(g.apply('test', plot_output=False, feedback=False))
+        g.apply('test', plot_output=False, feedback=False)
+        self.assertTrue(all([x in g.populations.keys() for x in ['positive', 'negative']]))
         y = data[data.blobID == 1].index.values
-        y_hat = g.populations.get('positive').index.values
+        y_hat = g.populations.get('positive').index
         self.assertListEqual(list(y), list(y_hat))
 
     def test_edit_gate(self):
         data = make_example_date(n_samples=100, centers=3, n_features=2)
         g = self._build()
-        populations = ChildPopulationCollection(gate_type='geom')
-        populations.add_population('positive', definition='++')
-        populations.add_population('negative', definition=['--', '+-', '-+'])
 
         # Threshold 2D
+        populations = ChildPopulationCollection(gate_type='threshold_2d')
+        populations.add_population('positive', definition='++')
+        populations.add_population('negative', definition=['--', '+-', '-+'])
         g.create_gate(gate_name='test',
                       parent='root',
                       class_='Static',
@@ -280,20 +278,29 @@ class TestGating(unittest.TestCase):
                                  'x': 'feature0',
                                  'y': 'feature1',
                                  'threshold_x': -2.5,
-                                 'threshold_y': 5},
+                                 'threshold_y': 5,
+                                 'shape': '2d_threshold',
+                                 'transform_x': None,
+                                 'transform_y': None},
                     'negative': {'definition': ['--', '+-', '-+'],
                                  'x': 'feature0',
                                  'y': 'feature1',
                                  'threshold_x': -2.5,
-                                 'threshold_y': 5}
+                                 'threshold_y': 5,
+                                 'shape': '2d_threshold',
+                                 'transform_x': None,
+                                 'transform_y': None}
                     }
         g.edit_gate('test', updated_geom=new_geom)
         y = data[(data.feature0.round(2) >= -2.5) &
                  (data.feature1.round(2) >= 5)].index.values
-        y_hat = g.populations.get('positive').index.values
+        y_hat = g.populations.get('positive').index
         self.assertListEqual(list(y), list(y_hat))
 
         # Rectangular gate
+        populations = ChildPopulationCollection(gate_type='geom')
+        populations.add_population('positive', definition='+')
+        populations.add_population('negative', definition='-')
         g.create_gate(gate_name='test',
                       parent='root',
                       class_='Static',
@@ -308,24 +315,30 @@ class TestGating(unittest.TestCase):
                                   y_max=5.5),
                       child_populations=populations)
         g.apply('test', plot_output=False, feedback=False)
-        new_geom = {'positive': {'definition': '++',
+        new_geom = {'positive': {'definition': '+',
                                  'x': 'feature0',
                                  'y': 'feature1',
                                  'x_min': -12,
                                  'x_max': -2.5,
                                  'y_min': -12,
-                                 'y_max': 0},
-                    'negative': {'definition': ['--', '+-', '-+'],
+                                 'y_max': 0,
+                                 'shape': 'rect',
+                                 'transform_x': None,
+                                 'transform_y': None},
+                    'negative': {'definition': '-',
                                  'x': 'feature0',
                                  'y': 'feature1',
                                  'x_min': -12,
                                  'x_max': -2.5,
                                  'y_min': -12,
-                                 'y_max': 0}
+                                 'y_max': 0,
+                                 'shape': 'rect',
+                                 'transform_x': None,
+                                 'transform_y': None}
                     }
         g.edit_gate('test', updated_geom=new_geom)
         y = data[data.blobID == 2.0].index.values
-        y_hat = g.populations.get('positive').index.values
+        y_hat = g.populations.get('positive').index
         self.assertListEqual(list(y), list(y_hat))
 
         # Ellipse gate
@@ -337,46 +350,68 @@ class TestGating(unittest.TestCase):
                                   y='feature1',
                                   transform_x=None,
                                   transform_y=None,
-                                  centroid=(5.,2.5),
+                                  centroid=(5, 2.5),
                                   width=5,
-                                  height=5,
+                                  height=8,
                                   angle=0),
                       child_populations=populations)
         g.apply('test', plot_output=False, feedback=False)
-        new_geom = {'positive': {'definition': '++',
+        new_geom = {'positive': {'definition': '+',
                                  'x': 'feature0',
                                  'y': 'feature1',
-                                 'centroid': (-8., -7.5),
+                                 'centroid': (-7., -7),
                                  'width': 5,
-                                 'height': 5,
-                                 'angle': 0},
-                    'negative': {'definition': ['--', '+-', '-+'],
+                                 'height': 8,
+                                 'angle': 0,
+                                 'shape': 'ellipse',
+                                 'transform_x': None,
+                                 'transform_y': None},
+                    'negative': {'definition': '-',
                                  'x': 'feature0',
                                  'y': 'feature1',
-                                 'centroid': (-8., -7.5),
+                                 'centroid': (-7., -7),
                                  'width': 5,
-                                 'height': 5,
-                                 'angle': 0}
+                                 'height': 8,
+                                 'angle': 0,
+                                 'shape': 'ellipse',
+                                 'transform_x': None,
+                                 'transform_y': None}
                     }
         g.edit_gate('test', updated_geom=new_geom)
         y = data[data.blobID == 2.0].index.values
-        y_hat = g.populations.get('positive').index.values
+        y_hat = g.populations.get('positive').index
         self.assertListEqual(list(y), list(y_hat))
 
     def test_nudge_threshold(self):
+        # Make a dummy threshold gate
+        g = self._build()
+        populations = ChildPopulationCollection(gate_type='threshold_2d')
+        populations.add_population('positive', definition='++')
+        populations.add_population('negative', definition=['--', '+-', '-+'])
+        g.create_gate(gate_name='test',
+                      parent='root',
+                      class_='Static',
+                      method='threshold_2d',
+                      kwargs=dict(x='feature0',
+                                  y='feature1',
+                                  transform_x=None,
+                                  transform_y=None,
+                                  threshold_x=1,
+                                  threshold_y=-2.5),
+                      child_populations=populations)
+        g.apply('test')
         data = make_example_date(n_samples=100, centers=3, n_features=2)
-        g = self._dummy_gate(self._build())
-        g.nudge_threshold('test', new_x=-2.5, new_y=5)
-        y = data[(data.feature0.round(2) >= -2.5) &
-                 (data.feature1.round(2) >= 5)].index.values
-        y_hat = g.populations.get('positive').index.values
+        g.nudge_threshold('test', new_x=4, new_y=2.5)
+        y = data[(data.feature0.round(2) >= 4) &
+                 (data.feature1.round(2) >= 2.5)].index.values
+        y_hat = g.populations.get('positive').index
         self.assertListEqual(list(y), list(y_hat))
 
     def test_find_dependencies(self):
         gate = self._build()
         # Add dummy populations
         a, b, c, d = self._dummy_pops()
-        gate.filegroup.populations = [gate.populations.get('root'), a, b, c, d]
+        gate.filegroup.populations = [Population(population_name='root'), a, b, c, d]
         gate.populations = gate._construct_tree(gate.filegroup)
         self.assertListEqual(gate.find_dependencies('a'),
                              ['a', 'b', 'c', 'd'])
@@ -384,7 +419,7 @@ class TestGating(unittest.TestCase):
     def test_remove_pop(self):
         gate = self._build()
         a, b, c, d = self._dummy_pops()
-        gate.filegroup.populations = [gate.populations.get('root'), a, b, c, d]
+        gate.filegroup.populations = [Population(population_name='root'), a, b, c, d]
         gate.populations = gate._construct_tree(gate.filegroup)
         gate.remove_population('c')
         self.assertListEqual(list(gate.populations.keys()),
@@ -396,24 +431,22 @@ class TestGating(unittest.TestCase):
         self.assertEqual(type(pop), Population)
         self.assertEqual('positive', pop.population_name)
         self.assertEqual('root', pop.parent)
-        self.assertEqual(type(pop.geom), list)
+        self.assertEqual(type(pop.geom), datastructures.BaseList)
 
     def test_save(self):
         g = self._build()
         g.save()
-        g = self._build()
+        g = self._build(dump=False)
         self.assertEqual(len(g.filegroup.populations), 1)
-
-    def test_reg_as_invalid(self):
-        g = self._build()
-        g.register_as_invalid()
-        g = self._build()
-        self.assertTrue('invalid' in g.filegroup.flags)
 
     def test_check_downstream_overlaps(self):
         gate = self._build()
         a, b, c, d = self._dummy_pops()
-        gate.filegroup.populations = [gate.populations.get('root'), a, b, c, d]
+        gate.filegroup.populations = [Population(population_name='root'), a, b, c, d]
         gate.populations = gate._construct_tree(gate.filegroup)
         self.assertTrue(gate.check_downstream_overlaps('d', population_labels=['c']))
         self.assertFalse(gate.check_downstream_overlaps('a', population_labels=['c']))
+
+
+if __name__ == '__main__':
+    unittest.main()

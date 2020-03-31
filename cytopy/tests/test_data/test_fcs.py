@@ -4,7 +4,7 @@ sys.path.append('/home/ross/CytoPy')
 from cytopy.data.project import Project
 from cytopy.data.mongo_setup import global_init
 from cytopy.data.fcs import File, FileGroup, ChannelMap
-from cytopy.tests.utilities import make_example_date, basic_setup
+from cytopy.tests.utilities import make_example_date, setup_with_dummy_data
 from mongoengine import connect
 import unittest
 
@@ -15,26 +15,8 @@ global_init('test')
 
 class TestFCS(unittest.TestCase):
     def test_FileGroup(self):
-        # Create example data
-        example_data = make_example_date(n_samples=100, centers=3, n_features=2)
-        # Create dummy channel mappings
-        mappings = [ChannelMap(channel='var0', marker='feature0'),
-                    ChannelMap(channel='var1', marker='feature1'),
-                    ChannelMap(channel='var2', marker='blobID')]
-        # Populate data
         test_project = Project.objects(project_id='test').get()
         test_exp = test_project.load_experiment('test_experiment_dummy')
-        test_grp = FileGroup(primary_id='dummy_test',
-                             flags='dummy')
-        test_file = File(file_id='dummy_file', channel_mappings=mappings)
-        test_ctrl = File(file_id='dummy_ctrl', channel_mappings=mappings, file_type='control')
-        test_file.put(example_data.values)
-        test_ctrl.put(example_data.values)
-        test_grp.files = [test_file, test_ctrl]
-        test_grp.save()
-        test_exp.fcs_files.append(test_grp)
-        test_exp.save()
-
         # Testing data retrieval
         test_grp = test_exp.pull_sample('dummy_test')
         test_file = test_grp.files[0]
@@ -52,5 +34,5 @@ class TestFCS(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    basic_setup()
+    setup_with_dummy_data()
     unittest.main()
