@@ -152,8 +152,11 @@ class Plot:
         ax.set_title(title)
         return ax
 
-    def plot_gate(self, gate_name: str, xlim: tuple or None = None, ylim: tuple or None = None,
-                  transforms: dict or None = None) -> None:
+    def plot_gate(self, gate_name: str,
+                  xlim: tuple or None = None,
+                  ylim: tuple or None = None,
+                  transforms: dict or None = None,
+                  figsize: tuple = (5, 5)) -> None:
         """
         Produce a static plot of a gate
 
@@ -168,6 +171,8 @@ class Plot:
         transforms : dict, optional
             dictionary object, key corresponds to one of 3 possible axes (x, y or z) and value
             the variable to plot (If None, defaults to logicle transform for every axis)
+        figsize: tuple, (default=(5,5))
+            Figure size passed to matplotlib.pyplot.subplots call
 
         Returns
         -------
@@ -195,7 +200,7 @@ class Plot:
         data = {k: transform_axes(v, axes_vars, transforms) for k, v in self._get_gate_data(gate).items()}
         xlim, ylim = plot_axis_lims(data=data, x=axes_vars['x'], y=y, xlim=xlim, ylim=ylim)
         num_axes = len(data.keys())
-        fig, axes = plt.subplots(ncols=num_axes, figsize=(5, 5))
+        fig, axes = plt.subplots(ncols=num_axes, figsize=figsize)
         self._geom_plot(data=data, fig=fig, axes=axes,
                         geoms=geoms, axes_vars=axes_vars,
                         xlim=xlim, ylim=ylim, name=gate_name)
@@ -286,24 +291,24 @@ class Plot:
                 print(f'Population {child_name} has no associated gate, skipping...')
                 continue
             if geom['shape'] == 'threshold':
-                ax.axvline(geom['threshold'], c=colour)
+                ax.axvline(geom['threshold'], c=colour, lw=5)
             if geom['shape'] == '2d_threshold':
-                ax.axvline(geom['threshold_x'], c=colour)
-                ax.axhline(geom['threshold_y'], c=colour)
+                ax.axvline(geom['threshold_x'], c=colour, lw=5)
+                ax.axhline(geom['threshold_y'], c=colour, lw=5)
             if geom['shape'] == 'ellipse':
                 ellipse = patches.Ellipse(xy=geom['centroid'], width=geom['width'], height=geom['height'],
-                                          angle=geom['angle'], fill=False, edgecolor=colour)
+                                          angle=geom['angle'], fill=False, edgecolor=colour, lw=5)
                 ax.add_patch(ellipse)
             if geom['shape'] == 'rect':
                 rect = patches.Rectangle(xy=(geom['x_min'], geom['y_min']),
                                          width=((geom['x_max']) - (geom['x_min'])),
                                          height=(geom['y_max'] - geom['y_min']),
-                                         fill=False, edgecolor=colour)
+                                         fill=False, edgecolor=colour, lw=5)
                 ax.add_patch(rect)
             if geom['shape'] == 'poly':
                 x = geom['cords']['x']
                 y = geom['cords']['y']
-                ax.plot(x, y, '-k', c=colour, label=child_name)
+                ax.plot(x, y, '-k', c=colour, label=child_name, lw=5)
 
     @staticmethod
     def _2dhist(ax: matplotlib.pyplot.axes, data: pd.DataFrame, x: str, y: str) -> matplotlib.pyplot.axes:
@@ -335,9 +340,15 @@ class Plot:
         ax.hist2d(data[x], data[y], bins=bins, norm=LogNorm(), cmap=plt.cm.jet)
         return ax
 
-    def plot_population(self, population_name: str, x: str, y: str,
-                        xlim: tuple = None, ylim: tuple = None,
-                        transforms: dict or None = None, sample: float or None = None):
+    def plot_population(self,
+                        population_name: str,
+                        x: str,
+                        y: str,
+                        xlim: tuple = None,
+                        ylim: tuple = None,
+                        transforms: dict or None = None,
+                        sample: float or None = None,
+                        figsize: tuple = (5, 5)):
         """
         Generate a static plot of a population
 
@@ -358,12 +369,14 @@ class Plot:
             the variable to plot (If None, defaults to logicle transform for every axis)
         sample : float, optional
             if a float value is provided, given proportion of data is sampled prior to plotting (optional)
+        figsize: tuple, (default=(5,5))
+            Figure size passed to matplotlib.pyplot.subplots call
 
         Returns
         -------
         None
         """
-        fig, ax = plt.subplots(figsize=(5, 5))
+        fig, ax = plt.subplots(figsize=figsize)
         if population_name in self.gating.populations.keys():
             data = self.gating.get_population_df(population_name, transform=False).copy()
         else:
