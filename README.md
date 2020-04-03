@@ -31,44 +31,67 @@ to train a classifier. Alternatively high-dimensional clustering (by PhenoGraph 
 cells in a completely unbiased fashion. CytoPy provides access to both methodologies as we observe 
 that both have benefits and failings.
 
-For more details we refer you to our pre-print manuscript and software documentation
+For more details we refer you to our pre-print manuscript and software documentation. Our documentation contains 
+a detailed tutorials for each of the above steps.
 
 ## Installation
 
-### Requirements
-Python 3x \
-MongoDB 
+### Python and MongoDB
 
-For installing MongoDB 
+CytoPy was built in Python 3.7 and uses MongoDB for data management. 
 
-**Python libraries:** 
+For installing MongoDB the reader should refer to https://docs.mongodb.com/manual/installation/
 
-| Misc | Scipy | Cytometry Stack | Machine Learning | Plotting |
-| :--- | :--- | :--- | :--- | :--- |
-| mongoengine, anytree, tqdm, xlrd | numpy, pandas, scipy | FlowUtilsPandas, FlowIO |scikit-learn, imblearn, phate, umap, hdbscan, keras, phenograph, minisom | matplotlib, seaborn, scprep, shapely|
+CytoPy assumes that the installation is local but if a remote MongoDB database is used then a host address, port and 
+authentication parameters can be provided when connecting to the database, which is handled by cytopy.data.mongo_setup.
 
-Install using pip (not currently active):
+For installing Python 3 we recommend the distribution provided on <a href='https://www.python.org/downloads/'>Python.org</a> but 
+ alternatively <a href='https://www.anaconda.com/'>Anaconda</a> can be used. We suggest that CytoPy be installed within an isolated 
+programming environment and suggest the environment manager <a href='https://docs.python.org/3/tutorial/venv.html'>venv.</a>
 
-`pip install cytopy`
+### Installing Python dependencies
 
-Or, download source code and run the following from the source directory:
+After downloading the source code the dependencies must first be installed before installing CytoPy. 
+Dependencies are listed in requirements.txt. To install the requirements, first activate the desired environment 
+and then run the following command:
+
+`pip install -r requirements.txt`
+
+Now install CytoPy by running the following:
 
 `pip install .`
 
-## Tutorials and examples
+## License and future directions
 
-* Analysing a novel Sepsis dataset [Manuscript: ####]
-* Reproducing results from FlowCAP Challenges
-* Reproducing results from ...
-* Detailed tutorials:
-    1. Loading data into CytoPy
-    2. Pre-processing steps
-    3. Visualising and quantifying batch effect
-    4. Selecting training data
-    5. Supervised cell classification and a comparison of method
-    6. High dimensional clustering with PhenoGraph and FlowSOM
-    7. Meta-clustering and visualisation
-    8. Feature extraction and selection
-    9. Classification at the single-cell level
+03/Apr/2020
+
+CytoPy is licensed under the MIT license from the Open Source Initiative. We welcome others to collaborate and expand 
+upon the framework developed here. If you're interested in contributing to future releases and developments for CytoPy 
+please contact us at burtonrj@cardiff.ac.uk
+
+In future releases we are currently interested in the following:
+
+* Incorporating data transform/normalisation procedures that mitigate or 'remove' noise as a result of batch effect. 
+Methods of interest include <a href='https://arxiv.org/pdf/1610.04181.pdf'>MMD-ResNet</a>, 
+<a href='https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1764-6'>BERMUDA</a>,
+<a href='https://www.nature.com/articles/s41592-019-0576-7'>SAUCIE</a>, and
+<a href='https://www.ncbi.nlm.nih.gov/pubmed/32151972'>scID</a>
+
+* Improving clustering and meta-clustering by more robust methodology as described in 
+    * https://www.nature.com/articles/s41598-018-21444-4
+    * https://www.ncbi.nlm.nih.gov/pubmed/26492316?dopt=Abstract
+    * https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-15-314
+   
+* CytoPy makes the labelling of single-cell data with meta-data simple with the integration of MongoDB and 
+sophisticated object mappings. We want to therefore include the capability to model cytometry data in a direct supervised 
+classification task where the objective is to predict a disease/experiment end-point and interpretation of the learned 
+model reveals cell phenotypes of interest. This is demonstrated recently in the following manuscript https://www.biorxiv.org/content/10.1101/2020.02.05.934521v1 
+and in 2017 in <a href='https://www.nature.com/articles/ncomms14825'>CellCNN</a>
+
+* In the current version of CytoPy data transforms (such as logicle i.e. biexponential transform) is applied to data 
+prior to plotting and is a function independent of generating plots. A more effective visualisation would be to create 
+a custom Matplotlib Transform. This would also mean that the axis of plots could be displayed in decimals, making the 
+plots align better visually with current practice and FlowJo outputs.
+
 
 
