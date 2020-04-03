@@ -11,12 +11,12 @@ that are new to programming. Additionally, current tools have a loose structure 
 resulting in large custom scripts, poor reproducibility, and insufficient data management.
 
 CytoPy was created to address these issues. It was created with the general philosophy that given some 
-cytometry data and a clinical/experimental endpoint, we wish to find what properties seperate groups (e.g. what cell populations
+cytometry data and a clinical/experimental endpoint, we wish to find what properties separate groups (e.g. what cell populations
 are important for identifying a disease? What phenotypes are changing in response to a stimulus? etc). 
 The pipeline itself is centered around a MongoDB database, is built in  the Python programming language, 
 and designed with a 'low code' API, greatly 
-simplifying cytometry analysis. We can break it all down into the following steps that can be completed 
-in just a few lines of code:
+simplifying cytometry analysis. We can break it all down into the following steps that can be completed within minimal 
+code required:
 
 1. Data uploading
 2. Pre-processing
@@ -31,20 +31,15 @@ to train a classifier. Alternatively high-dimensional clustering (by PhenoGraph 
 cells in a completely unbiased fashion. CytoPy provides access to both methodologies as we observe 
 that both have benefits and failings.
 
-Alternatively, after step 3 the user can choose to perform 'cell level association'. 
-What does this mean? Rather than classifying cells according to their 'natural' clustering 
-or some predefined 'gating strategy' we simply label each individual cell with the meta data of interest 
-(experimental endpoint or patient disease state for example) and then fit a classifier such
-that it can accurately predict the endpoint given cell-level information and then extract from 
-the classifier the feature weights, therefore allowing us to deduce cellular phenotypes of importance.
-
-All above steps are discussed in the manuscript and tutorials linked at the bottom of the page.
+For more details we refer you to our pre-print manuscript and software documentation
 
 ## Installation
 
 ### Requirements
 Python 3x \
 MongoDB 
+
+For installing MongoDB 
 
 **Python libraries:** 
 
