@@ -49,17 +49,15 @@ For installing Python 3 we recommend the distribution provided on <a href='https
  alternatively <a href='https://www.anaconda.com/'>Anaconda</a> can be used. We suggest that CytoPy be installed within an isolated 
 programming environment and suggest the environment manager <a href='https://docs.python.org/3/tutorial/venv.html'>venv.</a>
 
-### Installing Python dependencies
+### Installing CytoPy
 
-After downloading the source code the dependencies must first be installed before installing CytoPy. 
-Dependencies are listed in requirements.txt. To install the requirements, first activate the desired environment 
-and then run the following command:
+To install CytoPy and it's requirements, first download the source code, activate the desired environment and then run the following command:
 
-`pip install -r requirements.txt`
+`python3 setup.py install`
 
-Now install CytoPy by running the following:
+Alternatively, run the following from within the desired environment:
 
-`pip install .`
+`pip3 install git+https://github.com/burtonrj/CytoPy.git`
 
 ## License and future directions
 
