@@ -2,6 +2,9 @@ import sys
 import os
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, root_dir)
+sys.path.append(f'{root_dir}/cytopy')
+sys.path.append(f'{root_dir}/cytopy/flow')
+sys.path.append(f'{root_dir}/cytopy/data')
 # Configuration file for the Sphinx documentation builder.
 #
 # This file only contains a selection of the most common options. For a full
@@ -56,7 +59,7 @@ exclude_patterns = []
 #
 html_theme = 'sphinx_rtd_theme'
 html_theme_options = {
-    "collapse_navigation" : True
+    "collapse_navigation" : False
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,
@@ -64,9 +67,11 @@ html_theme_options = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-html_logo = '../build/logo_sm.png'
+html_logo = '../build/logo.png'
 
 autodoc_default_options = {
     'autosummary': True,
 }
+
+
 

@@ -13,7 +13,7 @@ from .dbscan import DensityBasedClustering
 from .quantile import Quantile
 from .mixturemodel import MixtureModel
 from .defaults import ChildPopulationCollection
-from .plotting.static_plots import Plot
+from flow.gating.plotting import Plot
 from .utilities import get_params, inside_ellipse, inside_polygon
 from ..feedback import progress_bar
 # Housekeeping and other tools

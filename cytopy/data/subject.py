@@ -94,12 +94,12 @@ class Biology(mongoengine.EmbeddedDocument):
     test_category: str
         category of test
     """
-    test_date = mongoengine.DateTimeField()
-    test = mongoengine.StringField()
-    result = mongoengine.FloatField()
-    unit = mongoengine.StringField()
-    ref_range = mongoengine.StringField()
-    test_category = mongoengine.StringField()
+    test_date = mongoengine.DateTimeField(required=False)
+    test = mongoengine.StringField(required=False)
+    result = mongoengine.FloatField(required=False)
+    unit = mongoengine.StringField(required=False)
+    ref_range = mongoengine.StringField(required=False)
+    test_category = mongoengine.StringField(required=False)
 
 
 class Subject(mongoengine.DynamicDocument):

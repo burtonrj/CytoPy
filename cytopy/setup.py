@@ -1,4 +1,8 @@
 from setuptools import setup
+import sys
+
+if sys.version_info.major != 3:
+    raise RuntimeError('CytoPy requires Python 3')
 
 setup(
     name='CytoPy',
@@ -9,5 +13,6 @@ setup(
     license='MIT',
     author='Ross Burton',
     author_email='burtonrj@cardiff.ac.uk',
-    description='Python framework for data-centric autonomous cytometry analysis'
+    description='Python framework for data-centric autonomous cytometry analysis',
+    install_requires=open("requirements.txt").read()
 )
