@@ -1,6 +1,6 @@
-from ....data.gating import Gate
-from ....data.fcs import FileGroup
-from ...transforms import apply_transform
+from cytopy.data.gating import Gate
+from cytopy.data.fcs import FileGroup
+from cytopy.flow.transforms import apply_transform
 from scipy.spatial import ConvexHull
 import matplotlib
 import matplotlib.pyplot as plt
