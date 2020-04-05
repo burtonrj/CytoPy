@@ -175,9 +175,9 @@ class TestGating(unittest.TestCase):
 
         g = self._build()
         self.assertFalse(g._check_class_args(Dummy, method=''))
-        self.assertFalse(g._check_class_args(dbscan.DensityBasedClustering,
+        self.assertFalse(g._check_class_args(dbscan.DensityClustering,
                                              method='dbscan'))
-        self.assertTrue(g._check_class_args(dbscan.DensityBasedClustering,
+        self.assertTrue(g._check_class_args(dbscan.DensityClustering,
                                             method='dbscan',
                                             x='x',
                                             child_populations='',

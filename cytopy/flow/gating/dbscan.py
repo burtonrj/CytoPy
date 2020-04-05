@@ -35,7 +35,7 @@ def meta_assignment(df: pd.DataFrame, meta_clusters: pd.DataFrame) -> pd.DataFra
     return df
 
 
-class DensityBasedClustering(Gate):
+class DensityClustering(Gate):
     """
     Class for Density based spatial clustering for applications with noise. Implements both DBSCAN and HDBSCAN
 
@@ -193,11 +193,11 @@ class DensityBasedClustering(Gate):
         -------
         None
         """
-        if self.frac is None:
-            print('Warning: no value given for frac, defaulting to 10% to perform downsampling prior to fitting model')
-            self.frac = 0.1
 
         sample = self.sampling(self.data, 40000)
+        if sample is None:
+            print('Warning: no value given for frac, downsampling is recommended prior to fitting model')
+            sample = self.data
         model = DBSCAN(eps=distance_nn,
                        min_samples=self.min_pop_size,
                        algorithm='ball_tree',

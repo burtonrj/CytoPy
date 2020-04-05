@@ -98,7 +98,52 @@ If we wanted to observe the populations currently associated to a **Gating**/**T
 
 	template.print_population_tree()
 
-The actions described above are exactly the same for a **Gating** object
+.. image:: images/gating/tree.png
+
+The actions described above are exactly the same for a **Gating** object. The exception is that for a **Template** object we can save the gates to our database for later use::
+
+	template.save_new_template('Preprocessing')
+
+
+The **Template** can then be reloaded to apply to further samples::
+	
+	template = Template(experiment=exp, sample_id='new_sample', include_controls=True)
+	template.load_template('PBMCt_Preprocessing')
+	template.apply_many(apply_all=True, plot_outcome=True, feedback=False)
+
+The *apply_many* method allows you to apply many or all gates to a sample.
+
+Types of Gates
+###############
+
+Gates fall into the following cateogores according to the type of geometric object they produce: threshold_1d, threshold_2d, cluster (polygon generated from clustering algorithm applied in two dimensions), and geom (ellipse and rectangles).
+
+Each gate produces a **Geom** object that is saved to the **Population** and defines the 'space' in which that population is defined (e.g. the variables on the x and y axis, how they are transformed, and the coordinates in this space that "capture" the population of interest)
+
+For every type of gate there is a class that inherits from the **Gate** class in cytopy.flow.gating.base
+
+Each gate and their class is detailed below. Code examples are given for creating and applying a gate. Reminder: in the examples below we create gates for **Template** object, but the commands are the same for a **Gating** object.
+
+DensityThreshold
+*****************
+
+Quantile
+*********
+
+DensityClustering
+******************
+
+MixtureModel
+*************
+
+Static
+*******
+
+Using control data
+###################
+
+
+
 
 
 
