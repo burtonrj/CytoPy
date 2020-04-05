@@ -1,10 +1,10 @@
-from cytopy.data.gating import Gate
 from cytopy.data.fcs import FileGroup
 from cytopy.flow.transforms import apply_transform
 from scipy.spatial import ConvexHull
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
+import matplotlib.patches as mpatches
 from matplotlib import patches
 from anytree import Node
 from itertools import cycle
@@ -87,7 +87,11 @@ class Plot:
     def __init__(self, gating_object, default_axis):
         self.gating = gating_object
         self.default_axis = default_axis
-        self.colours = cycle(plt.get_cmap('tab20c').colors)
+        colours = ['black', 'gray', 'brown', 'orange', 'red',
+                   'coral', 'peru', 'olive', 'magenta', 'crimson',
+                   'orchid']
+        random.shuffle(colours)
+        self.colours = cycle(colours)
 
     @staticmethod
     def _plot_asthetics(ax: matplotlib.pyplot.axes, x: str, y: str,
@@ -378,6 +382,8 @@ class Plot:
                         ctrl_id: list,
                         x: str,
                         y: str,
+                        xlim: tuple = None,
+                        ylim: tuple = None,
                         transforms: dict or None = None,
                         figsize: tuple = (8, 8)):
         """
@@ -395,6 +401,10 @@ class Plot:
             X-axis variable
         y: str
             Y-axis variable
+        xlim: tuple, optional
+            x-axis limits
+        ylim: tuple, optional
+            y-axis limits
         transforms: dict, optional
             How to transform axis variables (defaults to logicle transform if not given)
         figsize: tuple
@@ -422,11 +432,19 @@ class Plot:
                                 transforms=transforms) for c in ctrl_id]
 
         fig, ax = plt.subplots(figsize=figsize)
-        self._2dhist(ax, parent, x, y)
-        ax.scatter(x=base_pop[x], y=base_pop[y], s=3, c='red', alpha=0.7, label=population)
-        for ct, co, cid in zip(ctrls, self.colours, ctrl_id):
-            ax.scatter(x=ct[x], y=ct[y], s=3, c=co, alpha=0.5, label=cid)
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        xlim, ylim = plot_axis_lims(x=x, y=y, xlim=xlim, ylim=ylim)
+        ax = self._plot_asthetics(ax, x, y, xlim, ylim, title=f'Control comparison; {population}; {ctrl_id}')
+        ax = self._2dhist(ax=ax, data=parent, x=x, y=y)
+        pop_hull = {pid: {'data': d[[x, y]].values, 'hull': ConvexHull(d[[x, y]].values)}
+                    for pid, d in zip([population] + ctrl_id, [base_pop] + ctrls)}
+        legend_handles = list()
+        for pid, data_hull in pop_hull.items():
+            colour = next(self.colours)
+            d = data_hull.get('data')
+            for simplex in data_hull.get('hull').simplices:
+                ax.plot(d[simplex, 0], d[simplex, 1], '-k', c=colour)
+            legend_handles.append(mpatches.Patch(color=colour, label=pid))
+        ax.legend(handles=legend_handles, loc='center left', bbox_to_anchor=(1, 0.5))
         return ax
 
     def backgate(self,
