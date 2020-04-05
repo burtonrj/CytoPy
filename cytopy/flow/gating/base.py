@@ -4,7 +4,6 @@ from .utilities import density_dependent_downsample
 from shapely.geometry.polygon import Polygon
 from scipy.spatial import ConvexHull
 from functools import partial
-from collections import defaultdict
 import pandas as pd
 import numpy as np
 

@@ -80,9 +80,6 @@ class MixtureModel(Gate):
             # Choose component closest to target
             tp_medoid = min(model.means_, key=lambda m: math.hypot(m[0] - self.target[0], m[1] - self.target[1]))
             tp_idx = [list(x) for x in model.means_].index(list(tp_medoid))
-            if math.ceil(math.hypot(tp_medoid[0] - self.target[0], tp_medoid[1] - self.target[1])) >= 3:
-                self.warnings.append('WARNING: actual population is at least a 3 fold distance from the target. '
-                                     'Is this really the population of interest?')
         else:
             # If target isn't specified then select the most populous component
             y_hat = model.predict(data)
