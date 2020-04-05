@@ -419,7 +419,9 @@ class Gating:
         """
         assert ctrl_id in self.ctrl.keys(), f'No control data found for {ctrl_id}'
         for pop_name in self.populations.keys():
-            self.populations[pop_name]['control_idx'].pop(pop_name)
+            if pop_name == 'root':
+                continue
+            self.populations[pop_name].control_idx.pop(ctrl_id)
 
     def control_gating(self, ctrl_id: str,
                        tree_map: dict or None = None,
