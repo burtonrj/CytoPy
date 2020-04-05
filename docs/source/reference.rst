@@ -15,7 +15,6 @@ API Reference
     api/cytopy.flow.gating.base
     api/cytopy.flow.gating.actions
     api/cytopy.flow.gating.plotting
-    api/cytopy.flow.gating.control
     api/cytopy.flow.gating.dbscan
     api/cytopy.flow.gating.defaults
     api/cytopy.flow.gating.density
