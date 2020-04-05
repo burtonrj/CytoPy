@@ -7,13 +7,12 @@ from ...data.fcs_experiments import FCSExperiment
 from ..transforms import apply_transform
 from .base import GateError
 from .static import Static
-from .control import ControlGate
 from .density import DensityThreshold
-from .dbscan import DensityBasedClustering
+from .dbscan import DensityClustering
 from .quantile import Quantile
 from .mixturemodel import MixtureModel
 from .defaults import ChildPopulationCollection
-from flow.gating.plotting import Plot
+from .plotting import Plot
 from .utilities import get_params, inside_ellipse, inside_polygon
 from ..feedback import progress_bar
 # Housekeeping and other tools
@@ -238,7 +237,7 @@ class Gating:
         dict
             Class look-up dictionary
         """
-        available_classes = [Static, ControlGate, DensityBasedClustering, DensityThreshold, Quantile, MixtureModel]
+        available_classes = [Static, DensityClustering, DensityThreshold, Quantile, MixtureModel]
         return {x.__name__: x for x in available_classes}
 
     def get_population_df(self,
@@ -745,6 +744,7 @@ class Gating:
               gate_name: str,
               plot_output: bool = True,
               feedback: bool = True,
+              plotting_kwargs: dict or None = None,
               **kwargs) -> None:
         """Apply a gate to events data (must be generated with `create_gate` first)
 
@@ -756,6 +756,8 @@ class Gating:
             If True, resulting gates will be printed to screen
         feedback : bool, (default=True)
             If True, print feedback
+        plotting_kwargs: dict or None, optional
+            Additional keyword arguments to be passed to plotting function plot_gate
         **kwargs :
             keyword arguments to pass to call to gating method
 
@@ -763,6 +765,8 @@ class Gating:
         -------
         None
         """
+        if plotting_kwargs is None:
+            plotting_kwargs = {}
         gatedoc = self._apply_checks(gate_name)
         if gatedoc is None:
             return None
@@ -770,18 +774,6 @@ class Gating:
         # Add kwargs if given
         for k, v in kwargs.items():
             gkwargs[k] = v
-        for fmo in ['fmo_x', 'fmo_y']:
-            if fmo in gkwargs.keys():
-                try:
-                    gkwargs[fmo] = self.search_ctrl_cache(target_population=gatedoc.parent,
-                                                          ctrl_id=gkwargs[fmo],
-                                                          return_dataframe=True)
-                except ValueError:
-                    print(f'No control data found for {gkwargs[fmo]}, calling "control_gating"')
-                    self.control_gating(ctrl_id=gkwargs[fmo])
-                    gkwargs[fmo] = self.search_ctrl_cache(target_population=gatedoc.parent,
-                                                          ctrl_id=gkwargs[fmo],
-                                                          return_dataframe=True)
 
         if gatedoc.class_ == 'merge':
             self.merge(population_left=gkwargs.get('left'), population_right=gkwargs.get('right'),
@@ -792,7 +784,7 @@ class Gating:
         else:
             self._construct_class_and_gate(gatedoc, gkwargs, feedback)
         if plot_output:
-            self.plotting.plot_gate(gate_name=gate_name)
+            self.plotting.plot_gate(gate_name=gate_name, **plotting_kwargs)
 
     def update_populations(self,
                            output: ChildPopulationCollection,

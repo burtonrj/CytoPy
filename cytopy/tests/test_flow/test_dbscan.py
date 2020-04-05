@@ -22,13 +22,13 @@ class TestDBSCAN(unittest.TestCase):
         populations.add_population('blob2', target=(5, 1), weight=1)
         populations.add_population('blob3', target=(-7.5, -7.5), weight=1)
 
-        gate = dbscan.DensityBasedClustering(data=example_data,
-                                             child_populations=populations,
-                                             x='feature0',
-                                             y='feature1',
-                                             transform_x=None,
-                                             transform_y=None,
-                                             min_pop_size=min_pop_size)
+        gate = dbscan.DensityClustering(data=example_data,
+                                        child_populations=populations,
+                                        x='feature0',
+                                        y='feature1',
+                                        transform_x=None,
+                                        transform_y=None,
+                                        min_pop_size=min_pop_size)
         if return_data:
             return gate, example_data
         return gate
