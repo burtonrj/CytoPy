@@ -283,7 +283,7 @@ class CellClassifier:
         keyword arguments to pass to scaling function
     frac: float, optional
         If provided, data will be downsampled to given fraction prior to classification
-    downsample_kwargs: dict, optional
+    downsampling_kwargs: dict, optional
         keyword arguments to be passed to density dependent downsampling
     """
     def __init__(self,
