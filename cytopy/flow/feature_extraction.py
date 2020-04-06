@@ -3,8 +3,13 @@ from ..data.fcs import FileGroup
 from ..data.subject import Subject
 from ..data.fcs import ClusteringDefinition
 from ..flow.gating.actions import Gating
+from ..flow.dim_reduction import dimensionality_reduction
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import LinearSVC
 from .feedback import progress_bar
 from functools import reduce
+import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 import numpy as np
 
@@ -32,7 +37,8 @@ class ControlComparisons:
     model_kwargs:
         Additional keyword arguments will be passed to instance scikit-learn classifier
     """
-    def __init__(self, experiment: FCSExperiment,
+    def __init__(self,
+                 experiment: FCSExperiment,
                  samples: list or None = None,
                  gating_model: str = 'knn',
                  tree_map: dict or None = None,
@@ -613,3 +619,211 @@ class Proportions:
         return self._as_dataframe(results)
 
 
+def sort_variance(summary: pd.DataFrame):
+    """
+    Given the output of either population_proportions or cluster_proportions of the class ExperimentProportions,
+    rank the clusters or propulations by variance (highest to lowest)
+
+    Parameters
+    ----------
+    summary: Pandas.DataFrame
+
+    Returns
+    -------
+    Pandas.DataFrame
+        Column 'feature' ranked by column 'variance' (highest to lowest)
+
+    """
+
+    x = summary.melt(id_vars='sample_id',
+                     value_name='prop',
+                     var_name='feature')
+    return x.groupby('feature').var().reset_index().sort_values('prop',
+                                                                ascending=False).rename(columns={'prop': 'variance'})
+
+
+def multicolinearity_matrix(summary: pd.DataFrame,
+                            features: list,
+                            **kwargs):
+    """
+    Given the output of either population_proportions or cluster_proportions of the class ExperimentProportions,
+    or a concatenation of results (where the features are each contained within their own column) plot a
+    multicolinearity matrix
+
+    Parameters
+    ----------
+    summary: Pandas.DataFrame
+        Columns correspond to features
+    features: List
+        List of features to include
+    kwargs:
+        Additional keyword arguments to pass to call to Seaborn.clustermap
+
+    Returns
+    -------
+    Seaborn.ClusterGrid
+    """
+    corr = summary[features].corr()
+    return sns.clustermap(corr, **kwargs)
+
+
+def dim_reduction(summary: pd.DataFrame,
+                  label: str,
+                  features: list or None = None,
+                  scale: bool = True,
+                  method: str = 'PCA',
+                  **plotting_kwargs):
+    """
+    Given a dataframe of features where each column is a feature, each row a subject, and a column whom's name is equal
+    to the value of the label argument is the target label that colours our data points in our plot, perform
+    dimensionality reduction and plot outcome.
+
+    Parameters
+    ----------
+    summary: Pandas.DataFrame
+        Dataframe of features index by column 'sample_id' and containing a column whom's name is equal to the argument
+        label
+    features: list, optional
+        If given, only these columns will be used as features
+    label: str
+        Column to colour data points by
+    scale: bool, (default=True)
+        If True, values of features are scaled (standard scale) prior to dimensionality reduction
+    method: str, (default='PCA')
+        Method used for dimensionality reduction (see cytopy.flow.dim_reduction)
+    plotting_kwargs:
+        Additional keyword arguments to pass to call to Seaborn.scatterplot
+
+    Returns
+    -------
+    Matplotlib.axes
+
+    """
+    if features is None:
+        features = [f for f in summary.columns if f not in ['sample_id', label]]
+    feature_space = summary[features].drop_na()
+    if scale:
+        scaler = StandardScaler()
+        feature_space = pd.DataFrame(scaler.fit_transform(feature_space.values),
+                                     columns=feature_space.columns,
+                                     index=feature_space.index)
+    feature_space = dimensionality_reduction(feature_space,
+                                             features=features,
+                                             method=method,
+                                             n_components=2)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    feature_space['label'] = summary[label]
+    ax = sns.scatterplot(data=feature_space,
+                         x='PCA_0',
+                         y='PCA_1',
+                         hue='label',
+                         ax=ax,
+                         **plotting_kwargs)
+    return ax
+
+
+def radar_plot(summary: pd.DataFrame,
+               features: list,
+               figsize: tuple = (10, 10)):
+    """
+    Given a Pandas DataFrame where columns are features and each row is a different subject
+    (indexed by a column named 'subject_id'), generate a radar plot of all the features
+    Parameters
+    ----------
+    summary: Pandas.DataFrame
+    features: List
+        Features to be included in the plot
+    figsize: tuple, (default=(10,10))
+
+    Returns
+    -------
+    Matplotlib.axes
+
+    """
+    summary = summary.melt(id_vars='subject_id',
+                           value_name='stat',
+                           var_name='feature')
+    summary = summary[summary.feature.isin(features)]
+    labels = summary.feature.values
+    stats = summary.stat.values
+
+    angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False)
+    stats = np.concatenate((stats, [stats[0]]))  # Closed
+    angles = np.concatenate((angles, [angles[0]]))  # Closed
+
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111, polar=True)  # Set polar axis
+    ax.plot(angles, stats, 'o-', linewidth=2, c='blue')
+    ax.set_thetagrids(angles * 180 / np.pi, labels)  # Set the label for each axis
+    ax.tick_params(pad=30)
+    ax.set_rlabel_position(145)
+    ax.grid(True)
+    return ax
+
+
+def l1_feature_selection(feature_space: pd.DataFrame,
+                         features: list,
+                         label: str,
+                         scale: bool = True,
+                         search_space: tuple = (-2, 0, 50),
+                         model: callable or None = None,
+                         figsize: tuple = (10, 5)):
+    """
+    Perform L1 regularised classification over a defined search space for the L1 parameter and plot the
+    coefficient of each feature in respect to the change in L1 parameter.
+
+    Parameters
+    ----------
+    feature_space: Pandas.DataFrame
+        A dataframe of features where each column is a feature, each row a subject, and a column whom's name is equal
+        to the value of the label argument is the target label for prediction
+    features: List
+        List of features to include in model
+    label: str
+        The target label to predict
+    scale: bool, (default=True)
+        if True, features are scaled (standard scale) prior to analysis
+    search_space: tuple, (default=(-2, 0, 50))
+        Search range for L1 parameter
+    model: callable, optional
+        Must be a Scikit-Learn classifier that accepts an L1 regularisation parameter named 'C'. If left as None,
+        a linear SVM is used
+    figsize: tuple, (default=(10,5))
+
+    Returns
+    -------
+    Matplotlib.axes
+
+    """
+
+    y = feature_space[label].values
+    feature_space = feature_space[features].drop_na()
+    if scale:
+        scaler = StandardScaler()
+        feature_space = pd.DataFrame(scaler.fit_transform(feature_space.values),
+                                     columns=feature_space.columns,
+                                     index=feature_space.index)
+    x = feature_space.values
+    cs = np.logspace(*search_space)
+    coefs = []
+    if model is None:
+        model = LinearSVC(penalty='l1',
+                          loss='squared_hinge',
+                          dual=False,
+                          tol=1e-3)
+    for c in cs:
+        model.set_params(C=c)
+        model.fit(x, y)
+        coefs.append(list(model.coef_[0]))
+    coefs = np.array(coefs)
+
+    # Plot result
+    fig, ax = plt.subplots(figsize=figsize)
+    for i, col in enumerate(range(len(features))):
+        ax.plot(cs, coefs[:, col], label=features[i])
+    ax.xscale('log')
+    ax.title('L1 penalty')
+    ax.xlabel('C')
+    ax.ylabel('Coefficient value')
+    ax.legend(bbox_to_anchor=(1, 1), loc='upper left', ncol=1)
+    return ax
