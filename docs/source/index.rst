@@ -7,7 +7,7 @@ Although exciting, this can be daunting to those from a traditional immunology b
 
 CytoPy was created to address these issues. It was created with the general philosophy that given some cytometry data and a clinical/experimental endpoint, we wish to find what properties seperate groups (e.g. what cell populations are important for identifying a disease? What phenotypes are changing in response to a stimulus? etc). The pipeline itself is centered around a MongoDB database, is built in the Python programming language, and designed with a 'low code' API, greatly simplifying cytometry analysis.
 
-CytoPy is maintained on GitHub (https://github.com/burtonrj/CytoPy) and all the latest developments can be found here. If you would like to contribute to CytoPy, please make a pull request or email us at burtonrj@cardiff.ac.uk.
+CytoPy is maintained on GitHub (https://github.com/burtonrj/CytoPy) and all the latest developments can be found here. CytoPy is also a working progress and we are eager to expand and improve it's capabilities. If you would like to contribute to CytoPy or have ideas regarding how it could be expanded or improved please make a pull request or email us at burtonrj@cardiff.ac.uk.
 
 .. toctree::
     :caption: Table of Contents
