@@ -79,7 +79,6 @@ pandocfilters==1.4.2
 parso==0.5.2
 pexpect==4.7.0
 phate==1.0.2
-PhenoGraph==1.5.2
 pickleshare==0.7.5
 prometheus-client==0.7.1
 prompt-toolkit==2.0.10
@@ -141,3 +140,4 @@ xlrd==1.2.0
 yellowbrick==1.0.1
 zipp==0.6.0
 -e git://github.com/burtonrj/FlowUtilsPandas.git#egg=FlowUtilsPandas
+-e git://github.com/jacoblevine/PhenoGraph.git#egg=PhenoGraph
