@@ -124,5 +124,3 @@ xgboost==0.90
 xlrd==1.2.0
 yellowbrick==1.0.1
 zipp==0.6.0
--e git://github.com/jacoblevine/PhenoGraph.git#egg=PhenoGraph
--e git://github.com/burtonrj/FlowUtilsPandas.git#egg=flowutilspd
