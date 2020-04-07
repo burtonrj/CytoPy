@@ -1,0 +1,302 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Getting started &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Data loading" href="data.html" />
+    <link rel="prev" title="CytoPy - a cytometry analysis framework for Python" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#using-python">Using Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installing-mongodb">Installing MongoDB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installing-cytopy">Installing CytoPy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="data.html">Data uploading</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="data.html#connecting-to-the-database">Connecting to the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#projects-subjects">Projects &amp; Subjects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#adding-cytometry-data">Adding Cytometry data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="data.html#cytometry-panels">Cytometry Panels</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gating.html">Pre-processing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="batch.html">Batch-effect analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="classify.html">Supervised cell classification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cluster.html">High-dimensional clustering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="features.html">Feature extraction, selection, and description</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.control.html">cytopy.flow.gating.control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Getting started</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/intro.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="getting-started">
+<h1>Getting started<a class="headerlink" href="#getting-started" title="Permalink to this headline">¶</a></h1>
+<p>Welcome to CytoPy, a data-centric analytical framework for cytometry data. The source code for CytoPy is stored and maintained at <a class="reference external" href="https://github.com/burtonrj/CytoPy">https://github.com/burtonrj/CytoPy</a>. You can also read our pre-print manuscript HERE. It is our hope that CytoPy opens the door to a bioinformatics approach to Cytometry analysis by using the beginner friendly programming langauge, Python. CytoPy was developed in Python 3.7. If you’re new to programming that is fine, as we have added some information below for installing Python 3.7.</p>
+<p>CytoPy makes the assumption that your hypothesis is as follows:</p>
+<p class="centered">
+<strong>“We have collected data on humans/mice/cell-lines in X experimental/clinical conditions and we want to test for cell phenotypes that differentiate between these conditions”</strong></p><p>We recognise that there has been an extraordinary effort to develop bioinformatics tools for addressing questions like the one above using Cytometry data. Some of these tools even feature within CytoPy itself (see manuscript for details). So why CytoPy and not one of the 30+ tools in the literature? CytoPy is an agnostic framework that will allow you to apply autonomous gates, supervised classification, and high-dimensional clustering algorithms, and it achieves all this whilst providing a low-code interface and a central data repository in the form of a MongoDB database. We want to make the amazing tools in the literature more accessible to immunologists whilst improving the analysts experience.</p>
+<p>Bioinformatics is a jungle of possible methods and an analysis tends to amount hundreds of scripts, lots of csv files, and lots of headaches. In CytoPy all experimental/clinical metadata is housed within a central database, which can be hosted locally or online. Linked to this metadata are the results of your gating, classification and clustering, and this is all stored in one central repository. Analysis is iterative and this fact has steered the design of CytoPy; an object-orientated interface built atop the <a class="reference external" href="http://mongoengine.org/">MongoEngine</a> ORM makes interacting with this database a breeze.</p>
+<p>Let’s get started by explaining how to setup CytoPy on your local system…</p>
+<div class="section" id="using-python">
+<h2>Using Python<a class="headerlink" href="#using-python" title="Permalink to this headline">¶</a></h2>
+<p>For those of you who are brand-new to programming or not familiar with Python, this section will provide some helpful tips on how to get started.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>CytoPy assumes you are familar with Python version 3, have some experience with object-orientated programming, and are happy with the concepts of Numpy arrays, Pandas DataFrames, and general data science concepts like machine learning and clustering</p>
+</div>
+<p>If the above note is daunting, please don’t threat! There are lots of resources linked before and I believe with 6/8 weeks hard work anyone can grasp these concepts. So if you’re brand new to Python, please start at one of the following resources:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://www.learnpython.org/">https://www.learnpython.org/</a> (Basics)</p></li>
+<li><p><a class="reference external" href="https://www.freecodecamp.org/news/want-to-learn-python-heres-our-free-4-hour-interactive-course/">https://www.freecodecamp.org/news/want-to-learn-python-heres-our-free-4-hour-interactive-course/</a> (Basics)</p></li>
+<li><p><a class="reference external" href="https://www.youtube.com/watch?v=rfscVS0vtbw">https://www.youtube.com/watch?v=rfscVS0vtbw</a> (Basics)</p></li>
+<li><p><a class="reference external" href="https://jakevdp.github.io/PythonDataScienceHandbook/">https://jakevdp.github.io/PythonDataScienceHandbook/</a> (Data science)</p></li>
+</ul>
+<p>To install Python 3 locally we recommend either:</p>
+<ul class="simple">
+<li><p>Download and install from <a class="reference external" href="https://www.python.org/downloads">Python.org</a> and then install virtualenv (see <a class="reference external" href="https://realpython.com/python-virtual-environments-a-primer/">here</a> for information about venv)</p></li>
+<li><p>Or, install <a class="reference external" href="https://www.anaconda.com/">Anaconda</a> which has environment management built in</p></li>
+</ul>
+<p>We recommend making yourself familiar with programming environments before getting started. CytoPy has many dependencies and the best way to prevent any problems down the line is to keep CytoPy contained within it’s own programming environment.</p>
+</div>
+<div class="section" id="installing-mongodb">
+<h2>Installing MongoDB<a class="headerlink" href="#installing-mongodb" title="Permalink to this headline">¶</a></h2>
+<p>CytoPy assumes you have a MongoDB server up and running, either locally or in the cloud. If you wish to install MongoDB locally, then download the community edition <a class="reference external" href="https://www.mongodb.com/download-center/community">here</a>. CytoPy makes the assumption that MongoDB is hosted locally, but if it is hosted remotely this can be specified when connecting to the database by providing the host address, port, and authentication data.</p>
+<p>Although to use CytoPy you don’t need to know much about MongoDB, we recommend that the user learns a bit about this powerful document-based database and how to perform simple troubleshooting and queries. To learn more we recommend checking out the resources over at FreeCodeCamp (<a class="reference external" href="https://www.youtube.com/watch?v=E-1xI85Zog8">https://www.youtube.com/watch?v=E-1xI85Zog8</a>).</p>
+<p>We also suggest using some sort of MongoDB GUI for troubleshooting and helping with understanding how data is stored. <a class="reference external" href="https://robomongo.org/">Robo3T</a> is a free tool that can be used for this purpose.</p>
+</div>
+<div class="section" id="installing-cytopy">
+<h2>Installing CytoPy<a class="headerlink" href="#installing-cytopy" title="Permalink to this headline">¶</a></h2>
+<p>So you have Python 3 installed, you have MongoDB installed, and now you’re ready to get started with CytoPy. First you want to create a new programming environment and activate that environment. Once inside that programming environment, either run the following command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip3</span> <span class="n">install</span> <span class="n">git</span><span class="o">+</span><span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">burtonrj</span><span class="o">/</span><span class="n">CytoPy</span><span class="o">.</span><span class="n">git</span>
+</pre></div>
+</div>
+<p>Or, alternatively, download the source code and run the setup file as so:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python3</span> <span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">install</span>
+</pre></div>
+</div>
+<p>For a detailed overview of CytoPy we direct you to our PRE-PRINT MANUSCRIPT. The remaining tutorials on this site display the functionality of CytoPy by replicating the analysis described within our manuscript.</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="data.html" class="btn btn-neutral float-right" title="Data loading" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="index.html" class="btn btn-neutral float-left" title="CytoPy - a cytometry analysis framework for Python" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

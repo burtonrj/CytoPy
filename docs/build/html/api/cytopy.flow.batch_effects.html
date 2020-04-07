@@ -1,0 +1,556 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>cytopy.flow.batch_effects &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="cytopy.flow.dim_reductions" href="cytopy.flow.dim_reduction.html" />
+    <link rel="prev" title="cytopy.flow.clustering" href="cytopy.flow.clustering.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../intro.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../data.html">Data uploading</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gating.html">Pre-processing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../batch.html">Batch-effect analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../classify.html">Supervised cell classification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cluster.html">High-dimensional clustering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Feature extraction, selection, and description</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.control.html">cytopy.flow.gating.control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../reference.html">API Reference</a> &raquo;</li>
+        
+      <li>cytopy.flow.batch_effects</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/api/cytopy.flow.batch_effects.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-cytopy.flow.batch_effects">
+<span id="cytopy-flow-batch-effects"></span><h1>cytopy.flow.batch_effects<a class="headerlink" href="#module-cytopy.flow.batch_effects" title="Permalink to this headline">¶</a></h1>
+<p><strong>Classes</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.EvaluateBatchEffects" title="cytopy.flow.batch_effects.EvaluateBatchEffects"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EvaluateBatchEffects</span></code></a>(experiment, …)</p></td>
+<td><p>Evaluate the batch effects present in an experiment.</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Functions</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.generate_groups" title="cytopy.flow.batch_effects.generate_groups"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_groups</span></code></a>(linkage_matrix, sample_ids, …)</p></td>
+<td><p>Given the output of EvaluateBatchEffects.similarity_matrix (that is the linkage matrix and ordered list of sample IDs) and a desired number of groups, return a Pandas DataFrame of sample IDs and assigned group ID, generated by cutting the linkage matrix in such a way that the desired number of groups are generated.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.indexed_kde" title="cytopy.flow.batch_effects.indexed_kde"><code class="xref py py-obj docutils literal notranslate"><span class="pre">indexed_kde</span></code></a>(named_x, kde_f)</p></td>
+<td><p>Utility function for mapping KDE function across multiple data-sets; returns tuple (key, PDF) so that the resulting PDFs can be sorted after calculation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.jenson_shannon_dist" title="cytopy.flow.batch_effects.jenson_shannon_dist"><code class="xref py py-obj docutils literal notranslate"><span class="pre">jenson_shannon_dist</span></code></a>(x, y)</p></td>
+<td><p>Wrapper for scipy.spatial.distance.jensenshannon</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.kl_distance" title="cytopy.flow.batch_effects.kl_distance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">kl_distance</span></code></a>(x, y)</p></td>
+<td><p>Wrapper for scipy.stats.entropy</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="class">
+<dt id="cytopy.flow.batch_effects.EvaluateBatchEffects">
+<em class="property">class </em><code class="sig-prename descclassname">cytopy.flow.batch_effects.</code><code class="sig-name descname">EvaluateBatchEffects</code><span class="sig-paren">(</span><em class="sig-param">experiment: cytopy.data.fcs_experiments.FCSExperiment</em>, <em class="sig-param">root_population: str</em>, <em class="sig-param">samples: list = None</em>, <em class="sig-param">transform: str = 'logicle'</em>, <em class="sig-param">scale: str = None</em>, <em class="sig-param">sample_n: str = 10000</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.batch_effects.EvaluateBatchEffects" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Evaluate the batch effects present in an experiment. Contains utility functions for visualising the
+total variation amongst collected samples.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>experiment</strong> (<a class="reference internal" href="cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment" title="cytopy.data.fcs_experiments.FCSExperiment"><em>FCSExperiment</em></a>) – Experiment to evaluate</p></li>
+<li><p><strong>root_population</strong> (<em>str</em>) – Root population; population to be retrieved from each sample for comparison</p></li>
+<li><p><strong>samples</strong> (<em>list</em><em>, </em><em>optional</em>) – List of samples to include in analysis, if None given all samples will be included</p></li>
+<li><p><strong>transform</strong> (<em>str</em><em>, </em><em>(</em><em>default='logicle'</em><em>)</em>) – Method used to transform data prior to analysis</p></li>
+<li><p><strong>scale</strong> (<em>str</em><em>, </em><em>optional</em>) – Optional parameter to scale data prior to analysis</p></li>
+<li><p><strong>sample_n</strong> (<em>int</em><em>, </em><em>optional</em><em>, </em><em>(</em><em>default=10000</em><em>)</em>) – Number of events to sample from each file in experiment</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Methods</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.calc_divergence" title="cytopy.flow.batch_effects.EvaluateBatchEffects.calc_divergence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">calc_divergence</span></code></a>(target_id, comparisons, …)</p></td>
+<td><p>Calculate the statistical distance between the probability density function of a target sample and one or many comparison samples.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.dim_reduction_grid" title="cytopy.flow.batch_effects.EvaluateBatchEffects.dim_reduction_grid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dim_reduction_grid</span></code></a>(reference_id, …)</p></td>
+<td><p>Generate a grid of embeddings using a valid dimensionality reduction technique, in each plot a reference sample is shown in blue and a comparison sample in red.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.divergence_barplot" title="cytopy.flow.batch_effects.EvaluateBatchEffects.divergence_barplot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">divergence_barplot</span></code></a>(target_id, comparisons, …)</p></td>
+<td><p>Generate a barplot of statistical distance to some reference sample (target).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.load_data" title="cytopy.flow.batch_effects.EvaluateBatchEffects.load_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_data</span></code></a>()</p></td>
+<td><p>Load new dataset from given FCS Experiment</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.marker_variance" title="cytopy.flow.batch_effects.EvaluateBatchEffects.marker_variance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">marker_variance</span></code></a>(reference_id, …)</p></td>
+<td><p>For a given reference sample and a list of markers of interest, create a grid of KDE plots with the reference sample given in red and comparison samples given in blue.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.similarity_matrix" title="cytopy.flow.batch_effects.EvaluateBatchEffects.similarity_matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">similarity_matrix</span></code></a>(exclude, figsize, …)</p></td>
+<td><p>Generate a clustered heatmap of pairwise statistical distance comparisons.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="cytopy.flow.batch_effects.EvaluateBatchEffects.calc_divergence">
+<code class="sig-name descname">calc_divergence</code><span class="sig-paren">(</span><em class="sig-param">target_id: str</em>, <em class="sig-param">comparisons: list</em>, <em class="sig-param">kde_kernel: str = 'gaussian'</em>, <em class="sig-param">divergence_method: str = 'jsd'</em>, <em class="sig-param">verbose: bool = False</em><span class="sig-paren">)</span> &#x2192; numpy.array<a class="headerlink" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.calc_divergence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate the statistical distance between the probability density function of a target sample and one or many
+comparison samples.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>target_id</strong> (<em>str</em>) – sample ID for PDF p</p></li>
+<li><p><strong>comparisons</strong> (<em>list</em>) – list of sample IDs that will form PDF q</p></li>
+<li><p><strong>kde_kernel</strong> (<em>str</em><em>, </em><em>(</em><em>default='gaussian'</em><em>)</em>) – name of kernel to use for density estimation (default = ‘gaussian’)</p></li>
+<li><p><strong>divergence_method</strong> (<em>str</em><em>, </em><em>(</em><em>default='jsd'</em><em>)</em>) – name of statistical distance metric to use; valid choices are:
+<a href="#id1"><span class="problematic" id="id2">*</span></a>jsd: squared Jensen-Shannon Divergence (default)
+<a href="#id3"><span class="problematic" id="id4">*</span></a>kl: Kullback–Leibler divergence (relative entropy); warning, asymmetrical
+<a href="#id5"><span class="problematic" id="id6">*</span></a>hellinger: squared Hellinger distance</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em><em>, </em><em>(</em><em>default=False</em><em>)</em>) – If True, function will return regular feedback (default = False)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>List of tuples in format (SAMPLE_NAME, DIVERGENCE)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.batch_effects.EvaluateBatchEffects.dim_reduction_grid">
+<code class="sig-name descname">dim_reduction_grid</code><span class="sig-paren">(</span><em class="sig-param">reference_id: str</em>, <em class="sig-param">comparisons: list</em>, <em class="sig-param">features: list</em>, <em class="sig-param">figsize: tuple = (10</em>, <em class="sig-param">10)</em>, <em class="sig-param">method: str = 'PCA'</em>, <em class="sig-param">kde: bool = False</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.dim_reduction_grid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate a grid of embeddings using a valid dimensionality reduction technique, in each plot a reference sample
+is shown in blue and a comparison sample in red. The reference sample is conserved across all plots.</p>
+<dl class="simple">
+<dt>reference_id: str</dt><dd><p>This sample will appear in red as a comparison</p>
+</dd>
+<dt>comparison_samples: list</dt><dd><p>List of samples to compare to reference (blue)</p>
+</dd>
+<dt>features: list</dt><dd><p>List of features to use for dimensionality reduction</p>
+</dd>
+<dt>figsize: tuple, (default=(10,10))</dt><dd><p>Size of figure</p>
+</dd>
+<dt>method: str, (default=’PCA’)</dt><dd><p>Method to use for dimensionality reduction (see flow.dim_reduction)</p>
+</dd>
+<dt>kde: bool, (default=False)</dt><dd><p>If True, overlay with two-dimensional PDF estimated by KDE</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Plot printed to stdout</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.batch_effects.EvaluateBatchEffects.divergence_barplot">
+<code class="sig-name descname">divergence_barplot</code><span class="sig-paren">(</span><em class="sig-param">target_id: str</em>, <em class="sig-param">comparisons: list</em>, <em class="sig-param">figsize: tuple = (8</em>, <em class="sig-param">8)</em>, <em class="sig-param">kde_kernel: str = 'gaussian'</em>, <em class="sig-param">divergence_method: str = 'hellinger'</em>, <em class="sig-param">verbose: bool = False</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.divergence_barplot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate a barplot of statistical distance to some reference sample (target).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>target_id</strong> (<em>str</em>) – Sample to use as reference</p></li>
+<li><p><strong>comparisons</strong> (<em>list</em>) – List of samples to be included in analysis and compared to reference</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>(</em><em>default=</em><em>(</em><em>8</em><em>,</em><em>8</em><em>)</em><em>)</em>) – Size of barplot figure</p></li>
+<li><p><strong>kde_kernel</strong> (<em>str</em><em>, </em><em>(</em><em>default='gaussian'</em><em>)</em>) – Name of kernel to use for kernel density estimation that generates PDF for statistical distance calculation</p></li>
+<li><p><strong>divergence_method</strong> (<em>str</em><em>, </em><em>(</em><em>default='hellinger'</em><em>)</em>) – Name of method to use for statistical distance</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em><em>, </em><em>(</em><em>default=False</em><em>)</em>) – Feedback</p></li>
+<li><p><strong>kwargs</strong> – Keyword arguments to pass to Seaborn.barplot</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.batch_effects.EvaluateBatchEffects.load_data">
+<code class="sig-name descname">load_data</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; dict<a class="headerlink" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.load_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load new dataset from given FCS Experiment</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>{sample_id: Pandas.DataFrame}</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.batch_effects.EvaluateBatchEffects.marker_variance">
+<code class="sig-name descname">marker_variance</code><span class="sig-paren">(</span><em class="sig-param">reference_id: str</em>, <em class="sig-param">comparison_samples: list</em>, <em class="sig-param">markers: list = None</em>, <em class="sig-param">figsize: tuple = (10</em>, <em class="sig-param">10)</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.marker_variance" title="Permalink to this definition">¶</a></dt>
+<dd><p>For a given reference sample and a list of markers of interest, create a grid of KDE plots with the reference
+sample given in red and comparison samples given in blue.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>reference_id</strong> (<em>str</em>) – this sample will appear in red on KDE plots</p></li>
+<li><p><strong>markers</strong> (<em>list</em><em>, </em><em>optional</em>) – list of valid marker names to plot in KDE grid</p></li>
+<li><p><strong>comparison_samples</strong> (<em>list</em>) – list of valid sample names in the current experiment</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="simple">
+<dt>figsize: tuple, (default=(10,10))</dt><dd><p>size of resulting figure</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Matplotlib figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.batch_effects.EvaluateBatchEffects.similarity_matrix">
+<code class="sig-name descname">similarity_matrix</code><span class="sig-paren">(</span><em class="sig-param">exclude: list = None</em>, <em class="sig-param">figsize: tuple = (12</em>, <em class="sig-param">12)</em>, <em class="sig-param">kde_kernel: str = 'gaussian'</em>, <em class="sig-param">distance_metric: str = 'jsd'</em>, <em class="sig-param">clustering_method: str = 'average'</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.batch_effects.EvaluateBatchEffects.similarity_matrix" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate a clustered heatmap of pairwise statistical distance comparisons. This can be used to find
+samples of high similarity and conversely demonstrates samples that greatly differ.
+Returns a linkage matrix that can be given to scipy.cluster.hierarchy.cut_tree to subset samples.
+Also returns Seaborn ClusterGrid instance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exclude</strong> (<em>list</em><em>, </em><em>optional</em>) – list of sample IDs to be omitted from plot</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>(</em><em>default=</em><em>(</em><em>12</em><em>,</em><em>12</em><em>)</em>) – size of resulting Seaborn clusterplot figure</p></li>
+<li><p><strong>kde_kernel</strong> (<em>str</em><em>, </em><em>(</em><em>default='guassian'</em><em>)</em>) – name of kernel to use for density estimation (default = ‘gaussian’)</p></li>
+<li><p><strong>distance_metric</strong> (<em>str</em><em>, </em><em>(</em><em>default='jsd'</em><em>)</em>) – name of statistical distance metric to use; valid choices are:
+<a href="#id7"><span class="problematic" id="id8">*</span></a>jsd: squared Jensen-Shannon Divergence (default)
+<a href="#id9"><span class="problematic" id="id10">*</span></a>kl: Kullback–Leibler divergence (relative entropy); warning, asymmetrical
+<a href="#id11"><span class="problematic" id="id12">*</span></a>hellinger: squared Hellinger Divergence</p></li>
+<li><p><strong>clustering_method</strong> (<em>str</em><em>, </em><em>(</em><em>default='average'</em><em>)</em>) – method for hierarchical clustering, see scipy.cluster.hierarchy.linkage for details</p></li>
+<li><p><strong>kwargs</strong> – additional keyword arguments to be passed to Seaborn ClusterPlot
+(seaborn.pydata.org/generated/seaborn.clustermap.html#seaborn.clustermap)
+(hierarchical clustering encoded as a linkage matrix, array of sample IDs,
+Seaborn ClusterGrid instance)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.batch_effects.generate_groups">
+<code class="sig-prename descclassname">cytopy.flow.batch_effects.</code><code class="sig-name descname">generate_groups</code><span class="sig-paren">(</span><em class="sig-param">linkage_matrix: numpy.array</em>, <em class="sig-param">sample_ids: list</em>, <em class="sig-param">n_groups: int</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.batch_effects.generate_groups" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given the output of EvaluateBatchEffects.similarity_matrix (that is the linkage matrix and ordered list of sample
+IDs) and a desired number of groups, return a Pandas DataFrame of sample IDs and assigned group ID, generated by
+cutting the linkage matrix in such a way that the desired number of groups are generated.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>linkage_matrix</strong> (<em>np.array</em>) – Linkage matrix generated from EvaluateBatchEffects.similarity_matrix (using SciPy.cluster.hierarchy.linkage)</p></li>
+<li><p><strong>sample_ids</strong> (<em>list</em><em> or </em><em>np.array</em>) – Ordered list of sample IDs generated from EvaluateBatchEffects.similarity_matrix</p></li>
+<li><p><strong>n_groups</strong> (<em>int</em>) – Desired number of groups</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.batch_effects.indexed_kde">
+<code class="sig-prename descclassname">cytopy.flow.batch_effects.</code><code class="sig-name descname">indexed_kde</code><span class="sig-paren">(</span><em class="sig-param">named_x: tuple</em>, <em class="sig-param">kde_f: callable</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.batch_effects.indexed_kde" title="Permalink to this definition">¶</a></dt>
+<dd><p>Utility function for mapping KDE function across multiple data-sets; returns tuple
+(key, PDF) so that the resulting PDFs can be sorted after calculation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>named_x</strong> (<em>tuple</em>) – (key, data)</p></li>
+<li><p><strong>kde_f</strong> (<em>callable</em>) – Some function for estimating PDF</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>(key, PDF)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.batch_effects.jenson_shannon_dist">
+<code class="sig-prename descclassname">cytopy.flow.batch_effects.</code><code class="sig-name descname">jenson_shannon_dist</code><span class="sig-paren">(</span><em class="sig-param">x: numpy.array</em>, <em class="sig-param">y: numpy.array</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.batch_effects.jenson_shannon_dist" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wrapper for scipy.spatial.distance.jensenshannon
+:param x:
+:type x: Numpy.array
+:param y:
+:type y: Numpy.array</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Jenson Shannon Distance</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.batch_effects.kl_distance">
+<code class="sig-prename descclassname">cytopy.flow.batch_effects.</code><code class="sig-name descname">kl_distance</code><span class="sig-paren">(</span><em class="sig-param">x</em>, <em class="sig-param">y</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.batch_effects.kl_distance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wrapper for scipy.stats.entropy
+:param x:
+:type x: Numpy.array
+:param y:
+:type y: Numpy.array</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Kullback–Leibler divergence</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="cytopy.flow.dim_reduction.html" class="btn btn-neutral float-right" title="cytopy.flow.dim_reductions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="cytopy.flow.clustering.html" class="btn btn-neutral float-left" title="cytopy.flow.clustering" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

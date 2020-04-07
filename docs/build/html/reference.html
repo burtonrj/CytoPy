@@ -1,0 +1,333 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>API Reference &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="cytopy.data.fcs" href="api/cytopy.data.fcs.html" />
+    <link rel="prev" title="Feature extraction, selection, and summarisation" href="features.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#using-python">Using Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#installing-mongodb">Installing MongoDB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#installing-cytopy">Installing CytoPy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="data.html">Data uploading</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="data.html#connecting-to-the-database">Connecting to the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#projects-subjects">Projects &amp; Subjects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#adding-cytometry-data">Adding Cytometry data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="data.html#cytometry-panels">Cytometry Panels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#creating-fcsexperiments">Creating FCSExperiments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#adding-fcs-files">Adding *.fcs files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gating.html">Pre-processing with autonomous gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#the-gating-and-template-class">The Gating and Template class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#plotting-a-population">Plotting a population</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#creating-and-applying-a-gate">Creating and applying a gate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#types-of-gates">Types of Gates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#densitythreshold">DensityThreshold</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#quantile">Quantile</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#densityclustering">DensityClustering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#mixturemodel">MixtureModel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#static">Static</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#using-control-data">Using control data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#editing-gate">Editing gate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#other-worthy-mentions">Other worthy mentions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="batch.html">Batch-effect analysis</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#choosing-a-reference-sample">Choosing a reference sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#evaluatebatcheffects">EvaluateBatchEffects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#visualising-univariant-differences">Visualising univariant differences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#visualising-multivariant-differences">Visualising multivariant differences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#building-a-similarity-matrix">Building a similarity matrix</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="classify.html">Supervised cell classification</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="classify.html#introducing-the-cellclassifier">Introducing the CellClassifier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="classify.html#training">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="classify.html#validating">Validating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="classify.html#troubleshooting-with-backgating">Troubleshooting with backgating</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cluster.html">High-dimensional clustering</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#the-clusteringdefinition">The ClusteringDefinition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#singleclustering">SingleClustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#introducing-exploratory-data-analysis-with-explorer">Introducing exploratory data analysis with Explorer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#metaclustering">MetaClustering</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="features.html">Feature extraction, selection, and description</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="features.html#summarising-the-proportion-of-cell-populations-clusters">Summarising the proportion of cell populations/clusters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#variance-and-multicolinearity">Variance and Multicolinearity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#dimensionality-reduction">Dimensionality reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#feature-selection">Feature selection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#control-comparisons">Control comparisons</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>API Reference</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/reference.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="api-reference">
+<h1>API Reference<a class="headerlink" href="#api-reference" title="Permalink to this headline">¶</a></h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="api/cytopy.data.fcs.html" class="btn btn-neutral float-right" title="cytopy.data.fcs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="features.html" class="btn btn-neutral float-left" title="Feature extraction, selection, and summarisation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

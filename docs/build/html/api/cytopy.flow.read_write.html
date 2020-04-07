@@ -1,0 +1,376 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>cytopy.flow.read_write &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="cytopy.flow.transforms" href="cytopy.flow.transforms.html" />
+    <link rel="prev" title="cytopy.flow.feedback" href="cytopy.flow.feedback.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../intro.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../data.html">Data uploading</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gating.html">Pre-processing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../batch.html">Batch-effect analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../classify.html">Supervised cell classification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cluster.html">High-dimensional clustering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Feature extraction, selection, and description</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.control.html">cytopy.flow.gating.control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../reference.html">API Reference</a> &raquo;</li>
+        
+      <li>cytopy.flow.read_write</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/api/cytopy.flow.read_write.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-cytopy.flow.read_write">
+<span id="cytopy-flow-read-write"></span><h1>cytopy.flow.read_write<a class="headerlink" href="#module-cytopy.flow.read_write" title="Permalink to this headline">¶</a></h1>
+<p><strong>Classes</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.read_write.FCSFile" title="cytopy.flow.read_write.FCSFile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FCSFile</span></code></a>(filepath[, comp_matrix])</p></td>
+<td><p>Utilising FlowIO to generate an object for representing an FCS file</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Functions</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.read_write.chunks" title="cytopy.flow.read_write.chunks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chunks</span></code></a>(df_list, n)</p></td>
+<td><p>Yield successive n-sized chunks from l.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.read_write.explore_channel_mappings" title="cytopy.flow.read_write.explore_channel_mappings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">explore_channel_mappings</span></code></a>(fcs_dir, exclude_comps)</p></td>
+<td><p>Given a directory, explore all fcs files and find all permutations of channel/marker mappings</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.read_write.fcs_mappings" title="cytopy.flow.read_write.fcs_mappings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fcs_mappings</span></code></a>(path)</p></td>
+<td><p>Fetch channel mappings from fcs file.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="class">
+<dt id="cytopy.flow.read_write.FCSFile">
+<em class="property">class </em><code class="sig-prename descclassname">cytopy.flow.read_write.</code><code class="sig-name descname">FCSFile</code><span class="sig-paren">(</span><em class="sig-param">filepath</em>, <em class="sig-param">comp_matrix=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.read_write.FCSFile" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Utilising FlowIO to generate an object for representing an FCS file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>filepath</strong> (<em>str</em>) – location of fcs file to parse</p></li>
+<li><p><strong>comp_matrix</strong> (<em>str</em>) – csv file containing compensation matrix (optional, not required if a
+spillover matrix is already linked to the file)</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Methods</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.read_write.FCSFile.compensate" title="cytopy.flow.read_write.FCSFile.compensate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">compensate</span></code></a>()</p></td>
+<td><p>Apply compensation to event data</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="cytopy.flow.read_write.FCSFile.compensate">
+<code class="sig-name descname">compensate</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.read_write.FCSFile.compensate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Apply compensation to event data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.read_write.chunks">
+<code class="sig-prename descclassname">cytopy.flow.read_write.</code><code class="sig-name descname">chunks</code><span class="sig-paren">(</span><em class="sig-param">df_list: list</em>, <em class="sig-param">n: int</em><span class="sig-paren">)</span> &#x2192; pandas.core.frame.DataFrame<a class="headerlink" href="#cytopy.flow.read_write.chunks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Yield successive n-sized chunks from l.
+ref: <a class="reference external" href="https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks">https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks</a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_list</strong> (<em>list</em>) – list of DataFrames to generated ‘chunks’ from</p></li>
+<li><p><strong>n</strong> (<em>int</em>) – number of chunks to generate</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Yields successive n-sized DataFrames</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>generator</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.read_write.explore_channel_mappings">
+<code class="sig-prename descclassname">cytopy.flow.read_write.</code><code class="sig-name descname">explore_channel_mappings</code><span class="sig-paren">(</span><em class="sig-param">fcs_dir: str</em>, <em class="sig-param">exclude_comps: bool = True</em><span class="sig-paren">)</span> &#x2192; list<a class="headerlink" href="#cytopy.flow.read_write.explore_channel_mappings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a directory, explore all fcs files and find all permutations of channel/marker mappings</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fcs_dir</strong> (<em>str</em>) – root directory to search</p></li>
+<li><p><strong>exclude_comps</strong> (<em>bool</em><em>, </em><em>(</em><em>default=True</em><em>)</em>) – exclude compentation files (must have ‘comp’ in filename)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>list of all unique channel/marker mappings</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>List</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.read_write.fcs_mappings">
+<code class="sig-prename descclassname">cytopy.flow.read_write.</code><code class="sig-name descname">fcs_mappings</code><span class="sig-paren">(</span><em class="sig-param">path: str</em><span class="sig-paren">)</span> &#x2192; list<a class="headerlink" href="#cytopy.flow.read_write.fcs_mappings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fetch channel mappings from fcs file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>path</strong> (<em>str</em>) – path to fcs file</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>List of channel mappings. Will return None if file fails to load.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>List or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="cytopy.flow.transforms.html" class="btn btn-neutral float-right" title="cytopy.flow.transforms" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="cytopy.flow.feedback.html" class="btn btn-neutral float-left" title="cytopy.flow.feedback" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

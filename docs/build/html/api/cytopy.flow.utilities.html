@@ -1,0 +1,471 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>cytopy.flow.utilities &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="CytoPy License" href="../license.html" />
+    <link rel="prev" title="cytopy.flow.transforms" href="cytopy.flow.transforms.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../intro.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intro.html#using-python">Using Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intro.html#installing-mongodb">Installing MongoDB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intro.html#installing-cytopy">Installing CytoPy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../data.html">Data uploading</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../data.html#connecting-to-the-database">Connecting to the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../data.html#projects-subjects">Projects &amp; Subjects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../data.html#adding-cytometry-data">Adding Cytometry data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../data.html#cytometry-panels">Cytometry Panels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../data.html#creating-fcsexperiments">Creating FCSExperiments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../data.html#adding-fcs-files">Adding *.fcs files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../gating.html">Pre-processing with autonomous gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#the-gating-and-template-class">The Gating and Template class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#plotting-a-population">Plotting a population</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#creating-and-applying-a-gate">Creating and applying a gate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#types-of-gates">Types of Gates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#densitythreshold">DensityThreshold</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#quantile">Quantile</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#densityclustering">DensityClustering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#mixturemodel">MixtureModel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#static">Static</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#using-control-data">Using control data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#editing-gate">Editing gate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#other-worthy-mentions">Other worthy mentions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../batch.html">Batch-effect analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../classify.html">Supervised cell classification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cluster.html">High-dimensional clustering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Feature extraction, selection, and description</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.control.html">cytopy.flow.gating.control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../reference.html">API Reference</a> &raquo;</li>
+        
+      <li>cytopy.flow.utilities</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/api/cytopy.flow.utilities.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-cytopy.flow.utilities">
+<span id="cytopy-flow-utilities"></span><h1>cytopy.flow.utilities<a class="headerlink" href="#module-cytopy.flow.utilities" title="Permalink to this headline">¶</a></h1>
+<p><strong>Functions</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.utilities.faithful_downsampling" title="cytopy.flow.utilities.faithful_downsampling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">faithful_downsampling</span></code></a>(data, h)</p></td>
+<td><p>An implementation of faithful downsampling as described in:  Zare H, Shooshtari P, Gupta A, Brinkman R.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.utilities.hellinger_dot" title="cytopy.flow.utilities.hellinger_dot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hellinger_dot</span></code></a>(p, q)</p></td>
+<td><p>Hellinger distance between two discrete distributions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.utilities.jsd_divergence" title="cytopy.flow.utilities.jsd_divergence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">jsd_divergence</span></code></a>(p, q)</p></td>
+<td><p>Calculate the Jensen-Shannon Divergence between two PDFs</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.utilities.kde_bandwidth_cv" title="cytopy.flow.utilities.kde_bandwidth_cv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">kde_bandwidth_cv</span></code></a>(x, bandwidth_search, cv)</p></td>
+<td><p>Estimate best bandwidth for KDE using cross validation</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.utilities.kde_multivariant" title="cytopy.flow.utilities.kde_multivariant"><code class="xref py py-obj docutils literal notranslate"><span class="pre">kde_multivariant</span></code></a>(x, bandwidth, …)</p></td>
+<td><p>Perform Kernel Density Estimation for a multivariant data.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.utilities.load_and_transform" title="cytopy.flow.utilities.load_and_transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_and_transform</span></code></a>(sample_id, experiment, …)</p></td>
+<td><p>Standard function for loading data from an experiment, transforming, scaling, and sampling.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.utilities.ordered_load_transform" title="cytopy.flow.utilities.ordered_load_transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ordered_load_transform</span></code></a>(sample_id, …)</p></td>
+<td><p>Wrapper function for load_and_transform that adds convenience for multi-processing (data can be ordered post-hoc); returns a tuple, first element is the subject ID and the second element the population dataframe.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="function">
+<dt id="cytopy.flow.utilities.faithful_downsampling">
+<code class="sig-prename descclassname">cytopy.flow.utilities.</code><code class="sig-name descname">faithful_downsampling</code><span class="sig-paren">(</span><em class="sig-param">data: numpy.array</em>, <em class="sig-param">h: float</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.utilities.faithful_downsampling" title="Permalink to this definition">¶</a></dt>
+<dd><p>An implementation of faithful downsampling as described in:  Zare H, Shooshtari P, Gupta A, Brinkman R.
+Data reduction for spectral clustering to analyze high throughput flow cytometry data.
+BMC Bioinformatics 2010;11:403</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>Numpy.array</em>) – numpy array to be down-sampled</p></li>
+<li><p><strong>h</strong> (<em>float</em>) – radius for nearest neighbours search</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Down-sampled array</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Numpy.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.utilities.hellinger_dot">
+<code class="sig-prename descclassname">cytopy.flow.utilities.</code><code class="sig-name descname">hellinger_dot</code><span class="sig-paren">(</span><em class="sig-param">p: numpy.array</em>, <em class="sig-param">q: numpy.array</em><span class="sig-paren">)</span> &#x2192; float<a class="headerlink" href="#cytopy.flow.utilities.hellinger_dot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Hellinger distance between two discrete distributions.
+Original code found here: <a class="reference external" href="https://nbviewer.jupyter.org/gist/Teagum/460a508cda99f9874e4ff828e1896862">https://nbviewer.jupyter.org/gist/Teagum/460a508cda99f9874e4ff828e1896862</a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>p</strong> (<em>Numpy.array</em>) – discrete probability distribution, p</p></li>
+<li><p><strong>q</strong> (<em>Numpy.array</em>) – discrete probability distribution, q</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Hellinger Distance</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Numpy.float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.utilities.jsd_divergence">
+<code class="sig-prename descclassname">cytopy.flow.utilities.</code><code class="sig-name descname">jsd_divergence</code><span class="sig-paren">(</span><em class="sig-param">p: numpy.array</em>, <em class="sig-param">q: numpy.array</em><span class="sig-paren">)</span> &#x2192; float<a class="headerlink" href="#cytopy.flow.utilities.jsd_divergence" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate the Jensen-Shannon Divergence between two PDFs</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>p</strong> (<em>Numpy.array</em>) – discrete probability distribution, p</p></li>
+<li><p><strong>q</strong> (<em>Numpy.array</em>) – discrete probability distribution, q</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Jenson-Shannon Divergence</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Numpy.float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.utilities.kde_bandwidth_cv">
+<code class="sig-prename descclassname">cytopy.flow.utilities.</code><code class="sig-name descname">kde_bandwidth_cv</code><span class="sig-paren">(</span><em class="sig-param">x</em>, <em class="sig-param">bandwidth_search: tuple = None</em>, <em class="sig-param">cv: int = 20</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.utilities.kde_bandwidth_cv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Estimate best bandwidth for KDE using cross validation</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – data for KDE</p></li>
+<li><p><strong>bandwidth_search</strong> (<em>tuple</em><em>, </em><em>optional</em>) – tuple specifying range of bandwidth values to search (start, end) in cross validation;
+if value is None, 5th and 95th quartile of data is used for lower ad upper limit respectively</p></li>
+<li><p><strong>cv</strong> (<em>int</em><em>, </em><em>(</em><em>default=20</em><em>)</em>) – number of folds to use in cross validation (default = 20)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Optimal bandwidth</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.utilities.kde_multivariant">
+<code class="sig-prename descclassname">cytopy.flow.utilities.</code><code class="sig-name descname">kde_multivariant</code><span class="sig-paren">(</span><em class="sig-param">x: numpy.array</em>, <em class="sig-param">bandwidth: str = 'cross_val'</em>, <em class="sig-param">bandwidth_search: tuple = None</em>, <em class="sig-param">bins: int = 1000</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span> &#x2192; numpy.array<a class="headerlink" href="#cytopy.flow.utilities.kde_multivariant" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform Kernel Density Estimation for a multivariant data. Function is a wrapper for methods provided by
+the scikit-learn library. See scikit-learn documentation for available kernels (default = gaussian).
+Cross-validation available for bandwidth search by setting bandwidth argument to ‘cross_val’ otherwise
+a float value is expected.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> (<em>Numpy.array</em>) – data to perform KDE upon; if 1 dimensional data must be reshaped e.g. np.array.reshape(-1, 1)</p></li>
+<li><p><strong>bandwidth</strong> (<em>str</em><em> or </em><em>float</em><em>, </em><em>(</em><em>default='cross_val'</em><em>)</em>) – either float value for bandwidth or ‘cross-val’ to estimate bandwidth using cross-validation</p></li>
+<li><p><strong>bandwidth_search</strong> (<em>tuple</em><em>, </em><em>optional</em>) – tuple specifying range of bandwidth values to search (start, end) in cross validaiton;
+ignored if bandwidth != ‘cross_val’</p></li>
+<li><p><strong>bins</strong> (<em>int</em><em>, </em><em>(</em><em>default=1000</em><em>)</em>) – bin size for generating grid of sample locations for scoring probability estimate</p></li>
+<li><p><strong>kwargs</strong> – additional keyword arguments to pass to sklearn.neighbors.KernelDensity</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Probability density estimate</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Numpy.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.utilities.load_and_transform">
+<code class="sig-prename descclassname">cytopy.flow.utilities.</code><code class="sig-name descname">load_and_transform</code><span class="sig-paren">(</span><em class="sig-param">sample_id: str</em>, <em class="sig-param">experiment: cytopy.data.fcs_experiments.FCSExperiment</em>, <em class="sig-param">root_population: str</em>, <em class="sig-param">transform: str</em>, <em class="sig-param">scale: str = None</em>, <em class="sig-param">sample_n: int = None</em><span class="sig-paren">)</span> &#x2192; pandas.core.frame.DataFrame<a class="headerlink" href="#cytopy.flow.utilities.load_and_transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>Standard function for loading data from an experiment, transforming, scaling, and sampling.
+experiment: Experiment object that sample belongs to</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample_id</strong> (<em>str</em>) – ID for sample to load</p></li>
+<li><p><strong>experiment</strong> (<a class="reference internal" href="cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment" title="cytopy.data.fcs_experiments.FCSExperiment"><em>FCSExperiment</em></a>) – Experiment of interest</p></li>
+<li><p><strong>root_population</strong> (<em>str</em>) – name of root population to load from sample</p></li>
+<li><p><strong>transform</strong> (<em>str</em><em>, </em><em>optional</em>) – name of transformation method to apply (if None, data is returned untransformed)</p></li>
+<li><p><strong>scale</strong> (<em>str</em><em>, </em><em>optional</em>) – name of scalling method to apply after transformation (if None, no scaling is applied)</p></li>
+<li><p><strong>sample_n</strong> (<em>int</em><em>, </em><em>optional</em>) – number of events to return (sample is uniform; if None, no sampling occurs)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Population DataFrame or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.utilities.ordered_load_transform">
+<code class="sig-prename descclassname">cytopy.flow.utilities.</code><code class="sig-name descname">ordered_load_transform</code><span class="sig-paren">(</span><em class="sig-param">sample_id: str</em>, <em class="sig-param">experiment: cytopy.data.fcs_experiments.FCSExperiment</em>, <em class="sig-param">root_population: str</em>, <em class="sig-param">transform: str</em>, <em class="sig-param">scale: str = None</em>, <em class="sig-param">sample_n: int = None) -&gt; (&lt;class 'str'&gt;</em>, <em class="sig-param">&lt;class 'pandas.core.frame.DataFrame'&gt;</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.utilities.ordered_load_transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wrapper function for load_and_transform that adds convenience for multi-processing (data can be ordered post-hoc);
+returns a tuple, first element is the subject ID and the second element the population dataframe.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>experiment</strong> (<a class="reference internal" href="cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment" title="cytopy.data.fcs_experiments.FCSExperiment"><em>FCSExperiment</em></a>) – Experiment object that sample belongs to</p></li>
+<li><p><strong>sample_id</strong> (<em>str</em>) – ID for sample to load</p></li>
+<li><p><strong>root_population</strong> (<em>str</em>) – name of root population to load from sample</p></li>
+<li><p><strong>transform</strong> (<em>str</em>) – name of transformation method to apply (if None, data is returned untransformed)</p></li>
+<li><p><strong>scale</strong> (<em>str</em><em>, </em><em>optional</em>) – name of scalling method to apply after transformation (if None, no scaling is applied)</p></li>
+<li><p><strong>sample_n</strong> (<em>int</em><em>, </em><em>optional</em>) – number of events to return (sample is uniform; if None, no sampling occurs)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>sample_id, population DataFrame</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str, Pandas.DataFrame or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../license.html" class="btn btn-neutral float-right" title="CytoPy License" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="cytopy.flow.transforms.html" class="btn btn-neutral float-left" title="cytopy.flow.transforms" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

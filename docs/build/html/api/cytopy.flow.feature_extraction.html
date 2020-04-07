@@ -1,0 +1,765 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>cytopy.flow.feature_extraction &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="cytopy.flow.feedback" href="cytopy.flow.feedback.html" />
+    <link rel="prev" title="cytopy.flow.dim_reductions" href="cytopy.flow.dim_reduction.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../intro.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intro.html#using-python">Using Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intro.html#installing-mongodb">Installing MongoDB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intro.html#installing-cytopy">Installing CytoPy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../data.html">Data uploading</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../data.html#connecting-to-the-database">Connecting to the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../data.html#projects-subjects">Projects &amp; Subjects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../data.html#adding-cytometry-data">Adding Cytometry data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../data.html#cytometry-panels">Cytometry Panels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../data.html#creating-fcsexperiments">Creating FCSExperiments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../data.html#adding-fcs-files">Adding *.fcs files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../gating.html">Pre-processing with autonomous gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#the-gating-and-template-class">The Gating and Template class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#plotting-a-population">Plotting a population</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#creating-and-applying-a-gate">Creating and applying a gate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#types-of-gates">Types of Gates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#densitythreshold">DensityThreshold</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#quantile">Quantile</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#densityclustering">DensityClustering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#mixturemodel">MixtureModel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#static">Static</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#using-control-data">Using control data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#editing-gate">Editing gate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#other-worthy-mentions">Other worthy mentions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../batch.html">Batch-effect analysis</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../batch.html#choosing-a-reference-sample">Choosing a reference sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../batch.html#evaluatebatcheffects">EvaluateBatchEffects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../batch.html#visualising-univariant-differences">Visualising univariant differences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../batch.html#visualising-multivariant-differences">Visualising multivariant differences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../batch.html#building-a-similarity-matrix">Building a similarity matrix</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../classify.html">Supervised cell classification</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../classify.html#introducing-the-cellclassifier">Introducing the CellClassifier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../classify.html#training">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../classify.html#validating">Validating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../classify.html#troubleshooting-with-backgating">Troubleshooting with backgating</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../cluster.html">High-dimensional clustering</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cluster.html#the-clusteringdefinition">The ClusteringDefinition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cluster.html#singleclustering">SingleClustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cluster.html#introducing-exploratory-data-analysis-with-explorer">Introducing exploratory data analysis with Explorer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cluster.html#metaclustering">MetaClustering</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Feature extraction, selection, and description</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../features.html#summarising-the-proportion-of-cell-populations-clusters">Summarising the proportion of cell populations/clusters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../features.html#variance-and-multicolinearity">Variance and Multicolinearity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../features.html#dimensionality-reduction">Dimensionality reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../features.html#feature-selection">Feature selection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../features.html#control-comparisons">Control comparisons</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../reference.html">API Reference</a> &raquo;</li>
+        
+      <li>cytopy.flow.feature_extraction</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/api/cytopy.flow.feature_extraction.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-cytopy.flow.feature_extraction">
+<span id="cytopy-flow-feature-extraction"></span><h1>cytopy.flow.feature_extraction<a class="headerlink" href="#module-cytopy.flow.feature_extraction" title="Permalink to this headline">¶</a></h1>
+<p><strong>Classes</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.ControlComparisons" title="cytopy.flow.feature_extraction.ControlComparisons"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ControlComparisons</span></code></a>(experiment, samples, …)</p></td>
+<td><p>This class is for making experiment wide comparisons of controls to the primary data collected on each sample.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.ExperimentProportions" title="cytopy.flow.feature_extraction.ExperimentProportions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExperimentProportions</span></code></a>(experiment, samples)</p></td>
+<td><p>Calculate proportion of populations/clusters for an experiment</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.Proportions" title="cytopy.flow.feature_extraction.Proportions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Proportions</span></code></a>(experiment, sample_id)</p></td>
+<td><p>Calculate proportion of populations/clusters for a single sample</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Functions</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.dim_reduction" title="cytopy.flow.feature_extraction.dim_reduction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dim_reduction</span></code></a>(summary, label, features, …)</p></td>
+<td><p>Given a dataframe of features where each column is a feature, each row a subject, and a column whom’s name is equal to the value of the label argument is the target label that colours our data points in our plot, perform dimensionality reduction and plot outcome.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.l1_feature_selection" title="cytopy.flow.feature_extraction.l1_feature_selection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">l1_feature_selection</span></code></a>(feature_space, …)</p></td>
+<td><p>Perform L1 regularised classification over a defined search space for the L1 parameter and plot the coefficient of each feature in respect to the change in L1 parameter.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.meta_labelling" title="cytopy.flow.feature_extraction.meta_labelling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">meta_labelling</span></code></a>(experiment, dataframe, meta_label)</p></td>
+<td><p>Given a Pandas DataFrame and an FCSExperiment object, on the assumption that the DataFrame contains a column named ‘sample_id’ with the ID of samples associated to the given FCSExperiment, parse the sample ID’s and retrieve patient meta-data.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.multicolinearity_matrix" title="cytopy.flow.feature_extraction.multicolinearity_matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multicolinearity_matrix</span></code></a>(summary, features, …)</p></td>
+<td><p>Given the output of either population_proportions or cluster_proportions of the class ExperimentProportions,</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.radar_plot" title="cytopy.flow.feature_extraction.radar_plot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">radar_plot</span></code></a>(summary, features, figsize)</p></td>
+<td><p>Given a Pandas DataFrame where columns are features and each row is a different subject</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.sort_variance" title="cytopy.flow.feature_extraction.sort_variance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sort_variance</span></code></a>(summary)</p></td>
+<td><p>Given the output of either population_proportions or cluster_proportions of the class ExperimentProportions,</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="class">
+<dt id="cytopy.flow.feature_extraction.ControlComparisons">
+<em class="property">class </em><code class="sig-prename descclassname">cytopy.flow.feature_extraction.</code><code class="sig-name descname">ControlComparisons</code><span class="sig-paren">(</span><em class="sig-param">experiment: cytopy.data.fcs_experiments.FCSExperiment</em>, <em class="sig-param">samples: list = None</em>, <em class="sig-param">gating_model: str = 'knn'</em>, <em class="sig-param">tree_map: dict = None</em>, <em class="sig-param">**model_kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.ControlComparisons" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>This class is for making experiment wide comparisons of controls to the primary data collected
+on each sample. As an example, people commonly use Full-Minus-One controls (FMO) in cytometry experiments.
+Where a common FMO is present across all samples of an experiment, a ControlComparison object will allow
+the extraction of a population from both primary samples and control samples and make comparisons.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>experiment</strong> (<a class="reference internal" href="cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment" title="cytopy.data.fcs_experiments.FCSExperiment"><em>FCSExperiment</em></a>) – Instance of FCSExperiment to investigate</p></li>
+<li><p><strong>samples</strong> (<em>list</em><em>, </em><em>optional</em>) – List of samples in experiment to investigate, if left as None all samples will be included</p></li>
+<li><p><strong>gating_model</strong> (<em>str</em><em>, </em><em>(</em><em>default='knn'</em><em>)</em>) – Type of model to use to estimate the populations in control samples using primary data as training data, if
+control samples have not been gated previously and saved to the database.
+By default it uses a KNearestNeighbours model, but user has the option to use a Support Vector Machine instead (svm).</p></li>
+<li><p><strong>tree_map</strong> (<em>dict</em><em>, </em><em>optional</em>) – Only required if one or more samples in experiment is lacking populations for control data and populations in sample
+were derived using a supervised machine learning model. See cytopy.gating.actions.Gating.control_gating for more information.</p></li>
+<li><p><strong>model_kwargs</strong> – Additional keyword arguments will be passed to instance scikit-learn classifier</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Methods</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.ControlComparisons.statistic_1d" title="cytopy.flow.feature_extraction.ControlComparisons.statistic_1d"><code class="xref py py-obj docutils literal notranslate"><span class="pre">statistic_1d</span></code></a>(markers, population, transform, …)</p></td>
+<td><p>Calculate a desired statistic for each marker currently acquired</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="cytopy.flow.feature_extraction.ControlComparisons.statistic_1d">
+<code class="sig-name descname">statistic_1d</code><span class="sig-paren">(</span><em class="sig-param">markers: list</em>, <em class="sig-param">population: str</em>, <em class="sig-param">transform: bool = True</em>, <em class="sig-param">transform_method: str = 'logicle'</em>, <em class="sig-param">stat: str = 'fold_change'</em>, <em class="sig-param">center_function: callable = None</em><span class="sig-paren">)</span> &#x2192; pandas.core.frame.DataFrame<a class="headerlink" href="#cytopy.flow.feature_extraction.ControlComparisons.statistic_1d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate a desired statistic for each marker currently acquired</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>markers</strong> (<em>list</em>) – List of markers to calculate statistic for</p></li>
+<li><p><strong>population</strong> (<em>str</em>) – Population to calculate statistic for</p></li>
+<li><p><strong>transform</strong> (<em>bool</em><em>, </em><em>(</em><em>default=True</em><em>)</em>) – If True, apply transfomration to data</p></li>
+<li><p><strong>transform_method</strong> (<em>str</em><em>, </em><em>(</em><em>default='logicle'</em><em>)</em>) – Transformation method to apply</p></li>
+<li><p><strong>stat</strong> (<em>str</em><em>, </em><em>(</em><em>default = 'fold_change'</em><em>)</em>) – Name of the statistic to calculate. Currently CytoPy version 0.0.1 only supports fold_change, which is
+the relative fold change in MFI between control and primary data. Future releases hope to include more.</p></li>
+<li><p><strong>center_function</strong> (<em>callable</em><em>, </em><em>(</em><em>default=Numpy.mean</em><em>)</em>) – Function to use for calculating center of data</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="cytopy.flow.feature_extraction.ExperimentProportions">
+<em class="property">class </em><code class="sig-prename descclassname">cytopy.flow.feature_extraction.</code><code class="sig-name descname">ExperimentProportions</code><span class="sig-paren">(</span><em class="sig-param">experiment: cytopy.data.fcs_experiments.FCSExperiment</em>, <em class="sig-param">samples: list = None</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.ExperimentProportions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Calculate proportion of populations/clusters for an experiment</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>experiment</strong> (<a class="reference internal" href="cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment" title="cytopy.data.fcs_experiments.FCSExperiment"><em>FCSExperiment</em></a>) – Experiment to calculate proportions for</p></li>
+<li><p><strong>samples</strong> (<em>list</em><em>, </em><em>optional</em>) – List of samples to include, if not provided, will analyse all samples in experiment</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Methods</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.ExperimentProportions.cluster_proportions" title="cytopy.flow.feature_extraction.ExperimentProportions.cluster_proportions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cluster_proportions</span></code></a>(comparison_population, …)</p></td>
+<td><p>Retrieve proportion of clusters relative to some comparison population</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.ExperimentProportions.population_proportions" title="cytopy.flow.feature_extraction.ExperimentProportions.population_proportions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">population_proportions</span></code></a>(parent, …)</p></td>
+<td><p>Retrieve the proportion of populations relative to some parent population</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.ExperimentProportions.raw_counts" title="cytopy.flow.feature_extraction.ExperimentProportions.raw_counts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raw_counts</span></code></a>(populations)</p></td>
+<td><p>Collect raw counts of events in populations.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="cytopy.flow.feature_extraction.ExperimentProportions.cluster_proportions">
+<code class="sig-name descname">cluster_proportions</code><span class="sig-paren">(</span><em class="sig-param">comparison_population: str</em>, <em class="sig-param">clusters_of_interest: list</em>, <em class="sig-param">clustering_definition: cytopy.data.fcs.ClusteringDefinition</em>, <em class="sig-param">merge_associated_clusters: bool = False</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.ExperimentProportions.cluster_proportions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve proportion of clusters relative to some comparison population</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>comparison_population</strong> (<em>str</em>) – Population to compare clusters to: proportion = cluster/comparison_population</p></li>
+<li><p><strong>clusters_of_interest</strong> (<em>list</em>) – Clusters to collect proportions for</p></li>
+<li><p><strong>clustering_definition</strong> (<a class="reference internal" href="cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition" title="cytopy.data.fcs.ClusteringDefinition"><em>ClusteringDefinition</em></a>) – ClusteringDefinition for clusters of interest</p></li>
+<li><p><strong>merge_associated_clusters</strong> (<em>bool</em><em>, </em><em>(</em><em>default=False</em><em>)</em>) – If True, values in clusters_of_interest treated as like terms and clusters are merged on like terms
+e.g. a value of ‘CD4’ would result in all clusters containing the term ‘CD4’ into one cluster</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.feature_extraction.ExperimentProportions.population_proportions">
+<code class="sig-name descname">population_proportions</code><span class="sig-paren">(</span><em class="sig-param">parent: str</em>, <em class="sig-param">populations_of_interest: list</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.ExperimentProportions.population_proportions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve the proportion of populations relative to some parent population</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>parent</strong> (<em>str</em>) – Name of parent population; proportion = population/parent</p></li>
+<li><p><strong>populations_of_interest</strong> (<em>list</em>) – List of populations to retrieve proportional data for</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.feature_extraction.ExperimentProportions.raw_counts">
+<code class="sig-name descname">raw_counts</code><span class="sig-paren">(</span><em class="sig-param">populations: list</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.ExperimentProportions.raw_counts" title="Permalink to this definition">¶</a></dt>
+<dd><p>Collect raw counts of events in populations. Returns a DataFrame with columns ‘sample_id’,
+‘{population_name}’. Where the population column contains the raw counts.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>populations</strong> (<em>list</em>) – Population names to collect raw counts of</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="cytopy.flow.feature_extraction.Proportions">
+<em class="property">class </em><code class="sig-prename descclassname">cytopy.flow.feature_extraction.</code><code class="sig-name descname">Proportions</code><span class="sig-paren">(</span><em class="sig-param">experiment: cytopy.data.fcs_experiments.FCSExperiment</em>, <em class="sig-param">sample_id: str</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.Proportions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Calculate proportion of populations/clusters for a single sample</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>experiment</strong> (<a class="reference internal" href="cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment" title="cytopy.data.fcs_experiments.FCSExperiment"><em>FCSExperiment</em></a>) – Experiment sample associate to</p></li>
+<li><p><strong>sample_id</strong> (<em>str</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Methods</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.Proportions.get_cluster_n" title="cytopy.flow.feature_extraction.Proportions.get_cluster_n"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_cluster_n</span></code></a>(clustering_definition, …)</p></td>
+<td><p>Get number of events in a single cluster</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.Proportions.get_cluster_proportions" title="cytopy.flow.feature_extraction.Proportions.get_cluster_proportions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_cluster_proportions</span></code></a>(…)</p></td>
+<td><p>Retrieve proportion of clusters relative to some comparison population</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.Proportions.get_pop_proportions" title="cytopy.flow.feature_extraction.Proportions.get_pop_proportions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_pop_proportions</span></code></a>(parent, …)</p></td>
+<td><p>Get the proportion of events for populations</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.feature_extraction.Proportions.get_population_n" title="cytopy.flow.feature_extraction.Proportions.get_population_n"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_population_n</span></code></a>(population)</p></td>
+<td><p>Get raw counts of a single population</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="cytopy.flow.feature_extraction.Proportions.get_cluster_n">
+<code class="sig-name descname">get_cluster_n</code><span class="sig-paren">(</span><em class="sig-param">clustering_definition: cytopy.data.fcs.ClusteringDefinition</em>, <em class="sig-param">cluster_id: str</em>, <em class="sig-param">merge_on_like_term: bool = False</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.Proportions.get_cluster_n" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get number of events in a single cluster</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>clustering_definition</strong> (<a class="reference internal" href="cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition" title="cytopy.data.fcs.ClusteringDefinition"><em>ClusteringDefinition</em></a>) – ClusteringDefinition for cluster of interest</p></li>
+<li><p><strong>cluster_id</strong> (<em>str</em>) – ID for cluster of interest</p></li>
+<li><p><strong>merge_on_like_term</strong> (<em>bool</em><em>, </em><em>(</em><em>default=False</em><em>)</em>) – If True, cluster_id treated as like terms and clusters are merged on like terms
+e.g. a value of ‘CD4’ would result in all clusters containing the term ‘CD4’ into one cluster</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>N events</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.feature_extraction.Proportions.get_cluster_proportions">
+<code class="sig-name descname">get_cluster_proportions</code><span class="sig-paren">(</span><em class="sig-param">comparison_population: str</em>, <em class="sig-param">clusters_of_interest: list</em>, <em class="sig-param">clustering_definition: cytopy.data.fcs.ClusteringDefinition</em>, <em class="sig-param">merge_associated_clusters: bool = False</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.Proportions.get_cluster_proportions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve proportion of clusters relative to some comparison population</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>comparison_population</strong> (<em>str</em>) – Population to compare clusters to: proportion = cluster/comparison_population</p></li>
+<li><p><strong>clusters_of_interest</strong> (<em>list</em>) – Clusters to collect proportions for</p></li>
+<li><p><strong>clustering_definition</strong> (<a class="reference internal" href="cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition" title="cytopy.data.fcs.ClusteringDefinition"><em>ClusteringDefinition</em></a>) – ClusteringDefinition for clusters of interest</p></li>
+<li><p><strong>merge_associated_clusters</strong> (<em>bool</em><em>, </em><em>(</em><em>default=False</em><em>)</em>) – If True, values in clusters_of_interest treated as like terms and clusters are merged on like terms
+e.g. a value of ‘CD4’ would result in all clusters containing the term ‘CD4’ into one cluster</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.feature_extraction.Proportions.get_pop_proportions">
+<code class="sig-name descname">get_pop_proportions</code><span class="sig-paren">(</span><em class="sig-param">parent: str</em>, <em class="sig-param">populations_of_interest: list</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.Proportions.get_pop_proportions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the proportion of events for populations</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>parent</strong> (<em>str</em>) – Parent population for comparison; proportion = population/parent</p></li>
+<li><p><strong>populations_of_interest</strong> (<em>list</em>) – List of populations to calculate proportions for</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.feature_extraction.Proportions.get_population_n">
+<code class="sig-name descname">get_population_n</code><span class="sig-paren">(</span><em class="sig-param">population: str</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.Proportions.get_population_n" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get raw counts of a single population</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>population</strong> (<em>str</em>) – Name of population</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>N events</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Int</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.feature_extraction.dim_reduction">
+<code class="sig-prename descclassname">cytopy.flow.feature_extraction.</code><code class="sig-name descname">dim_reduction</code><span class="sig-paren">(</span><em class="sig-param">summary: pandas.core.frame.DataFrame</em>, <em class="sig-param">label: str</em>, <em class="sig-param">features: list = None</em>, <em class="sig-param">scale: bool = True</em>, <em class="sig-param">method: str = 'PCA'</em>, <em class="sig-param">**plotting_kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.dim_reduction" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a dataframe of features where each column is a feature, each row a subject, and a column whom’s name is equal
+to the value of the label argument is the target label that colours our data points in our plot, perform
+dimensionality reduction and plot outcome.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>summary</strong> (<em>Pandas.DataFrame</em>) – Dataframe of features index by column ‘sample_id’ and containing a column whom’s name is equal to the argument
+label</p></li>
+<li><p><strong>features</strong> (<em>list</em><em>, </em><em>optional</em>) – If given, only these columns will be used as features</p></li>
+<li><p><strong>label</strong> (<em>str</em>) – Column to colour data points by</p></li>
+<li><p><strong>scale</strong> (<em>bool</em><em>, </em><em>(</em><em>default=True</em><em>)</em>) – If True, values of features are scaled (standard scale) prior to dimensionality reduction</p></li>
+<li><p><strong>method</strong> (<em>str</em><em>, </em><em>(</em><em>default='PCA'</em><em>)</em>) – Method used for dimensionality reduction (see cytopy.flow.dim_reduction)</p></li>
+<li><p><strong>plotting_kwargs</strong> – Additional keyword arguments to pass to call to Seaborn.scatterplot</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Matplotlib.axes</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.feature_extraction.l1_feature_selection">
+<code class="sig-prename descclassname">cytopy.flow.feature_extraction.</code><code class="sig-name descname">l1_feature_selection</code><span class="sig-paren">(</span><em class="sig-param">feature_space: pandas.core.frame.DataFrame</em>, <em class="sig-param">features: list</em>, <em class="sig-param">label: str</em>, <em class="sig-param">scale: bool = True</em>, <em class="sig-param">search_space: tuple = (-2</em>, <em class="sig-param">0</em>, <em class="sig-param">50)</em>, <em class="sig-param">model: callable = None</em>, <em class="sig-param">figsize: tuple = (10</em>, <em class="sig-param">5)</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.l1_feature_selection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform L1 regularised classification over a defined search space for the L1 parameter and plot the
+coefficient of each feature in respect to the change in L1 parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>feature_space</strong> (<em>Pandas.DataFrame</em>) – A dataframe of features where each column is a feature, each row a subject, and a column whom’s name is equal
+to the value of the label argument is the target label for prediction</p></li>
+<li><p><strong>features</strong> (<em>List</em>) – List of features to include in model</p></li>
+<li><p><strong>label</strong> (<em>str</em>) – The target label to predict</p></li>
+<li><p><strong>scale</strong> (<em>bool</em><em>, </em><em>(</em><em>default=True</em><em>)</em>) – if True, features are scaled (standard scale) prior to analysis</p></li>
+<li><p><strong>search_space</strong> (<em>tuple</em><em>, </em><em>(</em><em>default=</em><em>(</em><em>-2</em><em>, </em><em>0</em><em>, </em><em>50</em><em>)</em><em>)</em>) – Search range for L1 parameter</p></li>
+<li><p><strong>model</strong> (<em>callable</em><em>, </em><em>optional</em>) – Must be a Scikit-Learn classifier that accepts an L1 regularisation parameter named ‘C’. If left as None,
+a linear SVM is used</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>(</em><em>default=</em><em>(</em><em>10</em><em>,</em><em>5</em><em>)</em><em>)</em>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Matplotlib.axes</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.feature_extraction.meta_labelling">
+<code class="sig-prename descclassname">cytopy.flow.feature_extraction.</code><code class="sig-name descname">meta_labelling</code><span class="sig-paren">(</span><em class="sig-param">experiment: cytopy.data.fcs_experiments.FCSExperiment</em>, <em class="sig-param">dataframe: pandas.core.frame.DataFrame</em>, <em class="sig-param">meta_label: str</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.meta_labelling" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a Pandas DataFrame and an FCSExperiment object, on the assumption that the DataFrame contains
+a column named ‘sample_id’ with the ID of samples associated to the given FCSExperiment, parse the sample
+ID’s and retrieve patient meta-data. Returns modified DataFrame with a new column corresponding to the requested
+meta-data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>experiment</strong> (<a class="reference internal" href="cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment" title="cytopy.data.fcs_experiments.FCSExperiment"><em>FCSExperiment</em></a>) – Instance of FCSExperiment to search</p></li>
+<li><p><strong>dataframe</strong> (<em>Pandas.DataFrame</em>) – DataFrame with a minimum of one column named ‘sample_id’ that will be passed to fetch
+associated patient meta-data using the given FCSExperiment object</p></li>
+<li><p><strong>meta_label</strong> (<em>str</em>) – Name of a meta-data variable, associated to the Subject document of each patient, that should be
+retrieved and inserted into the DataFrame</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Modified DataFrame with a new column corresponding to the requested meta-data</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.feature_extraction.multicolinearity_matrix">
+<code class="sig-prename descclassname">cytopy.flow.feature_extraction.</code><code class="sig-name descname">multicolinearity_matrix</code><span class="sig-paren">(</span><em class="sig-param">summary: pandas.core.frame.DataFrame</em>, <em class="sig-param">features: list</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.multicolinearity_matrix" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given the output of either population_proportions or cluster_proportions of the class ExperimentProportions,
+or a concatenation of results (where the features are each contained within their own column) plot a
+multicolinearity matrix</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>summary</strong> (<em>Pandas.DataFrame</em>) – Columns correspond to features</p></li>
+<li><p><strong>features</strong> (<em>List</em>) – List of features to include</p></li>
+<li><p><strong>kwargs</strong> – Additional keyword arguments to pass to call to Seaborn.clustermap</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Seaborn.ClusterGrid</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.feature_extraction.radar_plot">
+<code class="sig-prename descclassname">cytopy.flow.feature_extraction.</code><code class="sig-name descname">radar_plot</code><span class="sig-paren">(</span><em class="sig-param">summary: pandas.core.frame.DataFrame</em>, <em class="sig-param">features: list</em>, <em class="sig-param">figsize: tuple = (10</em>, <em class="sig-param">10)</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.radar_plot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a Pandas DataFrame where columns are features and each row is a different subject
+(indexed by a column named ‘subject_id’), generate a radar plot of all the features
+:param summary:
+:type summary: Pandas.DataFrame
+:param features: Features to be included in the plot
+:type features: List
+:param figsize:
+:type figsize: tuple, (default=(10,10))</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Matplotlib.axes</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cytopy.flow.feature_extraction.sort_variance">
+<code class="sig-prename descclassname">cytopy.flow.feature_extraction.</code><code class="sig-name descname">sort_variance</code><span class="sig-paren">(</span><em class="sig-param">summary: pandas.core.frame.DataFrame</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.feature_extraction.sort_variance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given the output of either population_proportions or cluster_proportions of the class ExperimentProportions,
+rank the clusters or propulations by variance (highest to lowest)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>summary</strong> (<em>Pandas.DataFrame</em>) – </p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Column ‘feature’ ranked by column ‘variance’ (highest to lowest)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="cytopy.flow.feedback.html" class="btn btn-neutral float-right" title="cytopy.flow.feedback" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="cytopy.flow.dim_reduction.html" class="btn btn-neutral float-left" title="cytopy.flow.dim_reductions" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

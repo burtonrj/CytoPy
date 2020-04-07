@@ -1,0 +1,485 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>cytopy.flow.gating.base &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="cytopy.flow.gating.actions" href="cytopy.flow.gating.actions.html" />
+    <link rel="prev" title="cytopy.data.utilities" href="cytopy.data.utilities.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../intro.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../intro.html#using-python">Using Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intro.html#installing-mongodb">Installing MongoDB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../intro.html#installing-cytopy">Installing CytoPy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../data.html">Data uploading</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../data.html#connecting-to-the-database">Connecting to the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../data.html#projects-subjects">Projects &amp; Subjects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../data.html#adding-cytometry-data">Adding Cytometry data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../data.html#cytometry-panels">Cytometry Panels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../data.html#creating-fcsexperiments">Creating FCSExperiments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../data.html#adding-fcs-files">Adding *.fcs files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../gating.html">Pre-processing with autonomous gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#the-gating-and-template-class">The Gating and Template class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#plotting-a-population">Plotting a population</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#creating-and-applying-a-gate">Creating and applying a gate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#types-of-gates">Types of Gates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#densitythreshold">DensityThreshold</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#quantile">Quantile</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#densityclustering">DensityClustering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#mixturemodel">MixtureModel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gating.html#static">Static</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#using-control-data">Using control data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#editing-gate">Editing gate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../gating.html#other-worthy-mentions">Other worthy mentions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../batch.html">Batch-effect analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../classify.html">Supervised cell classification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cluster.html">High-dimensional clustering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Feature extraction, selection, and description</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.control.html">cytopy.flow.gating.control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../reference.html">API Reference</a> &raquo;</li>
+        
+      <li>cytopy.flow.gating.base</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/api/cytopy.flow.gating.base.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-cytopy.flow.gating.base">
+<span id="cytopy-flow-gating-base"></span><h1>cytopy.flow.gating.base<a class="headerlink" href="#module-cytopy.flow.gating.base" title="Permalink to this headline">¶</a></h1>
+<p><strong>Classes</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.base.Gate" title="cytopy.flow.gating.base.Gate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Gate</span></code></a>(data, x, child_populations, y, frac, …)</p></td>
+<td><p>Base class for gate definition.</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exceptions</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.base.GateError" title="cytopy.flow.gating.base.GateError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GateError</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+<dl class="class">
+<dt id="cytopy.flow.gating.base.Gate">
+<em class="property">class </em><code class="sig-prename descclassname">cytopy.flow.gating.base.</code><code class="sig-name descname">Gate</code><span class="sig-paren">(</span><em class="sig-param">data: pandas.core.frame.DataFrame</em>, <em class="sig-param">x: str</em>, <em class="sig-param">child_populations: cytopy.flow.gating.defaults.ChildPopulationCollection</em>, <em class="sig-param">y: str = None</em>, <em class="sig-param">frac: float = None</em>, <em class="sig-param">downsample_method: str = 'uniform'</em>, <em class="sig-param">density_downsample_kwargs: dict = None</em>, <em class="sig-param">transform_x: str = 'logicle'</em>, <em class="sig-param">transform_y: str = 'logicle'</em>, <em class="sig-param">low_memory: bool = False</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.gating.base.Gate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base class for gate definition.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>Pandas.DataFrame</em>) – FCS data for gating</p></li>
+<li><p><strong>x</strong> (<em>str</em>) – name of X dimension</p></li>
+<li><p><strong>y</strong> (<em>str</em><em>, </em><em>optional</em>) – name of Y dimension (optional)</p></li>
+<li><p><strong>populations</strong> (<em>child</em>) – Collection of populations that gate generates</p></li>
+<li><p><strong>frac</strong> (<em>float</em><em>, </em><em>optional</em>) – Fraction of data to sample prior to gating (if None, sampling not performed)</p></li>
+<li><p><strong>downsample_method</strong> (<em>str</em><em>, </em><em>(</em><em>default='uniform'</em><em>)</em>) – If frac is not None, method used for downsampling (must be either ‘uniform’ or ‘density’)</p></li>
+<li><p><strong>density_downsample_kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Keyword arguments to pass to flow.utilitis.density_dependent_downsample if downsample_method is ‘density’</p></li>
+<li><p><strong>transform_x</strong> (<em>str</em><em> or </em><em>None</em><em>, </em><em>(</em><em>default='logicle'</em><em>)</em>) – Method used to transform x-axis</p></li>
+<li><p><strong>transform_y</strong> (<em>str</em><em> or </em><em>None</em><em>, </em><em>(</em><em>default='logicle'</em><em>)</em>) – Method used to transform y-axis</p></li>
+<li><p><strong>low_memory</strong> (<em>bool</em><em>, </em><em>(</em><em>default=False</em><em>)</em>) – If True, frac is adjusted according to the size of the DataFrame</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Methods</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.base.Gate.child_update_1d" title="cytopy.flow.gating.base.Gate.child_update_1d"><code class="xref py py-obj docutils literal notranslate"><span class="pre">child_update_1d</span></code></a>(threshold, method)</p></td>
+<td><p>Internal method.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.base.Gate.child_update_2d" title="cytopy.flow.gating.base.Gate.child_update_2d"><code class="xref py py-obj docutils literal notranslate"><span class="pre">child_update_2d</span></code></a>(x_threshold, y_threshold, method)</p></td>
+<td><p>Internal method.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.base.Gate.generate_chunks" title="cytopy.flow.gating.base.Gate.generate_chunks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_chunks</span></code></a>(chunksize)</p></td>
+<td><p>Generate a list of dataframes (chunks) from original data of a target chunksize</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.base.Gate.generate_polygons" title="cytopy.flow.gating.base.Gate.generate_polygons"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_polygons</span></code></a>(data)</p></td>
+<td><p>Generate a dictionary of polygon coordinates and shapely Polygon from clustered data</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.base.Gate.sampling" title="cytopy.flow.gating.base.Gate.sampling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sampling</span></code></a>(data, threshold)</p></td>
+<td><p>For a given dataset perform down-sampling</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.base.Gate.uniform_downsample" title="cytopy.flow.gating.base.Gate.uniform_downsample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">uniform_downsample</span></code></a>(sample_size, data)</p></td>
+<td><p>Sample associated events data</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="cytopy.flow.gating.base.Gate.child_update_1d">
+<code class="sig-name descname">child_update_1d</code><span class="sig-paren">(</span><em class="sig-param">threshold: float</em>, <em class="sig-param">method: str</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#cytopy.flow.gating.base.Gate.child_update_1d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Internal method. Given a threshold and method generated from 1 dimensional threshold gating, update the objects child
+population collection.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>threshold</strong> (<em>float</em>) – threshold value for gate</p></li>
+<li><p><strong>method</strong> (<em>str</em>) – method used for generating threshold</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.base.Gate.child_update_2d">
+<code class="sig-name descname">child_update_2d</code><span class="sig-paren">(</span><em class="sig-param">x_threshold: float</em>, <em class="sig-param">y_threshold: float</em>, <em class="sig-param">method: str</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#cytopy.flow.gating.base.Gate.child_update_2d" title="Permalink to this definition">¶</a></dt>
+<dd><p>Internal method. Given thresholds and method generated from 2 dimensional threshold gating,
+update the objects child population collection.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x_threshold</strong> (<em>float</em>) – threshold value for gate in x-dimension</p></li>
+<li><p><strong>y_threshold</strong> (<em>float</em>) – threshold value for gate in y-dimension</p></li>
+<li><p><strong>method</strong> (<em>str</em>) – method used for generating threshold</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.base.Gate.generate_chunks">
+<code class="sig-name descname">generate_chunks</code><span class="sig-paren">(</span><em class="sig-param">chunksize: int</em><span class="sig-paren">)</span> &#x2192; list<a class="headerlink" href="#cytopy.flow.gating.base.Gate.generate_chunks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate a list of dataframes (chunks) from original data of a target chunksize</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>chunksize</strong> (<em>int</em>) – target size of chunks (might be smaller or larger than intended value depending on the size
+of the data)</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>List of pandas dataframes, one for each chunk</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>List</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.base.Gate.generate_polygons">
+<code class="sig-name descname">generate_polygons</code><span class="sig-paren">(</span><em class="sig-param">data: pandas.core.frame.DataFrame = None</em><span class="sig-paren">)</span> &#x2192; dict<a class="headerlink" href="#cytopy.flow.gating.base.Gate.generate_polygons" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate a dictionary of polygon coordinates and shapely Polygon from clustered data
+objects</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>data</strong> (<em>Panda.DataFrame</em><em>, </em><em>optional</em>) – Optional, if DataFrame given, overwrites call to self.data</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Dictionary of polygon coordinates and dictionary of Polygon shapely objects</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.base.Gate.sampling">
+<code class="sig-name descname">sampling</code><span class="sig-paren">(</span><em class="sig-param">data: pandas.core.frame.DataFrame</em>, <em class="sig-param">threshold: float</em><span class="sig-paren">)</span> &#x2192; pandas.core.frame.DataFrame<a class="headerlink" href="#cytopy.flow.gating.base.Gate.sampling" title="Permalink to this definition">¶</a></dt>
+<dd><p>For a given dataset perform down-sampling</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>Pandas.DataFrame</em>) – Events data to downsample</p></li>
+<li><p><strong>threshold</strong> (<em>float</em>) – threshold below which sampling is not necessary</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Down-sampled data</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.base.Gate.uniform_downsample">
+<code class="sig-name descname">uniform_downsample</code><span class="sig-paren">(</span><em class="sig-param">sample_size: int = 0.1</em>, <em class="sig-param">data: pandas.core.frame.DataFrame = None</em><span class="sig-paren">)</span> &#x2192; pandas.core.frame.DataFrame<a class="headerlink" href="#cytopy.flow.gating.base.Gate.uniform_downsample" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sample associated events data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample_size</strong> (<em>int</em><em> or </em><em>float</em><em>, </em><em>(</em><em>default=0.1</em><em>)</em>) – fraction or number of events to sample from dataset</p></li>
+<li><p><strong>data</strong> (<em>Pandas.DataFrame</em><em>, </em><em>optional</em>) – Optional, if given overrides call to self.data</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>sampled pandas dataframe</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="exception">
+<dt id="cytopy.flow.gating.base.GateError">
+<em class="property">exception </em><code class="sig-prename descclassname">cytopy.flow.gating.base.</code><code class="sig-name descname">GateError</code><a class="headerlink" href="#cytopy.flow.gating.base.GateError" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Exception</span></code></p>
+<dl class="method">
+<dt id="cytopy.flow.gating.base.GateError.with_traceback">
+<code class="sig-name descname">with_traceback</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.gating.base.GateError.with_traceback" title="Permalink to this definition">¶</a></dt>
+<dd><p>Exception.with_traceback(tb) –
+set self.__traceback__ to tb and return self.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="cytopy.flow.gating.actions.html" class="btn btn-neutral float-right" title="cytopy.flow.gating.actions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="cytopy.data.utilities.html" class="btn btn-neutral float-left" title="cytopy.data.utilities" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

@@ -1,0 +1,723 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Autonomous gating and pre-processing &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Assessment of batch effects" href="batch.html" />
+    <link rel="prev" title="Data loading" href="data.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#using-python">Using Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#installing-mongodb">Installing MongoDB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#installing-cytopy">Installing CytoPy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="data.html">Data uploading</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="data.html#connecting-to-the-database">Connecting to the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#projects-subjects">Projects &amp; Subjects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#adding-cytometry-data">Adding Cytometry data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="data.html#cytometry-panels">Cytometry Panels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#creating-fcsexperiments">Creating FCSExperiments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#adding-fcs-files">Adding *.fcs files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Pre-processing with autonomous gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-gating-and-template-class">The Gating and Template class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#plotting-a-population">Plotting a population</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#creating-and-applying-a-gate">Creating and applying a gate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#types-of-gates">Types of Gates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#densitythreshold">DensityThreshold</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#quantile">Quantile</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#densityclustering">DensityClustering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mixturemodel">MixtureModel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#static">Static</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#using-control-data">Using control data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#editing-gate">Editing gate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#other-worthy-mentions">Other worthy mentions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="batch.html">Batch-effect analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="classify.html">Supervised cell classification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cluster.html">High-dimensional clustering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="features.html">Feature extraction, selection, and description</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Autonomous gating and pre-processing</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/gating.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="autonomous-gating-and-pre-processing">
+<h1>Autonomous gating and pre-processing<a class="headerlink" href="#autonomous-gating-and-pre-processing" title="Permalink to this headline">¶</a></h1>
+<p>We were heavily inspired by the great work of OpenCyto, an autonomous gating framework developed for R Bioconductor. We recognised early on however, that autonomous gating is limited in it’s capabilities. First of all, what do we mean by an “autonomous gate”.</p>
+<p>An autonomous gate is one that replicates the actions of a manual gate by applying some sort of algorithm to the same data in two dimensional space. Autonomous gates as a means of automated cytometry analysis have the following issues:</p>
+<ul class="simple">
+<li><p>Being a direct emulation of manual gating, they suffer from the same bias as a manually derived gating strategy</p></li>
+<li><p>Because the algorithm of choice is only ever applied to two-dimensional space, and therefore two variables as opposed to all available variables, the algorithm can struggle to generalise; if two biological samples deviate from one another signficantly this can result in abnormal results</p></li>
+<li><p>Building on the previous point, algorithms applied in this way don’t take into consideration the “global topology” of the immunological landscape captured across all variables measured</p></li>
+</ul>
+<p>This is why CytoPy focuses instead on using supervised machine learning and high-dimensional clustering that has access to all available variables when modelling the cytometry data.</p>
+<p>Despite this, we decided to include automated gating as a function of CytoPy. The reason for this is that we found, no matter the quailty of data, some amount of ‘gating’ is required. Before we can classify cells autonomously we must remove debris, dead cells, and other artifacts. The efficiency and standardisation of this process can be greatly improved through the use of autonomous gates.</p>
+<p>We actually refer to this as <strong>semi-autonomous</strong> gating, just for complete transparancy; some ‘static’ gates are often used in this task and to be honest, automated gates are not perfect and for about 10% of them some manual intervetion will be needed. We have created convenience functions to make the editing of gates easy.</p>
+<p>Pre-processing normally follows these steps:</p>
+<ol class="arabic simple">
+<li><p>Design a gating <strong>Template</strong></p></li>
+<li><p>Apply that <strong>Template</strong> to each biological sample within an <strong>FCSExperiment</strong></p></li>
+<li><p>The <strong>Template</strong> generates <strong>Population</strong>’s as a result of this gating process and they are saved to the underlying database in each biological samples <strong>FCSGroup</strong></p></li>
+<li><p>The <strong>Template</strong> results in an ‘identical’ root population being generated for each biological sample e.g. T cells or CD45+ leukocytes. This root population is the point from which supervised classification and high-dimensional clustering take place.</p></li>
+</ol>
+<p>A <strong>Population</strong> is generated whenever a gate is applied or when classified by some supervised classification algorithm. High-dimensional clustering algorithms can be applied to a <strong>Population</strong> and the resulting clusters saved within that <strong>Population</strong></p>
+<div class="section" id="the-gating-and-template-class">
+<h2>The Gating and Template class<a class="headerlink" href="#the-gating-and-template-class" title="Permalink to this headline">¶</a></h2>
+<p>The <strong>Gating</strong> class is central to CytoPy’s design. It is the primary class used for accessing the biological samples contained within an experiment to create and apply gates, generate <strong>Population**s and visualise data. The **Gating</strong> class is very powerful and we recommend checking out the API reference for details (see cytopy.gating.actions.Gating).</p>
+<p>Often what we want to do is create a ‘gating strategy’: a sequence of gates applied to each biological sample, rendering the root population for each. We do this by using the <strong>Template</strong> class. This class directly inherits from the <strong>Gating</strong> class except it has the ability to save the gating sequence to the database for later use.</p>
+<p>We initiate a <strong>Template</strong> object like so:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">project</span> <span class="o">=</span> <span class="n">Project</span><span class="o">.</span><span class="n">objects</span><span class="p">(</span><span class="n">project_id</span><span class="o">=</span><span class="s1">&#39;Peritonitis&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<span class="n">exp</span> <span class="o">=</span> <span class="n">project</span><span class="o">.</span><span class="n">load_experiment</span><span class="p">(</span><span class="s1">&#39;PD_T_PDMCs&#39;</span><span class="p">)</span>
+<span class="n">template</span> <span class="o">=</span> <span class="n">Template</span><span class="p">(</span><span class="n">experiment</span><span class="o">=</span><span class="n">exp</span><span class="p">,</span> <span class="n">sample_id</span><span class="o">=</span><span class="s1">&#39;286-03_pdmc_t&#39;</span><span class="p">,</span> <span class="n">include_controls</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The arguments passed to <strong>Template</strong> are the same as those that would be passed to <strong>Gating</strong>. We provide <strong>Template</strong> with our <strong>FCSExperiment</strong> and the ID for the sample we want to load. For creating a gating template you should choose a biological sample that is fairly representative of all other samples in this experiment.</p>
+<p>The <em>include_controls</em> argument specifies whether any associated control data should be loaded into the <strong>Gating</strong>/<strong>Template</strong> object. Later on we will see examples of how control data can be used.</p>
+<p>Data is stored within the <strong>Gating</strong>/<strong>Template</strong> class as a Pandas DataFrame and can be accessed through the <em>data</em> parameter. The control data is stored as Pandas DataFrame(s) as well but is nested within a dictionary where the key is the control name.</p>
+<div class="section" id="plotting-a-population">
+<h3>Plotting a population<a class="headerlink" href="#plotting-a-population" title="Permalink to this headline">¶</a></h3>
+<p>For every sample there will always be one population present by default. This is called the ‘root’ population. Not to be confused with what we refer to before. This ‘root’ is a population that contains all the events in an fcs file.</p>
+<p>We can plot the ‘root’ population using the <em>plot_population</em> method. For all plotting tasks we access the embedded object <strong>plotting</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">plot_population</span><span class="p">(</span><span class="n">population_name</span><span class="o">=</span><span class="s1">&#39;root&#39;</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="s1">&#39;FSC-A&#39;</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="s1">&#39;SSC-A&#39;</span><span class="p">,</span> <span class="n">transforms</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">:</span><span class="kc">None</span><span class="p">})</span>
+</pre></div>
+</div>
+<img alt="_images/root.png" src="_images/root.png" />
+<p>The transforms arugment is how we want to transform the x and y-axis. CytoPy supports all common data transformations for cytometry data (see cytopy.flow.transforms). By default a biexponential transformation is applied.</p>
+</div>
+<div class="section" id="creating-and-applying-a-gate">
+<h3>Creating and applying a gate<a class="headerlink" href="#creating-and-applying-a-gate" title="Permalink to this headline">¶</a></h3>
+<p>We first create a gate and then we apply that gate. Before we create a gate however, we must specify the populations that gate will generate. Below we are going to create a one dimensional threshold gate that captures CD3+ and CD3- populations. This gate used the properties of a probability density function formed by gaussian KDE to find a suitable threshold that seperates regions of high density. We need to tell our gate that we expect two populations as a result. We do this using the <strong>ChildPopulationCollection</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">cytopy.flow.gating.defaults</span> <span class="kn">import</span> <span class="n">ChildPopulationCollection</span>
+<span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;threshold_1d&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;CD3+&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;CD3-&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The children object tells us:
+* This is a 1D threshold gate
+* It generates a population named ‘CD3+’ that is defined as being ‘+’ (right of the threshold)
+* It generates a population named ‘CD3-‘ that is defined as being ‘-‘ (left of the threshold)</p>
+<p>We can now create this gate by passing the children to the <em>create_gate</em> method:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;CD3&#39;</span><span class="p">,</span>
+                <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+                <span class="n">kde_bw</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+                <span class="n">peak_threshold</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;CD3_gate&#39;</span><span class="p">,</span>
+              <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;cells&#39;</span><span class="p">,</span>
+              <span class="n">class</span>\<span class="n">_</span><span class="o">=</span><span class="s1">&#39;DensityThreshold&#39;</span><span class="p">,</span>
+              <span class="n">method</span><span class="o">=</span><span class="s1">&#39;gate_1d&#39;</span><span class="p">,</span>
+              <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+              <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>We specify the gate name, this is what we will use to refer to the gate in the future. The parent population that the gate is applied too. The type of gate we apply (class and method; see below for types of gates), the child populations produced, and the keyword arguments that are required for this gate type (again, see below for details)</p>
+<p>Applying a gate, once created, is simple:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;CD3_gate&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img alt="_images/cd3.png" src="_images/cd3.png" />
+<p>If we wanted to observe the populations currently associated to a <strong>Gating</strong>/<strong>Template</strong> object we call the <em>print_population_tree</em> method:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span><span class="o">.</span><span class="n">print_population_tree</span><span class="p">()</span>
+</pre></div>
+</div>
+<img alt="_images/tree.png" src="_images/tree.png" />
+<p>The actions described above are exactly the same for a <strong>Gating</strong> object. The exception is that for a <strong>Template</strong> object we can save the gates to our database for later use:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span><span class="o">.</span><span class="n">save_new_template</span><span class="p">(</span><span class="s1">&#39;Preprocessing&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The <strong>Template</strong> can then be reloaded to apply to further samples:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span> <span class="o">=</span> <span class="n">Template</span><span class="p">(</span><span class="n">experiment</span><span class="o">=</span><span class="n">exp</span><span class="p">,</span> <span class="n">sample_id</span><span class="o">=</span><span class="s1">&#39;new_sample&#39;</span><span class="p">,</span> <span class="n">include_controls</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">load_template</span><span class="p">(</span><span class="s1">&#39;PBMCt_Preprocessing&#39;</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply_many</span><span class="p">(</span><span class="n">apply_all</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">plot_outcome</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">feedback</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The <em>apply_many</em> method allows you to apply many or all gates to a sample.</p>
+<p>Once we are happy with the gating results, we call the <em>save</em> method to save our populations to the database:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="types-of-gates">
+<h2>Types of Gates<a class="headerlink" href="#types-of-gates" title="Permalink to this headline">¶</a></h2>
+<p>Gates fall into the following cateogores according to the type of geometric object they produce: threshold_1d, threshold_2d, cluster (polygon generated from clustering algorithm applied in two dimensions), and geom (ellipse and rectangles).</p>
+<p>Each gate produces a <strong>Geom</strong> object that is saved to the <strong>Population</strong> and defines the ‘space’ in which that population is defined (e.g. the variables on the x and y axis, how they are transformed, and the coordinates in this space that “capture” the population of interest)</p>
+<p>For every type of gate there is a class that inherits from the <strong>Gate</strong> class in cytopy.flow.gating.base</p>
+<p>Each gate and their class is detailed below. Code examples are given for creating and applying a gate. Reminder: in the examples below we create gates for <strong>Template</strong> object, but the commands are the same for a <strong>Gating</strong> object.</p>
+<div class="section" id="densitythreshold">
+<h3>DensityThreshold<a class="headerlink" href="#densitythreshold" title="Permalink to this headline">¶</a></h3>
+<p>The <strong>DensityThreshold</strong> class can be applied in one or two dimensions. For each axis the probability density function is estimated using gaussian kernel density estimation (implemented with scikit-learn). The objective is to acquire a smooth function that describes the ‘density’ of our data. A peak finding algorithm (implemented with SciPy signal module) is applied and the region of minimum density between the two highest ‘peaks’ (regions of high density) is detected. This region of minimum density is taken as the threshold at which a gate is drawn. <strong>Population**s are assigned to regions either side of the threshold based on how they were defined in the given **ChildPopulationCollection</strong> object.</p>
+<p>An example of creating an applying a one dimensional threshold:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;threshold_1d&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;CD3+&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;CD3-&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">)</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;CD3&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;FSC-A&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+              <span class="n">kde_bw</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;cd3_gate&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;cells&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;DensityThreshold&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;gate_1d&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;cd3_gate&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img alt="_images/density_threshold_1d.png" src="_images/density_threshold_1d.png" />
+<p>An example of creating an applying a two dimensional threshold:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;threshold_2d&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;Live_CD3+&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;+-&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;Dead_CD3-&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;++&#39;</span><span class="p">,</span> <span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="s1">&#39;-+&#39;</span><span class="p">])</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;CD3&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;LD&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">kde_bw</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;live_cd3_gate&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;cells&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;DensityThreshold&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;gate_2d&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;live_cd3_gate&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img alt="_images/density_threshold_2d.png" src="_images/density_threshold_2d.png" />
+<p>Note the difference when defining the populations for the 2D gate. A definition such as ‘+-‘ denotes ‘postive’ (to the right of the threshold) in the x-axis plane and ‘negative’ (to the left of the threshold) in the y-axis plane. We can pass a list of definitions to merge quadrants.</p>
+<p>See cytopy.flow.gating.density for details</p>
+</div>
+<div class="section" id="quantile">
+<h3>Quantile<a class="headerlink" href="#quantile" title="Permalink to this headline">¶</a></h3>
+<p>Similar to the <strong>DensityThreshold</strong> gating class <strong>Quantile</strong> gates generate threshold(s) in one or two dimensions. Therefore child population definitions are the same. <strong>Quantile</strong> gates however apply simple logic; thresholds are generated by taking some user defined quantile of the data in the x-axis/y-axis plane.</p>
+<p>A one-dimensional gate:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;threshold_1d&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;live&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;dead&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">)</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;LD&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;FSC-A&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+              <span class="n">q</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;live_gate&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;CD3+&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;Quantile&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;gate_1d&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;live_gate&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img alt="_images/quantile_1d.png" src="_images/quantile_1d.png" />
+<p>A two-dimensional gate:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;threshold_2d&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;dead&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;+-&#39;</span><span class="p">,</span> <span class="s1">&#39;-+&#39;</span><span class="p">,</span> <span class="s1">&#39;++&#39;</span><span class="p">])</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;live&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">)</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;LD&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;FSC-A&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+              <span class="n">q</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;live_gate&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;CD3+&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;Quantile&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;gate_2d&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;live_gate&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img alt="_images/quantile_2d.png" src="_images/quantile_2d.png" />
+</div>
+<div class="section" id="densityclustering">
+<h3>DensityClustering<a class="headerlink" href="#densityclustering" title="Permalink to this headline">¶</a></h3>
+<p>The <strong>DensityClustering</strong> class implements the popular clustering algorithms <cite>DBSCAN &lt;https://scikit-learn.org/stable/modules/clustering.html#dbscan&gt;_</cite> and <cite>HDBSCAN &lt;https://hdbscan.readthedocs.io/en/latest/how_hdbscan_works.html&gt;_</cite> for the purpose of producing polygon gates for one or more populations in two-dimensional space. These algorithms recognise ‘populations’ (or ‘clusters’) as regions of high density seperated from regions of low density. They offer a unique advantage over other clustering algorithms such as k-means, in that they can recognise ‘noise’; unclassified data points that occupy regions of low density. They also recognise clusters of any shape.</p>
+<p>We include DBSCAN and it’s successor HDBSCAN for completeness, but for practicallity we recommend the use of HDBSCAN for more robust clustering with less hyperparameter tuning.</p>
+<p>When we define populations for these types of gates, we define the <em>gate_type</em> as ‘cluster’. We can specify as many populations as we like and for each we provide two arguments:</p>
+<ul class="simple">
+<li><p>target: the estimated centroid of our target population; this doesn’t have to be perfect, populations will be assigned to the cluster whom’s centroid is closest to this estimated centroid</p></li>
+<li><p>weight: if more than one population is assigned to a single cluster, this weight parameter specifies which population is overarching importance. A higher value means the population is of more importance and will overwrite other populations assigned to the same cluster.</p></li>
+</ul>
+<p>An example of DBSCAN:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;cluster&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;live&#39;</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="p">(</span><span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">),</span> <span class="n">weight</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;LD&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;FSC-A&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">min_pop_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+              <span class="n">distance_nn</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+              <span class="n">frac</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;live_gate&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;CD3+&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;DensityClustering&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;dbscan&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;live_gate&#39;</span><span class="p">,</span>
+                <span class="n">plotting_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;ylim&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.7</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                <span class="s1">&#39;transforms&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+                                <span class="s1">&#39;y&#39;</span><span class="p">:</span> <span class="s1">&#39;logicle&#39;</span><span class="p">}})</span>
+</pre></div>
+</div>
+<img alt="_images/dbscan.png" src="_images/dbscan.png" />
+<p>Note two things above:
+* We transform the x and y axis, even though the y-axis is forward scatter light. This is important because DBSCAN is sensitive to the range of values on the x and y-axis
+* Because we have transformed the axis, we want this to reflect in the plotted outcome of our <em>apply</em> call. Plots that contains forward or sideward scatter will default to a range of 0 to 250000, but we have transformed these axis so we want to reduce this range. We provide additional arguments in <em>plotting_kwargs</em> to pass this onto the call to <em>plot_gate</em> that visualises our results</p>
+<p>An example of HDBSCAN:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;cluster&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;live&#39;</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="p">(</span><span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.85</span><span class="p">),</span> <span class="n">weight</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;LD&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;FSC-A&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">min_pop_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+              <span class="n">frac</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;live_gate&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;CD3+&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;DensityClustering&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;hdbscan&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;live_gate&#39;</span><span class="p">,</span>
+               <span class="n">plotting_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;ylim&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.7</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                                <span class="s1">&#39;transforms&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+                                               <span class="s1">&#39;y&#39;</span><span class="p">:</span> <span class="s1">&#39;logicle&#39;</span><span class="p">}})</span>
+</pre></div>
+</div>
+<img alt="_images/hdbscan.png" src="_images/hdbscan.png" />
+<p>See cytopy.flow.gating.dbscan for further details</p>
+</div>
+<div class="section" id="mixturemodel">
+<h3>MixtureModel<a class="headerlink" href="#mixturemodel" title="Permalink to this headline">¶</a></h3>
+<p>The <strong>MixtureModel</strong> class implements gaussian mixture models for generating an elliptical gate that targets a single population. A gaussian mixture model is a probabilistic model that assumes the observed data is a result of a mixture of finite gaussian distributions with unknown parameters. Given some presumed center of a target population (the <em>target</em> argument in the code below), <strong>MixtureModel</strong> will fit a gaussian mixture model to the target data and then extract the component whom’s center is closest to the target center. A confidence ellipse is drawn around this component and is used as the ‘gate’. The size of the ellipse can be adjusted by providing a confidence parameter (e.g. <em>conf=0.95</em> draws an ellipse equivalent to a 95% confidence interval).</p>
+<p><strong>MixtureModel</strong> is a <em>geom</em> gate, in that it produces a single shape and the contents of that shape is what is considered “positive”. This is reflected in how we define the <strong>ChildPopulationCollection</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;geom&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;live&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;dead&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">)</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;LD&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;FSC-A&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+              <span class="n">target</span><span class="o">=</span><span class="p">(</span><span class="mf">0.3</span><span class="p">,</span> <span class="mi">85000</span><span class="p">),</span>
+              <span class="n">conf</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;live_gate&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;CD3+&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;MixtureModel&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;gate&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;live_gate&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img alt="_images/mixture.png" src="_images/mixture.png" />
+<p>The <strong>MixtureModel</strong> implements scikit-learn and a user can specify whether to use a gaussian mixture or variational bayesian gaussian mixture. See cytopy.flow.gating.mixturemodel for details.</p>
+</div>
+<div class="section" id="static">
+<h3>Static<a class="headerlink" href="#static" title="Permalink to this headline">¶</a></h3>
+<p>In addition to what we have seen already with autonomous gates, we also have the option to use static gates that don’t change in accordance to the data presented. These are implemented with the <strong>Static</strong> class. Some examples of these are given below.</p>
+<p>Example of a static rectangular gate:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;geom&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;cells&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;debris&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">)</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;FSC-A&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;SSC-A&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+              <span class="n">x_min</span><span class="o">=</span><span class="mi">20000</span><span class="p">,</span>
+              <span class="n">y_min</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
+              <span class="n">x_max</span><span class="o">=</span><span class="mi">150000</span><span class="p">,</span>
+              <span class="n">y_max</span><span class="o">=</span><span class="mi">100000</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;debris_gate&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;root&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;Static&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;rect_gate&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;debris_gate&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img alt="_images/rect.png" src="_images/rect.png" />
+<p>Example of a static elliptical gate:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;geom&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;Live_CD3+&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;Dead_CD3-&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">)</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;CD3&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;LD&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">centroid</span><span class="o">=</span><span class="p">(</span><span class="mf">0.55</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">),</span>
+              <span class="n">width</span><span class="o">=</span><span class="mf">0.35</span><span class="p">,</span>
+              <span class="n">height</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+              <span class="n">angle</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;live_cd3_gate&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;cells&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;Static&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;ellipse_gate&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;live_cd3_gate&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img alt="_images/ellipse.png" src="_images/ellipse.png" />
+<p>Example of a static threshold gate:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;threshold_2d&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;Live_CD3+&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;+-&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;Dead_CD3-&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;++&#39;</span><span class="p">,</span> <span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="s1">&#39;-+&#39;</span><span class="p">])</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;CD3&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;LD&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">threshold_x</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
+              <span class="n">threshold_y</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;live_cd3_gate&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;cells&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;Static&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;threshold_2d&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;live_cd3_gate&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img alt="_images/manual_threshold.png" src="_images/manual_threshold.png" />
+<p>The last example is a special type of static gate known as a <em>border_gate</em>. If you have data where you know that there are anomolies scattered around the extremes of two variables, this can be useful to remove them. It creates a rectangular gate that is defined using some lower and upper quantile:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">children</span> <span class="o">=</span> <span class="n">ChildPopulationCollection</span><span class="p">(</span><span class="s1">&#39;geom&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;CD3+_cells&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">)</span>
+<span class="n">children</span><span class="o">.</span><span class="n">add_population</span><span class="p">(</span><span class="s1">&#39;CD3+_debris&#39;</span><span class="p">,</span> <span class="n">definition</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">)</span>
+
+<span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s1">&#39;CD4&#39;</span><span class="p">,</span>
+              <span class="n">y</span><span class="o">=</span><span class="s1">&#39;CD8&#39;</span><span class="p">,</span>
+              <span class="n">transform_x</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">transform_y</span><span class="o">=</span><span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+              <span class="n">bottom_cutoff</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+              <span class="n">top_cutoff</span><span class="o">=</span><span class="mf">0.999</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">create_gate</span><span class="p">(</span><span class="n">gate_name</span><span class="o">=</span><span class="s1">&#39;cd4cd8_border&#39;</span><span class="p">,</span>
+                     <span class="n">parent</span><span class="o">=</span><span class="s1">&#39;Live_CD3+&#39;</span><span class="p">,</span>
+                     <span class="n">class_</span><span class="o">=</span><span class="s1">&#39;Static&#39;</span><span class="p">,</span>
+                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;border_gate&#39;</span><span class="p">,</span>
+                     <span class="n">child_populations</span><span class="o">=</span><span class="n">children</span><span class="p">,</span>
+                     <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="n">template</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s1">&#39;cd4cd8_border&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<img alt="_images/border.png" src="_images/border.png" />
+</div>
+</div>
+<div class="section" id="using-control-data">
+<h2>Using control data<a class="headerlink" href="#using-control-data" title="Permalink to this headline">¶</a></h2>
+<p>We mentioned before that the <strong>Gating</strong> class loads in control data, but why? Well we can use this control data for confirmation of certain observations, for example if we see a ‘drift’ in a population we might use an isotype or flourescence minus one control to confirm that drift is of biological origin.</p>
+<p>In the feature extraction module of CytoPy we’ll see ho we can use controls to measure relative fold change in MFI and calculate earth mover’s distance amongst other statistical distance measures to show the change between the primary measurement and some control.</p>
+<p>In order to do this however, controls have to have the same gating strategy applied to them to derive the populations of interest. We recognise that this is compuationally expensive and therefore we have created the <em>control_gating</em> function in <strong>Gating</strong> to ‘predict’ the assignment of control data to populations identified in the primary data.</p>
+<p>We make the assumption that data for controls was collected from the same source sample and under the same conditions (minus the abscence of a stain for example) as the primary data. We therefore assume that the primary data makes for adequate training data for a supervised learning approach. The <em>control_gating</em> function transverses the population tree of the primary data and for each population trains either a K-nearest neighbours or support vector machine classifier using the two dimensional data from the primary data set (e.g. if CD3+ cells were defined using the variables CD3 and FSC-A, then these variables are used to train the classifier). Each population is predicted in sequence following the gating strategy applied to the primary data.</p>
+<p>Let’s see an example. First we can print the population tree for a sample that’s already been gated for a few populations:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span><span class="o">.</span><span class="n">print_population_tree</span><span class="p">()</span>
+</pre></div>
+</div>
+<img alt="_images/small_tree.png" src="_images/small_tree.png" />
+<p>Then we can inspect what control data we have by looking at the keys of the control dictionary loaded into this <strong>Gating</strong>/<strong>Template</strong> object:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span><span class="o">.</span><span class="n">ctrl</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+<span class="c1"># Returns: dict_keys([&#39;CD27&#39;, &#39;CD45RA&#39;, &#39;CCR7&#39;])</span>
+</pre></div>
+</div>
+<p>Let’s predict the populations in the population tree for the CD27 and the CD45RA controls. We specify which control we want to predict populations for and the model of choice. This wraps around scikit-learn implementations so arguments mirror that of native scikit-learn objects:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span><span class="o">.</span><span class="n">control_gating</span><span class="p">(</span><span class="n">ctrl_id</span><span class="o">=</span><span class="s1">&#39;CD27&#39;</span><span class="p">,</span>
+                        <span class="n">model</span><span class="o">=</span><span class="s1">&#39;knn&#39;</span><span class="p">,</span>
+                        <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+                        <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+                        <span class="n">algorithm</span><span class="o">=</span><span class="s1">&#39;ball_tree&#39;</span><span class="p">)</span>
+
+<span class="n">template</span><span class="o">.</span><span class="n">control_gating</span><span class="p">(</span><span class="n">ctrl_id</span><span class="o">=</span><span class="s1">&#39;CD45RA&#39;</span><span class="p">,</span>
+                        <span class="n">model</span><span class="o">=</span><span class="s1">&#39;knn&#39;</span><span class="p">,</span>
+                        <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+                        <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+                        <span class="n">algorithm</span><span class="o">=</span><span class="s1">&#39;ball_tree&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>We can then plot our control populations in comparison to the population in the primary data using the <em>compare_control</em> plotting function:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">compare_control</span><span class="p">(</span><span class="n">population</span><span class="o">=</span><span class="s1">&#39;live&#39;</span><span class="p">,</span>
+                                  <span class="n">ctrl_id</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;CD27&#39;</span><span class="p">,</span> <span class="s1">&#39;CD45RA&#39;</span><span class="p">],</span>
+                                  <span class="n">x</span><span class="o">=</span><span class="s1">&#39;LD&#39;</span><span class="p">,</span>
+                                  <span class="n">y</span><span class="o">=</span><span class="s1">&#39;FSC-A&#39;</span><span class="p">,</span>
+                                  <span class="n">transforms</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+                                              <span class="s1">&#39;y&#39;</span><span class="p">:</span><span class="kc">None</span><span class="p">})</span>
+</pre></div>
+</div>
+<img alt="_images/control.png" src="_images/control.png" />
+</div>
+<div class="section" id="editing-gate">
+<h2>Editing gate<a class="headerlink" href="#editing-gate" title="Permalink to this headline">¶</a></h2>
+<p>We admitted before that automated gates are not perfect. There will of course always be outliers in our biological samples (it is biology after all…). CytoPy comes well equiped for troubleshooting and editing errors.</p>
+<p>To edit a gate we use the <em>edit_gate</em> function. First, for each population that a gate generates we fetch it’s ‘geom’ (the gating info that defined that population). We then edit the ‘geom’ as we see fit and pass this into <em>edit_gate</em> to apply our changes:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cd3_pos</span> <span class="o">=</span> <span class="n">gating</span><span class="o">.</span><span class="n">fetch_geom</span><span class="p">(</span><span class="s1">&#39;cd3+&#39;</span><span class="p">)</span>
+<span class="n">cd3_neg</span> <span class="o">=</span> <span class="n">gating</span><span class="o">.</span><span class="n">fetch_geom</span><span class="p">(</span><span class="s1">&#39;cd3-&#39;</span><span class="p">)</span>
+
+<span class="n">cd3_pos</span><span class="p">[</span><span class="s1">&#39;threshold_x&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.6</span>
+<span class="n">cd3_neg</span><span class="p">[</span><span class="s1">&#39;threshold_x&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.6</span>
+
+<span class="n">gating</span><span class="o">.</span><span class="n">edit_gate</span><span class="p">(</span><span class="s1">&#39;cd3_gate&#39;</span><span class="p">,</span>
+                 <span class="n">updated_geom</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;cd3+&#39;</span><span class="p">:</span> <span class="n">cd3_pos</span><span class="p">,</span>
+                               <span class="s1">&#39;cd3-&#39;</span><span class="p">:</span> <span class="n">cd3_neg</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>The <em>edit_gate</em> function allows for editing any gate type, but for threshold gates there is an even more convenient function called <em>nudge_threshold</em>. This is a bit of a short-cut compared to the above. We simple state the name of the gate and the new x and/or y threshold to apply:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">gating</span><span class="o">.</span><span class="n">nudge_threshold</span><span class="p">(</span><span class="s1">&#39;cd3_gate&#39;</span><span class="p">,</span> <span class="n">new_x</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="other-worthy-mentions">
+<h2>Other worthy mentions<a class="headerlink" href="#other-worthy-mentions" title="Permalink to this headline">¶</a></h2>
+<p>I hope we have demonstrated so far that the <strong>Gating</strong> class is very powerful and we recommend reading the the API reference at cytopy.flow.gating.actions for more details.</p>
+<p>As for other functions contained within <strong>Gating</strong>, worthy mentions are:</p>
+<ul class="simple">
+<li><p>get_population_df: given a population name, returns the Pandas DataFrame of events within the population. Has options to transform the data according to any of the transform function avaiable in cytopy.flow.transforms. Also has an option to label events according to the downstream populations they belong too. If a value for <em>ctrl_id</em> is provided, the equivalent population in the given control is returned instead of the primary data</p></li>
+<li><p>population_size: returns the total number of events within a population</p></li>
+<li><p>merge: given two populations with the same parent, creates a new gate and a resulting population that is the merger of these two populations</p></li>
+<li><p>subtraction: given a target population and any number of other populations that share the same parent, subtract the other populations from the target, generating a new population. The defintion is saved within a gate and can be saved within a template.</p></li>
+<li><p>remove_population: removes a population and all downstream dependencies (optional but recommended)</p></li>
+<li><p>remove_gate: removes a gate and, if specified to do so, removes all associated populations</p></li>
+<li><p>register_as_invalid: registers the currently loaded sample as invalid and saves flag to database</p></li>
+<li><p>check_downstream_overlaps: checks if a population is downstream to any number of other populations</p></li>
+</ul>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="batch.html" class="btn btn-neutral float-right" title="Assessment of batch effects" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="data.html" class="btn btn-neutral float-left" title="Data loading" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

@@ -1,0 +1,625 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>cytopy.flow.gating.defaults &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="cytopy.flow.gating.density" href="cytopy.flow.gating.density.html" />
+    <link rel="prev" title="cytopy.flow.gating.dbscan" href="cytopy.flow.gating.dbscan.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="../_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../intro.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../data.html">Data uploading</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gating.html">Pre-processing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../batch.html">Batch-effect analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../classify.html">Supervised cell classification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cluster.html">High-dimensional clustering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Feature extraction, selection, and description</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../reference.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.control.html">cytopy.flow.gating.control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../reference.html">API Reference</a> &raquo;</li>
+        
+      <li>cytopy.flow.gating.defaults</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/api/cytopy.flow.gating.defaults.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-cytopy.flow.gating.defaults">
+<span id="cytopy-flow-gating-defaults"></span><h1>cytopy.flow.gating.defaults<a class="headerlink" href="#module-cytopy.flow.gating.defaults" title="Permalink to this headline">¶</a></h1>
+<p><strong>Classes</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.ChildPopulation" title="cytopy.flow.gating.defaults.ChildPopulation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChildPopulation</span></code></a>(gate_type, **kwargs)</p></td>
+<td><p>Representation of a single population that is to be stored in a ChildPopulationCollection.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.ChildPopulationCollection" title="cytopy.flow.gating.defaults.ChildPopulationCollection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChildPopulationCollection</span></code></a>([gate_type, json_dict])</p></td>
+<td><p>Collection of child populations.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom" title="cytopy.flow.gating.defaults.Geom"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Geom</span></code></a>(shape, x, y, **kwargs)</p></td>
+<td><p>Geometric object defining a population e.g.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="class">
+<dt id="cytopy.flow.gating.defaults.ChildPopulation">
+<em class="property">class </em><code class="sig-prename descclassname">cytopy.flow.gating.defaults.</code><code class="sig-name descname">ChildPopulation</code><span class="sig-paren">(</span><em class="sig-param">gate_type: str</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.gating.defaults.ChildPopulation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Representation of a single population that is to be stored in a ChildPopulationCollection. Contains the state
+of a population being generated by some gating operation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gate_type</strong> (<em>str</em>) – Type of gate that generates the population</p></li>
+<li><p><strong>kwargs</strong> – Additional keyword arguments for generating population</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Methods</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.ChildPopulation.update_geom" title="cytopy.flow.gating.defaults.ChildPopulation.update_geom"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_geom</span></code></a>(x, shape, y, **kwargs)</p></td>
+<td><p>Update geom associated to this child population instance</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.ChildPopulation.update_index" title="cytopy.flow.gating.defaults.ChildPopulation.update_index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_index</span></code></a>(idx)</p></td>
+<td><p>Update the index values of this population</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.ChildPopulation.update_geom">
+<code class="sig-name descname">update_geom</code><span class="sig-paren">(</span><em class="sig-param">x: str</em>, <em class="sig-param">shape: str = None</em>, <em class="sig-param">y: str = None</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.gating.defaults.ChildPopulation.update_geom" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update geom associated to this child population instance</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shape</strong> (<em>str</em><em>, </em><em>optional</em>) – type of shape generated, must be one of [‘ellipse’, ‘rect’, ‘threshold’, ‘2d_threshold’, ‘poly’, ‘sml’,
+‘sub’]</p></li>
+<li><p><strong>x</strong> (<em>str</em>) – name of x-axis plane</p></li>
+<li><p><strong>y</strong> (<em>str</em><em>, </em><em>optional</em>) – name of y-axis plane</p></li>
+<li><p><strong>kwargs</strong> – Other parameters that describe this geometric object</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.ChildPopulation.update_index">
+<code class="sig-name descname">update_index</code><span class="sig-paren">(</span><em class="sig-param">idx: numpy.array</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#cytopy.flow.gating.defaults.ChildPopulation.update_index" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update the index values of this population</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>idx</strong> (<em>Numpy.array</em>) – index values corresponding to events data</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="cytopy.flow.gating.defaults.ChildPopulationCollection">
+<em class="property">class </em><code class="sig-prename descclassname">cytopy.flow.gating.defaults.</code><code class="sig-name descname">ChildPopulationCollection</code><span class="sig-paren">(</span><em class="sig-param">gate_type=None</em>, <em class="sig-param">json_dict=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.gating.defaults.ChildPopulationCollection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Collection of child populations. This is the standard input handed to the Gate object prior to gating. It defines
+the expected output of the operation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gate_type</strong> (<em>str</em><em>, </em><em>optional</em>) – the gate type of the intended gate to generate this child population. Must be one of:
+[‘threshold_1d’, ‘threshold_2d’, ‘cluster’, ‘geom’, ‘sml’, ‘sub’, ‘merge’, None]</p></li>
+<li><p><strong>json_dict</strong> (<em>dict</em>) – dictionary to populate ChildPopulationCollection</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Methods</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.ChildPopulationCollection.add_population" title="cytopy.flow.gating.defaults.ChildPopulationCollection.add_population"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_population</span></code></a>(name, **kwargs)</p></td>
+<td><p>Add a new population to this collection</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.ChildPopulationCollection.deserialise" title="cytopy.flow.gating.defaults.ChildPopulationCollection.deserialise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deserialise</span></code></a>(json_dict)</p></td>
+<td><p>Given some dictionary representation of a ChildPopulationCollection, populate the object with properties and populations.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.ChildPopulationCollection.fetch_by_definition" title="cytopy.flow.gating.defaults.ChildPopulationCollection.fetch_by_definition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fetch_by_definition</span></code></a>(definition)</p></td>
+<td><p>Given a population definition e.g.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.ChildPopulationCollection.remove_population" title="cytopy.flow.gating.defaults.ChildPopulationCollection.remove_population"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_population</span></code></a>(name)</p></td>
+<td><p>Remove population from collection</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.ChildPopulationCollection.serialise" title="cytopy.flow.gating.defaults.ChildPopulationCollection.serialise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serialise</span></code></a>()</p></td>
+<td><p>Using the current properties and the populations, creates a dictionary representation</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.ChildPopulationCollection.add_population">
+<code class="sig-name descname">add_population</code><span class="sig-paren">(</span><em class="sig-param">name: str</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#cytopy.flow.gating.defaults.ChildPopulationCollection.add_population" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a new population to this collection</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – name of the population</p></li>
+<li><p><strong>kwargs</strong> – <p>arguments for population definition. Will differ depending on gate type:
+threshold_1d:</p>
+<blockquote>
+<div><ul>
+<li><p>definition: one of [‘+’, ‘-‘]. Defines how the population is identified in</p></li>
+</ul>
+<p>respect to the gate’s resulting threshold(s)</p>
+</div></blockquote>
+<dl>
+<dt>threshold_2d:</dt><dd><ul>
+<li><p>definition: one or more of [‘++’, ‘–’, ‘-+’, ‘-+’]. Defines how the population is identified in</p></li>
+</ul>
+<p>respect to the gate’s resulting threshold(s)</p>
+</dd>
+<dt>cluster:</dt><dd><ul>
+<li><p>target: 2d coordinate of expected population medoid</p></li>
+<li><p>weight: integer value for populations ranked priority (used in case of merged populations)</p></li>
+</ul>
+</dd>
+<dt>geom:</dt><dd><ul>
+<li><p>definition: one of [‘+’, ‘-‘]. Defines how the population is identified in respect</p></li>
+</ul>
+<p>to the gate’s resulting geom</p>
+</dd>
+</dl>
+</p></li>
+</ul>
+</dd>
+</dl>
+<p>:param :
+:type : return: None</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.ChildPopulationCollection.deserialise">
+<code class="sig-name descname">deserialise</code><span class="sig-paren">(</span><em class="sig-param">json_dict: dict</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#cytopy.flow.gating.defaults.ChildPopulationCollection.deserialise" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given some dictionary representation of a ChildPopulationCollection, populate the object
+with properties and populations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>json_dict</strong> (<em>dict</em>) – </p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.ChildPopulationCollection.fetch_by_definition">
+<code class="sig-name descname">fetch_by_definition</code><span class="sig-paren">(</span><em class="sig-param">definition: str</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.gating.defaults.ChildPopulationCollection.fetch_by_definition" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a population definition e.g. ‘+’ or [‘++’, ‘+-‘] return the name of the corresponding population</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>definition</strong> (<em>str</em>) – population definition e.g. ‘+’ or [‘++’, ‘+-‘]</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.ChildPopulationCollection.remove_population">
+<code class="sig-name descname">remove_population</code><span class="sig-paren">(</span><em class="sig-param">name: str</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#cytopy.flow.gating.defaults.ChildPopulationCollection.remove_population" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remove population from collection</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – name of population to remove</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.ChildPopulationCollection.serialise">
+<code class="sig-name descname">serialise</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; dict<a class="headerlink" href="#cytopy.flow.gating.defaults.ChildPopulationCollection.serialise" title="Permalink to this definition">¶</a></dt>
+<dd><p>Using the current properties and the populations, creates a dictionary representation
+of population data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="cytopy.flow.gating.defaults.Geom">
+<em class="property">class </em><code class="sig-prename descclassname">cytopy.flow.gating.defaults.</code><code class="sig-name descname">Geom</code><span class="sig-paren">(</span><em class="sig-param">shape: str</em>, <em class="sig-param">x: str</em>, <em class="sig-param">y: str = None</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.gating.defaults.Geom" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></p>
+<p>Geometric object defining a population e.g. a threshold or rectangular gate</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shape</strong> (<em>str</em>) – Shape of the geometric object, must be one of [‘ellipse’, ‘rect’, ‘threshold’, ‘2d_threshold’, ‘poly’, ‘sml’,
+‘sub’]</p></li>
+<li><p><strong>x</strong> (<em>str</em>) – Name of the x-axis plane</p></li>
+<li><p><strong>y</strong> (<em>str</em><em>, </em><em>optional</em>) – Name of the y-axis plane</p></li>
+<li><p><strong>kwargs</strong> – Any additional keyword arguments</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>Methods</strong></p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.as_dict" title="cytopy.flow.gating.defaults.Geom.as_dict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_dict</span></code></a>()</p></td>
+<td><p>Converts object to base class (Python dictionary)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.clear" title="cytopy.flow.gating.defaults.Geom.clear"><code class="xref py py-obj docutils literal notranslate"><span class="pre">clear</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.copy" title="cytopy.flow.gating.defaults.Geom.copy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">copy</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.fromkeys" title="cytopy.flow.gating.defaults.Geom.fromkeys"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromkeys</span></code></a></p></td>
+<td><p>Create a new dictionary with keys from iterable and values set to value.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.get" title="cytopy.flow.gating.defaults.Geom.get"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get</span></code></a></p></td>
+<td><p>Return the value for key if key is in the dictionary, else default.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.items" title="cytopy.flow.gating.defaults.Geom.items"><code class="xref py py-obj docutils literal notranslate"><span class="pre">items</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.keys" title="cytopy.flow.gating.defaults.Geom.keys"><code class="xref py py-obj docutils literal notranslate"><span class="pre">keys</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.pop" title="cytopy.flow.gating.defaults.Geom.pop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pop</span></code></a>(k[,d])</p></td>
+<td><p>If key is not found, d is returned if given, otherwise KeyError is raised</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.popitem" title="cytopy.flow.gating.defaults.Geom.popitem"><code class="xref py py-obj docutils literal notranslate"><span class="pre">popitem</span></code></a>()</p></td>
+<td><p>2-tuple; but raise KeyError if D is empty.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.setdefault" title="cytopy.flow.gating.defaults.Geom.setdefault"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setdefault</span></code></a></p></td>
+<td><p>Insert key with a value of default if key is not in the dictionary.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.update" title="cytopy.flow.gating.defaults.Geom.update"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code></a>([E, ]**F)</p></td>
+<td><p>If E is present and has a .keys() method, then does:  for k in E: D[k] = E[k]</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cytopy.flow.gating.defaults.Geom.values" title="cytopy.flow.gating.defaults.Geom.values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.as_dict">
+<code class="sig-name descname">as_dict</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; dict<a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.as_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts object to base class (Python dictionary)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.clear">
+<code class="sig-name descname">clear</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; None.  Remove all items from D.<a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.clear" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.copy">
+<code class="sig-name descname">copy</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; a shallow copy of D<a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.copy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.fromkeys">
+<code class="sig-name descname">fromkeys</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.fromkeys" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a new dictionary with keys from iterable and values set to value.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.get">
+<code class="sig-name descname">get</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the value for key if key is in the dictionary, else default.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.items">
+<code class="sig-name descname">items</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; a set-like object providing a view on D's items<a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.items" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.keys">
+<code class="sig-name descname">keys</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; a set-like object providing a view on D's keys<a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.keys" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.pop">
+<code class="sig-name descname">pop</code><span class="sig-paren">(</span><em class="sig-param">k</em><span class="optional">[</span>, <em class="sig-param">d</em><span class="optional">]</span><span class="sig-paren">)</span> &#x2192; v, remove specified key and return the corresponding value.<a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.pop" title="Permalink to this definition">¶</a></dt>
+<dd><p>If key is not found, d is returned if given, otherwise KeyError is raised</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.popitem">
+<code class="sig-name descname">popitem</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; (k, v), remove and return some (key, value) pair as a<a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.popitem" title="Permalink to this definition">¶</a></dt>
+<dd><p>2-tuple; but raise KeyError if D is empty.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.setdefault">
+<code class="sig-name descname">setdefault</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.setdefault" title="Permalink to this definition">¶</a></dt>
+<dd><p>Insert key with a value of default if key is not in the dictionary.</p>
+<p>Return the value for key if key is in the dictionary, else default.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.update">
+<code class="sig-name descname">update</code><span class="sig-paren">(</span><span class="optional">[</span><em class="sig-param">E</em>, <span class="optional">]</span><em class="sig-param">**F</em><span class="sig-paren">)</span> &#x2192; None.  Update D from dict/iterable E and F.<a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.update" title="Permalink to this definition">¶</a></dt>
+<dd><p>If E is present and has a .keys() method, then does:  for k in E: D[k] = E[k]
+If E is present and lacks a .keys() method, then does:  for k, v in E: D[k] = v
+In either case, this is followed by: for k in F:  D[k] = F[k]</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cytopy.flow.gating.defaults.Geom.values">
+<code class="sig-name descname">values</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; an object providing a view on D's values<a class="headerlink" href="#cytopy.flow.gating.defaults.Geom.values" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="cytopy.flow.gating.density.html" class="btn btn-neutral float-right" title="cytopy.flow.gating.density" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="cytopy.flow.gating.dbscan.html" class="btn btn-neutral float-left" title="cytopy.flow.gating.dbscan" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

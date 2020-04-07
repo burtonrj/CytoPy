@@ -1,0 +1,420 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Single cell phenotype classification by supervised learning &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Single-cell phenotype classification by high-dimensional clustering" href="cluster.html" />
+    <link rel="prev" title="Assessment of batch effects" href="batch.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#using-python">Using Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#installing-mongodb">Installing MongoDB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#installing-cytopy">Installing CytoPy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="data.html">Data uploading</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="data.html#connecting-to-the-database">Connecting to the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#projects-subjects">Projects &amp; Subjects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#adding-cytometry-data">Adding Cytometry data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="data.html#cytometry-panels">Cytometry Panels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#creating-fcsexperiments">Creating FCSExperiments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#adding-fcs-files">Adding *.fcs files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gating.html">Pre-processing with autonomous gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#the-gating-and-template-class">The Gating and Template class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#plotting-a-population">Plotting a population</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#creating-and-applying-a-gate">Creating and applying a gate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#types-of-gates">Types of Gates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#densitythreshold">DensityThreshold</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#quantile">Quantile</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#densityclustering">DensityClustering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#mixturemodel">MixtureModel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#static">Static</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#using-control-data">Using control data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#editing-gate">Editing gate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#other-worthy-mentions">Other worthy mentions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="batch.html">Batch-effect analysis</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#choosing-a-reference-sample">Choosing a reference sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#evaluatebatcheffects">EvaluateBatchEffects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#visualising-univariant-differences">Visualising univariant differences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#visualising-multivariant-differences">Visualising multivariant differences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#building-a-similarity-matrix">Building a similarity matrix</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Supervised cell classification</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#introducing-the-cellclassifier">Introducing the CellClassifier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#training">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#validating">Validating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting-with-backgating">Troubleshooting with backgating</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cluster.html">High-dimensional clustering</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#the-clusteringdefinition">The ClusteringDefinition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#singleclustering">SingleClustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#introducing-exploratory-data-analysis-with-explorer">Introducing exploratory data analysis with Explorer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#metaclustering">MetaClustering</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="features.html">Feature extraction, selection, and description</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Single cell phenotype classification by supervised learning</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/classify.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="single-cell-phenotype-classification-by-supervised-learning">
+<h1>Single cell phenotype classification by supervised learning<a class="headerlink" href="#single-cell-phenotype-classification-by-supervised-learning" title="Permalink to this headline">¶</a></h1>
+<p>There are many ways in which we can autonomously classify cells by their phenotype. CytoPy encourages the use of multiple methodologies by creating a single data repository in which the results of multiple methods can be stored and then contrasted.</p>
+<p>One such method is supervised machine learning. Here, we label some representative data by manual or semi-autonomous gating, train a classifier, and then predict the classification for all remaining samples.</p>
+<p>How do we choose representative data as training data? In the section “Batch effect analysis” we discuss how we can generate a “similarity matrix” for an experiment and group samples according to some statistical distance metric. We then either choose or create a sample for each group to act as training data. A classifier is trained for each group.</p>
+<p>We can choose a reference sample using the <em>calculate_ref_sample_fast</em> function (see “Batch effect analysis”) or we can create a reference sample by taking a uniform sample of events from each member of our group:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">cytopy.flow.supervised.cell_classifier</span> <span class="kn">import</span> <span class="n">create_reference_sample</span>
+<span class="n">create_reference_sample</span><span class="p">(</span><span class="n">experiment</span><span class="o">=</span><span class="n">experiment</span><span class="p">,</span>
+                        <span class="n">root_population</span><span class="o">=</span><span class="s1">&#39;T cells&#39;</span><span class="p">,</span>
+                        <span class="n">samples</span><span class="o">=</span><span class="n">group_1</span><span class="p">,</span>
+                        <span class="n">new_file_name</span><span class="o">=</span><span class="s1">&#39;group_1_training_data&#39;</span><span class="p">,</span>
+                        <span class="n">sample_n</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+                        <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>In the function call above, we pass in an instance of <strong>FCSExperiment</strong> (the experiment we are currently working on). We specify a root population that is true for each biological sample and is the population we will sample vents from. We specify a list of sample IDs to sample events from, here they are contained in the variable “group_1” which corresponds to a group derived as detailed in “Batch effect analysis”.</p>
+<p>The function <em>create_reference_sample</em> doesn’t return anything, instead it saves the new file to the experiment. It can then be retrieved and manipulated like any file in the experiment. We specify the file name with the argument “new_file_name”. Lastly we specify how many events to sample from each biological sample.</p>
+<p>A sample is used as training data by interpreting the populations currently associated to it. So if we take “group_1_training_data” and gate 10 populations using the <strong>Gating</strong> class (see “Pre-processing with autonomous gates”), we can then specify 10 (or less) of those populations to be “labels” in a classification task. This is all handled by the <strong>CellClassifier</strong> class detailed in the next section.</p>
+<div class="section" id="introducing-the-cellclassifier">
+<h2>Introducing the CellClassifier<a class="headerlink" href="#introducing-the-cellclassifier" title="Permalink to this headline">¶</a></h2>
+<p>The <strong>CellClassifier</strong> class is the base class that all supervised classifiers inherit from in CytoPy. It handles the retrieval of population data from samples, the conversion of this data into “labels” for classification, and saving predictions. The predictions of a classifier are saved as <strong>Population</strong>’s no different to a <strong>Population</strong> defined by a gate.</p>
+<p>You might ask, well how do classifiers handle the multi-class structure of population tree’s we see in cytometry data. Take the example below:</p>
+<img alt="_images/tree1.png" src="_images/tree1.png" />
+<p>This is clearly a very complex population tree. If we wanted a classifier to identify the populations “CD3+” and “T cells”, how would we do so when there are clearly overlaps? (A cell might fall inside the CD3+ gate but then not the T cell gate). <strong>CellClassifier</strong> overcomes this by labelling each cell with the “end node”, that is the population that is furthest from the root population. The tree structure is stored within the label however, so a cell labelled as a T cell and starting at the root “Single_Live_CD45+” would have the label:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s1">&#39;&quot;Single_Live_CD45+&quot;,&quot;CD3+&quot;,&quot;T cells&quot;&#39;</span>
+</pre></div>
+</div>
+<p>When the predicted classifications are saved to in <strong>Population</strong>’s, the tree structure is recreated, such that the classified cell belongs to all three <strong>Population</strong>’s within its label.</p>
+<p>The sample ID for the sample to use as training data and the target populations for prediction are given at the point of initialising a <strong>CellClassifier</strong> object. The user can also specify how to transform the data, whether additional scalling should be applied (e.g. min max normalisation or standard scaling) and specify how to handle issues such as class imbalance; class weights can be provided or a sampling procedure applied (see cytopy.flow.supervised.cell_clasifier).</p>
+<p>The <strong>CellClassifier</strong> object follows the conventions of Scikit-Learn and provides a familar API for training and prediction. The following methods provide all necessary for interacting with the model and are the same for all classifiers in CytoPy:</p>
+<ul class="simple">
+<li><p>build_model: this must be called prior to training or prediction; initiates the model and in the case of neural networks, it generates the architecture of the neural net</p></li>
+<li><p>train: trains the model using all available training data</p></li>
+<li><p>train_holdout: train the model and report performance on a specified proportion of data used as holdout data</p></li>
+<li><p>train_cv: train with cross validation over ‘k’ folds. Classification performance reported for each fold and as an average over all folds.</p></li>
+<li><p>gridsearch: implements Scikit-Learn GridSearchCV class. Provided a “hyperparameter grid” performs cross-validation; useful for hyperparameter tuning.</p></li>
+<li><p>predict: under the assumption that the model has been trained and given a sample ID within the associated experiment, predict the cell populations for that sample. Returns a <strong>Gating</strong> object for the sample containing the newly predicted populations. The user can then call <em>save</em> method on this <strong>Gating</strong> object to save the predictions.</p></li>
+<li><p>manual_validation: given a sample ID for a biological sample with the populations to be predicted already classified by some other method (e.g. manual or semi-autonomous gating), performs classification and performance given in comparison to the pre-existing populations</p></li>
+</ul>
+<p>As mentioned before, all classifiers inherit from <strong>CellClassifier</strong> and hence following the structure detailed above. In CytoPy v0.0.1 the following classifier classes are available and they all use common libraries:</p>
+<ul class="simple">
+<li><p>KNN: k-nearest neighbours classifier (Scikit-learn)</p></li>
+<li><p>DeepGating: feed forward neural network (with customisable layers) implemented with Keras</p></li>
+<li><p>DiscriminantAnalysis: linear or quadratic discriminant analysis (Scikit-learn)</p></li>
+<li><p>SupportVectorMachine: support vector classifier (Scikit-learn)</p></li>
+<li><p>XGBoostClassifier: XGBoost classifier implemented with the Scikit-learn wrapper from the xgboost library</p></li>
+</ul>
+</div>
+<div class="section" id="training">
+<h2>Training<a class="headerlink" href="#training" title="Permalink to this headline">¶</a></h2>
+<p>Taking XGBoostClassifier as an example, creating and training a model is simple. Note additional hyperparameters specific to a particular model are given when we call <em>build_model</em>. If we want to ry new hyperparameters with the same training data, we simply make a new call to <em>build_model</em> and this will overwrite the current classifier stored within the object:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Import dependencies</span>
+<span class="kn">from</span> <span class="nn">cytopy.flow.supervised</span> <span class="kn">import</span> <span class="n">xgboost</span>
+<span class="kn">from</span> <span class="nn">cytopy.data.project</span> <span class="kn">import</span> <span class="n">Project</span>
+
+<span class="c1"># Load project data</span>
+<span class="n">pd_project</span> <span class="o">=</span> <span class="n">Project</span><span class="o">.</span><span class="n">objects</span><span class="p">(</span><span class="n">project_id</span><span class="o">=</span><span class="s1">&#39;Peritonitis&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<span class="n">exp</span> <span class="o">=</span> <span class="n">pd_project</span><span class="o">.</span><span class="n">load_experiment</span><span class="p">(</span><span class="s1">&#39;PD_T_PDMCs&#39;</span><span class="p">)</span>
+
+<span class="n">populations</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;gdt&#39;</span><span class="p">,</span> <span class="s1">&#39;mait&#39;</span><span class="p">,</span> <span class="s1">&#39;CD4+CD8-&#39;</span><span class="p">,</span>
+               <span class="s1">&#39;CD4+CD8+&#39;</span><span class="p">,</span> <span class="s1">&#39;CD4-CD8+&#39;</span><span class="p">,</span> <span class="s1">&#39;CD4-CD8-&#39;</span><span class="p">]</span>
+<span class="n">features</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;CD4&#39;</span><span class="p">,</span> <span class="s1">&#39;CD8&#39;</span><span class="p">,</span> <span class="s1">&#39;PanGD&#39;</span><span class="p">,</span> <span class="s1">&#39;Vd2&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;CD161&#39;</span><span class="p">,</span> <span class="s1">&#39;Va7.2&#39;</span><span class="p">,</span> <span class="s1">&#39;CD45RA&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;CD27&#39;</span><span class="p">,</span> <span class="s1">&#39;CCR7&#39;</span><span class="p">]</span>
+<span class="n">classifier</span> <span class="o">=</span> <span class="n">xgboost</span><span class="o">.</span><span class="n">XGBoostClassifier</span><span class="p">(</span><span class="n">experiment</span><span class="o">=</span><span class="n">exp</span><span class="p">,</span>
+                                       <span class="n">reference_sample</span><span class="o">=</span><span class="s1">&#39;Group1_Training&#39;</span><span class="p">,</span>
+                                       <span class="n">features</span><span class="o">=</span><span class="n">features</span><span class="p">,</span>
+                                       <span class="n">population_labels</span><span class="o">=</span><span class="n">populations</span><span class="p">,</span>
+                                       <span class="n">root_population</span><span class="o">=</span><span class="s1">&#39;T cells&#39;</span><span class="p">)</span>
+<span class="n">classifier</span><span class="o">.</span><span class="n">build_model</span><span class="p">()</span>
+<span class="c1"># Train with 30% of training data kept as holdout</span>
+<span class="n">classifier</span><span class="o">.</span><span class="n">train_holdout</span><span class="p">(</span><span class="n">holdout_frac</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>In <strong>CellClassifier</strong> there is a special output known as a ‘report card’. If we specify to print the report card, it gives a detailed breakdown of classification performance. Doing this for <em>train_holdout</em> gives us a comparison between train and test data:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">classifier</span><span class="o">.</span><span class="n">train_holdout</span><span class="p">(</span><span class="n">holdout_frac</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">print_report_card</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This will provide classification performance metrics for each individual class for both test and train data, as well as confusion matrices such as the one below:</p>
+<img alt="_images/mappings1.png" src="_images/mappings1.png" />
+<img alt="_images/confusion_holdout.png" src="_images/confusion_holdout.png" />
+</div>
+<div class="section" id="validating">
+<h2>Validating<a class="headerlink" href="#validating" title="Permalink to this headline">¶</a></h2>
+<p>When working with a new data set it is recommended that you validate the performance of your classifier by manually classifying multiple samples and assessing the performance using <em>manual_validation</em>. This method of <strong>CellClassifier</strong> returns a Pandas DataFrame of classification performance compared to the already existing populations. In the example below, the samples had already been classified by manual gating:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">validation_samples</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;254-05_pdmc_t&#39;</span><span class="p">,</span>
+                      <span class="s1">&#39;325-01_pdmc_t&#39;</span><span class="p">,</span>
+                      <span class="s1">&#39;326-01_pdmc_t&#39;</span><span class="p">,</span>
+                      <span class="s1">&#39;332-01_pdmc_t&#39;</span><span class="p">,</span>
+                      <span class="s1">&#39;338-01_pdmc_t&#39;</span><span class="p">]</span>
+
+
+<span class="n">val_performance</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">g1_validation</span><span class="p">:</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">classifier</span><span class="o">.</span><span class="n">manual_validation</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">root_population</span><span class="o">=</span><span class="s1">&#39;T cells&#39;</span><span class="p">)</span>
+    <span class="n">result</span><span class="p">[</span><span class="s1">&#39;sample_id&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+    <span class="n">val_performance</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">val_performance</span><span class="p">,</span> <span class="n">result</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>The dataframe “val_performance” looks like this:</p>
+<img alt="_images/val_performance.png" src="_images/val_performance.png" />
+<p>The poor performance of the outlier can be investigated further by printing the “report card”:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">classifier</span><span class="o">.</span><span class="n">manual_validation</span><span class="p">(</span><span class="s1">&#39;325-01_pdmc_t&#39;</span><span class="p">,</span>
+                              <span class="n">print_report_card</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                              <span class="n">root_population</span><span class="o">=</span><span class="s1">&#39;T cells&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This produces the following confusion matrix, showing that the poor performance stems from misclassification of gamma delta T cells and unclassified events:</p>
+<img alt="_images/mappings1.png" src="_images/mappings1.png" />
+<img alt="_images/confusion_outlier.png" src="_images/confusion_outlier.png" />
+</div>
+<div class="section" id="troubleshooting-with-backgating">
+<h2>Troubleshooting with backgating<a class="headerlink" href="#troubleshooting-with-backgating" title="Permalink to this headline">¶</a></h2>
+<p>We may want to investigate further as to how the cells classified as gamma delta T cells by XGBoost compare to those classified manually. Remeber how earlier we said that <em>predict</em> method returns a <strong>Gating</strong> object. We can use this <strong>Gating</strong> object and the <em>plotting.backgate</em> method to directly compare the “pseudo-gate” (predictions) of the XGBoost classifier with the manual gate:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">gates</span> <span class="o">=</span> <span class="n">classifier</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="s1">&#39;325-01_pdmc_t&#39;</span><span class="p">)</span>
+<span class="n">gates</span><span class="o">.</span><span class="n">plotting</span><span class="o">.</span><span class="n">backgate</span><span class="p">(</span><span class="n">base_population</span><span class="o">=</span><span class="s1">&#39;T cells&#39;</span><span class="p">,</span>
+                        <span class="n">x</span><span class="o">=</span><span class="s1">&#39;PanGD&#39;</span><span class="p">,</span>
+                        <span class="n">y</span><span class="o">=</span><span class="s1">&#39;Vd2&#39;</span><span class="p">,</span>
+                        <span class="n">transforms</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="s1">&#39;logicle&#39;</span><span class="p">,</span>
+                                    <span class="s1">&#39;y&#39;</span><span class="p">:</span> <span class="s1">&#39;logicle&#39;</span><span class="p">},</span>
+                        <span class="n">poverlay</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;XGBoost_gdt&#39;</span><span class="p">],</span>
+                        <span class="n">pgeoms</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;gdt&#39;</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>“poverlay” specifies populations to ‘overlay’ as scatter points and “pgeoms” specifies populations to overlay as a ‘polygon gate’ calculated as the convex hull of the populations data points. The above gives us the following that displays how the “poor classification” is a result of this biological sample having reduced numbers of gamma delta T cells:</p>
+<img alt="_images/back_gate.png" src="_images/back_gate.png" />
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="cluster.html" class="btn btn-neutral float-right" title="Single-cell phenotype classification by high-dimensional clustering" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="batch.html" class="btn btn-neutral float-left" title="Assessment of batch effects" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

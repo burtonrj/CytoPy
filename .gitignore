@@ -8,7 +8,6 @@ temp_data
 *.pyc
 *.so
 *.pickle
-build
 deepcytof_local
 BatchEffectRemoval_Local
 *.bin

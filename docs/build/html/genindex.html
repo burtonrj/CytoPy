@@ -1,0 +1,2183 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Index &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="#" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#using-python">Using Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#installing-mongodb">Installing MongoDB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#installing-cytopy">Installing CytoPy</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="data.html">Data uploading</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="data.html#connecting-to-the-database">Connecting to the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#projects-subjects">Projects &amp; Subjects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data.html#adding-cytometry-data">Adding Cytometry data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="data.html#cytometry-panels">Cytometry Panels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#creating-fcsexperiments">Creating FCSExperiments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html#adding-fcs-files">Adding *.fcs files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gating.html">Pre-processing with autonomous gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#the-gating-and-template-class">The Gating and Template class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#plotting-a-population">Plotting a population</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#creating-and-applying-a-gate">Creating and applying a gate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#types-of-gates">Types of Gates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#densitythreshold">DensityThreshold</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#quantile">Quantile</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#densityclustering">DensityClustering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#mixturemodel">MixtureModel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gating.html#static">Static</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#using-control-data">Using control data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#editing-gate">Editing gate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gating.html#other-worthy-mentions">Other worthy mentions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="batch.html">Batch-effect analysis</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#choosing-a-reference-sample">Choosing a reference sample</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#evaluatebatcheffects">EvaluateBatchEffects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#visualising-univariant-differences">Visualising univariant differences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#visualising-multivariant-differences">Visualising multivariant differences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="batch.html#building-a-similarity-matrix">Building a similarity matrix</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="classify.html">Supervised cell classification</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="classify.html#introducing-the-cellclassifier">Introducing the CellClassifier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="classify.html#training">Training</a></li>
+<li class="toctree-l2"><a class="reference internal" href="classify.html#validating">Validating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="classify.html#troubleshooting-with-backgating">Troubleshooting with backgating</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cluster.html">High-dimensional clustering</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#the-clusteringdefinition">The ClusteringDefinition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#singleclustering">SingleClustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#introducing-exploratory-data-analysis-with-explorer">Introducing exploratory data analysis with Explorer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#metaclustering">MetaClustering</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="features.html">Feature extraction, selection, and description</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="features.html#summarising-the-proportion-of-cell-populations-clusters">Summarising the proportion of cell populations/clusters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#variance-and-multicolinearity">Variance and Multicolinearity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#dimensionality-reduction">Dimensionality reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#feature-selection">Feature selection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#control-comparisons">Control comparisons</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Index</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+
+<h1 id="index">Index</h1>
+
+<div class="genindex-jumpbox">
+ <a href="#A"><strong>A</strong></a>
+ | <a href="#B"><strong>B</strong></a>
+ | <a href="#C"><strong>C</strong></a>
+ | <a href="#D"><strong>D</strong></a>
+ | <a href="#E"><strong>E</strong></a>
+ | <a href="#F"><strong>F</strong></a>
+ | <a href="#G"><strong>G</strong></a>
+ | <a href="#H"><strong>H</strong></a>
+ | <a href="#I"><strong>I</strong></a>
+ | <a href="#J"><strong>J</strong></a>
+ | <a href="#K"><strong>K</strong></a>
+ | <a href="#L"><strong>L</strong></a>
+ | <a href="#M"><strong>M</strong></a>
+ | <a href="#N"><strong>N</strong></a>
+ | <a href="#O"><strong>O</strong></a>
+ | <a href="#P"><strong>P</strong></a>
+ | <a href="#Q"><strong>Q</strong></a>
+ | <a href="#R"><strong>R</strong></a>
+ | <a href="#S"><strong>S</strong></a>
+ | <a href="#T"><strong>T</strong></a>
+ | <a href="#U"><strong>U</strong></a>
+ | <a href="#V"><strong>V</strong></a>
+ | <a href="#W"><strong>W</strong></a>
+ | <a href="#X"><strong>X</strong></a>
+ 
+</div>
+<h2 id="A">A</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.add_experiment">add_experiment() (cytopy.data.project.Project method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.add_new_sample">add_new_sample() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.ChildPopulationCollection.add_population">add_population() (cytopy.flow.gating.defaults.ChildPopulationCollection method)</a>
+</li>
+      <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.add_subject">add_subject() (cytopy.data.project.Project method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.apply">apply() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.apply">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.apply_many">apply_many() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.apply_many">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.transforms.html#cytopy.flow.transforms.apply_transform">apply_transform() (in module cytopy.flow.transforms)</a>
+</li>
+      <li><a href="api/cytopy.data.utilities.html#cytopy.data.utilities.as_dataframe">as_dataframe() (in module cytopy.data.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.as_dict">as_dict() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="B">B</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.plotting.html#cytopy.flow.gating.plotting.Plot.backgate">backgate() (cytopy.flow.gating.plotting.Plot method)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.balance_dataset">balance_dataset() (cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.balance_dataset">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.balance_dataset">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.balance_dataset">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.balance_dataset">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.balance_dataset">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Biology">Biology (class in cytopy.data.subject)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.biology">biology() (in module cytopy.data.subject)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static.border_gate">border_gate() (cytopy.flow.gating.static.Static method)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Bug">Bug (class in cytopy.data.subject)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.bugs">bugs() (in module cytopy.data.subject)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.build_linear">build_linear() (cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.build_linear">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.build_model">build_model() (cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.build_model">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.build_model">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.build_nonlinear">build_nonlinear() (cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.build_quadratic">build_quadratic() (cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="C">C</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.EvaluateBatchEffects.calc_divergence">calc_divergence() (cytopy.flow.batch_effects.EvaluateBatchEffects method)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.ref.calculate_ref_sample_fast">calculate_ref_sample_fast() (in module cytopy.flow.supervised.ref)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.ref.calculate_reference_sample">calculate_reference_sample() (in module cytopy.flow.supervised.ref)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.cascade_save">cascade_save() (cytopy.data.fcs.ClusteringDefinition method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.cascade_save">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.cascade_save">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.cascade_save">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.cascade_save">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.cascade_save">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.cascade_save">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.cascade_save">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier">CellClassifier (class in cytopy.flow.supervised.cell_classifier)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.utilities.html#cytopy.flow.gating.utilities.centroid">centroid() (in module cytopy.flow.gating.utilities)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.ChannelMap">ChannelMap (class in cytopy.data.panel)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.check_downstream_overlaps">check_downstream_overlaps() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.check_downstream_overlaps">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.check_excel_template">check_excel_template() (cytopy.data.panel.Panel static method)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.ChannelMap.check_matched_pair">check_matched_pair() (cytopy.data.panel.ChannelMap method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.utilities.html#cytopy.flow.gating.utilities.check_peak">check_peak() (in module cytopy.flow.gating.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.base.html#cytopy.flow.gating.base.Gate.child_update_1d">child_update_1d() (cytopy.flow.gating.base.Gate method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.dbscan.html#cytopy.flow.gating.dbscan.DensityClustering.child_update_1d">(cytopy.flow.gating.dbscan.DensityClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.density.html#cytopy.flow.gating.density.DensityThreshold.child_update_1d">(cytopy.flow.gating.density.DensityThreshold method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.mixturemodel.html#cytopy.flow.gating.mixturemodel.MixtureModel.child_update_1d">(cytopy.flow.gating.mixturemodel.MixtureModel method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.quantile.html#cytopy.flow.gating.quantile.Quantile.child_update_1d">(cytopy.flow.gating.quantile.Quantile method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static.child_update_1d">(cytopy.flow.gating.static.Static method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.base.html#cytopy.flow.gating.base.Gate.child_update_2d">child_update_2d() (cytopy.flow.gating.base.Gate method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.dbscan.html#cytopy.flow.gating.dbscan.DensityClustering.child_update_2d">(cytopy.flow.gating.dbscan.DensityClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.density.html#cytopy.flow.gating.density.DensityThreshold.child_update_2d">(cytopy.flow.gating.density.DensityThreshold method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.mixturemodel.html#cytopy.flow.gating.mixturemodel.MixtureModel.child_update_2d">(cytopy.flow.gating.mixturemodel.MixtureModel method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.quantile.html#cytopy.flow.gating.quantile.Quantile.child_update_2d">(cytopy.flow.gating.quantile.Quantile method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static.child_update_2d">(cytopy.flow.gating.static.Static method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.ChildPopulation">ChildPopulation (class in cytopy.flow.gating.defaults)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.ChildPopulationCollection">ChildPopulationCollection (class in cytopy.flow.gating.defaults)</a>
+</li>
+      <li><a href="api/cytopy.flow.read_write.html#cytopy.flow.read_write.chunks">chunks() (in module cytopy.flow.read_write)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Cluster.clean">clean() (cytopy.data.fcs.Cluster method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.clean">(cytopy.data.fcs.ClusteringDefinition method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ControlIndex.clean">(cytopy.data.fcs.ControlIndex method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.File.clean">(cytopy.data.fcs.File method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.clean">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.clean">(cytopy.data.fcs.Population method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.clean">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.Gate.clean">(cytopy.data.gating.Gate method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.clean">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.ChannelMap.clean">(cytopy.data.panel.ChannelMap method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.NormalisedName.clean">(cytopy.data.panel.NormalisedName method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.clean">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.clean">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Biology.clean">(cytopy.data.subject.Biology method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Bug.clean">(cytopy.data.subject.Bug method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Drug.clean">(cytopy.data.subject.Drug method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.clean">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.clean">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.clear">clear() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.clear_control_cache">clear_control_cache() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.clear_control_cache">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.clear_gates">clear_gates() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.clear_gates">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Cluster">Cluster (class in cytopy.data.fcs)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Clustering.cluster">cluster() (cytopy.flow.clustering.main.Clustering method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.GlobalClustering.cluster">(cytopy.flow.clustering.main.GlobalClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.MetaClustering.cluster">(cytopy.flow.clustering.main.MetaClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.SingleClustering.cluster">(cytopy.flow.clustering.main.SingleClustering method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.ExperimentProportions.cluster_proportions">cluster_proportions() (cytopy.flow.feature_extraction.ExperimentProportions method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Clustering">Clustering (class in cytopy.flow.clustering.main)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition">ClusteringDefinition (class in cytopy.data.fcs)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.DoesNotExist">ClusteringDefinition.DoesNotExist</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.MultipleObjectsReturned">ClusteringDefinition.MultipleObjectsReturned</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.plotting.html#cytopy.flow.gating.plotting.Plot.compare_control">compare_control() (cytopy.flow.gating.plotting.Plot method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.compare_indexes">compare_indexes() (cytopy.data.fcs.ClusteringDefinition class method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.compare_indexes">(cytopy.data.fcs.FileGroup class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.compare_indexes">(cytopy.data.fcs_experiments.FCSExperiment class method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.compare_indexes">(cytopy.data.gating.GatingStrategy class method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.compare_indexes">(cytopy.data.panel.Panel class method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.compare_indexes">(cytopy.data.project.Project class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.compare_indexes">(cytopy.data.subject.MetaDataDictionary class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.compare_indexes">(cytopy.data.subject.Subject class method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.compare_to_training_set">compare_to_training_set() (cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.compare_to_training_set">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.compare_to_training_set">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.compare_to_training_set">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.compare_to_training_set">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.compare_to_training_set">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.read_write.html#cytopy.flow.read_write.FCSFile.compensate">compensate() (cytopy.flow.read_write.FCSFile method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.consensus.ConsensusCluster">ConsensusCluster (class in cytopy.flow.clustering.consensus)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.control_gating">control_gating() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.control_gating">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.ControlComparisons">ControlComparisons (class in cytopy.flow.feature_extraction)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ControlIndex">ControlIndex (class in cytopy.data.fcs)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.copy">copy() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.mixturemodel.html#cytopy.flow.gating.mixturemodel.MixtureModel.create_ellipse">create_ellipse() (cytopy.flow.gating.mixturemodel.MixtureModel method)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.create_from_dict">create_from_dict() (cytopy.data.panel.Panel method)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.create_from_excel">create_from_excel() (cytopy.data.panel.Panel method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.create_gate">create_gate() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.create_gate">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.create_index">create_index() (cytopy.data.fcs.ClusteringDefinition class method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.create_index">(cytopy.data.fcs.FileGroup class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.create_index">(cytopy.data.fcs_experiments.FCSExperiment class method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.create_index">(cytopy.data.gating.GatingStrategy class method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.create_index">(cytopy.data.panel.Panel class method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.create_index">(cytopy.data.project.Project class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.create_index">(cytopy.data.subject.MetaDataDictionary class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.create_index">(cytopy.data.subject.Subject class method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.create_reference_sample">create_reference_sample() (in module cytopy.flow.supervised.cell_classifier)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.create_regex">create_regex() (in module cytopy.data.panel)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.create_template">create_template() (in module cytopy.data.panel)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.ctrl_search">ctrl_search() (cytopy.data.fcs.Population method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#module-cytopy.data.fcs">cytopy.data.fcs (module)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#module-cytopy.data.fcs_experiments">cytopy.data.fcs_experiments (module)</a>
+</li>
+      <li><a href="api/cytopy.data.gating.html#module-cytopy.data.gating">cytopy.data.gating (module)</a>
+</li>
+      <li><a href="api/cytopy.data.mongo_setup.html#module-cytopy.data.mongo_setup">cytopy.data.mongo_setup (module)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#module-cytopy.data.panel">cytopy.data.panel (module)</a>
+</li>
+      <li><a href="api/cytopy.data.project.html#module-cytopy.data.project">cytopy.data.project (module)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#module-cytopy.data.subject">cytopy.data.subject (module)</a>
+</li>
+      <li><a href="api/cytopy.data.utilities.html#module-cytopy.data.utilities">cytopy.data.utilities (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.batch_effects.html#module-cytopy.flow.batch_effects">cytopy.flow.batch_effects (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#module-cytopy.flow.clustering.consensus">cytopy.flow.clustering.consensus (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#module-cytopy.flow.clustering.flowsom">cytopy.flow.clustering.flowsom (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#module-cytopy.flow.clustering.main">cytopy.flow.clustering.main (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.dim_reduction.html#module-cytopy.flow.dim_reduction">cytopy.flow.dim_reduction (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#module-cytopy.flow.feature_extraction">cytopy.flow.feature_extraction (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.feedback.html#module-cytopy.flow.feedback">cytopy.flow.feedback (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#module-cytopy.flow.gating.actions">cytopy.flow.gating.actions (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.base.html#module-cytopy.flow.gating.base">cytopy.flow.gating.base (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.dbscan.html#module-cytopy.flow.gating.dbscan">cytopy.flow.gating.dbscan (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#module-cytopy.flow.gating.defaults">cytopy.flow.gating.defaults (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.density.html#module-cytopy.flow.gating.density">cytopy.flow.gating.density (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.mixturemodel.html#module-cytopy.flow.gating.mixturemodel">cytopy.flow.gating.mixturemodel (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.plotting.html#module-cytopy.flow.gating.plotting">cytopy.flow.gating.plotting (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.quantile.html#module-cytopy.flow.gating.quantile">cytopy.flow.gating.quantile (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.static.html#module-cytopy.flow.gating.static">cytopy.flow.gating.static (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.utilities.html#module-cytopy.flow.gating.utilities">cytopy.flow.gating.utilities (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.read_write.html#module-cytopy.flow.read_write">cytopy.flow.read_write (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#module-cytopy.flow.supervised.cell_classifier">cytopy.flow.supervised.cell_classifier (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#module-cytopy.flow.supervised.deep_gating">cytopy.flow.supervised.deep_gating (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#module-cytopy.flow.supervised.discriminant_analysis">cytopy.flow.supervised.discriminant_analysis (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#module-cytopy.flow.supervised.evaluate">cytopy.flow.supervised.evaluate (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#module-cytopy.flow.supervised.knn">cytopy.flow.supervised.knn (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#module-cytopy.flow.supervised.ref">cytopy.flow.supervised.ref (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#module-cytopy.flow.supervised.svm">cytopy.flow.supervised.svm (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#module-cytopy.flow.supervised.utilities">cytopy.flow.supervised.utilities (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#module-cytopy.flow.supervised.xgboost">cytopy.flow.supervised.xgboost (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.transforms.html#module-cytopy.flow.transforms">cytopy.flow.transforms (module)</a>
+</li>
+      <li><a href="api/cytopy.flow.utilities.html#module-cytopy.flow.utilities">cytopy.flow.utilities (module)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="D">D</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.utilities.html#cytopy.data.utilities.data_from_file">data_from_file() (in module cytopy.data.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.dbscan.html#cytopy.flow.gating.dbscan.DensityClustering.dbscan">dbscan() (cytopy.flow.gating.dbscan.DensityClustering method)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating">DeepGating (class in cytopy.flow.supervised.deep_gating)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.delete">delete() (cytopy.data.fcs.ClusteringDefinition method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.delete">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.delete">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.delete">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.delete">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.delete">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.delete">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.delete">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.delete_all_populations">delete_all_populations() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.delete_clusters">delete_clusters() (cytopy.data.fcs.FileGroup method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.delete_clusters">(cytopy.data.fcs.Population method)</a>
+</li>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.SingleClustering.delete_clusters">(cytopy.flow.clustering.main.SingleClustering method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.delete_gates">delete_gates() (cytopy.data.fcs.FileGroup method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.delete_gating_templates">delete_gating_templates() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.delete_populations">delete_populations() (cytopy.data.fcs.FileGroup method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.utilities.html#cytopy.flow.gating.utilities.density_dependent_downsample">density_dependent_downsample() (in module cytopy.flow.gating.utilities)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.dbscan.html#cytopy.flow.gating.dbscan.DensityClustering">DensityClustering (class in cytopy.flow.gating.dbscan)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.density.html#cytopy.flow.gating.density.DensityThreshold">DensityThreshold (class in cytopy.flow.gating.density)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.ChildPopulationCollection.deserialise">deserialise() (cytopy.flow.gating.defaults.ChildPopulationCollection method)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.dim_reduction">dim_reduction() (in module cytopy.flow.feature_extraction)</a>
+</li>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.EvaluateBatchEffects.dim_reduction_grid">dim_reduction_grid() (cytopy.flow.batch_effects.EvaluateBatchEffects method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.dimenionality_reduction">dimenionality_reduction() (cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+      <li><a href="api/cytopy.flow.dim_reduction.html#cytopy.flow.dim_reduction.dimensionality_reduction">dimensionality_reduction() (in module cytopy.flow.dim_reduction)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis">DiscriminantAnalysis (class in cytopy.flow.supervised.discriminant_analysis)</a>
+</li>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.EvaluateBatchEffects.divergence_barplot">divergence_barplot() (cytopy.flow.batch_effects.EvaluateBatchEffects method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.drop_collection">drop_collection() (cytopy.data.fcs.ClusteringDefinition class method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.drop_collection">(cytopy.data.fcs.FileGroup class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.drop_collection">(cytopy.data.fcs_experiments.FCSExperiment class method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.drop_collection">(cytopy.data.gating.GatingStrategy class method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.drop_collection">(cytopy.data.panel.Panel class method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.drop_collection">(cytopy.data.project.Project class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.drop_collection">(cytopy.data.subject.MetaDataDictionary class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.drop_collection">(cytopy.data.subject.Subject class method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.drop_data">drop_data() (cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Drug">Drug (class in cytopy.data.subject)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="E">E</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.edit_gate">edit_gate() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.edit_gate">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static.ellipse_gate">ellipse_gate() (cytopy.flow.gating.static.Static method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.ensure_index">ensure_index() (cytopy.data.fcs.ClusteringDefinition class method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.ensure_index">(cytopy.data.fcs.FileGroup class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.ensure_index">(cytopy.data.fcs_experiments.FCSExperiment class method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.ensure_index">(cytopy.data.gating.GatingStrategy class method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.ensure_index">(cytopy.data.panel.Panel class method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.ensure_index">(cytopy.data.project.Project class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.ensure_index">(cytopy.data.subject.MetaDataDictionary class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.ensure_index">(cytopy.data.subject.Subject class method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.ensure_indexes">ensure_indexes() (cytopy.data.fcs.ClusteringDefinition class method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.ensure_indexes">(cytopy.data.fcs.FileGroup class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.ensure_indexes">(cytopy.data.fcs_experiments.FCSExperiment class method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.ensure_indexes">(cytopy.data.gating.GatingStrategy class method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.ensure_indexes">(cytopy.data.panel.Panel class method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.ensure_indexes">(cytopy.data.project.Project class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.ensure_indexes">(cytopy.data.subject.MetaDataDictionary class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.ensure_indexes">(cytopy.data.subject.Subject class method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.evaluate.evaluate_model">evaluate_model() (in module cytopy.flow.supervised.evaluate)</a>
+</li>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.EvaluateBatchEffects">EvaluateBatchEffects (class in cytopy.flow.batch_effects)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.ExperimentProportions">ExperimentProportions (class in cytopy.flow.feature_extraction)</a>
+</li>
+      <li><a href="api/cytopy.flow.read_write.html#cytopy.flow.read_write.explore_channel_mappings">explore_channel_mappings() (in module cytopy.flow.read_write)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer">Explorer (class in cytopy.flow.clustering.main)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.GlobalClustering.explorer">explorer() (cytopy.flow.clustering.main.GlobalClustering method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.MetaClustering.explorer">(cytopy.flow.clustering.main.MetaClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.SingleClustering.explorer">(cytopy.flow.clustering.main.SingleClustering method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="F">F</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.utilities.html#cytopy.flow.utilities.faithful_downsampling">faithful_downsampling() (in module cytopy.flow.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.read_write.html#cytopy.flow.read_write.fcs_mappings">fcs_mappings() (in module cytopy.flow.read_write)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment">FCSExperiment (class in cytopy.data.fcs_experiments)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.DoesNotExist">FCSExperiment.DoesNotExist</a>
+</li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.MultipleObjectsReturned">FCSExperiment.MultipleObjectsReturned</a>
+</li>
+      <li><a href="api/cytopy.flow.read_write.html#cytopy.flow.read_write.FCSFile">FCSFile (class in cytopy.flow.read_write)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.ChildPopulationCollection.fetch_by_definition">fetch_by_definition() (cytopy.flow.gating.defaults.ChildPopulationCollection method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.fetch_geom">fetch_geom() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.fetch_geom">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.fetch_sample_mid">fetch_sample_mid() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.File">File (class in cytopy.data.fcs)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup">FileGroup (class in cytopy.data.fcs)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.DoesNotExist">FileGroup.DoesNotExist</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.MultipleObjectsReturned">FileGroup.MultipleObjectsReturned</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.filter_dict">filter_dict() (in module cytopy.flow.clustering.main)</a>
+</li>
+      <li><a href="api/cytopy.data.utilities.html#cytopy.data.utilities.filter_fcs_files">filter_fcs_files() (in module cytopy.data.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.utilities.find_common_features">find_common_features() (in module cytopy.flow.supervised.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.find_dependencies">find_dependencies() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.find_dependencies">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.utilities.html#cytopy.flow.gating.utilities.find_local_minima">find_local_minima() (in module cytopy.flow.gating.utilities)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.consensus.ConsensusCluster.fit">fit() (cytopy.flow.clustering.consensus.ConsensusCluster method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.flowsom.FlowSOM">FlowSOM (class in cytopy.flow.clustering.flowsom)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Cluster.from_json">from_json() (cytopy.data.fcs.Cluster class method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.from_json">(cytopy.data.fcs.ClusteringDefinition class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ControlIndex.from_json">(cytopy.data.fcs.ControlIndex class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.File.from_json">(cytopy.data.fcs.File class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.from_json">(cytopy.data.fcs.FileGroup class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.from_json">(cytopy.data.fcs.Population class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.from_json">(cytopy.data.fcs_experiments.FCSExperiment class method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.Gate.from_json">(cytopy.data.gating.Gate class method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.from_json">(cytopy.data.gating.GatingStrategy class method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.ChannelMap.from_json">(cytopy.data.panel.ChannelMap class method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.NormalisedName.from_json">(cytopy.data.panel.NormalisedName class method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.from_json">(cytopy.data.panel.Panel class method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.from_json">(cytopy.data.project.Project class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Biology.from_json">(cytopy.data.subject.Biology class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Bug.from_json">(cytopy.data.subject.Bug class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Drug.from_json">(cytopy.data.subject.Drug class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.from_json">(cytopy.data.subject.MetaDataDictionary class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.from_json">(cytopy.data.subject.Subject class method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.fromkeys">fromkeys() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="G">G</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.Gate">Gate (class in cytopy.data.gating)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.base.html#cytopy.flow.gating.base.Gate">(class in cytopy.flow.gating.base)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.mixturemodel.html#cytopy.flow.gating.mixturemodel.MixtureModel.gate">gate() (cytopy.flow.gating.mixturemodel.MixtureModel method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.density.html#cytopy.flow.gating.density.DensityThreshold.gate_1d">gate_1d() (cytopy.flow.gating.density.DensityThreshold method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.quantile.html#cytopy.flow.gating.quantile.Quantile.gate_1d">(cytopy.flow.gating.quantile.Quantile method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.density.html#cytopy.flow.gating.density.DensityThreshold.gate_2d">gate_2d() (cytopy.flow.gating.density.DensityThreshold method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.quantile.html#cytopy.flow.gating.quantile.Quantile.gate_2d">(cytopy.flow.gating.quantile.Quantile method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.base.html#cytopy.flow.gating.base.GateError">GateError</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating">Gating (class in cytopy.flow.gating.actions)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.gating_classes">gating_classes() (cytopy.flow.gating.actions.Gating property)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.gating_classes">(cytopy.flow.gating.actions.Template property)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy">GatingStrategy (class in cytopy.data.gating)</a>
+</li>
+      <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.DoesNotExist">GatingStrategy.DoesNotExist</a>
+</li>
+      <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.MultipleObjectsReturned">GatingStrategy.MultipleObjectsReturned</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.base.html#cytopy.flow.gating.base.Gate.generate_chunks">generate_chunks() (cytopy.flow.gating.base.Gate method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.dbscan.html#cytopy.flow.gating.dbscan.DensityClustering.generate_chunks">(cytopy.flow.gating.dbscan.DensityClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.density.html#cytopy.flow.gating.density.DensityThreshold.generate_chunks">(cytopy.flow.gating.density.DensityThreshold method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.mixturemodel.html#cytopy.flow.gating.mixturemodel.MixtureModel.generate_chunks">(cytopy.flow.gating.mixturemodel.MixtureModel method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.quantile.html#cytopy.flow.gating.quantile.Quantile.generate_chunks">(cytopy.flow.gating.quantile.Quantile method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static.generate_chunks">(cytopy.flow.gating.static.Static method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.generate_groups">generate_groups() (in module cytopy.flow.batch_effects)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.base.html#cytopy.flow.gating.base.Gate.generate_polygons">generate_polygons() (cytopy.flow.gating.base.Gate method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.dbscan.html#cytopy.flow.gating.dbscan.DensityClustering.generate_polygons">(cytopy.flow.gating.dbscan.DensityClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.density.html#cytopy.flow.gating.density.DensityThreshold.generate_polygons">(cytopy.flow.gating.density.DensityThreshold method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.mixturemodel.html#cytopy.flow.gating.mixturemodel.MixtureModel.generate_polygons">(cytopy.flow.gating.mixturemodel.MixtureModel method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.quantile.html#cytopy.flow.gating.quantile.Quantile.generate_polygons">(cytopy.flow.gating.quantile.Quantile method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static.generate_polygons">(cytopy.flow.gating.static.Static method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom">Geom (class in cytopy.flow.gating.defaults)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.get">get() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.get_channels">get_channels() (cytopy.data.panel.Panel method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.get_cluster">get_cluster() (cytopy.data.fcs.Population method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.SingleClustering.get_cluster_dataframe">get_cluster_dataframe() (cytopy.flow.clustering.main.SingleClustering method)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.Proportions.get_cluster_n">get_cluster_n() (cytopy.flow.feature_extraction.Proportions method)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.Proportions.get_cluster_proportions">get_cluster_proportions() (cytopy.flow.feature_extraction.Proportions method)</a>
+</li>
+      <li><a href="api/cytopy.data.utilities.html#cytopy.data.utilities.get_fcs_file_paths">get_fcs_file_paths() (in module cytopy.data.utilities)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.get_many_clusters">get_many_clusters() (cytopy.data.fcs.Population method)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.get_markers">get_markers() (cytopy.data.panel.Panel method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.utilities.html#cytopy.flow.gating.utilities.get_params">get_params() (in module cytopy.flow.gating.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.Proportions.get_pop_proportions">get_pop_proportions() (cytopy.flow.feature_extraction.Proportions method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.get_population">get_population() (cytopy.data.fcs.FileGroup method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.get_population_by_parent">get_population_by_parent() (cytopy.data.fcs.FileGroup method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.get_population_df">get_population_df() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.get_population_df">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.Proportions.get_population_n">get_population_n() (cytopy.flow.feature_extraction.Proportions method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Cluster.get_text_score">get_text_score() (cytopy.data.fcs.Cluster method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.get_text_score">(cytopy.data.fcs.ClusteringDefinition method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ControlIndex.get_text_score">(cytopy.data.fcs.ControlIndex method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.File.get_text_score">(cytopy.data.fcs.File method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.get_text_score">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.get_text_score">(cytopy.data.fcs.Population method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.get_text_score">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.Gate.get_text_score">(cytopy.data.gating.Gate method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.get_text_score">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.ChannelMap.get_text_score">(cytopy.data.panel.ChannelMap method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.NormalisedName.get_text_score">(cytopy.data.panel.NormalisedName method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.get_text_score">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.get_text_score">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Biology.get_text_score">(cytopy.data.subject.Biology method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Bug.get_text_score">(cytopy.data.subject.Bug method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Drug.get_text_score">(cytopy.data.subject.Drug method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.get_text_score">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.get_text_score">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.mongo_setup.html#cytopy.data.mongo_setup.global_init">global_init() (in module cytopy.data.mongo_setup)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.GlobalClustering">GlobalClustering (class in cytopy.flow.clustering.main)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.gram_status">gram_status() (in module cytopy.data.subject)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.gridsearch">gridsearch() (cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.gridsearch">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.gridsearch">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.gridsearch">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.gridsearch">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.gridsearch">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="H">H</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.dbscan.html#cytopy.flow.gating.dbscan.DensityClustering.hdbscan">hdbscan() (cytopy.flow.gating.dbscan.DensityClustering method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.heatmap">heatmap() (cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.utilities.html#cytopy.flow.utilities.hellinger_dot">hellinger_dot() (in module cytopy.flow.utilities)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.hmbpp_ribo">hmbpp_ribo() (in module cytopy.data.subject)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="I">I</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.indexed_kde">indexed_kde() (in module cytopy.flow.batch_effects)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.info">info() (cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.utilities.html#cytopy.flow.gating.utilities.inside_ellipse">inside_ellipse() (in module cytopy.flow.gating.utilities)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.utilities.html#cytopy.flow.gating.utilities.inside_polygon">inside_polygon() (in module cytopy.flow.gating.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.MetaClustering.inspect_heatmap">inspect_heatmap() (cytopy.flow.clustering.main.MetaClustering method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.items">items() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="J">J</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.jenson_shannon_dist">jenson_shannon_dist() (in module cytopy.flow.batch_effects)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.utilities.html#cytopy.flow.utilities.jsd_divergence">jsd_divergence() (in module cytopy.flow.utilities)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="K">K</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.utilities.html#cytopy.flow.gating.utilities.kde">kde() (in module cytopy.flow.gating.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.utilities.html#cytopy.flow.utilities.kde_bandwidth_cv">kde_bandwidth_cv() (in module cytopy.flow.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.utilities.html#cytopy.flow.utilities.kde_multivariant">kde_multivariant() (in module cytopy.flow.utilities)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.keys">keys() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.kl_distance">kl_distance() (in module cytopy.flow.batch_effects)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN">KNN (class in cytopy.flow.supervised.knn)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="L">L</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.l1_feature_selection">l1_feature_selection() (in module cytopy.flow.feature_extraction)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.MetaClustering.label_cluster">label_cluster() (cytopy.flow.clustering.main.MetaClustering method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.list_clustering_experiments">list_clustering_experiments() (cytopy.data.fcs.Population method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.list_clusters">list_clusters() (cytopy.data.fcs.Population method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.list_controls">list_controls() (cytopy.data.fcs.FileGroup method)</a>
+</li>
+      <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.list_fcs_experiments">list_fcs_experiments() (cytopy.data.project.Project method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.list_gated_controls">list_gated_controls() (cytopy.data.fcs.FileGroup method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.list_gates">list_gates() (cytopy.data.fcs.FileGroup method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.list_indexes">list_indexes() (cytopy.data.fcs.ClusteringDefinition class method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.list_indexes">(cytopy.data.fcs.FileGroup class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.list_indexes">(cytopy.data.fcs_experiments.FCSExperiment class method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.list_indexes">(cytopy.data.gating.GatingStrategy class method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.list_indexes">(cytopy.data.panel.Panel class method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.list_indexes">(cytopy.data.project.Project class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.list_indexes">(cytopy.data.subject.MetaDataDictionary class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.list_indexes">(cytopy.data.subject.Subject class method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.list_invalid">list_invalid() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.list_populations">list_populations() (cytopy.data.fcs.FileGroup method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.list_samples">list_samples() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+      <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.list_subjects">list_subjects() (cytopy.data.project.Project method)</a>
+</li>
+      <li><a href="api/cytopy.flow.utilities.html#cytopy.flow.utilities.load_and_transform">load_and_transform() (in module cytopy.flow.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.load_biology_data">load_biology_data() (cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.MetaClustering.load_clusters">load_clusters() (cytopy.flow.clustering.main.MetaClustering method)</a>
+</li>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.EvaluateBatchEffects.load_data">load_data() (cytopy.flow.batch_effects.EvaluateBatchEffects method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.GlobalClustering.load_data">(cytopy.flow.clustering.main.GlobalClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.SingleClustering.load_data">(cytopy.flow.clustering.main.SingleClustering method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.MetaClustering.load_existing_clusters">load_existing_clusters() (cytopy.flow.clustering.main.MetaClustering method)</a>
+</li>
+      <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.load_experiment">load_experiment() (cytopy.data.project.Project method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Cluster.load_index">load_index() (cytopy.data.fcs.Cluster method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ControlIndex.load_index">(cytopy.data.fcs.ControlIndex method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.load_index">(cytopy.data.fcs.Population method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.load_infectious_data">load_infectious_data() (cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.load_meta">load_meta() (cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.load_model">load_model() (cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.load_template">load_template() (cytopy.flow.gating.actions.Template method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="M">M</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.manual_validation">manual_validation() (cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.manual_validation">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.manual_validation">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.manual_validation">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.manual_validation">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.manual_validation">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.EvaluateBatchEffects.marker_variance">marker_variance() (cytopy.flow.batch_effects.EvaluateBatchEffects method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.merge">merge() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.merge">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.dbscan.html#cytopy.flow.gating.dbscan.meta_assignment">meta_assignment() (in module cytopy.flow.gating.dbscan)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.flowsom.FlowSOM.meta_cluster">meta_cluster() (cytopy.flow.clustering.flowsom.FlowSOM method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.meta_dict_lookup">meta_dict_lookup() (in module cytopy.flow.clustering.main)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.meta_labelling">meta_labelling() (in module cytopy.flow.feature_extraction)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.MetaClustering">MetaClustering (class in cytopy.flow.clustering.main)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary">MetaDataDictionary (class in cytopy.data.subject)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.DoesNotExist">MetaDataDictionary.DoesNotExist</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.MultipleObjectsReturned">MetaDataDictionary.MultipleObjectsReturned</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.mixturemodel.html#cytopy.flow.gating.mixturemodel.MixtureModel">MixtureModel (class in cytopy.flow.gating.mixturemodel)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.modify">modify() (cytopy.data.fcs.ClusteringDefinition method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.modify">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.modify">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.modify">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.modify">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.modify">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.modify">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.modify">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.utilities.html#cytopy.flow.gating.utilities.multi_centroid_calculation">multi_centroid_calculation() (in module cytopy.flow.gating.utilities)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.evaluate.multi_label_performance">multi_label_performance() (in module cytopy.flow.supervised.evaluate)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.multi_process_ordered">multi_process_ordered() (in module cytopy.flow.supervised.cell_classifier)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.multiclass_labels">multiclass_labels() (cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.multiclass_labels">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.multiclass_labels">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.multiclass_labels">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.multiclass_labels">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.multiclass_labels">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.multicolinearity_matrix">multicolinearity_matrix() (in module cytopy.flow.feature_extraction)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Cluster.my_metaclass">my_metaclass (cytopy.data.fcs.Cluster attribute)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.my_metaclass">(cytopy.data.fcs.ClusteringDefinition attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ControlIndex.my_metaclass">(cytopy.data.fcs.ControlIndex attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.File.my_metaclass">(cytopy.data.fcs.File attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.my_metaclass">(cytopy.data.fcs.FileGroup attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.my_metaclass">(cytopy.data.fcs.Population attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.my_metaclass">(cytopy.data.fcs_experiments.FCSExperiment attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.Gate.my_metaclass">(cytopy.data.gating.Gate attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.my_metaclass">(cytopy.data.gating.GatingStrategy attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.ChannelMap.my_metaclass">(cytopy.data.panel.ChannelMap attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.NormalisedName.my_metaclass">(cytopy.data.panel.NormalisedName attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.my_metaclass">(cytopy.data.panel.Panel attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.my_metaclass">(cytopy.data.project.Project attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Biology.my_metaclass">(cytopy.data.subject.Biology attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Bug.my_metaclass">(cytopy.data.subject.Bug attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Drug.my_metaclass">(cytopy.data.subject.Drug attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.my_metaclass">(cytopy.data.subject.MetaDataDictionary attribute)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.my_metaclass">(cytopy.data.subject.Subject attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="N">N</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.NormalisedName">NormalisedName (class in cytopy.data.panel)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.nudge_threshold">nudge_threshold() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.nudge_threshold">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="O">O</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.utilities.html#cytopy.flow.utilities.ordered_load_transform">ordered_load_transform() (in module cytopy.flow.utilities)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.org_type">org_type() (in module cytopy.data.subject)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="P">P</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel">Panel (class in cytopy.data.panel)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.DoesNotExist">Panel.DoesNotExist</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.MultipleObjectsReturned">Panel.MultipleObjectsReturned</a>
+</li>
+      <li><a href="api/cytopy.flow.transforms.html#cytopy.flow.transforms.percentile_rank_transform">percentile_rank_transform() (in module cytopy.flow.transforms)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.pk">pk() (cytopy.data.fcs.ClusteringDefinition property)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.pk">(cytopy.data.fcs.FileGroup property)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.pk">(cytopy.data.fcs_experiments.FCSExperiment property)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.pk">(cytopy.data.gating.GatingStrategy property)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.pk">(cytopy.data.panel.Panel property)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.pk">(cytopy.data.project.Project property)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.pk">(cytopy.data.subject.MetaDataDictionary property)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.pk">(cytopy.data.subject.Subject property)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.plotting.html#cytopy.flow.gating.plotting.Plot">Plot (class in cytopy.flow.gating.plotting)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.plot_2d">plot_2d() (cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.plotting.html#cytopy.flow.gating.plotting.plot_axis_lims">plot_axis_lims() (in module cytopy.flow.gating.plotting)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.evaluate.plot_cm">plot_cm() (in module cytopy.flow.supervised.evaluate)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.plotting.html#cytopy.flow.gating.plotting.Plot.plot_gate">plot_gate() (cytopy.flow.gating.plotting.Plot method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.plotting.html#cytopy.flow.gating.plotting.Plot.plot_population">plot_population() (cytopy.flow.gating.plotting.Plot method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.plot_representation">plot_representation() (cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.pop">pop() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.popitem">popitem() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population">Population (class in cytopy.data.fcs)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.ExperimentProportions.population_proportions">population_proportions() (cytopy.flow.feature_extraction.ExperimentProportions method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.population_size">population_size() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.population_size">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.consensus.ConsensusCluster.predict">predict() (cytopy.flow.clustering.consensus.ConsensusCluster method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.flowsom.FlowSOM.predict">(cytopy.flow.clustering.flowsom.FlowSOM method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.predict">(cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.predict">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.predict">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.predict">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.predict">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.predict">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.utilities.predict_class">predict_class() (in module cytopy.flow.supervised.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.consensus.ConsensusCluster.predict_data">predict_data() (cytopy.flow.clustering.consensus.ConsensusCluster method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.print_population_tree">print_population_tree() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.print_population_tree">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.feedback.html#cytopy.flow.feedback.progress_bar">progress_bar() (in module cytopy.flow.feedback)</a>
+</li>
+      <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project">Project (class in cytopy.data.project)</a>
+</li>
+      <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.DoesNotExist">Project.DoesNotExist</a>
+</li>
+      <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.MultipleObjectsReturned">Project.MultipleObjectsReturned</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.Proportions">Proportions (class in cytopy.flow.feature_extraction)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.File.pull">pull() (cytopy.data.fcs.File method)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.ref.pull_data">pull_data() (in module cytopy.flow.supervised.ref)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.ref.pull_data_hashtable">pull_data_hashtable() (in module cytopy.flow.supervised.ref)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.pull_sample">pull_sample() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.pull_sample_data">pull_sample_data() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.pull_sample_mappings">pull_sample_mappings() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+      <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.pull_subject">pull_subject() (cytopy.data.project.Project method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.File.put">put() (cytopy.data.fcs.File method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="Q">Q</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.quantile.html#cytopy.flow.gating.quantile.Quantile">Quantile (class in cytopy.flow.gating.quantile)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.NormalisedName.query">query() (cytopy.data.panel.NormalisedName method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="R">R</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.radar_plot">radar_plot() (in module cytopy.flow.feature_extraction)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.utilities.random_oversampling">random_oversampling() (in module cytopy.flow.supervised.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.ExperimentProportions.raw_counts">raw_counts() (cytopy.flow.feature_extraction.ExperimentProportions method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static.rect_gate">rect_gate() (cytopy.flow.gating.static.Static method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.utilities.html#cytopy.flow.gating.utilities.rectangular_filter">rectangular_filter() (in module cytopy.flow.gating.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.register_as_invalid">register_as_invalid() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.register_as_invalid">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.register_delete_rule">register_delete_rule() (cytopy.data.fcs.ClusteringDefinition class method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.register_delete_rule">(cytopy.data.fcs.FileGroup class method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.register_delete_rule">(cytopy.data.fcs_experiments.FCSExperiment class method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.register_delete_rule">(cytopy.data.gating.GatingStrategy class method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.register_delete_rule">(cytopy.data.panel.Panel class method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.register_delete_rule">(cytopy.data.project.Project class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.register_delete_rule">(cytopy.data.subject.MetaDataDictionary class method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.register_delete_rule">(cytopy.data.subject.Subject class method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.reload">reload() (cytopy.data.fcs.ClusteringDefinition method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.reload">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.reload">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.reload">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.reload">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.reload">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.reload">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.reload">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.remove_gate">remove_gate() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.remove_gate">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.remove_population">remove_population() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.remove_population">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.ChildPopulationCollection.remove_population">(cytopy.flow.gating.defaults.ChildPopulationCollection method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.remove_sample">remove_sample() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.replace_cluster_experiment">replace_cluster_experiment() (cytopy.data.fcs.Population method)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.evaluate.report_card">report_card() (in module cytopy.flow.supervised.evaluate)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="S">S</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.sample_exists">sample_exists() (cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.base.html#cytopy.flow.gating.base.Gate.sampling">sampling() (cytopy.flow.gating.base.Gate method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.dbscan.html#cytopy.flow.gating.dbscan.DensityClustering.sampling">(cytopy.flow.gating.dbscan.DensityClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.density.html#cytopy.flow.gating.density.DensityThreshold.sampling">(cytopy.flow.gating.density.DensityThreshold method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.mixturemodel.html#cytopy.flow.gating.mixturemodel.MixtureModel.sampling">(cytopy.flow.gating.mixturemodel.MixtureModel method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.quantile.html#cytopy.flow.gating.quantile.Quantile.sampling">(cytopy.flow.gating.quantile.Quantile method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static.sampling">(cytopy.flow.gating.static.Static method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.save">save() (cytopy.data.fcs.ClusteringDefinition method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.save">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.save">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.save">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.save">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.save">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.save">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.save">(cytopy.data.subject.Subject method)</a>
+</li>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.save">(cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+        <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.MetaClustering.save">(cytopy.flow.clustering.main.MetaClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.save">(cytopy.flow.gating.actions.Gating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.save">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.save_classifier">save_classifier() (cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.SingleClustering.save_clusters">save_clusters() (cytopy.flow.clustering.main.SingleClustering method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.save_control_idx">save_control_idx() (cytopy.data.fcs.Population method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Cluster.save_index">save_index() (cytopy.data.fcs.Cluster method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ControlIndex.save_index">(cytopy.data.fcs.ControlIndex method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.save_index">(cytopy.data.fcs.Population method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.save_new_template">save_new_template() (cytopy.flow.gating.actions.Template method)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.utilities.scaler">scaler() (in module cytopy.flow.supervised.utilities)</a>
+</li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.Explorer.scatter_plot">scatter_plot() (cytopy.flow.clustering.main.Explorer method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.search_ctrl_cache">search_ctrl_cache() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.search_ctrl_cache">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.select_related">select_related() (cytopy.data.fcs.ClusteringDefinition method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.select_related">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.select_related">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.select_related">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.select_related">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.select_related">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.select_related">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.select_related">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.ChildPopulationCollection.serialise">serialise() (cytopy.flow.gating.defaults.ChildPopulationCollection method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.setdefault">setdefault() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+      <li><a href="api/cytopy.flow.batch_effects.html#cytopy.flow.batch_effects.EvaluateBatchEffects.similarity_matrix">similarity_matrix() (cytopy.flow.batch_effects.EvaluateBatchEffects method)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.singleclass_labels">singleclass_labels() (cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.singleclass_labels">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.singleclass_labels">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.singleclass_labels">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.singleclass_labels">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.singleclass_labels">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.main.SingleClustering">SingleClustering (class in cytopy.flow.clustering.main)</a>
+</li>
+      <li><a href="api/cytopy.flow.transforms.html#cytopy.flow.transforms.sklearn_scaler">sklearn_scaler() (in module cytopy.flow.transforms)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.sort_variance">sort_variance() (in module cytopy.flow.feature_extraction)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.standardise">standardise() (cytopy.data.panel.Panel method)</a>
+</li>
+      <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.standardise_names">standardise_names() (cytopy.data.panel.Panel method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static">Static (class in cytopy.flow.gating.static)</a>
+</li>
+      <li><a href="api/cytopy.flow.feature_extraction.html#cytopy.flow.feature_extraction.ControlComparisons.statistic_1d">statistic_1d() (cytopy.flow.feature_extraction.ControlComparisons method)</a>
+</li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.step_decay">step_decay() (in module cytopy.flow.supervised.deep_gating)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject">Subject (class in cytopy.data.subject)</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.DoesNotExist">Subject.DoesNotExist</a>
+</li>
+      <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.MultipleObjectsReturned">Subject.MultipleObjectsReturned</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.subtraction">subtraction() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.subtraction">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine">SupportVectorMachine (class in cytopy.flow.supervised.svm)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.switch_collection">switch_collection() (cytopy.data.fcs.ClusteringDefinition method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.switch_collection">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.switch_collection">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.switch_collection">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.switch_collection">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.switch_collection">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.switch_collection">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.switch_collection">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.switch_db">switch_db() (cytopy.data.fcs.ClusteringDefinition method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.switch_db">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.switch_db">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.switch_db">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.switch_db">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.switch_db">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.switch_db">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.switch_db">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="T">T</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template">Template (class in cytopy.flow.gating.actions)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static.threshold_2d">threshold_2d() (cytopy.flow.gating.static.Static method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.to_dbref">to_dbref() (cytopy.data.fcs.ClusteringDefinition method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.to_dbref">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.to_dbref">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.to_dbref">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.to_dbref">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.to_dbref">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.to_dbref">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.to_dbref">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Cluster.to_json">to_json() (cytopy.data.fcs.Cluster method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.to_json">(cytopy.data.fcs.ClusteringDefinition method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ControlIndex.to_json">(cytopy.data.fcs.ControlIndex method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.File.to_json">(cytopy.data.fcs.File method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.to_json">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.to_json">(cytopy.data.fcs.Population method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.to_json">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.Gate.to_json">(cytopy.data.gating.Gate method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.to_json">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.ChannelMap.to_json">(cytopy.data.panel.ChannelMap method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.NormalisedName.to_json">(cytopy.data.panel.NormalisedName method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.to_json">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.to_json">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Biology.to_json">(cytopy.data.subject.Biology method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Bug.to_json">(cytopy.data.subject.Bug method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Drug.to_json">(cytopy.data.subject.Drug method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.to_json">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.to_json">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Cluster.to_mongo">to_mongo() (cytopy.data.fcs.Cluster method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.to_mongo">(cytopy.data.fcs.ClusteringDefinition method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ControlIndex.to_mongo">(cytopy.data.fcs.ControlIndex method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.File.to_mongo">(cytopy.data.fcs.File method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.to_mongo">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.to_mongo">(cytopy.data.fcs.Population method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.to_mongo">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.Gate.to_mongo">(cytopy.data.gating.Gate method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.to_mongo">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.ChannelMap.to_mongo">(cytopy.data.panel.ChannelMap method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.NormalisedName.to_mongo">(cytopy.data.panel.NormalisedName method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.to_mongo">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.to_mongo">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Biology.to_mongo">(cytopy.data.subject.Biology method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Bug.to_mongo">(cytopy.data.subject.Bug method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Drug.to_mongo">(cytopy.data.subject.Drug method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.to_mongo">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.to_mongo">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.to_python">to_python() (cytopy.data.fcs.Population method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.Gate.to_python">(cytopy.data.gating.Gate method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.ChannelMap.to_python">(cytopy.data.panel.ChannelMap method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.clustering.html#cytopy.flow.clustering.flowsom.FlowSOM.train">train() (cytopy.flow.clustering.flowsom.FlowSOM method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.train">(cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.train">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.train">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.train">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.train">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.train">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.train_cv">train_cv() (cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.train_cv">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.train_cv">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.train_cv">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.train_cv">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.train_cv">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.train_holdout">train_holdout() (cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.train_holdout">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.train_holdout">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.train_holdout">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.train_holdout">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.train_holdout">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.cell_classifier.CellClassifier.train_test_split">train_test_split() (cytopy.flow.supervised.cell_classifier.CellClassifier method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.deep_gating.DeepGating.train_test_split">(cytopy.flow.supervised.deep_gating.DeepGating method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis.train_test_split">(cytopy.flow.supervised.discriminant_analysis.DiscriminantAnalysis method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.knn.KNN.train_test_split">(cytopy.flow.supervised.knn.KNN method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.svm.SupportVectorMachine.train_test_split">(cytopy.flow.supervised.svm.SupportVectorMachine method)</a>
+</li>
+        <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier.train_test_split">(cytopy.flow.supervised.xgboost.XGBoostClassifier method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.flow.gating.plotting.html#cytopy.flow.gating.plotting.transform_axes">transform_axes() (in module cytopy.flow.gating.plotting)</a>
+</li>
+      <li><a href="api/cytopy.flow.transforms.html#cytopy.flow.transforms.TransformError">TransformError</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="U">U</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.base.html#cytopy.flow.gating.base.Gate.uniform_downsample">uniform_downsample() (cytopy.flow.gating.base.Gate method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.dbscan.html#cytopy.flow.gating.dbscan.DensityClustering.uniform_downsample">(cytopy.flow.gating.dbscan.DensityClustering method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.density.html#cytopy.flow.gating.density.DensityThreshold.uniform_downsample">(cytopy.flow.gating.density.DensityThreshold method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.mixturemodel.html#cytopy.flow.gating.mixturemodel.MixtureModel.uniform_downsample">(cytopy.flow.gating.mixturemodel.MixtureModel method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.quantile.html#cytopy.flow.gating.quantile.Quantile.uniform_downsample">(cytopy.flow.gating.quantile.Quantile method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.static.html#cytopy.flow.gating.static.Static.uniform_downsample">(cytopy.flow.gating.static.Static method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.update">update() (cytopy.data.fcs.ClusteringDefinition method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.update">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.update">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.update">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.update">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.update">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.update">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.update">(cytopy.data.subject.Subject method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.update">(cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.update_cluster">update_cluster() (cytopy.data.fcs.Population method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.ChildPopulation.update_geom">update_geom() (cytopy.flow.gating.defaults.ChildPopulation method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.ChildPopulation.update_index">update_index() (cytopy.flow.gating.defaults.ChildPopulation method)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.update_population">update_population() (cytopy.data.fcs.FileGroup method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.update_populations">update_populations() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.update_populations">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="V">V</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Gating.valid_populations">valid_populations() (cytopy.flow.gating.actions.Gating method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.flow.gating.actions.html#cytopy.flow.gating.actions.Template.valid_populations">(cytopy.flow.gating.actions.Template method)</a>
+</li>
+      </ul></li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Cluster.validate">validate() (cytopy.data.fcs.Cluster method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.validate">(cytopy.data.fcs.ClusteringDefinition method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ControlIndex.validate">(cytopy.data.fcs.ControlIndex method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.File.validate">(cytopy.data.fcs.File method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.validate">(cytopy.data.fcs.FileGroup method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.Population.validate">(cytopy.data.fcs.Population method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.validate">(cytopy.data.fcs_experiments.FCSExperiment method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.Gate.validate">(cytopy.data.gating.Gate method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.validate">(cytopy.data.gating.GatingStrategy method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.ChannelMap.validate">(cytopy.data.panel.ChannelMap method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.NormalisedName.validate">(cytopy.data.panel.NormalisedName method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.validate">(cytopy.data.panel.Panel method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.validate">(cytopy.data.project.Project method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Biology.validate">(cytopy.data.subject.Biology method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Bug.validate">(cytopy.data.subject.Bug method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Drug.validate">(cytopy.data.subject.Drug method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.validate">(cytopy.data.subject.MetaDataDictionary method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.validate">(cytopy.data.subject.Subject method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.validity">validity() (cytopy.data.fcs.FileGroup method)</a>
+</li>
+      <li><a href="api/cytopy.flow.gating.defaults.html#cytopy.flow.gating.defaults.Geom.values">values() (cytopy.flow.gating.defaults.Geom method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="W">W</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.feedback.html#cytopy.flow.feedback.which_environment">which_environment() (in module cytopy.flow.feedback)</a>
+</li>
+      <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.DoesNotExist.with_traceback">with_traceback() (cytopy.data.fcs.ClusteringDefinition.DoesNotExist method)</a>
+
+      <ul>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.ClusteringDefinition.MultipleObjectsReturned.with_traceback">(cytopy.data.fcs.ClusteringDefinition.MultipleObjectsReturned method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.DoesNotExist.with_traceback">(cytopy.data.fcs.FileGroup.DoesNotExist method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs.html#cytopy.data.fcs.FileGroup.MultipleObjectsReturned.with_traceback">(cytopy.data.fcs.FileGroup.MultipleObjectsReturned method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.DoesNotExist.with_traceback">(cytopy.data.fcs_experiments.FCSExperiment.DoesNotExist method)</a>
+</li>
+        <li><a href="api/cytopy.data.fcs_experiments.html#cytopy.data.fcs_experiments.FCSExperiment.MultipleObjectsReturned.with_traceback">(cytopy.data.fcs_experiments.FCSExperiment.MultipleObjectsReturned method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.DoesNotExist.with_traceback">(cytopy.data.gating.GatingStrategy.DoesNotExist method)</a>
+</li>
+        <li><a href="api/cytopy.data.gating.html#cytopy.data.gating.GatingStrategy.MultipleObjectsReturned.with_traceback">(cytopy.data.gating.GatingStrategy.MultipleObjectsReturned method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.DoesNotExist.with_traceback">(cytopy.data.panel.Panel.DoesNotExist method)</a>
+</li>
+        <li><a href="api/cytopy.data.panel.html#cytopy.data.panel.Panel.MultipleObjectsReturned.with_traceback">(cytopy.data.panel.Panel.MultipleObjectsReturned method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.DoesNotExist.with_traceback">(cytopy.data.project.Project.DoesNotExist method)</a>
+</li>
+        <li><a href="api/cytopy.data.project.html#cytopy.data.project.Project.MultipleObjectsReturned.with_traceback">(cytopy.data.project.Project.MultipleObjectsReturned method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.DoesNotExist.with_traceback">(cytopy.data.subject.MetaDataDictionary.DoesNotExist method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.MetaDataDictionary.MultipleObjectsReturned.with_traceback">(cytopy.data.subject.MetaDataDictionary.MultipleObjectsReturned method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.DoesNotExist.with_traceback">(cytopy.data.subject.Subject.DoesNotExist method)</a>
+</li>
+        <li><a href="api/cytopy.data.subject.html#cytopy.data.subject.Subject.MultipleObjectsReturned.with_traceback">(cytopy.data.subject.Subject.MultipleObjectsReturned method)</a>
+</li>
+        <li><a href="api/cytopy.flow.gating.base.html#cytopy.flow.gating.base.GateError.with_traceback">(cytopy.flow.gating.base.GateError method)</a>
+</li>
+        <li><a href="api/cytopy.flow.transforms.html#cytopy.flow.transforms.TransformError.with_traceback">(cytopy.flow.transforms.TransformError method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="X">X</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/cytopy.flow.supervised.html#cytopy.flow.supervised.xgboost.XGBoostClassifier">XGBoostClassifier (class in cytopy.flow.supervised.xgboost)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

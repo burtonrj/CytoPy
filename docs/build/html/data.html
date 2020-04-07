@@ -1,0 +1,380 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Data loading &mdash; CytoPy 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Autonomous gating and pre-processing" href="gating.html" />
+    <link rel="prev" title="Getting started" href="intro.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> CytoPy
+          
+
+          
+            
+            <img src="_static/logo.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Table of Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Getting Started</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#using-python">Using Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#installing-mongodb">Installing MongoDB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="intro.html#installing-cytopy">Installing CytoPy</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Data uploading</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#connecting-to-the-database">Connecting to the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#projects-subjects">Projects &amp; Subjects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-cytometry-data">Adding Cytometry data</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#cytometry-panels">Cytometry Panels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#creating-fcsexperiments">Creating FCSExperiments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#adding-fcs-files">Adding *.fcs files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gating.html">Pre-processing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="batch.html">Batch-effect analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="classify.html">Supervised cell classification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cluster.html">High-dimensional clustering</a></li>
+<li class="toctree-l1"><a class="reference internal" href="features.html">Feature extraction, selection, and description</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs.html">cytopy.data.fcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.fcs_experiments.html">cytopy.data.fcs_experiments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.gating.html">cytopy.data.gating</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.mongo_setup.html">cytopy.data.mongo_setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.panel.html">cytopy.data.panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.project.html">cytopy.data.project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.subject.html">cytopy.data.subject</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.data.utilities.html">cytopy.data.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.base.html">cytopy.flow.gating.base</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.actions.html">cytopy.flow.gating.actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.plotting.html">cytopy.flow.gating.plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.control.html">cytopy.flow.gating.control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.dbscan.html">cytopy.flow.gating.dbscan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.defaults.html">cytopy.flow.gating.defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.density.html">cytopy.flow.gating.density</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.mixturemodel.html">cytopy.flow.gating.mixturemodel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.quantile.html">cytopy.flow.gating.quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.static.html">cytopy.flow.gating.static</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.gating.utilities.html">cytopy.flow.gating.utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.supervised.html">cytopy.flow.supervised</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.clustering.html">cytopy.flow.clustering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.batch_effects.html">cytopy.flow.batch_effects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.dim_reduction.html">cytopy.flow.dim_reductions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feature_extraction.html">cytopy.flow.feature_extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.feedback.html">cytopy.flow.feedback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.read_write.html">cytopy.flow.read_write</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.transforms.html">cytopy.flow.transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/cytopy.flow.utilities.html">cytopy.flow.utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CytoPy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Data loading</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/data.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="data-loading">
+<h1>Data loading<a class="headerlink" href="#data-loading" title="Permalink to this headline">¶</a></h1>
+<p>To start any analysis we will need to populate our database. Here we will detail how to connect to a database, create projects, populate those projects with subjects, add experiments, and add *.fcs files.</p>
+<div class="section" id="connecting-to-the-database">
+<h2>Connecting to the database<a class="headerlink" href="#connecting-to-the-database" title="Permalink to this headline">¶</a></h2>
+<p>If the database is hosted locally, then connecting is simple. We use the <em>global_init</em> function at the beginning of our analysis (whether this is in a script or in a notebook). All we have to do is pass the name of our database into this function, for example this will connect to the database called “CytoPy”:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">cytopy.data.mongo_setup</span> <span class="kn">import</span> <span class="n">global_init</span>
+<span class="n">global_init</span><span class="p">(</span><span class="s1">&#39;CytoPy&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>If the database does not yet exist, it will automatically be generated.</p>
+<p>If you’re connecting to a remote database, you can pass other arguments such as host name and port as keyword arguments. These are passed to a call to mongoengine.connection.register_connection. Please see the mongoengine documentaiton for details.</p>
+<p>Currently CytoPy does not support connection to multiple databases. All connections default to the alias “core”.</p>
+</div>
+<div class="section" id="projects-subjects">
+<h2>Projects &amp; Subjects<a class="headerlink" href="#projects-subjects" title="Permalink to this headline">¶</a></h2>
+<p>Inside CytoPy all data is contained within MongoDB documents. We start by defining a <strong>Project</strong>. We create a project like so:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">cytopy.data.project</span> <span class="kn">import</span> <span class="n">Project</span>
+<span class="c1"># Create a project for the PD data</span>
+<span class="n">pd_project</span> <span class="o">=</span> <span class="n">Project</span><span class="p">(</span><span class="n">project_id</span><span class="o">=</span><span class="s1">&#39;Peritonitis&#39;</span><span class="p">,</span> <span class="n">owner</span><span class="o">=</span><span class="s1">&#39;ross&#39;</span><span class="p">)</span>
+<span class="n">pd_project</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>We then retrieve this project using the <em>get</em> function and the relevant query:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pd_project</span> <span class="o">=</span> <span class="n">Project</span><span class="o">.</span><span class="n">objects</span><span class="p">(</span><span class="n">project_id</span><span class="o">=</span><span class="s1">&#39;Peritonitis&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>We use the <strong>Project</strong> document to access all the data within our analysis. A <strong>Project</strong> will have connections to one or more <strong>Subject</strong>’s. A <strong>Subject</strong> can be associated to more than one <strong>Project</strong>.</p>
+<p>A <strong>Subject</strong> contains all the metadata related to one individual patient/mouse/cell-line (some biological ‘subject’). The <strong>Subject</strong> document is dynamic, that is, we can add any variables we like. In addition to this, there are special embedded documents that can be added to a <strong>Subject</strong>. Multiple embedded documents can be added for each:</p>
+<ul class="simple">
+<li><p>Bug - each <strong>Bug</strong> document details a single microbiological isolate related to the associated subject e.g. if a patient had bacterial pneumonia and <em>Pseudomonas aeroginosa</em> had been isolated, you can add a <strong>Bug</strong> document detailing this event (see cytopy.data.subject.Bug)</p></li>
+<li><p>Drug - each <strong>Drug</strong> document details the name of a drug administrated, the initiation data, and the end date (see cytopy.data.subject.Drug)</p></li>
+<li><p>Biology - each <strong>Biology</strong> document details some biological measurement (see cytopy.data.subject.Biology)</p></li>
+</ul>
+<p>The purpose of these embedded documents is that some metadata is complicated; a subject can have multiple bacterial isolates, many drugs administrated, or many other biological measurements taken. To be able to suitably associate this metadata to our single cell data in exploratory analysis, we must account for this.</p>
+<p>An example of creating a <strong>Subject</strong> with two bacterial isolates and some biology:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">cytopy.data.subject</span> <span class="kn">import</span> <span class="n">Subject</span><span class="p">,</span> <span class="n">Bug</span><span class="p">,</span> <span class="n">Biology</span><span class="p">,</span> <span class="n">Drug</span>
+
+<span class="n">bugs</span> <span class="o">=</span> <span class="p">[</span><span class="n">Bug</span><span class="p">(</span><span class="n">org_name</span><span class="o">=</span><span class="s1">&#39;staph&#39;</span><span class="p">,</span> <span class="n">gram_status</span><span class="o">=</span><span class="s1">&#39;positive&#39;</span><span class="p">),</span>
+        <span class="n">Bug</span><span class="p">(</span><span class="n">org_name</span><span class="o">=</span><span class="s1">&#39;e.coli&#39;</span><span class="p">,</span> <span class="n">gram_status</span><span class="o">=</span><span class="s1">&#39;negative&#39;</span><span class="p">)]</span>
+<span class="n">biology</span> <span class="o">=</span> <span class="p">[</span><span class="n">Biology</span><span class="p">(</span><span class="n">test</span><span class="o">=</span><span class="s1">&#39;white_cell_count&#39;</span><span class="p">,</span> <span class="n">result</span><span class="o">=</span><span class="mi">8000</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s1">&#39;cubic millimeter&#39;</span><span class="p">)]</span>
+<span class="n">patient</span> <span class="o">=</span> <span class="n">Subject</span><span class="p">(</span><span class="n">subject_id</span><span class="o">=</span><span class="s1">&#39;patient_001&#39;</span><span class="p">,</span> <span class="n">peritonitis</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">infection_data</span><span class="o">=</span><span class="n">bugs</span><span class="p">,</span> <span class="n">patient_biology</span><span class="o">=</span><span class="n">biology</span><span class="p">,</span> <span class="n">age</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">gender</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">patient</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Notice that we added a field called ‘peritonitis’. This is pretty specific to this project. This doesn’t matter because <strong>Subject</strong> is a dynamic document. This means you can add whatever fields you want ad hoc.</p>
+<p>We now save the <strong>Subject</strong> and add it to our <strong>Project</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">cytopy.data.project</span> <span class="kn">import</span> <span class="n">Project</span>
+<span class="n">pd_project</span> <span class="o">=</span> <span class="n">Project</span><span class="o">.</span><span class="n">objects</span><span class="p">(</span><span class="n">project_id</span><span class="o">=</span><span class="s1">&#39;Peritonitis&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<span class="n">pd_project</span><span class="o">.</span><span class="n">subjects</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">patient</span><span class="p">)</span>
+<span class="n">pd_project</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Always remember to save your documents!</p>
+</div>
+<div class="section" id="adding-cytometry-data">
+<h2>Adding Cytometry data<a class="headerlink" href="#adding-cytometry-data" title="Permalink to this headline">¶</a></h2>
+<p>To add Cytometry data we have to add a <strong>FCSExperiment</strong> to our project. Before we do that however, we must create a <strong>Panel</strong>.</p>
+<div class="section" id="cytometry-panels">
+<h3>Cytometry Panels<a class="headerlink" href="#cytometry-panels" title="Permalink to this headline">¶</a></h3>
+<p>Cytometry data can be related according to some staining profile/panel used to describe the cellular contents of a biological sample. In CytoPy, an <strong>FCSExperiment</strong> must be created for each set of staining conditions. The staining conditions are described by a <strong>Panel</strong> document.</p>
+<p>The <strong>Panel</strong> document is special because it standardises the input of cytometry data at the point of entry. What do I mean by this? Well imagine a user has collected 10 samples, all stained for the same markers, but each time they collected their data they labelled the metadata in their *.fcs file differently. E.g. in the first sample CXCR3 was labelled “CXCR3”, but in the next it was “CXCR 3”, then “CXCR-3” and then “cxcr-3” and so on. You can see how this could be an issue when it comes to analysing our data.</p>
+<p>To overcome this problem, we introduce the <strong>Panel</strong> document. It contains a description of the expected marker and channel names, the marker and channel names that should be set as standard, and then a regular expression used to match markers and channels to their appropriate standard. If you haven’t heard of regular expression before, you can find info here:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/howto/regex.html">https://docs.python.org/3/howto/regex.html</a></p></li>
+<li><p><a class="reference external" href="https://www.youtube.com/watch?v=ZfQFUJhPqMM">https://www.youtube.com/watch?v=ZfQFUJhPqMM</a></p></li>
+</ul>
+<p>To create a <strong>Panel</strong> we first prepare an Excel template. You can get a blank template here: <a class="reference external" href="https://github.com/burtonrj/CytoPy/tree/master/cytopy/assets">https://github.com/burtonrj/CytoPy/tree/master/cytopy/assets</a></p>
+<p>The template Excel spreadsheet contains two sheets:</p>
+<ul class="simple">
+<li><p>Mappings - these are the channel/marker mappings and names of the channels and markers that should be used as standard. The channels and markers will appear with these names throughout your analysis as every file will be standardised accordingly.</p></li>
+<li><p>nomenclature - this sheet details, for each channel and each marker standard, a regular expression search term, a list of possible “permutations” and whether the search should be case sensitive. This sheet is used to search each *.fcs file and match the marker/channel to the appropriate standard name</p></li>
+</ul>
+<p>Below is an example of the mappings sheet for one staining panel in the Peritonitis study detailed in our manuscript:</p>
+<img alt="_images/mappings.png" src="_images/mappings.png" />
+<p>An example of the nomenclature sheet:</p>
+<img alt="_images/nomenclature.png" src="_images/nomenclature.png" />
+<p>This study spanned over 2 years and so there was a vast array of naming conventions used within the cytometry files provided. Using regular expression and a list of known permutations, we can match the channels and markers to the correct standard.</p>
+<p>Templates can be made manually by editing the default template. A useful resource for testing regular expressions is <a class="reference external" href="https://regexr.com/">https://regexr.com/</a></p>
+<p>Some convenience functions for exploring the range of channel mappings and creating templates are:</p>
+<ul class="simple">
+<li><p>cytopy.flow.read_write.explore_channel_mappings - given the path to a directory containing one or more *.fcs files, returns a list of dictionaries for all unique channel/marker names</p></li>
+<li><p>cytopy.flow.read_write.fcs_mappings - given the path to a single *.fcs file, return the channel/marker names</p></li>
+<li><p>cytopy.data.panel.create_template - given a list of channel mappings e.g. <em>[{‘channel: ‘FITC’, ‘marker’: ‘CD3’}, {‘channel’: ‘PE’, ‘marker’:’CD4’}]</em> generates a Excel template with template regular expression statements. This should then be checked and edited prior to use.</p></li>
+</ul>
+<p>Once we have our template ready, we can create out <strong>Panel</strong> document:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">cytopy.data.panel</span> <span class="kn">import</span> <span class="n">Panel</span>
+<span class="n">n_panel</span> <span class="o">=</span> <span class="n">Panel</span><span class="p">(</span><span class="n">panel_name</span><span class="o">=</span><span class="s1">&#39;PD_N_Panel&#39;</span><span class="p">)</span>
+<span class="n">n_panel</span><span class="o">.</span><span class="n">create_from_excel</span><span class="p">(</span><span class="s1">&#39;path/to/template.xlsx&#39;</span><span class="p">)</span>
+<span class="n">n_panel</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="creating-fcsexperiments">
+<h3>Creating FCSExperiments<a class="headerlink" href="#creating-fcsexperiments" title="Permalink to this headline">¶</a></h3>
+<p>As explained above, for each staining condition we are going to create an <strong>FCSExperiment</strong>. It is the <strong>FCSExperiment</strong> that will be used later on to access single cell data. To create a new <strong>FCSExperiment</strong> we use the <em>add_experiment</em> method of <strong>Project</strong>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">cytopy.data.project</span> <span class="kn">import</span> <span class="n">Project</span>
+<span class="n">pd_project</span> <span class="o">=</span> <span class="n">Project</span><span class="o">.</span><span class="n">objects</span><span class="p">(</span><span class="n">project_id</span><span class="o">=</span><span class="s1">&#39;Peritonitis&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+<span class="n">pd_project</span><span class="o">.</span><span class="n">add_experiment</span><span class="p">(</span><span class="s1">&#39;PD_N_Panel&#39;</span><span class="p">,</span> <span class="n">panel_name</span><span class="o">=</span><span class="s1">&#39;PD_N_Panel&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>As shown, this takes as input, the name of the experiment (‘N_panel’) and the name of the panel we want to associate to the experiment.</p>
+<p>To load an experiment from our <strong>Project</strong> we use the <em>load_experiment</em> method:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">experiment</span> <span class="o">=</span> <span class="n">pd_project</span><span class="o">.</span><span class="n">load_experiment</span><span class="p">(</span><span class="s1">&#39;PD_N_Panel&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="adding-fcs-files">
+<h3>Adding *.fcs files<a class="headerlink" href="#adding-fcs-files" title="Permalink to this headline">¶</a></h3>
+<p>*.fcs files are stored within something called a <strong>FileGroup</strong>. Within a <strong>FileGroup</strong> there should be one primary file and then any other *.fcs files attributed to controls. We refer to this group of related files as <em>one biological sample</em>. So for example if I had three different mice (a, b, and c) and I stained for CD4 and CD8 but had an isotype control for CD4 and CD8 in each, then each mouse would have one <strong>FileGroup</strong> and within each <strong>FileGroup</strong> would be 3 files: the primary staining and two isotype controls.</p>
+<p>We add the files for a biological sample like so:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">experiment</span><span class="o">.</span><span class="n">add_new_sample</span><span class="p">(</span><span class="n">sample_id</span><span class="o">=</span><span class="s1">&#39;patient_001_N&#39;</span><span class="p">,</span> <span class="n">file_path</span><span class="o">=</span><span class="s1">&#39;path/to/primary_staining.fcs&#39;</span><span class="p">,</span> <span class="n">controls</span><span class="o">=</span><span class="p">[{</span><span class="s1">&#39;control_id&#39;</span><span class="p">:</span> <span class="s1">&#39;CD27&#39;</span><span class="p">,</span> <span class="s1">&#39;path&#39;</span><span class="p">:</span> <span class="s1">&#39;path/to/CD27_FMO.fcs&#39;</span><span class="p">}],</span> <span class="n">subject_id</span><span class="o">=</span><span class="s1">&#39;patient_001&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>In the method call above we provided the following:</p>
+<ul class="simple">
+<li><p>sample_id: this is the ID we will use to retrieve data from this sample</p></li>
+<li><p>file_path: this is the file path to the primary fcs file</p></li>
+<li><p>controls (optional): a list of dictionaries, the dictionaries should contain a key value pair for the ‘control_id’ and for the ‘path’ where the control file is located</p></li>
+<li><p>subject_id (optional): the <strong>Subject</strong> this sample should be referenced too. This will allow metadata to be pulled and associated at a later date</p></li>
+</ul>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="gating.html" class="btn btn-neutral float-right" title="Autonomous gating and pre-processing" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="intro.html" class="btn btn-neutral float-left" title="Getting started" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Ross Burton
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
