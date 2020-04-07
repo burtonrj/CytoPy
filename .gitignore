@@ -12,4 +12,5 @@ build
 deepcytof_local
 BatchEffectRemoval_Local
 *.bin
+<<<<<<< HEAD
 *.ipynb
