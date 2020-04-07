@@ -1,4 +1,5 @@
 mongoengine==0.19.1
+autodocsumm==0.1.13
 Sphinx==2.4.3
 sphinx-rtd-theme==0.4.3
 sphinx-theme==1.0
