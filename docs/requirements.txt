@@ -12,4 +12,4 @@ sphinxcontrib-serializinghtml==1.1.4
 flowio
 decorator
 graphtools
--e git://github.com/burtonrj/FlowUtilsPandas.get#egg=FlowUtilsPandas
+-e git://github.com/burtonrj/FlowUtilsPandas.git#egg=FlowUtilsPandas
