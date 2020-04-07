@@ -32,7 +32,7 @@ cells in a completely unbiased fashion. CytoPy provides access to both methodolo
 that both have benefits and failings.
 
 For more details we refer you to our pre-print manuscript and software documentation. Our documentation contains 
-a detailed tutorials for each of the above steps.
+a detailed tutorials for each of the above steps (https://cytopy.readthedocs.io/)
 
 ## Installation
 
