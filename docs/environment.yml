@@ -1,5 +1,3 @@
-name: cytopy
-
 channels:
   - conda-forge
   - anaconda
