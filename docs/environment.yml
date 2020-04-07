@@ -1,9 +1,8 @@
 channels:
-  - conda-forge
   - anaconda
 dependencies:
   - cython
-  - python=3.7
+  - python==3.7
   - numpy
   - pandas
   - pip:
