@@ -31,7 +31,7 @@ to train a classifier. Alternatively high-dimensional clustering (by PhenoGraph 
 cells in a completely unbiased fashion. CytoPy provides access to both methodologies as we observe 
 that both have benefits and failings.
 
-For more details we refer you to our pre-print manuscript and software documentation. Our documentation contains 
+For more details we refer you to our pre-print <a href='https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2'>manuscript</a> and software documentation. Our documentation contains 
 a detailed tutorials for each of the above steps (https://cytopy.readthedocs.io/)
 
 ## Installation

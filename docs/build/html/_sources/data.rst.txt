@@ -87,7 +87,7 @@ The template Excel spreadsheet contains two sheets:
 * Mappings - these are the channel/marker mappings and names of the channels and markers that should be used as standard. The channels and markers will appear with these names throughout your analysis as every file will be standardised accordingly.
 * nomenclature - this sheet details, for each channel and each marker standard, a regular expression search term, a list of possible "permutations" and whether the search should be case sensitive. This sheet is used to search each \*.fcs file and match the marker/channel to the appropriate standard name
 
-Below is an example of the mappings sheet for one staining panel in the Peritonitis study detailed in our manuscript:
+Below is an example of the mappings sheet for one staining panel in the Peritonitis study detailed in our `manuscript <https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2>`_:
 
 .. image:: images/mappings.png
 
