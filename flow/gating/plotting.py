@@ -1,4 +1,4 @@
-from data.fcs import FileGroup
+from ...data.fcs import FileGroup
 from flow.transforms import apply_transform
 from scipy.spatial import ConvexHull
 import matplotlib
