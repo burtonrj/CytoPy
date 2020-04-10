@@ -2,13 +2,13 @@ import sys
 sys.path.append('/home/ross/CytoPy')
 
 # Data imports
-from cytopy.data.mongo_setup import global_init
-from cytopy.data.project import Project
-from cytopy.data.fcs import Population
-from cytopy.flow.gating.defaults import ChildPopulationCollection
-from cytopy.flow.gating.actions import Gating
-from cytopy.flow.gating import dbscan
-from cytopy.tests.utilities import make_example_date, setup_with_dummy_data
+from data.mongo_setup import global_init
+from data.project import Project
+from data.fcs import Population
+from flow.gating.defaults import ChildPopulationCollection
+from flow.gating.actions import Gating
+from flow.gating import dbscan
+from tests.utilities import make_example_date, setup_with_dummy_data
 from mongoengine.connection import connect
 from mongoengine.base import datastructures
 import unittest

@@ -1,5 +1,5 @@
-from cytopy.data.fcs import FileGroup
-from cytopy.flow.transforms import apply_transform
+from data.fcs import FileGroup
+from flow.transforms import apply_transform
 from scipy.spatial import ConvexHull
 import matplotlib
 import matplotlib.pyplot as plt

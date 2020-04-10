@@ -1,8 +1,8 @@
 import sys
 sys.path.append('/home/ross/CytoPy')
 # Data imports
-from cytopy.data.mongo_setup import global_init
-from cytopy.flow.gating.defaults import Geom, ChildPopulation, ChildPopulationCollection, _validate_input
+from data.mongo_setup import global_init
+from flow import Geom, ChildPopulation, ChildPopulationCollection, _validate_input
 import numpy as np
 import unittest
 

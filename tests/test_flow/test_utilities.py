@@ -1,9 +1,9 @@
 import sys
 sys.path.append('/home/ross/CytoPy')
 
-from cytopy.data.mongo_setup import global_init
-from cytopy.flow.gating import utilities
-from cytopy.tests.utilities import make_example_date
+from data.mongo_setup import global_init
+from flow.gating import utilities
+from tests.utilities import make_example_date
 from sklearn.neighbors import KernelDensity
 from scipy.signal import find_peaks
 from itertools import combinations
