@@ -2,13 +2,13 @@
 Getting started
 ****************
 
-Welcome to CytoPy, a data-centric analytical framework for cytometry data. The source code for CytoPy is stored and maintained at https://github.com/burtonrj/CytoPy. You can also read our pre-print manuscript HERE. It is our hope that CytoPy opens the door to a bioinformatics approach to Cytometry analysis by using the beginner friendly programming langauge, Python. CytoPy was developed in Python 3.7. If you're new to programming that is fine, as we have added some information below for installing Python 3.7.
+Welcome to CytoPy, a data-centric analytical framework for cytometry data. The source code for CytoPy is stored and maintained at https://github.com/burtonrj/CytoPy. You can also read our pre-print `manuscript <https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2>`_. It is our hope that CytoPy opens the door to a bioinformatics approach to Cytometry analysis by using the beginner friendly programming langauge, Python. CytoPy was developed in Python 3.7. If you're new to programming that is fine, as we have added some information below for installing Python 3.7.
 
 CytoPy makes the assumption that your hypothesis is as follows:
 
 .. centered:: "We have collected data on humans/mice/cell-lines in X experimental/clinical conditions and we want to test for cell phenotypes that differentiate between these conditions"
 
-We recognise that there has been an extraordinary effort to develop bioinformatics tools for addressing questions like the one above using Cytometry data. Some of these tools even feature within CytoPy itself (see manuscript for details). So why CytoPy and not one of the 30+ tools in the literature? CytoPy is an agnostic framework that will allow you to apply autonomous gates, supervised classification, and high-dimensional clustering algorithms, and it achieves all this whilst providing a low-code interface and a central data repository in the form of a MongoDB database. We want to make the amazing tools in the literature more accessible to immunologists whilst improving the analysts experience. 
+We recognise that there has been an extraordinary effort to develop bioinformatics tools for addressing questions like the one above using Cytometry data. Some of these tools even feature within CytoPy itself (see https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2 for details). So why CytoPy and not one of the 30+ tools in the literature? CytoPy is an agnostic framework that will allow you to apply autonomous gates, supervised classification, and high-dimensional clustering algorithms, and it achieves all this whilst providing a low-code interface and a central data repository in the form of a MongoDB database. We want to make the amazing tools in the literature more accessible to immunologists whilst improving the analysts experience.
 
 Bioinformatics is a jungle of possible methods and an analysis tends to amount hundreds of scripts, lots of csv files, and lots of headaches. In CytoPy all experimental/clinical metadata is housed within a central database, which can be hosted locally or online. Linked to this metadata are the results of your gating, classification and clustering, and this is all stored in one central repository. Analysis is iterative and this fact has steered the design of CytoPy; an object-orientated interface built atop the `MongoEngine <http://mongoengine.org/>`_ ORM makes interacting with this database a breeze. 
 
@@ -56,7 +56,7 @@ Or, alternatively, download the source code and run the setup file as so::
 	
 	python3 setup.py install
 
-For a detailed overview of CytoPy we direct you to our PRE-PRINT MANUSCRIPT. The remaining tutorials on this site display the functionality of CytoPy by replicating the analysis described within our manuscript.
+For a detailed overview of CytoPy we direct you to our `manuscript <https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2>`_. The remaining tutorials on this site display the functionality of CytoPy by replicating the analysis described within our manuscript.
 
 
 

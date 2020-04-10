@@ -128,7 +128,7 @@ We can observe the phenotype of each cluster by using the *heatmap* method::
 MetaClustering
 ===============
 
-Once we have the clustering results for each biological sample in an experiment, we want to be able to group similar clusters between samples and observe them in the same space. Our manuscript (LINK) describes the methodology applied here in detail but in brief, the centroid for each cluster from each biological sample is calculated and the centroids are then clustered. This operation is handled by **MetaClustering**. The steps in code are very similar to **SingleClustering** except now we have to specify which samples we want to load::
+Once we have the clustering results for each biological sample in an experiment, we want to be able to group similar clusters between samples and observe them in the same space. Our manuscript (https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2) describes the methodology applied here in detail but in brief, the centroid for each cluster from each biological sample is calculated and the centroids are then clustered. This operation is handled by **MetaClustering**. The steps in code are very similar to **SingleClustering** except now we have to specify which samples we want to load::
 
 	cd = ClusteringDefinition.objects(clustering_uid='Meta_T').get()
 	meta = MetaClustering(experiment=experiment, 
