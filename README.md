@@ -63,7 +63,7 @@ Alternatively, run the following from within the desired environment:
 
 03/Apr/2020
 
-CytoPy is licensed under the MIT license from the Open Source Initiative. CytoPy was authored by <a href='https://www.linkedin.com/in/burtonbiomedical/'>Ross Burton</a> and the <a href='https://www.cardiff.ac.uk/people/view/78691-eberl-matthias'>Eberl Lab</a>  at <a href='https://www.cardiff.ac.uk/medicine/research/divisions/infection-and-immunity'>Cardiff University Infection and Immunity Research Institute</a>. This project is a working progress and we are eager to expand and improve it's capabilities. If you would like to contribute to CytoPy please make a pull request or email us at burtonrj@cardiff.ac.uk. For news and latest developments, follow us on Twitter <a href='https://twitter.com/EberlLab'>@EberlLab</a> and <a href='https://twitter.com/burtondatasci'>@burtondatasci</a>
+CytoPy is licensed under the MIT license from the Open Source Initiative. CytoPy was authored by <a href='https://www.linkedin.com/in/burtonbiomedical/'>Ross Burton</a> and the <a href='https://www.cardiff.ac.uk/people/view/78691-eberl-matthias'>Eberl Lab</a>  at <a href='https://www.cardiff.ac.uk/systems-immunity'>Cardiff University's Systems Immunity Research Institute</a>. This project is a working progress and we are eager to expand and improve its capabilities. If you would like to contribute to CytoPy please make a pull request or email us at burtonrj@cardiff.ac.uk. For news and latest developments, follow us on Twitter <a href='https://twitter.com/EberlLab'>@EberlLab</a> and <a href='https://twitter.com/burtondatasci'>@burtondatasci</a>
 
 In future releases we are currently interested in the following:
 
