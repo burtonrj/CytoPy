@@ -2,12 +2,11 @@ import sys
 sys.path.append('/home/ross/CytoPy')
 
 # Data imports
-from cytopy.data.mongo_setup import global_init
-from cytopy.flow.gating.defaults import ChildPopulationCollection
-from cytopy.flow.gating import density
-from cytopy.tests.utilities import make_example_date
+from data.mongo_setup import global_init
+from flow import ChildPopulationCollection
+from tests.utilities import make_example_date
 from sklearn.neighbors import KernelDensity
-from cytopy.flow.gating import quantile
+from flow.gating import quantile, density
 from scipy.signal import find_peaks
 import numpy as np
 import unittest

@@ -1,9 +1,9 @@
 import sys
 sys.path.append('/home/ross/CytoPy')
 
-from cytopy.data.panel import NormalisedName, Panel, create_regex
-from cytopy.data.fcs import ChannelMap
-from cytopy.data.mongo_setup import global_init
+from data.panel import NormalisedName, Panel, create_regex
+from data.fcs import ChannelMap
+from data.mongo_setup import global_init
 from mongoengine import connect
 import unittest
 

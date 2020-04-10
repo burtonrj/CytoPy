@@ -1,9 +1,9 @@
 import sys
 sys.path.append('/home/ross/CytoPy')
 
-from cytopy.data.project import Project
-from cytopy.data.panel import Panel
-from cytopy.data.mongo_setup import global_init
+from data.project import Project
+from data.panel import Panel
+from data.mongo_setup import global_init
 from mongoengine import connect
 from mongoengine.errors import DoesNotExist
 import unittest

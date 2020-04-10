@@ -4,7 +4,7 @@ sys.path.append('/home/ross/CytoPy')
 from data.subject import Subject
 from data.mongo_setup import global_init
 from flow.clustering import main
-from cytopy.tests.utilities import make_example_date
+from tests.utilities import make_example_date
 import unittest
 
 global_init('test')
