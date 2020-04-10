@@ -1,6 +1,6 @@
 from ...data.fcs_experiments import FCSExperiment
 from ...data.fcs import FileGroup, File, ChannelMap, Population
-from data.panel import Panel
+from ...data.panel import Panel
 from ...flow.gating.actions import Gating
 from ...flow.gating.defaults import ChildPopulationCollection
 from ...flow.supervised.utilities import scaler, find_common_features, predict_class, random_oversampling
