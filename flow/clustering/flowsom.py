@@ -6,7 +6,14 @@ import pandas as pd
 
 
 class FlowSOM:
-    """Python implementation of FlowSOM algorithm, adapted from https://github.com/Hatchin/FlowSOM
+    """
+    Python implementation of FlowSOM algorithm, adapted from https://github.com/Hatchin/FlowSOM
+    This class implements MiniSOM in an almost identical manner to the work by Hatchin, but removed all the
+    of the data handling steps seen in Hatchin's original library, since these are handled by the infrastructure in
+    CytoPy. The FlowSOM algorithm is implemented here in such a way that it requires only a Pandas DataFrame,
+    like that typically produced when retrieving data from the CytoPy database, and gives access to methods
+    of clustering an meta-clustering. In addition to Hatchin's work, the CytoPy implementation has improved error
+    handling and integrates better with the CytoPy workflow.
 
     Parameters
     ----------
@@ -141,7 +148,8 @@ class FlowSOM:
         self.meta_class = self.meta_flatten.reshape(self.xn, self.yn)
 
     def predict(self):
-        """Predict the cluster allocation for each cell in the associated dataset.
+        """
+        Predict the cluster allocation for each cell in the associated dataset.
         (Requires that train and meta_cluster have been called previously)
 
         Parameters
