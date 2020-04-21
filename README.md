@@ -51,6 +51,10 @@ programming environment and suggest the environment manager <a href='https://doc
 
 ### Installing CytoPy
 
+First, due to CytoPy's dependencies Cython must be installed. This can be achieved using the command:
+
+`pip3 install cython`
+
 To install CytoPy and it's requirements, first download the source code, activate the desired environment and then run the following command:
 
 `python3 setup.py install`
