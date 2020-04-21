@@ -1,6 +1,10 @@
 from setuptools import setup
 import sys
 
+try:
+    import cython
+except ModuleNotFoundError:
+    raise RunTimeError('CytoPy requires that Cython>=0.27 be installed.')
 if sys.version_info.major >= 3.6:
     raise RuntimeError('CytoPy requires Python version >= 3.6')
 setup(
