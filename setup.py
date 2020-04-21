@@ -1,7 +1,7 @@
 from setuptools import setup
 import sys
 
-if sys.version_info.major !>= 3.6:
+if sys.version_info.major >= 3.6:
     raise RuntimeError('CytoPy requires Python version >= 3.6')
 setup(
     name='CytoPy',
