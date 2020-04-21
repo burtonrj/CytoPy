@@ -1,9 +1,10 @@
 from setuptools import setup
+from setuptools.dist import Distribution
 import sys
 
 if sys.version_info.major != 3:
     raise RuntimeError('CytoPy requires Python 3')
-
+Distribution().fetch_build_eggs(['Cython'])
 setup(
     name='CytoPy',
     version='0.0.1',
