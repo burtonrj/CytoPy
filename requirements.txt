@@ -121,7 +121,7 @@ sphinxcontrib-qthelp==1.0.3
 sphinxcontrib-serializinghtml==1.1.4
 tasklogger==1.0.0
 tensorboard==2
-tensorflow==2
+tensorflow==2.0.1
 tensorflow-estimator
 termcolor==1.1.0
 terminado==0.8.3
