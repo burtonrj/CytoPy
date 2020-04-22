@@ -1,7 +1,7 @@
-cytopy.data.project
+CytoPy.data.project
 ====================
 
-.. automodule:: cytopy.data.project
+.. automodule:: CytoPy.data.project
     :members:
     :inherited-members:
     :show-inheritance:

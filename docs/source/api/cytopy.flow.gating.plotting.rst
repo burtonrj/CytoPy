@@ -1,8 +1,8 @@
-cytopy.flow.gating.plotting
+CytoPy.flow.gating.plotting
 ==============================
 
 
-.. automodule:: cytopy.flow.gating.plotting
+.. automodule:: CytoPy.flow.gating.plotting
     :members:
     :inherited-members:
     :show-inheritance:

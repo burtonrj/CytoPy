@@ -1,7 +1,7 @@
-cytopy.data.mongo_setup
+CytoPy.data.mongo_setup
 ========================
 
-.. automodule:: cytopy.data.mongo_setup
+.. automodule:: CytoPy.data.mongo_setup
     :members:
     :inherited-members:
     :show-inheritance:

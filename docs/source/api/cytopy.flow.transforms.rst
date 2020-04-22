@@ -1,8 +1,8 @@
-cytopy.flow.transforms
+CytoPy.flow.transforms
 ==========================
 
 
-.. automodule:: cytopy.flow.transforms
+.. automodule:: CytoPy.flow.transforms
     :members:
     :inherited-members:
     :show-inheritance:

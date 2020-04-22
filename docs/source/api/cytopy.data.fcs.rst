@@ -1,7 +1,7 @@
-cytopy.data.fcs
+CytoPy.data.fcs
 ================
 
-.. automodule:: cytopy.data.fcs
+.. automodule:: CytoPy.data.fcs
     :members:
     :inherited-members:
     :show-inheritance:

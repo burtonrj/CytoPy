@@ -1,8 +1,8 @@
-cytopy.flow.utilities
+CytoPy.flow.utilities
 ==========================
 
 
-.. automodule:: cytopy.flow.utilities
+.. automodule:: CytoPy.flow.utilities
     :members:
     :inherited-members:
     :show-inheritance:
