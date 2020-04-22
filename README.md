@@ -59,10 +59,6 @@ To install CytoPy and it's requirements, first download the source code, activat
 
 `python3 setup.py install`
 
-Alternatively, run the following from within the desired environment:
-
-`pip3 install git+https://github.com/burtonrj/CytoPy.git`
-
 ## License and future directions
 
 03/Apr/2020
