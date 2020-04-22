@@ -36,6 +36,8 @@ class Drug(mongoengine.EmbeddedDocument):
     name = mongoengine.StringField(required=True)
     init_date = mongoengine.DateTimeField(required=False)
     end_date = mongoengine.DateTimeField(required=False)
+    dose = mongoengine.StringField(required=False)
+    notes = mongoengine.StringField(required=False)
 
 
 class Bug(mongoengine.EmbeddedDocument):
@@ -101,6 +103,7 @@ class Biology(mongoengine.EmbeddedDocument):
     unit = mongoengine.StringField(required=False)
     ref_range = mongoengine.StringField(required=False)
     test_category = mongoengine.StringField(required=False)
+    notes = mongoengine.StringField(required=False)
 
 
 class Subject(mongoengine.DynamicDocument):
