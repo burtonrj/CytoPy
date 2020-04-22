@@ -1,10 +1,10 @@
 import sys
 sys.path.append('/home/ross/CytoPy')
 
-from data.subject import Subject
-from data.mongo_setup import global_init
-from flow.clustering import main
-from tests.utilities import make_example_date
+from CytoPy.data.subject import Subject
+from CytoPy.data.mongo_setup import global_init
+from CytoPy.flow.clustering import main
+from CytoPy.tests import make_example_date
 import unittest
 
 global_init('test')

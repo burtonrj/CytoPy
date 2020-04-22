@@ -1,6 +1,6 @@
-from data.panel import Panel
+from CytoPy.data.panel import Panel
 from cytopy.data.project import Project
-from data.panel import ChannelMap
+from CytoPy.data.panel import ChannelMap
 from cytopy.data.fcs import FileGroup, File
 from sklearn.datasets import make_blobs
 import numpy as np

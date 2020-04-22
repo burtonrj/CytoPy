@@ -1,9 +1,9 @@
 import sys
 sys.path.append('/home/ross/CytoPy')
 
-from data.project import Project
-from data.mongo_setup import global_init
-from tests.utilities import basic_setup
+from CytoPy.data.project import Project
+from CytoPy.data.mongo_setup import global_init
+from CytoPy.tests import basic_setup
 from mongoengine import connect
 import unittest
 
