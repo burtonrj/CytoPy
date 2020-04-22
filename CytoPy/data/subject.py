@@ -72,6 +72,7 @@ class Bug(mongoengine.EmbeddedDocument):
     culture_source = mongoengine.StringField(required=False)
     organism_type = mongoengine.StringField(required=False, choices=['bacteria', 'fungi', 'virus'])
     report_date = mongoengine.DateTimeField(required=False)
+    growth_weight = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
 
 
