@@ -10,7 +10,7 @@ if sys.version_info.major >= 3.6:
 setup(
     name='CytoPy',
     version='0.0.1',
-    packages=['CytoPy', 'CytoPy.flow', 'CytoPy.flow.gating', 'CytoPy.flow.clustering',
+    packages=['CytoPy', 'CytoPy.flow', 'CytoPy.flow.gating', 'CytoPy.flow.clustering', 'CytoPy.data',
               'CytoPy.flow.supervised', 'CytoPy.tests', 'CytoPy.tests.data',
               'CytoPy.tests.test_clustering', 'CytoPy.tests.test_data', 'CytoPy.tests.test_flow'],
     url='https://github.com/burtonrj/CytoPy',
