@@ -146,7 +146,7 @@ class Subject(mongoengine.DynamicDocument):
 
     meta = {
         'db_alias': 'core',
-        'collection': 'patients'
+        'collection': 'subjects'
     }
 
 
