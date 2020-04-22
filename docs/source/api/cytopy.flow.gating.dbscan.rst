@@ -1,8 +1,8 @@
-cytopy.flow.gating.dbscan
+CytoPy.flow.gating.dbscan
 ============================
 
 
-.. automodule:: cytopy.flow.gating.dbscan
+.. automodule:: CytoPy.flow.gating.dbscan
     :members:
     :inherited-members:
     :show-inheritance:

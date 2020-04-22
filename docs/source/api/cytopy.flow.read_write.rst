@@ -1,8 +1,8 @@
-cytopy.flow.read_write
+CytoPy.flow.read_write
 ==========================
 
 
-.. automodule:: cytopy.flow.read_write
+.. automodule:: CytoPy.flow.read_write
     :members:
     :inherited-members:
     :show-inheritance:

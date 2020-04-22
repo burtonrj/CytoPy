@@ -1,8 +1,8 @@
-cytopy.flow.feedback
+CytoPy.flow.feedback
 ==========================
 
 
-.. automodule:: cytopy.flow.feedback
+.. automodule:: CytoPy.flow.feedback
     :members:
     :inherited-members:
     :show-inheritance:

@@ -1,8 +1,8 @@
-cytopy.flow.feature_extraction
+CytoPy.flow.feature_extraction
 ===============================
 
 
-.. automodule:: cytopy.flow.feature_extraction
+.. automodule:: CytoPy.flow.feature_extraction
     :members:
     :inherited-members:
     :show-inheritance:

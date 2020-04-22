@@ -1,8 +1,8 @@
-cytopy.flow.gating.static
+CytoPy.flow.gating.static
 ============================
 
 
-.. automodule:: cytopy.flow.gating.static
+.. automodule:: CytoPy.flow.gating.static
     :members:
     :inherited-members:
     :show-inheritance:

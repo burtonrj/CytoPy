@@ -1,7 +1,7 @@
-cytopy.data.utilities
+CytoPy.data.utilities
 =======================
 
-.. automodule:: cytopy.data.utilities
+.. automodule:: CytoPy.data.utilities
     :members:
     :inherited-members:
     :show-inheritance:

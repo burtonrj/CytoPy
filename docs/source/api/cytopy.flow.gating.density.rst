@@ -1,8 +1,8 @@
-cytopy.flow.gating.density
+CytoPy.flow.gating.density
 =============================
 
 
-.. automodule:: cytopy.flow.gating.density
+.. automodule:: CytoPy.flow.gating.density
     :members:
     :inherited-members:
     :show-inheritance:

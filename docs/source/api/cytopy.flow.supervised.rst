@@ -1,48 +1,48 @@
-cytopy.flow.supervised
+CytoPy.flow.supervised
 ==========================
 
 
-.. automodule:: cytopy.flow.supervised.cell_classifier
+.. automodule:: CytoPy.flow.supervised.cell_classifier
     :members:
     :inherited-members:
     :show-inheritance:
 
-.. automodule:: cytopy.flow.supervised.deep_gating
+.. automodule:: CytoPy.flow.supervised.deep_gating
     :members:
     :inherited-members:
     :show-inheritance:
 
-.. automodule:: cytopy.flow.supervised.discriminant_analysis
+.. automodule:: CytoPy.flow.supervised.discriminant_analysis
     :members:
     :inherited-members:
     :show-inheritance:
 
-.. automodule:: cytopy.flow.supervised.evaluate
+.. automodule:: CytoPy.flow.supervised.evaluate
     :members:
     :inherited-members:
     :show-inheritance:
 
-.. automodule:: cytopy.flow.supervised.knn
+.. automodule:: CytoPy.flow.supervised.knn
     :members:
     :inherited-members:
     :show-inheritance:
 
-.. automodule:: cytopy.flow.supervised.ref
+.. automodule:: CytoPy.flow.supervised.ref
     :members:
     :inherited-members:
     :show-inheritance:
 
-.. automodule:: cytopy.flow.supervised.svm
+.. automodule:: CytoPy.flow.supervised.svm
     :members:
     :inherited-members:
     :show-inheritance:
 
-.. automodule:: cytopy.flow.supervised.utilities
+.. automodule:: CytoPy.flow.supervised.utilities
     :members:
     :inherited-members:
     :show-inheritance:
 
-.. automodule:: cytopy.flow.supervised.xgboost
+.. automodule:: CytoPy.flow.supervised.xgboost
     :members:
     :inherited-members:
     :show-inheritance:

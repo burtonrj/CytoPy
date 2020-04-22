@@ -1,7 +1,7 @@
-cytopy.data.gating
+CytoPy.data.gating
 ====================
 
-.. automodule:: cytopy.data.gating
+.. automodule:: CytoPy.data.gating
     :members:
     :inherited-members:
     :show-inheritance:

@@ -1,8 +1,8 @@
-cytopy.flow.gating.base
+CytoPy.flow.gating.base
 ==========================
 
 
-.. automodule:: cytopy.flow.gating.base
+.. automodule:: CytoPy.flow.gating.base
     :members:
     :inherited-members:
     :show-inheritance:

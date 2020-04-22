@@ -1,17 +1,17 @@
-cytopy.flow.clustering
+CytoPy.flow.clustering
 =======================
 
-.. automodule:: cytopy.flow.clustering.main
+.. automodule:: CytoPy.flow.clustering.main
     :members:
     :inherited-members:
     :show-inheritance:
 
-.. automodule:: cytopy.flow.clustering.flowsom
+.. automodule:: CytoPy.flow.clustering.flowsom
     :members:
     :inherited-members:
     :show-inheritance:
 
-.. automodule:: cytopy.flow.clustering.consensus
+.. automodule:: CytoPy.flow.clustering.consensus
     :members:
     :inherited-members:
     :show-inheritance:

@@ -1,7 +1,7 @@
-cytopy.data.panel
+CytoPy.data.panel
 ===================
 
-.. automodule:: cytopy.data.panel
+.. automodule:: CytoPy.data.panel
     :members:
     :inherited-members:
     :show-inheritance:
