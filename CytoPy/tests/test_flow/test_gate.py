@@ -2,10 +2,10 @@ import sys
 sys.path.append('/home/ross/CytoPy')
 
 # Data imports
-from data.mongo_setup import global_init
-from tests.utilities import make_example_date
-from flow.gating.base import Gate
-from flow.gating.defaults import ChildPopulationCollection
+from CytoPy.data.mongo_setup import global_init
+from CytoPy.tests import make_example_date
+from CytoPy.flow.gating import Gate
+from CytoPy.flow.gating import ChildPopulationCollection
 import unittest
 
 global_init('test')

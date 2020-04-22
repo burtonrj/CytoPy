@@ -1,8 +1,8 @@
 import sys
 sys.path.append('/home/ross/CytoPy')
 
-from data.mongo_setup import global_init
-from flow.clustering import main
+from CytoPy.data.mongo_setup import global_init
+from CytoPy.flow.clustering import main
 from sklearn.cluster import AgglomerativeClustering, KMeans
 import unittest
 
