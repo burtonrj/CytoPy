@@ -101,7 +101,7 @@ class FCSFile:
         self.cst_pass = False
         self.data = fcs.events
         self.event_data = np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count))
-        self.spill_txt = fcs.text['spill']
+        self.spill_txt = None
         if 'threshold' in fcs.text.keys():
             self.threshold = [{'channel': c, 'threshold': v} for c, v in chunks(fcs.text["threshold"].split(','), 2)]
         else:
@@ -114,13 +114,20 @@ class FCSFile:
         if comp_matrix is not None:
             self.spill = pd.read_csv(comp_matrix)
         else:
-            try:
-                assert 'spill' in fcs.text.keys()
-                if(len(fcs.text['spill'])) < 1:
-                    raise KeyError("""Error: no spillover matrix found, please provide
-                    path to relevant csv file with 'comp_matrix' argument""")
-                self.spill = self._get_spill_matrix(fcs.text['spill'])
-            except AssertionError:
+            if 'spill' in fcs.text.keys():
+                spill = fcs.text['spill']
+            elif 'SPILLOVER' in fcs.text.keys():
+                spill = fcs.text['SPILLOVER']
+            else:
+                spill = None
+            if spill is not None:
+                if(len(spill)) < 1:
+                    print("""Warning: no spillover matrix found, please provide
+                    path to relevant csv file with 'comp_matrix' argument if compensation is necessary""")
+                    self.spill = None
+                else:
+                    self.spill = self._get_spill_matrix(spill)
+            else:
                 self.spill = None
         if 'cst_setup_status' in fcs.text:
             if fcs.text['cst setup status'] == 'SUCCESS':
