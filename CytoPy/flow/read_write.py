@@ -101,6 +101,7 @@ class FCSFile:
         self.cst_pass = False
         self.data = fcs.events
         self.event_data = np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count))
+        self.spill_txt = fcs.text['spill']
         if 'threshold' in fcs.text.keys():
             self.threshold = [{'channel': c, 'threshold': v} for c, v in chunks(fcs.text["threshold"].split(','), 2)]
         else:
