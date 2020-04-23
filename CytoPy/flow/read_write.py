@@ -117,7 +117,7 @@ class FCSFile:
             if 'spill' in fcs.text.keys():
                 self.spill_txt = fcs.text['spill']
 
-            elif 'SPILLOVER' in fcs.text.keys():
+            elif 'spillover' in fcs.text.keys():
                 self.spill_txt = fcs.text['spillover']
             else:
                 self.spill_txt = None
