@@ -86,7 +86,12 @@ def data_from_file(file_id: str,
 
     Parameters
     -----------
-    file: File
+    file_id: str
+        ID for file of interest
+    filegrp_id: str
+        MongoDB unique identifier for fcs file
+    db_name: str
+        Name of database
     sample_size: int, optional
         return a sample of given integer size
     output_format: str, (default='dataframe')

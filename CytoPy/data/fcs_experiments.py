@@ -337,9 +337,15 @@ class FCSExperiment(mongoengine.Document):
         new_file.channel_mappings = [ChannelMap(channel=c, marker=m) for c, m in column_mappings]
         return new_file
 
-    def add_new_sample(self, sample_id: str, file_path: str, controls: list or None = None, subject_id: str or None = None,
-                       comp_matrix: str or None = None, compensate: bool = True,
-                       feedback: bool = True, catch_standardisation_errors: bool = False,
+    def add_new_sample(self,
+                       sample_id: str,
+                       file_path: str,
+                       controls: list or None = None,
+                       subject_id: str or None = None,
+                       comp_matrix: str or None = None,
+                       compensate: bool = True,
+                       feedback: bool = True,
+                       catch_standardisation_errors: bool = False,
                        processing_datetime: str or None = None,
                        collection_datetime: str or None = None) -> None or str:
         """
