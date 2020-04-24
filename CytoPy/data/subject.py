@@ -153,6 +153,30 @@ class Subject(mongoengine.DynamicDocument):
         'collection': 'subjects'
     }
 
+    def delete(self, signal_kwargs=None, **write_concern):
+        """
+        Delete the Subject. The subject will automatically be pulled from associated Projects (reference field in
+        Project model has reverse_delete_rile=4; see mongoengine API for info).
+
+        WARNING: deletion of a subject will result in the automatic removal of all associated FCS data!
+
+        Parameters
+        ----------
+        signal_kwargs: optional
+            kwargs dictionary to be passed to the signal calls.
+        write_concern
+            Extra keyword arguments are passed down which will be used as options for the resultant getLastError command.
+            For example, save(..., w: 2, fsync: True) will wait until at least two servers have recorded the write and
+            will force an fsync on the primary server.
+
+        Returns
+        -------
+        None
+        """
+        for f in self.files:
+            f.delete()
+        super().delete(self, signal_kwargs=signal_kwargs, **write_concern)
+
 
 def gram_status(subject: Subject) -> str:
     """
