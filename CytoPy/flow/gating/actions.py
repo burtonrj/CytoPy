@@ -16,6 +16,7 @@ from .plotting import Plot
 from .utilities import get_params, inside_ellipse, inside_polygon
 from ..feedback import progress_bar
 # Housekeeping and other tools
+from mongoengine.base import BaseList
 from anytree.exporter import DotExporter
 from anytree import Node, RenderTree
 from anytree.search import findall
@@ -1074,7 +1075,7 @@ class Gating:
                                                                          'a key "transform_y", ' \
                                                                          'the transform method for the y-axis'
 
-        if type(geom['definition']) == list:
+        if type(geom['definition']) == list or type(geom['definition']) == BaseList:
             idx = list(map(lambda d: self._geom_bool(geom, d, parent), geom['definition']))
             return [i for l in idx for i in l]
         else:
