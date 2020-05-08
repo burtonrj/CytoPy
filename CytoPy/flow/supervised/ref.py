@@ -127,7 +127,8 @@ def pull_data(sid: str,
     -------
     Pandas.DataFrame
     """
-    d = experiment.pull_sample_data(sample_id=sid, include_controls=False,
+    d = experiment.pull_sample_data(sample_id=sid,
+                                    include_controls=False,
                                     sample_size=sample_n)
     if d is None:
         return None

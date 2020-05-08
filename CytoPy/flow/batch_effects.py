@@ -347,6 +347,7 @@ class EvaluateBatchEffects:
                           exclude: list or None = None,
                           figsize: tuple = (12, 12),
                           kde_kernel: str = 'gaussian',
+                          kde_bw: str or float = 'cross_val',
                           distance_metric: str = 'jsd',
                           clustering_method: str = 'average',
                           **kwargs):
@@ -369,6 +370,10 @@ class EvaluateBatchEffects:
             *jsd: squared Jensen-Shannon Divergence (default)
             *kl: Kullback–Leibler divergence (relative entropy); warning, asymmetrical
             *hellinger: squared Hellinger Divergence
+        kde_bw: str or float (default='cross_val')
+            Bandwidth for kernel density estimate. Should be either a float value (where the same fixed bandwidth
+            is used for KDE for every sample) or 'cross_val' where the KDE bandwidth is estimated for each sample
+            individually.
         clustering_method: str, (default='average')
             method for hierarchical clustering, see scipy.cluster.hierarchy.linkage for details
         kwargs:
@@ -385,6 +390,7 @@ class EvaluateBatchEffects:
         for s in progress_bar(samples):
             divergence = self.calc_divergence(target_id=s,
                                               kde_kernel=kde_kernel,
+                                              kde_bw=kde_bw,
                                               divergence_method=distance_metric,
                                               verbose=False,
                                               comparisons=samples)
@@ -419,6 +425,7 @@ class EvaluateBatchEffects:
                         target_id: str,
                         comparisons: list,
                         kde_kernel: str = 'gaussian',
+                        kde_bw: str or float = 'cross_val',
                         divergence_method: str = 'jsd',
                         verbose: bool = False) -> np.array:
         """
@@ -433,6 +440,10 @@ class EvaluateBatchEffects:
             list of sample IDs that will form PDF q
         kde_kernel: str, (default='gaussian')
             name of kernel to use for density estimation (default = 'gaussian')
+        kde_bw: str or float (default='cross_val')
+            Bandwidth for kernel density estimate. Should be either a float value (where the same fixed bandwidth
+            is used for KDE for every sample) or 'cross_val' where the KDE bandwidth is estimated for each sample
+            individually.
         divergence_method: str, (default='jsd')
             name of statistical distance metric to use; valid choices are:
             *jsd: squared Jensen-Shannon Divergence (default)
@@ -459,7 +470,7 @@ class EvaluateBatchEffects:
         if target_id not in self.kde_cache.keys():
             target = self.data[target_id]
             target = target.select_dtypes(include=['number']).values
-            self.kde_cache[target_id] = kde_multivariant(target, bandwidth='cross_val', kernel=kde_kernel)
+            self.kde_cache[target_id] = kde_multivariant(target, bandwidth=kde_bw, kernel=kde_kernel)
 
         # Calc PDF for other samples and calculate F-divergence
         if verbose:
@@ -468,7 +479,7 @@ class EvaluateBatchEffects:
         # Fetch data frame for all other samples if kde not previously computed
         samples_df = [(name, s.select_dtypes(include='number').values) for name, s in self.data.items()
                       if name in comparisons and name not in self.kde_cache.keys()]
-        kde_f = partial(kde_multivariant, bandwidth='cross_val', kernel=kde_kernel)
+        kde_f = partial(kde_multivariant, bandwidth=kde_bw, kernel=kde_kernel)
         kde_indexed_f = partial(indexed_kde, kde_f=kde_f)
         pool = Pool(cpu_count())
         q_ = pool.map(kde_indexed_f, samples_df)
