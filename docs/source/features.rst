@@ -9,8 +9,8 @@ Summarising the proportion of cell populations/clusters
 
 The main class of interest in the feature extraction module is the **ExperimentalProportions** class. This class takes an experiment and list of samples to extract data from like so::
 
-	from cytopy.flow.feature_extraction import ExperimentProportions
-	from cytopy.data.project import Project
+	from CytoPy.flow.feature_extraction import ExperimentProportions
+	from CytoPy.data.project import Project
 	pd_project = Project.objects(project_id='Peritonitis').get()
 	exp = pd_project.load_experiment('PD_N_PDMCs')
 
@@ -59,9 +59,9 @@ Once we have built a 'feature space' we will want to remove any redundant variab
 Dimensionality reduction
 ##########################
 
-A rapid method for detecting if there is a 'global' difference between two experimental or clinical groups is by using dimensionality reduction and plotting data points coloured according to their group. In the example below we differentiate patients with and without acute peritonitis. The dataframe 'summary' contains the proportion of cell populations identified by XGBoost and the proportion if clusters from all our experiments combined. We can use any method from cytopy.flow.dim_reduction for the dimensionality reduction and a scatter plot is returned with data points coloured according to some label (here it is whether a patient has peritonitis or not)::
+A rapid method for detecting if there is a 'global' difference between two experimental or clinical groups is by using dimensionality reduction and plotting data points coloured according to their group. In the example below we differentiate patients with and without acute peritonitis. The dataframe 'summary' contains the proportion of cell populations identified by XGBoost and the proportion if clusters from all our experiments combined. We can use any method from CytoPy.flow.dim_reduction for the dimensionality reduction and a scatter plot is returned with data points coloured according to some label (here it is whether a patient has peritonitis or not)::
 	
-	from cytopy.flow.feature_extraction import dim_reduction
+	from CytoPy.flow.feature_extraction import dim_reduction
 	dim_reduction(summary=summary,label='peritonitis',scale=True,method='PCA')
 	
 .. image:: images/features/pca.png
@@ -96,7 +96,7 @@ On initiation of a **ControlComparison** object with an experiment and some samp
 
 * 1D relative fold change in MFI: for each sample calculate the relative fold change in MFI between the control and the primary data for the variable that the control effects e.g. a CD27 FMO control would be relative fold change in MFI in CD27 between the primary data and the control
 
-For more details see cytopy.flow.feature_extraction.ControlComparison
+For more details see CytoPy.flow.feature_extraction.ControlComparison
 
 
 

@@ -13,8 +13,8 @@ These functions borrow the ideas presented in Li H et al (doi: 10.1093/bioinform
 
 To generate a reference sample we simple pass an instance of **FCSExperiment** to the *calculate_ref_sample_fast* function::
 
-	from cytopy.data.project import Project
-	from cytopy.flow.supervised.ref import calculate_ref_sample_fast
+	from CytoPy.data.project import Project
+	from CytoPy.flow.supervised.ref import calculate_ref_sample_fast
 
 	pd_project = Project.objects(project_id='Peritonitis').get()
 	experiment = pd_project.load_experiment('PD_T_PDMCs')
@@ -59,7 +59,7 @@ The number of markers and/or biological samples that can be included in any sing
 Visualising multivariant differences
 =====================================
 
-If we want to see the multivariant shift in biological samples compared to some reference sample, we can observe this using the *dim_reduction_grid* function. As the name suggests, this applies dimensionality reduction, and the use can use any algorithm from cytopy.flow.dim_reduction. 
+If we want to see the multivariant shift in biological samples compared to some reference sample, we can observe this using the *dim_reduction_grid* function. As the name suggests, this applies dimensionality reduction, and the use can use any algorithm from CytoPy.flow.dim_reduction. 
 
 The reduced projections of the reference sample are shown in each plot of the grid as a background and then for each plot a different biological sample is overlaid::
 
@@ -88,9 +88,9 @@ By default *similarity_matrix* uses Jenson-Shannon distance and this our recomme
 
 This method outputs a few things. The first is a "linkage matrix", generated from the SciPy.cluster.hierarchy function, and is the result of single linkage clustering on the matrix of pairwise statistical distances. Second is an ordered list of sample IDs that correspong to the linkage matrix. Finally is a Seaborn.ClusterMap object. The plot is printed to stdout.
 
-With this matrix produced we can group samples either heuristically (by visual inspection of the clustermap) or by using the linkage matrix and the *generate_groups* function found in the cytopy.flow.batch_effects module::
+With this matrix produced we can group samples either heuristically (by visual inspection of the clustermap) or by using the linkage matrix and the *generate_groups* function found in the CytoPy.flow.batch_effects module::
 	
-	from cytopy.flow.batch_effects import generate_groups
+	from CytoPy.flow.batch_effects import generate_groups
 	groups = generate_groups(linkage_matrix=linkage_matrix,
 				 sample_ids = sample_ids,
 				 n_groups=3)

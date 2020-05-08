@@ -10,7 +10,7 @@ Connecting to the database
 
 If the database is hosted locally, then connecting is simple. We use the *global_init* function at the beginning of our analysis (whether this is in a script or in a notebook). All we have to do is pass the name of our database into this function, for example this will connect to the database called "CytoPy"::
 	
-	from cytopy.data.mongo_setup import global_init
+	from CytoPy.data.mongo_setup import global_init
 	global_init('CytoPy')
 
 If the database does not yet exist, it will automatically be generated. 
@@ -24,7 +24,7 @@ Projects & Subjects
 
 Inside CytoPy all data is contained within MongoDB documents. We start by defining a **Project**. We create a project like so::
 	
-	from cytopy.data.project import Project
+	from CytoPy.data.project import Project
 	# Create a project for the PD data
 	pd_project = Project(project_id='Peritonitis', owner='ross')
 	pd_project.save()
@@ -37,15 +37,15 @@ We use the **Project** document to access all the data within our analysis. A **
 
 A **Subject** contains all the metadata related to one individual patient/mouse/cell-line (some biological 'subject'). The **Subject** document is dynamic, that is, we can add any variables we like. In addition to this, there are special embedded documents that can be added to a **Subject**. Multiple embedded documents can be added for each:
 
-* Bug - each **Bug** document details a single microbiological isolate related to the associated subject e.g. if a patient had bacterial pneumonia and *Pseudomonas aeroginosa* had been isolated, you can add a **Bug** document detailing this event (see cytopy.data.subject.Bug)
-* Drug - each **Drug** document details the name of a drug administrated, the initiation data, and the end date (see cytopy.data.subject.Drug)
-* Biology - each **Biology** document details some biological measurement (see cytopy.data.subject.Biology)
+* Bug - each **Bug** document details a single microbiological isolate related to the associated subject e.g. if a patient had bacterial pneumonia and *Pseudomonas aeroginosa* had been isolated, you can add a **Bug** document detailing this event (see CytoPy.data.subject.Bug)
+* Drug - each **Drug** document details the name of a drug administrated, the initiation data, and the end date (see CytoPy.data.subject.Drug)
+* Biology - each **Biology** document details some biological measurement (see CytoPy.data.subject.Biology)
 
 The purpose of these embedded documents is that some metadata is complicated; a subject can have multiple bacterial isolates, many drugs administrated, or many other biological measurements taken. To be able to suitably associate this metadata to our single cell data in exploratory analysis, we must account for this.
 
 An example of creating a **Subject** with two bacterial isolates and some biology::
 
-	from cytopy.data.subject import Subject, Bug, Biology, Drug
+	from CytoPy.data.subject import Subject, Bug, Biology, Drug
 
 	bugs = [Bug(org_name='staph', gram_status='positive'),
 		Bug(org_name='e.coli', gram_status='negative')]
@@ -57,7 +57,7 @@ Notice that we added a field called 'peritonitis'. This is pretty specific to th
 
 We now save the **Subject** and add it to our **Project**::
 
-	from cytopy.data.project import Project
+	from CytoPy.data.project import Project
 	pd_project = Project.objects(project_id='Peritonitis').get()	
 	pd_project.subjects.append(patient)
 	pd_project.save()
@@ -80,7 +80,7 @@ To overcome this problem, we introduce the **Panel** document. It contains a des
 * https://docs.python.org/3/howto/regex.html
 * https://www.youtube.com/watch?v=ZfQFUJhPqMM
 
-To create a **Panel** we first prepare an Excel template. You can get a blank template here: https://github.com/burtonrj/CytoPy/tree/master/cytopy/assets
+To create a **Panel** we first prepare an Excel template. You can get a blank template here: https://github.com/burtonrj/CytoPy/tree/master/CytoPy/assets
 
 The template Excel spreadsheet contains two sheets:
 
@@ -101,13 +101,13 @@ Templates can be made manually by editing the default template. A useful resourc
 
 Some convenience functions for exploring the range of channel mappings and creating templates are:
 
-* cytopy.flow.read_write.explore_channel_mappings - given the path to a directory containing one or more \*.fcs files, returns a list of dictionaries for all unique channel/marker names 
-* cytopy.flow.read_write.fcs_mappings - given the path to a single \*.fcs file, return the channel/marker names
-* cytopy.data.panel.create_template - given a list of channel mappings e.g. *[{'channel: 'FITC', 'marker': 'CD3'}, {'channel': 'PE', 'marker':'CD4'}]* generates a Excel template with template regular expression statements. This should then be checked and edited prior to use.
+* CytoPy.flow.read_write.explore_channel_mappings - given the path to a directory containing one or more \*.fcs files, returns a list of dictionaries for all unique channel/marker names 
+* CytoPy.flow.read_write.fcs_mappings - given the path to a single \*.fcs file, return the channel/marker names
+* CytoPy.data.panel.create_template - given a list of channel mappings e.g. *[{'channel: 'FITC', 'marker': 'CD3'}, {'channel': 'PE', 'marker':'CD4'}]* generates a Excel template with template regular expression statements. This should then be checked and edited prior to use.
 
 Once we have our template ready, we can create out **Panel** document::
 
-	from cytopy.data.panel import Panel
+	from CytoPy.data.panel import Panel
 	n_panel = Panel(panel_name='PD_N_Panel')
 	n_panel.create_from_excel('path/to/template.xlsx')
 	n_panel.save()
@@ -117,7 +117,7 @@ Creating FCSExperiments
 
 As explained above, for each staining condition we are going to create an **FCSExperiment**. It is the **FCSExperiment** that will be used later on to access single cell data. To create a new **FCSExperiment** we use the *add_experiment* method of **Project**::
 
-	from cytopy.data.project import Project
+	from CytoPy.data.project import Project
 	pd_project = Project.objects(project_id='Peritonitis').get()
 	pd_project.add_experiment('PD_N_Panel', panel_name='PD_N_Panel')
 

@@ -28,7 +28,7 @@ A **Population** is generated whenever a gate is applied or when classified by s
 The Gating and Template class
 ###############################
 
-The **Gating** class is central to CytoPy's design. It is the primary class used for accessing the biological samples contained within an experiment to create and apply gates, generate **Population**s and visualise data. The **Gating** class is very powerful and we recommend checking out the API reference for details (see cytopy.gating.actions.Gating).
+The **Gating** class is central to CytoPy's design. It is the primary class used for accessing the biological samples contained within an experiment to create and apply gates, generate **Population**s and visualise data. The **Gating** class is very powerful and we recommend checking out the API reference for details (see CytoPy.gating.actions.Gating).
 
 Often what we want to do is create a 'gating strategy': a sequence of gates applied to each biological sample, rendering the root population for each. We do this by using the **Template** class. This class directly inherits from the **Gating** class except it has the ability to save the gating sequence to the database for later use.
 
@@ -55,7 +55,7 @@ We can plot the 'root' population using the *plot_population* method. For all pl
 
 .. image:: images/gating/root.png
 
-The transforms arugment is how we want to transform the x and y-axis. CytoPy supports all common data transformations for cytometry data (see cytopy.flow.transforms). By default a biexponential transformation is applied.
+The transforms arugment is how we want to transform the x and y-axis. CytoPy supports all common data transformations for cytometry data (see CytoPy.flow.transforms). By default a biexponential transformation is applied.
 
 
 Creating and applying a gate
@@ -63,7 +63,7 @@ Creating and applying a gate
 
 We first create a gate and then we apply that gate. Before we create a gate however, we must specify the populations that gate will generate. Below we are going to create a one dimensional threshold gate that captures CD3+ and CD3- populations. This gate used the properties of a probability density function formed by gaussian KDE to find a suitable threshold that seperates regions of high density. We need to tell our gate that we expect two populations as a result. We do this using the **ChildPopulationCollection**::
 
-	from cytopy.flow.gating.defaults import ChildPopulationCollection
+	from CytoPy.flow.gating.defaults import ChildPopulationCollection
 	children = ChildPopulationCollection('threshold_1d')
 	children.add_population('CD3+', definition='+')
 	children.add_population('CD3-', definition='-')
@@ -125,7 +125,7 @@ Gates fall into the following cateogores according to the type of geometric obje
 
 Each gate produces a **Geom** object that is saved to the **Population** and defines the 'space' in which that population is defined (e.g. the variables on the x and y axis, how they are transformed, and the coordinates in this space that "capture" the population of interest)
 
-For every type of gate there is a class that inherits from the **Gate** class in cytopy.flow.gating.base
+For every type of gate there is a class that inherits from the **Gate** class in CytoPy.flow.gating.base
 
 Each gate and their class is detailed below. Code examples are given for creating and applying a gate. Reminder: in the examples below we create gates for **Template** object, but the commands are the same for a **Gating** object.
 
@@ -180,7 +180,7 @@ An example of creating an applying a two dimensional threshold::
 
 Note the difference when defining the populations for the 2D gate. A definition such as '+-' denotes 'postive' (to the right of the threshold) in the x-axis plane and 'negative' (to the left of the threshold) in the y-axis plane. We can pass a list of definitions to merge quadrants.
 
-See cytopy.flow.gating.density for details
+See CytoPy.flow.gating.density for details
 
 Quantile
 *********
@@ -294,7 +294,7 @@ An example of HDBSCAN::
 
 .. image:: images/gating/hdbscan.png
 
-See cytopy.flow.gating.dbscan for further details
+See CytoPy.flow.gating.dbscan for further details
 
 MixtureModel
 *************
@@ -323,7 +323,7 @@ The **MixtureModel** class implements gaussian mixture models for generating an 
 
 .. image:: images/gating/mixture.png
 
-The **MixtureModel** implements scikit-learn and a user can specify whether to use a gaussian mixture or variational bayesian gaussian mixture. See cytopy.flow.gating.mixturemodel for details.
+The **MixtureModel** implements scikit-learn and a user can specify whether to use a gaussian mixture or variational bayesian gaussian mixture. See CytoPy.flow.gating.mixturemodel for details.
 
 Static
 *******
@@ -494,11 +494,11 @@ The *edit_gate* function allows for editing any gate type, but for threshold gat
 Other worthy mentions
 ######################
 
-I hope we have demonstrated so far that the **Gating** class is very powerful and we recommend reading the the API reference at cytopy.flow.gating.actions for more details.
+I hope we have demonstrated so far that the **Gating** class is very powerful and we recommend reading the the API reference at CytoPy.flow.gating.actions for more details.
 
 As for other functions contained within **Gating**, worthy mentions are:
 
-* get_population_df: given a population name, returns the Pandas DataFrame of events within the population. Has options to transform the data according to any of the transform function avaiable in cytopy.flow.transforms. Also has an option to label events according to the downstream populations they belong too. If a value for *ctrl_id* is provided, the equivalent population in the given control is returned instead of the primary data
+* get_population_df: given a population name, returns the Pandas DataFrame of events within the population. Has options to transform the data according to any of the transform function avaiable in CytoPy.flow.transforms. Also has an option to label events according to the downstream populations they belong too. If a value for *ctrl_id* is provided, the equivalent population in the given control is returned instead of the primary data
 * population_size: returns the total number of events within a population
 * merge: given two populations with the same parent, creates a new gate and a resulting population that is the merger of these two populations
 * subtraction: given a target population and any number of other populations that share the same parent, subtract the other populations from the target, generating a new population. The defintion is saved within a gate and can be saved within a template.

@@ -10,7 +10,7 @@ How do we choose representative data as training data? In the section "Batch eff
 
 We can choose a reference sample using the *calculate_ref_sample_fast* function (see "Batch effect analysis") or we can create a reference sample by taking a uniform sample of events from each member of our group::
 
-	from cytopy.flow.supervised.cell_classifier import create_reference_sample
+	from CytoPy.flow.supervised.cell_classifier import create_reference_sample
 	create_reference_sample(experiment=experiment,
 				root_population='T cells',
 				samples=group_1,
@@ -39,7 +39,7 @@ This is clearly a very complex population tree. If we wanted a classifier to ide
 
 When the predicted classifications are saved to in **Population**'s, the tree structure is recreated, such that the classified cell belongs to all three **Population**'s within its label.
 
-The sample ID for the sample to use as training data and the target populations for prediction are given at the point of initialising a **CellClassifier** object. The user can also specify how to transform the data, whether additional scalling should be applied (e.g. min max normalisation or standard scaling) and specify how to handle issues such as class imbalance; class weights can be provided or a sampling procedure applied (see cytopy.flow.supervised.cell_clasifier).
+The sample ID for the sample to use as training data and the target populations for prediction are given at the point of initialising a **CellClassifier** object. The user can also specify how to transform the data, whether additional scalling should be applied (e.g. min max normalisation or standard scaling) and specify how to handle issues such as class imbalance; class weights can be provided or a sampling procedure applied (see CytoPy.flow.supervised.cell_clasifier).
 
 The **CellClassifier** object follows the conventions of Scikit-Learn and provides a familar API for training and prediction. The following methods provide all necessary for interacting with the model and are the same for all classifiers in CytoPy:
 
@@ -65,8 +65,8 @@ Training
 Taking XGBoostClassifier as an example, creating and training a model is simple. Note additional hyperparameters specific to a particular model are given when we call *build_model*. If we want to ry new hyperparameters with the same training data, we simply make a new call to *build_model* and this will overwrite the current classifier stored within the object::
 	
 	# Import dependencies 
-	from cytopy.flow.supervised import xgboost
-	from cytopy.data.project import Project
+	from CytoPy.flow.supervised import xgboost
+	from CytoPy.data.project import Project
 
 	# Load project data
 	pd_project = Project.objects(project_id='Peritonitis').get()
