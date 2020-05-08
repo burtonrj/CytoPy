@@ -11,7 +11,7 @@ We mentioned that multiple clustering algorithms can be applied to a **Populatio
 
 We create a **ClusteringDefinition** like so::
 
-	from cytopy.flow.clustering.main import ClusteringDefinition
+	from CytoPy.flow.clustering.main import ClusteringDefinition
 	cd = ClusteringDefinition(clustering_uid='Tcell_clustering',
 		                  features=features,
 		                  method='PhenoGraph',
@@ -45,13 +45,13 @@ SingleClustering
 
 When we want to perform clustering analysis for a single sample, we use the **SingleClustering** class. This, like all clustering classes, inherits from the base class **Clustering**. Performing clustering is very simple. Once we have a **ClusteringDefinition** we initiate our clustering object::
 
-	from cytopy.flow.clustering.main import SingleClustering
+	from CytoPy.flow.clustering.main import SingleClustering
 	cd = ClusteringDefinition.objects(clustering_uid='Tcell_clustering').get()	
 	scluster = SingleClustering(clustering_definition=cd)
 
 We then populate this object with a biological sample from some experiment of interest::
 
-	from cytopy.data.project import Project
+	from CytoPy.data.project import Project
 	pd_project = Project.objects(project_id='Peritonitis').get()
 	experiment = pd_project.load_experiment('PD_T_PDMCs')
 	# Just load the first sample from out experiment
@@ -79,7 +79,7 @@ When the **Explorer** object is generated the data is populated with labels of t
 	# Generate the Explorer object
 	explorer = scluster.explorer()
 
-We can generate a dimensionality reduction plot using any of the methods in cytopy.flow.dim_reduction (Linear PCA, non-linear PCA, UMAP, t-SNE, Isomap, and PHATE). We can specify to plot two components as a static two dimensional scatter plot or three components that will render automatically as a three-dimensional interactive plot::
+We can generate a dimensionality reduction plot using any of the methods in CytoPy.flow.dim_reduction (Linear PCA, non-linear PCA, UMAP, t-SNE, Isomap, and PHATE). We can specify to plot two components as a static two dimensional scatter plot or three components that will render automatically as a three-dimensional interactive plot::
 
 	explorer.scatter_plot(label='cluster_id', 
 		              features=['CXCR3', 'CD161', 
@@ -199,7 +199,7 @@ We can visualise meta clusters as a scatter plot where all clusters from all bio
 
 .. image:: images/cluster/meta_umap.png
 
-The crown jewl of CytoPy is its ability to easily and rapidly relate the results of complex cytometry analysis to the underlying clinical or experimental meta data. In the **Explorer** class we can load meta data using the *load_meta* method. We provide any field name in the **Subject** document that a column is amended to the Pandas DataFrame for that variable. Additionally we can load drug data, infection data, and other embedded data where multiple events of a variable exist for one patient (see cytopy.flow.clustering.main.Explorer). 
+The crown jewl of CytoPy is its ability to easily and rapidly relate the results of complex cytometry analysis to the underlying clinical or experimental meta data. In the **Explorer** class we can load meta data using the *load_meta* method. We provide any field name in the **Subject** document that a column is amended to the Pandas DataFrame for that variable. Additionally we can load drug data, infection data, and other embedded data where multiple events of a variable exist for one patient (see CytoPy.flow.clustering.main.Explorer). 
 
 Below is an example of loading the peritonitis variables, which specifies if a patient has peritonitis or not. We can then colour clusters according to this variable::
 
