@@ -172,7 +172,8 @@ class EvaluateBatchEffects:
                         reference_id: str,
                         comparison_samples: list,
                         markers: list or None = None,
-                        figsize: tuple = (10, 10)):
+                        figsize: tuple = (10, 10),
+                        xlim: tuple or None = None):
         """
         For a given reference sample and a list of markers of interest, create a grid of KDE plots with the reference
         sample given in red and comparison samples given in blue.
@@ -187,6 +188,8 @@ class EvaluateBatchEffects:
             list of valid sample names in the current experiment
         figsize: tuple, (default=(10,10))
             size of resulting figure
+        xlim: tuple (optional)
+            x-axis limits
         
         Returns
         --------
@@ -210,6 +213,8 @@ class EvaluateBatchEffects:
             ax = fig.add_subplot(nrows, 3, i)
             ax = sns.kdeplot(reference[marker], shade=True, color="b", ax=ax)
             ax.set_title(f'Total variance in {marker}')
+            if xlim:
+                ax.set_xlim(xlim)
             for d in comparison_samples:
                 d = self.data[d]
                 if marker not in d.columns:
