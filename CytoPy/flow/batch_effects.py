@@ -210,7 +210,6 @@ class EvaluateBatchEffects:
             ax = fig.add_subplot(nrows, 3, i)
             ax = sns.kdeplot(reference[marker], shade=True, color="b", ax=ax)
             ax.set_title(f'Total variance in {marker}')
-            ax.set_xlim((0, max(reference[marker])))
             for d in comparison_samples:
                 d = self.data[d]
                 if marker not in d.columns:
