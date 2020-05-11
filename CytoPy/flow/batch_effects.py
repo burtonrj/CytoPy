@@ -173,7 +173,8 @@ class EvaluateBatchEffects:
                         comparison_samples: list,
                         markers: list or None = None,
                         figsize: tuple = (10, 10),
-                        xlim: tuple or None = None):
+                        xlim: tuple or None = None,
+                        **kwargs):
         """
         For a given reference sample and a list of markers of interest, create a grid of KDE plots with the reference
         sample given in red and comparison samples given in blue.
@@ -190,6 +191,8 @@ class EvaluateBatchEffects:
             size of resulting figure
         xlim: tuple (optional)
             x-axis limits
+        kwargs:
+            Additional keywords to pass to call to Seaborn.kdeplot
         
         Returns
         --------
@@ -211,7 +214,7 @@ class EvaluateBatchEffects:
             if marker not in reference.columns:
                 print(f'{marker} absent from reference sample, skipping')
             ax = fig.add_subplot(nrows, 3, i)
-            ax = sns.kdeplot(reference[marker], shade=True, color="b", ax=ax)
+            ax = sns.kdeplot(reference[marker], shade=True, color="b", ax=ax, **kwargs)
             ax.set_title(f'Total variance in {marker}')
             if xlim:
                 ax.set_xlim(xlim)
@@ -354,6 +357,7 @@ class EvaluateBatchEffects:
                           kde_bw: str or float = 'cross_val',
                           distance_metric: str = 'jsd',
                           clustering_method: str = 'average',
+                          features: None or list = None,
                           **kwargs):
         """
         Generate a clustered heatmap of pairwise statistical distance comparisons. This can be used to find
@@ -380,12 +384,16 @@ class EvaluateBatchEffects:
             individually.
         clustering_method: str, (default='average')
             method for hierarchical clustering, see scipy.cluster.hierarchy.linkage for details
+        features: list (optional)
+            features to include in calculation
         kwargs:
             additional keyword arguments to be passed to Seaborn ClusterPlot
             (seaborn.pydata.org/generated/seaborn.clustermap.html#seaborn.clustermap)
             (hierarchical clustering encoded as a linkage matrix, array of sample IDs,
             Seaborn ClusterGrid instance)
         """
+        if features is None:
+            features = self.data[list(self.data.keys())[0]].columns.tolist()
         samples = self.sample_ids
         if exclude is not None:
             samples = [s for s in samples if s not in exclude]
@@ -397,7 +405,8 @@ class EvaluateBatchEffects:
                                               kde_bw=kde_bw,
                                               divergence_method=distance_metric,
                                               verbose=False,
-                                              comparisons=samples)
+                                              comparisons=samples,
+                                              features=features)
             hd_ = defaultdict(list)
             for n, h in divergence:
                 hd_[n].append(h)
@@ -428,6 +437,7 @@ class EvaluateBatchEffects:
     def calc_divergence(self,
                         target_id: str,
                         comparisons: list,
+                        features: list,
                         kde_kernel: str = 'gaussian',
                         kde_bw: str or float = 'cross_val',
                         divergence_method: str = 'jsd',
@@ -442,6 +452,8 @@ class EvaluateBatchEffects:
             sample ID for PDF p
         comparisons: list
             list of sample IDs that will form PDF q
+        features: list
+            features to include in calculation
         kde_kernel: str, (default='gaussian')
             name of kernel to use for density estimation (default = 'gaussian')
         kde_bw: str or float (default='cross_val')
@@ -472,7 +484,7 @@ class EvaluateBatchEffects:
         if verbose:
             print('Calculating PDF for target...')
         if target_id not in self.kde_cache.keys():
-            target = self.data[target_id]
+            target = self.data[target_id][features]
             target = target.select_dtypes(include=['number']).values
             self.kde_cache[target_id] = kde_multivariant(target, bandwidth=kde_bw, kernel=kde_kernel)
 
