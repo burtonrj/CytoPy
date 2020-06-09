@@ -1,6 +1,9 @@
 from ...data.fcs_experiments import FCSExperiment
+from ..feedback import progress_bar
+from ..gating.actions import Gating
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler
 from imblearn.over_sampling import RandomOverSampler
+import pandas as pd
 import numpy as np
 
 
@@ -164,4 +167,55 @@ def predict_class(y_probs: np.array,
     return list(map(lambda j: np.argmax(j), y_probs))
 
 
+def build_labelled_dataset(experiment: FCSExperiment,
+                           labels: dict,
+                           target_population: str,
+                           sample_n: int or float,
+                           transform: str or None = 'logicle',
+                           verbose: bool = False) -> pd.DataFrame:
+    """
+    Generate a DataFrame of concatenated single cell data where each row represents a single cell. Ech cell is labelled
+    and this value is contained within a column named "label". The label is specified by the "label" argument. The
+    label argument should be a dictionary where the key corresponds to the label and the values corresponds to
+    a list of sample IDs to fetch and associate to that label.
 
+    Parameters
+    ----------
+    experiment: FCSExperiment
+        Experiment to fetch samples from. The DataFrame can only contain single cell data
+        from the same experiment
+    labels: dict
+        Dictionary where each key is a label and its corresponding value is a list of associated sample IDs
+    target_population: str
+        Name of the population to fetch from each sample
+    sample_n: int or float
+        Number of cells to fetch from each sample
+    transform: str (optional) (default='logicle')
+        Transformation to be applied to data before returning the DataFrame. Set to None to return untransformed data
+    verbose: bool (default=False)
+        Set to True to print progress to screen
+
+    Returns
+    -------
+    Pandas DataFrame
+        Concatenated dataframe of single cell data where each row is labelled accordingly
+    """
+    vprint = print if verbose else lambda *a, **k: None
+    data = pd.DataFrame()
+    for label, sids in labels.items():
+        if verbose:
+            vprint(f"------- Fetching data for label: {label} -------")
+        for s in progress_bar(sids, verbose=verbose):
+            g = Gating(experiment=experiment, sample_id=s, include_controls=False)
+            d = g.get_population_df(population_name=target_population,
+                                    transform=transform is not None,
+                                    transform_method=transform,
+                                    transform_features="all").copy()
+            if type(sample_n) == int:
+                d = d.sample(sample_n)
+            else:
+                d = d.sample(frac=sample_n)
+            d["sid"] = s
+            d["label"] = label
+            data = pd.concat([data, d])
+    return data
