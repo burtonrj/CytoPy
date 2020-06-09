@@ -106,7 +106,8 @@ def pull_data(sid: str,
               experiment: FCSExperiment,
               features: list,
               sample_n: int or None = None,
-              transform: str or None = 'logicle'):
+              transform: str or None = 'logicle',
+              append_sid: bool = False):
     """
     Given a sample ID and experiment that the sample belongs too, fetch a DataFrame of associated single cell
     data including the given features and (if provided) down-sample the data to the value of sample_n.
@@ -136,6 +137,8 @@ def pull_data(sid: str,
     d = d[[x for x in d.columns if x != 'Time']]
     if transform is not None:
         return apply_transform(d, transform_method=transform)
+    if append_sid:
+        d["sid"] = sid
     return d
 
 
