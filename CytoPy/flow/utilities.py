@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from ..data.fcs_experiments import FCSExperiment
 from .gating.actions import Gating
-from .supervised.utilities import scaler
+from .transforms import scaler
 
 
 def faithful_downsampling(data: np.array,

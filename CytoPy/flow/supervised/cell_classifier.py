@@ -3,7 +3,8 @@ from ...data.fcs import FileGroup, File, ChannelMap, Population
 from ...data.panel import Panel
 from ...flow.gating.actions import Gating
 from ...flow.gating.defaults import ChildPopulationCollection
-from ...flow.supervised.utilities import scaler, find_common_features, predict_class, random_oversampling
+from ...flow.supervised.utilities import find_common_features, predict_class, random_oversampling
+from ..transforms import scaler
 from ...flow.gating.utilities import density_dependent_downsample
 from ...flow.supervised.evaluate import evaluate_model, report_card
 from ...flow.feedback import progress_bar
