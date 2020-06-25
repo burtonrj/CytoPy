@@ -1,7 +1,7 @@
 from flowutilspd.transforms import logicle, hyperlog, log_transform, asinh
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler
 import pandas as pd
-
-from CytoPy.flow.supervised.utilities import scaler
+import numpy as np
 
 
 class TransformError(Exception):
@@ -108,3 +108,36 @@ def apply_transform(data: pd.DataFrame,
     raise TransformError("Error: invalid transform_method, must be one of: 'logicle', 'hyperlog', 'log_transform',"
                          " 'asinh', 'percentile rank', 'Yeo-Johnson', 'RobustScale'")
 
+
+def scaler(data: np.array,
+           scale_method: str,
+           **kwargs) -> np.array and callable:
+    """
+    Wrapper for Sklearn transformation methods
+
+    Parameters
+    -----------
+    data: Numpy.array
+        data to transform; expects a numpy array
+    scale_method: str
+        type of transformation to perform
+    kwargs:
+        additional keyword arguments that can be passed to sklearn function
+
+    Returns
+    --------
+    (Numpy.array, callable)
+        transformed data and sklearn transformer object
+    """
+    if scale_method == 'standard':
+        preprocessor = StandardScaler(**kwargs).fit(data)
+    elif scale_method == 'norm':
+        preprocessor = MinMaxScaler(**kwargs).fit(data)
+    elif scale_method == 'power':
+        preprocessor = PowerTransformer(**kwargs).fit(data)
+    elif scale_method == 'robust':
+        preprocessor = RobustScaler(**kwargs).fit(data)
+    else:
+        raise ValueError('Method should be one of the following: [standard, norm, power, robust]')
+    data = preprocessor.transform(data)
+    return data, preprocessor

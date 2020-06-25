@@ -1,7 +1,6 @@
 from ...data.fcs_experiments import FCSExperiment
 from ..feedback import progress_bar
 from ..gating.actions import Gating
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler
 from imblearn.over_sampling import RandomOverSampler
 import pandas as pd
 import numpy as np
@@ -101,40 +100,6 @@ def find_common_features(experiment: FCSExperiment,
     for f in features[1:]:
         common_features.intersection_update(f)
     return list(common_features)
-
-
-def scaler(data: np.array,
-           scale_method: str,
-           **kwargs) -> np.array and callable:
-    """
-    Wrapper for Sklearn transformation methods
-
-    Parameters
-    -----------
-    data: Numpy.array
-        data to transform; expects a numpy array
-    scale_method: str
-        type of transformation to perform
-    kwargs:
-        additional keyword arguments that can be passed to sklearn function
-
-    Returns
-    --------
-    (Numpy.array, callable)
-        transformed data and sklearn transformer object
-    """
-    if scale_method == 'standard':
-        preprocessor = StandardScaler(**kwargs).fit(data)
-    elif scale_method == 'norm':
-        preprocessor = MinMaxScaler(**kwargs).fit(data)
-    elif scale_method == 'power':
-        preprocessor = PowerTransformer(**kwargs).fit(data)
-    elif scale_method == 'robust':
-        preprocessor = RobustScaler(**kwargs).fit(data)
-    else:
-        raise ValueError('Method should be one of the following: [standard, norm, power, robust]')
-    data = preprocessor.transform(data)
-    return data, preprocessor
 
 
 def predict_class(y_probs: np.array,
