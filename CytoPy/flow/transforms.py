@@ -1,6 +1,7 @@
 from flowutilspd.transforms import logicle, hyperlog, log_transform, asinh
-from .supervised.utilities import scaler
 import pandas as pd
+
+from CytoPy.flow.supervised.utilities import scaler
 
 
 class TransformError(Exception):
@@ -27,6 +28,35 @@ def percentile_rank_transform(data: pd.DataFrame,
     data = data.copy()
     transform = data[features_to_transform].rank(axis=0, method='average')
     transform = (transform / transform.shape[0]) * 100
+    data[features_to_transform] = transform
+    return data
+
+
+def sklearn_scaler(data: pd.DataFrame,
+                   features_to_transform: list,
+                   scale_method: str,
+                   **kwargs) -> pd.DataFrame:
+    """
+    Wrapper function for transforming single cell data using Sklearn scaler functions
+    data: dataframe of data to apply scale function too
+
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+    features_to_transform: list
+        list of features (columns) to scale
+    scale_method: str
+        name of scaler method to use (see cytopy.flow.supervised.utilities.scaler_for available methods)
+    kwargs:
+        keyword arguments to pass to scaler function (see cytopy.flow.supervised.utilities.scaler)
+
+    Returns
+    --------
+    Pandas.DataFrame
+        DataFrame with scaler applied
+    """
+    data = data.copy()
+    transform, _ = scaler(data[features_to_transform], scale_method=scale_method, **kwargs)
     data[features_to_transform] = transform
     return data
 
@@ -78,31 +108,3 @@ def apply_transform(data: pd.DataFrame,
     raise TransformError("Error: invalid transform_method, must be one of: 'logicle', 'hyperlog', 'log_transform',"
                          " 'asinh', 'percentile rank', 'Yeo-Johnson', 'RobustScale'")
 
-
-def sklearn_scaler(data: pd.DataFrame,
-                   features_to_transform: list,
-                   scale_method: str,
-                   **kwargs) -> pd.DataFrame:
-    """
-    Wrapper function for transforming single cell data using Sklearn scaler functions
-    data: dataframe of data to apply scale function too
-
-    Parameters
-    -----------
-    data: Pandas.DataFrame
-    features_to_transform: list
-        list of features (columns) to scale
-    scale_method: str
-        name of scaler method to use (see cytopy.flow.supervised.utilities.scaler_for available methods)
-    kwargs:
-        keyword arguments to pass to scaler function (see cytopy.flow.supervised.utilities.scaler)
-
-    Returns
-    --------
-    Pandas.DataFrame
-        DataFrame with scaler applied
-    """
-    data = data.copy()
-    transform, _ = scaler(data[features_to_transform], scale_method=scale_method, **kwargs)
-    data[features_to_transform] = transform
-    return data
