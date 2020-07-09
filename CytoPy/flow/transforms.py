@@ -1,4 +1,4 @@
-from flowutilspd.transforms import logicle, hyperlog, log_transform, asinh
+from flowutils.transforms import logicle, hyperlog, log_transform, asinh
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler
 import pandas as pd
 import numpy as np
