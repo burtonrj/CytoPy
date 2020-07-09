@@ -1,6 +1,7 @@
 anytree==2.8.0
 Cython==0.29.21
 FlowIO==0.9.5
+FlowUtils==0.7.1
 future==0.18.2
 hdbscan==0.8.26
 imbalanced-learn==0.7.0
@@ -27,6 +28,6 @@ sphinx-theme==1.0
 tensorflow==2.2.0
 tqdm==4.47.0
 umap-learn==0.4.6
-xgboost==0.90
+xgboost==1.1.1
 xlrd==1.2.0
 yellowbrick==1.1
