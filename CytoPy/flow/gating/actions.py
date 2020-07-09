@@ -821,10 +821,13 @@ class Gating:
             geom = None
             if population.geom is not None:
                 geom = population.geom.as_dict()
-            self.populations[name] = Node(name=name, population_name=name, index=population.index,
+            self.populations[name] = Node(name=name,
+                                          population_name=name,
+                                          index=population.index,
                                           prop_of_parent=prop_of_parent,
                                           prop_of_total=prop_of_total,
-                                          geom=geom, warnings=warnings,
+                                          geom=geom,
+                                          warnings=warnings,
                                           parent=self.populations[parent_name],
                                           control_idx=dict())
         return output

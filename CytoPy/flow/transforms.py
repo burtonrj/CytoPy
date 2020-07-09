@@ -29,36 +29,7 @@ def percentile_rank_transform(data: pd.DataFrame,
     return data
 
 
-def sklearn_scaler(data: pd.DataFrame,
-                   features_to_transform: list,
-                   scale_method: str,
-                   **kwargs) -> pd.DataFrame:
-    """
-    Wrapper function for transforming single cell data using Sklearn scaler functions
-    data: dataframe of data to apply scale function too
-
-    Parameters
-    -----------
-    data: Pandas.DataFrame
-    features_to_transform: list
-        list of features (columns) to scale
-    scale_method: str
-        name of scaler method to use (see cytopy.flow.supervised.utilities.scaler_for available methods)
-    kwargs:
-        keyword arguments to pass to scaler function (see cytopy.flow.supervised.utilities.scaler)
-
-    Returns
-    --------
-    Pandas.DataFrame
-        DataFrame with scaler applied
-    """
-    data = data.copy()
-    transform, _ = scaler(data[features_to_transform], scale_method=scale_method, **kwargs)
-    data[features_to_transform] = transform
-    return data
-
-
-def apply_transform(data: pd.DataFrame, 
+def apply_transform(data: pd.DataFrame,
                     features_to_transform: list or str = 'all',
                     transform_method: str = 'logicle',
                     **kwargs) -> pd.DataFrame:
@@ -102,9 +73,9 @@ def apply_transform(data: pd.DataFrame,
     if transform_method == 'percentile rank':
         return percentile_rank_transform(data, features_to_transform)
     if transform_method == 'Yeo-Johnson':
-        return sklearn_scaler(data, features_to_transform, scale_method='power', method='yeo-johnson')
+        return scaler(data, features_to_transform, scale_method='power', method='yeo-johnson')
     if transform_method == 'RobustScale':
-        return sklearn_scaler(data, features_to_transform, scale_method='robust')
+        return scaler(data, features_to_transform, scale_method='robust')
     raise ValueError("Error: invalid transform_method, must be one of: 'logicle', 'hyperlog', 'log_transform',"
                      " 'asinh', 'percentile rank', 'Yeo-Johnson', 'RobustScale'")
 

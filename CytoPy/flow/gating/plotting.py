@@ -4,14 +4,145 @@ from scipy.spatial import ConvexHull
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
+from matplotlib.ticker import Locator
 import matplotlib.patches as mpatches
 from matplotlib import patches
 from anytree import Node
 from itertools import cycle
+import seaborn as sns
 import pandas as pd
 import numpy as np
 import random
 
+
+def _check_gate_transforms(gates: list) -> list:
+    """
+    Given a list of Gate objects, check that the X-axis and Y-axis transforms are equal. If not, an AssertionError
+    is raised
+
+    Parameters
+    ----------
+    gates: list
+        List of Gate objects
+
+    Returns
+    -------
+    list
+        List of Gate objects
+    """
+    transform_x = [g.transform_x for g in gates]
+    transform_y = [g.transform_y for g in gates]
+    assert len(set(transform_x)) == 1, f"Conflicting X-axis transforms in given gates {transform_x}"
+    assert len(set(transform_y)) == 1, f"Conflicting X-axis transforms in given gates {transform_y}"
+    return gates
+
+
+def _hist1d():
+    pass
+
+
+def _hist2d():
+    pass
+
+
+def plot_population(data: pd.DataFrame,
+                    population: Node,
+                    transform_x: str,
+                    transform_y: str,
+                    xlabel: str or None = None,
+                    ylabel: str or None = None,
+                    xlim: tuple or None = None,
+                    ylim: tuple or None = None,
+                    plot_title: str or None = None):
+    pass
+
+
+class CreatePlot:
+    def __init__(self,
+                 gating,
+                 default_transform_x: str = "logicle",
+                 default_transform_y: str = "logicle",
+                 xlabel: str or None = None,
+                 ylabel: str or None = None,
+                 xlim: tuple or None = None,
+                 ylim: tuple or None = None,
+                 title: str or None = None,
+                 ax: matplotlib.pyplot.axes or None = None,
+                 figsize: tuple = (5, 5),
+                 bins: int or str = "scotts",
+                 cmap: str = "jet",
+                 style: str or None = "white",
+                 font_scale: float or None = 1.2,
+                 bw: str or float = "scott"):
+        self.gating = gating
+        self.tranform_defaults = {'x': default_transform_x, 'y': default_transform_y}
+        self.labels = {'x': xlabel, 'y': ylabel}
+        self.lims = {'x': xlim, 'y': ylim}
+        self.title = title
+        self.bw = bw
+        if type(bins) == str:
+            assert bins in ["scotts", "sturges", "rice", "sqrt"], """bins should be an integer or one of : 
+            "scotts", "sturges", "rice", or "sqrt"""
+        self.bins = bins
+        self._fig, self._ax = None, ax
+        if self._ax is None:
+            self._fig, self._ax = plt.subplots(figsize=figsize)
+        self.cmap = plt.get_cmap(cmap)
+        if style is not None:
+            sns.set_style(style)
+        if font_scale is not None:
+            sns.set_context(font_scale=font_scale)
+
+    def _hist1d(self,
+                data: pd.DataFrame,
+                x: str,
+                **kwargs):
+        sns.kdeplot(data=data[x], bw=self.bw, ax=self._ax, **kwargs)
+
+    def _hist2d(self,
+                data: pd.DataFrame,
+                x: str,
+                y: str,
+                **kwargs) -> None:
+        if type(self.bins) == str:
+            xbin, ybin = self._estimate_bins(x=data[x].values), self._estimate_bins(x=data[y].values)
+        else:
+            xbin, ybin = self.bins, self.bins
+
+        self._ax.hist2d(data[x], data[y], bins=[xbin, ybin], norm=LogNorm(), cmap=self.cmap, **kwargs)
+
+    def _scale_x(self,
+                 forward: callable,
+                 inverse: callable):
+        self._ax.set_xscale('function', forward, inverse)
+
+    def _scale_y(self,
+                 forward: callable,
+                 inverse: callable):
+        self._ax.set_yscale('function', forward, inverse)
+
+    def _estimate_bins(self, x: np.array):
+        if self.bins == "scotts":
+            return (3.49*x.std())/np.cbrt(x.shape[0])
+        if self.bins == "sturges":
+            return int(np.log2(x.shape[0])) + 1
+        if self.bins == "rice":
+            return int(2*np.cbrt(x.shape[0]))
+        if self.bins == "sqrt":
+            return int(np.sqrt(x))
+        raise ValueError("""bins should be an integer or one of : "scotts", "sturges", "rice", or "sqrt""")
+
+    def plot_population(self, population_name: str):
+        pass
+
+    def plot_gate(self):
+        pass
+
+    def plot_overlay(self):
+        pass
+
+    def plot_controls(self):
+        pass
 
 def transform_axes(data: pd.DataFrame, axes_vars: dict, transforms: dict) -> pd.DataFrame:
     """
