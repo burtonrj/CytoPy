@@ -241,7 +241,7 @@ def load_and_transform(sample_id: str,
                                         transform_method=transform,
                                         transform_features='all')
     if scale is not None:
-        data = scaler(data, scale_method=scale)[0]
+        data = pd.DataFrame(scaler(data, scale_method=scale)[0], columns=data.columns)
     if data is None:
         raise KeyError(f'Error: unable to load data for population {root_population} for {sample_id}')
     if sample_n is not None:
