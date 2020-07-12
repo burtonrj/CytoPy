@@ -4,7 +4,29 @@ from typing import List
 from warnings import warn
 import mongoengine
 import numpy as np
+import importlib
 import datetime
+
+
+class ControlGate(mongoengine.Document):
+    gate_name = mongoengine.StringField()
+    population = mongoengine.StringField()
+    method = mongoengine.StringField()
+    kwargs = mongoengine.ListField()
+
+
+class PreProcess(mongoengine.EmbeddedDocument):
+    downsample_method = mongoengine.StringField()
+    downsample_kwargs = mongoengine.ListField()
+    transform = mongoengine.StringField()
+    scale = mongoengine.StringField()
+    dim_reduction = mongoengine.StringField()
+    dim_reduction_kwargs = mongoengine.ListField()
+
+
+class PostProcess(mongoengine.EmbeddedDocument):
+    upsample_method = mongoengine.StringField()
+    upsample_kwargs = mongoengine.ListField()
 
 
 class ChildDefinition(mongoengine.EmbeddedDocument):
@@ -95,22 +117,6 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
 class Gate(mongoengine.Document):
     """
     Document representation of a Gate
-
-    Parameters
-    -----------
-    gate_name: str, required
-        Unique identifier for this gate (within the scope of a GatingStrategy)
-    children: list
-        list of population names; populations derived from application of this gate
-    parent: str, required
-        name of parent population; the population this gate acts upon
-    class_: str, required
-        name of gating class used to generate gate (see flow.gating.actions)
-    method: str, required
-        name of class method used to generate gate (see flow.gating.actions)
-    kwargs: list
-        list of keyword arguments (list of tuples; first element = key, second element = value) passed to
-        class/method to generate gate
     """
     gate_name = mongoengine.StringField(required=True)
     parent = mongoengine.StringField(required=True)
@@ -121,11 +127,29 @@ class Gate(mongoengine.Document):
                                                                 "ellipse"])
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField(required=True)
+    preprocessing = mongoengine.EmbeddedDocument(PreProcess)
+    method = mongoengine.StringField()
+    method_kwargs = mongoengine.ListField()
+    postprocessing = mongoengine.EmbeddedDocument(PostProcess)
 
     meta = {
         'db_alias': 'core',
         'collection': 'gates'
     }
+
+    def __init__(self,
+                 *args,
+                 **values):
+        super().__init__(*args, **values)
+        self.model = None
+
+    def initialise_model(self):
+        assert self.method, "No method set"
+        if not self.method_kwargs:
+            method_kwargs = {}
+        else:
+            method_kwargs = {k: v for k, v in self.method_kwargs}
+        self.model = importlib.import_module('.'.join(['CytoPy.flow.gates', self.method]))(**method_kwargs)
 
     def get_child_by_definition(self,
                                 definition: str or list) -> ChildDefinition or None:
@@ -332,6 +356,7 @@ class GatingStrategy(mongoengine.Document):
     """
     template_name = mongoengine.StringField(required=True)
     gates = mongoengine.EmbeddedDocumentListField(Gate)
+    control_gates = mongoengine.EmbeddedDocumentListField(ControlGate)
     creation_date = mongoengine.DateTimeField(default=datetime.datetime.now)
     last_edit = mongoengine.DateTimeField(default=datetime.datetime.now)
     flags = mongoengine.StringField(required=False)

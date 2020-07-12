@@ -124,7 +124,7 @@ class ControlIndex(mongoengine.EmbeddedDocument):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.index = None
+        self.index = kwargs.get("index", None)
 
     control_id = mongoengine.StringField()
     _index_file = mongoengine.FileField(db_alias='core', collection_name='control_indexes')
@@ -244,7 +244,7 @@ class Population(mongoengine.EmbeddedDocument):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.index = None
+        self.index = kwargs.get("index", None)
 
     population_name = mongoengine.StringField()
     _index_file = mongoengine.FileField(db_alias='core', collection_name='population_indexes')
@@ -264,18 +264,17 @@ class Population(mongoengine.EmbeddedDocument):
             return 0
         return len(self.index)
 
-    def ctrl_search(self, ctrl_id) -> bool:
+    def get_ctrl(self,
+                 ctrl_id: str) -> ControlIndex or None:
         """
-        If specified control exists in control_idx return True, otherwise False
-
         Returns
         -------
-        bool
+        bool or ControlIndex
         """
         for c in self.control_idx:
             if c.control_id == ctrl_id:
-                return True
-        return False
+                return c
+        return None
 
     def save_index(self) -> None:
         """
@@ -443,28 +442,6 @@ class Population(mongoengine.EmbeddedDocument):
         assert len(clusters) == 1, f'Multiple clusters with ID {cluster_id}'
         return clusters[0], clusters[0].load_index()
 
-    def save_control_idx(self, control_idx: dict):
-        """
-        Save index for control files. Takes a dictionary of values where the key corresponds to the control ID
-        and the value is a numpy array of index values
-
-        Parameters
-        ----------
-        control_idx: dict
-            Dictionary of values where the key corresponds to the control ID
-            and the value is a numpy array of index values
-
-        Returns
-        -------
-        None
-        """
-        new_control_index = list()
-        for control_id, data in control_idx.items():
-            cidx = ControlIndex(control_id=control_id)
-            cidx.save_index(data)
-            new_control_index.append(cidx)
-        self.control_idx = new_control_index
-
 
 class File(mongoengine.EmbeddedDocument):
     """
@@ -599,7 +576,7 @@ class FileGroup(mongoengine.Document):
             List of control IDs for gated controls
         """
         ctrls = self.list_controls()
-        return [c for c in ctrls if all([p.ctrl_search(c) for p in self.populations])]
+        return [c for c in ctrls if all([p.get_ctrl(c) is not None for p in self.populations])]
 
     def list_populations(self) -> iter:
         """
@@ -688,7 +665,8 @@ class FileGroup(mongoengine.Document):
 
     def get_population(self, population_name: str) -> Population:
         """
-        Given the name of a population associated to the FileGroup, returns the Population object
+        Given the name of a population associated to the FileGroup, returns the Population object, with
+        index and control index ready loaded.
 
         Parameters
         ----------
@@ -701,6 +679,10 @@ class FileGroup(mongoengine.Document):
         """
         p = [p for p in self.populations if p.population_name == population_name]
         assert p, f'Population {population_name} does not exist'
+        assert len(p) == 1, f"Multiple populations with name {population_name}, this should never happen!"
+        p[0].load_index()
+        for ctrl in p[0].control_idx:
+            ctrl.load_index()
         return p[0]
 
     def get_population_by_parent(self, parent: str):
