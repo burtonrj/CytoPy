@@ -43,3 +43,7 @@ def which_environment() -> str:
             return 'ipython'
     except:
         return 'terminal'
+
+
+def vprint(verbose: bool):
+    return print if verbose else lambda *a, **k: None
