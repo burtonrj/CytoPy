@@ -313,7 +313,7 @@ class Population(mongoengine.EmbeddedDocument):
         set
             Clustering experiment UIDs
         """
-        return set([c.cluster_experiment.clustering_uid for c in self.clustering])
+        return set([c.cluster_experiment.clustering_uid for c in self.clusters])
 
     def get_many_clusters(self, clustering_uid: str) -> list:
         """
@@ -331,7 +331,7 @@ class Population(mongoengine.EmbeddedDocument):
         """
         if clustering_uid not in self.list_clustering_experiments():
             raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
-        return [c for c in self.clustering if c.cluster_experiment.clustering_uid == clustering_uid]
+        return [c for c in self.clusters if c.cluster_experiment.clustering_uid == clustering_uid]
 
     def delete_clusters(self, clustering_uid: str or None = None, drop_all: bool = False) -> None:
         """
@@ -354,7 +354,7 @@ class Population(mongoengine.EmbeddedDocument):
         assert clustering_uid, 'Must provide a valid clustering experiment UID'
         if clustering_uid not in self.list_clustering_experiments():
             raise ValueError(f'Error: a clustering experiment with UID {clustering_uid} does not exist')
-        self.clusters = [c for c in self.clustering if c.cluster_experiment.clustering_uid != clustering_uid]
+        self.clusters = [c for c in self.clusters if c.cluster_experiment.clustering_uid != clustering_uid]
 
     def replace_cluster_experiment(self, current_uid: str, new_cluster_definition: ClusteringDefinition) -> None:
         """
@@ -372,7 +372,7 @@ class Population(mongoengine.EmbeddedDocument):
         -------
         None
         """
-        for c in self.clustering:
+        for c in self.clusters:
             try:
                 if c.cluster_experiment.clustering_uid == current_uid:
                     c.cluster_experiment = new_cluster_definition
@@ -611,17 +611,6 @@ class FileGroup(mongoengine.Document):
         for p in self.populations:
             yield p.population_name
 
-    def list_gates(self) -> iter:
-        """
-        Yields names of saved gates
-
-        Returns
-        -------
-        Generator
-        """
-        for g in self.gates:
-            yield g.gate_name
-
     def delete_clusters(self, clustering_uid: str or None = None, drop_all: bool = False):
         """
         Delete all cluster attaining to a given clustering UID
@@ -679,26 +668,6 @@ class FileGroup(mongoengine.Document):
         """
         self.populations = [p for p in self.populations if p.population_name != population_name]
         self.populations.append(new_population)
-        self.save()
-
-    def delete_gates(self, gates: list or str):
-        """
-        Delete one or many gates from FileGroup
-
-        Parameters
-        ----------
-        gates: list or str
-            Either a single gate name (str) or list of gate names (list of strings) of gates
-            to remove
-
-        Returns
-        -------
-        None
-        """
-        if gates == all:
-            self.gates = []
-        else:
-            self.gates = [g for g in self.gates if g.gate_name not in gates]
         self.save()
 
     def validity(self) -> bool:
