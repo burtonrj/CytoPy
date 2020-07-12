@@ -12,7 +12,7 @@ from .dbscan import DensityClustering
 from .quantile import Quantile
 from .mixturemodel import MixtureModel
 from .defaults import ChildPopulationCollection
-from .plotting import Plot
+from .plotting import CreatePlot
 from .utilities import get_params, inside_ellipse, inside_polygon
 from ..feedback import progress_bar
 # Housekeeping and other tools
@@ -34,7 +34,9 @@ import numpy as np
 
 
 class Gating:
-    """Central class for performing semi-automated gating and storing gating information on an FCS FileGroup of a single sample.
+    """
+    Central class for performing semi-automated gating and storing gating information on an FCS FileGroup
+    of a single sample.
     
     Parameters
     -----------
