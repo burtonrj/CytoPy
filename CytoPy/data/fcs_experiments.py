@@ -176,28 +176,6 @@ class FCSExperiment(mongoengine.Document):
             return None
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
         return file_grp.id.__str__()
-    
-    def pull_sample_mappings(self, sample_id: str):
-        """
-        Given a sample ID, return a dictionary of channel/marker mappings for all associated fcs files
-
-        Parameters
-        -----------
-        sample_id: str
-            Sample ID for search
-
-        Returns
-        --------
-        dict
-            Dictionary of channel/marker mappings for each associated fcs file
-        """
-        file_grp = self.pull_sample(sample_id)
-        if not file_grp:
-            return None
-        mappings = dict()
-        for f in file_grp.files:
-            mappings[f.file_id] = [m.to_python() for m in f.channel_mappings]
-        return mappings
 
     def pull_sample_data(self, sample_id: str, sample_size: int or None = None, include_controls: bool = True,
                          output_format: str = 'dataframe', columns_default: str = 'marker') -> None or list:
