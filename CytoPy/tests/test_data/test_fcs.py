@@ -19,13 +19,13 @@ class TestFCS(unittest.TestCase):
         # Testing data retrieval
         test_grp = test_exp.pull_sample('dummy_test')
         test_file = test_grp.files[0]
-        self.assertEqual(test_file.pull().shape, (100, 3))
-        self.assertEqual(test_file.pull(sample=10).shape, (10, 3))
+        self.assertEqual(test_file.pull().geom, (100, 3))
+        self.assertEqual(test_file.pull(sample=10).geom, (10, 3))
         data = test_exp.pull_sample_data('dummy_test', include_controls=True)
         primary = [d for d in data if d.get('typ') == 'complete'][0]
         ctrl = [d for d in data if d.get('typ') == 'control'][0]
-        self.assertEqual(primary.get('data').shape, (100, 3))
-        self.assertEqual(ctrl.get('data').shape, (100, 3))
+        self.assertEqual(primary.get('data').geom, (100, 3))
+        self.assertEqual(ctrl.get('data').geom, (100, 3))
         self.assertListEqual(ctrl.get('data').columns.tolist(), ['feature0', 'feature1', 'blobID'])
         data = test_exp.pull_sample_data('dummy_test', include_controls=True, columns_default='channel')
         primary = [d for d in data if d.get('typ') == 'complete'][0]

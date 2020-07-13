@@ -94,7 +94,7 @@ class TestGate(unittest.TestCase):
                     transform_y=None)
         chunks = gate.generate_chunks(chunksize=10)
         self.assertTrue(len(chunks) == 10)
-        self.assertTrue(all(x.shape[0] == 10 for x in chunks))
+        self.assertTrue(all(x.geom[0] == 10 for x in chunks))
 
     def test_generate_poly(self):
         example_data = make_example_date(n_samples=100)

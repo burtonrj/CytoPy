@@ -180,6 +180,8 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
     height = mongoengine.FloatField()
     center = mongoengine.ListField()
     angle = mongoengine.FloatField()
+    x_threshold = mongoengine.FloatField()
+    y_threshold = mongoengine.FloatField()
 
     @property
     def shape(self):
@@ -482,8 +484,8 @@ class File(mongoengine.EmbeddedDocument):
         """
         self.data.seek(0)
         data = pickle.loads(self.data.read())
-        if sample and sample < data.shape[0]:
-            idx = np.random.randint(0, data.shape[0], size=sample)
+        if sample and sample < data.geom[0]:
+            idx = np.random.randint(0, data.geom[0], size=sample)
             return data[idx, :]
         return data
 
@@ -711,11 +713,15 @@ def merge_populations(left_p: Population,
         warn("Associated clusters are now void. Repeat clustering on new population")
     if len(left_p.control_idx) > 0 or len(right_p.control_idx) > 0:
         warn("Associated control indexes are now void. Repeat control gating on new population")
+    new_definition = None
+    if left_p.definition and right_p.definition:
+        new_definition = ",".join([left_p.definition, right_p.definition])
     new_population = Population(population_name=left_p.population_name,
                                 n=len(left_p.index) + len(right_p.index),
                                 parent=left_p.parent,
                                 warnings=left_p.warnings+right_p.warnings+["MERGED POPULATION"],
                                 index=np.unique(np.concatenate(left_p.index, right_p.index)),
-                                geom=unary_union([p.geom.shape for p in [left_p, right_p]]))
+                                geom=unary_union([p.geom.shape for p in [left_p, right_p]]),
+                                definition=new_definition)
     return new_population
 

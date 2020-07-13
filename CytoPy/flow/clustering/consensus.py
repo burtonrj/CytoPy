@@ -59,7 +59,7 @@ class ConsensusCluster:
             Resampled indices and numpy array of resampled data
         """
         resampled_indices = np.random.choice(
-            range(data.shape[0]), size=int(data.shape[0]*proportion), replace=False)
+            range(data.geom[0]), size=int(data.geom[0] * proportion), replace=False)
         return resampled_indices, data[resampled_indices, :]
 
     def fit(self, data: np.array) -> None:
@@ -75,8 +75,8 @@ class ConsensusCluster:
         None
         """
         # Init a connectivity matrix and an indicator matrix with zeros
-        Mk = np.zeros((self.K_-self.L_, data.shape[0], data.shape[0]))
-        Is = np.zeros((data.shape[0],)*2)
+        Mk = np.zeros((self.K_ - self.L_, data.geom[0], data.geom[0]))
+        Is = np.zeros((data.geom[0],) * 2)
         for k in progress_bar(range(self.L_, self.K_)):  # for each number of clusters
             i_ = k-self.L_
             for h in range(self.H_):  # resample H times
@@ -102,8 +102,8 @@ class ConsensusCluster:
             Mk[i_] /= Is+1e-8  # consensus matrix
             # Mk[i_] is upper triangular (with zeros on diagonal), we now make it symmetric
             Mk[i_] += Mk[i_].T
-            Mk[i_, range(data.shape[0]), range(
-                data.shape[0])] = 1  # always with self
+            Mk[i_, range(data.geom[0]), range(
+                data.geom[0])] = 1  # always with self
             Is.fill(0)  # reset counter
         self.Mk = Mk
         # fits areas under the CDFs

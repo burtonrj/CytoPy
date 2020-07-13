@@ -539,7 +539,7 @@ class Explorer:
 
     @staticmethod
     def _no_such_pop_cluster(d, _id):
-        assert d.shape[0] == 0, f'unable to subset data on {_id}'
+        assert d.geom[0] == 0, f'unable to subset data on {_id}'
 
     def plot_2d(self, primary_id: dict, x: str, y: str, secondary_id: dict or None = None,
                 xlim: tuple or None = None, ylim: tuple or None = None) -> plt.Axes:
@@ -589,7 +589,7 @@ class Explorer:
         if secondary_id is not None:
             d2 = self.data[self.data[secondary_id['column_name']] == secondary_id['value']]
 
-        if d.shape[0] < 1000:
+        if d.geom[0] < 1000:
             ax.scatter(d[x], d[y], marker='o', s=1, c='b', alpha=0.8, label=primary_id['value'])
         else:
             ax.hist2d(d[x], d[y], bins=500, norm=LogNorm(), label=primary_id['value'])
@@ -846,7 +846,7 @@ class SingleClustering(Clustering):
         index = self.data.index[index_mask]
         self.clusters[name] = dict(index=index,
                                    n_events=len(index),
-                                   prop_of_root=len(index)/self.data.shape[0])
+                                   prop_of_root=len(index)/self.data.geom[0])
 
     def save_clusters(self, overwrite: bool = False):
         """
@@ -980,7 +980,7 @@ class GlobalClustering(Clustering):
 
             # Downsample
             if sample_n is not None:
-                if sample_n < fdata.shape[0]:
+                if sample_n < fdata.geom[0]:
                     fdata = fdata.sample(n=sample_n)
 
             # Label each single cell (row) with
@@ -1113,7 +1113,7 @@ class MetaClustering(Clustering):
             for c_name in clustering.clusters.keys():
                 c_data = clustering.get_cluster_dataframe(c_name)
                 n = c_data.shape[0]
-                relative_n = n/clustering.data.shape[0]
+                relative_n = n/clustering.data.geom[0]
                 pop_label = c_data['population_label'].mode()[0]
                 c_data = c_data.median()
                 c_data['population_label'] = pop_label

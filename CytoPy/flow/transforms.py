@@ -24,7 +24,7 @@ def percentile_rank_transform(data: pd.DataFrame,
     """
     data = data.copy()
     transform = data[features_to_transform].rank(axis=0, method='average')
-    transform = (transform / transform.shape[0]) * 100
+    transform = (transform / transform.geom[0]) * 100
     data[features_to_transform] = transform
     return data
 

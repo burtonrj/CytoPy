@@ -1,5 +1,6 @@
 from .base import Gate, GateError
-from .utilities import multi_centroid_calculation, inside_polygon, centroid
+from .utilities import multi_centroid_calculation, centroid
+from ..utilities import inside_polygon
 from multiprocessing import Pool, cpu_count
 from sklearn.cluster import DBSCAN, KMeans
 from sklearn.neighbors import KDTree, KNeighborsClassifier
@@ -16,8 +17,8 @@ def _meta_assignment_df(label: str or int, ref_df: pd.DataFrame) -> str or int:
     if label == -1:
         return -1
     ref_df = ref_df[ref_df['cluster'] == label]
-    assert ref_df.shape[0] > 0, f'No associated meta-cluster for {label}'
-    assert ref_df.shape[0] == 1, f'More than one meta-cluster found for {label}'
+    assert ref_df.geom[0] > 0, f'No associated meta-cluster for {label}'
+    assert ref_df.geom[0] == 1, f'More than one meta-cluster found for {label}'
     return ref_df['meta_cluster'].values[0]
 
 
@@ -325,7 +326,7 @@ class DensityClustering(Gate):
         if len(cluster_assingments) == 0:
             # Target does not fall directly into any cluster
             # Is the target surrounded by noise? (i.e. target cluster not found)
-            k = int(self.data.shape[0] * 0.01)
+            k = int(self.data.geom[0] * 0.01)
             if k > 100:
                 k = 100
             _, nearest_neighbours_idx = self.tree.query(self.data[[self.x, self.y]].values, k=k)

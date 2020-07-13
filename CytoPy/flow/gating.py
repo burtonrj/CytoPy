@@ -1,8 +1,11 @@
 from ..data.fcs_experiments import FCSExperiment
 from ..data.fcs import Population, ControlIndex, PopulationGeometry
 from ..data.gating import Gate, ControlGate, PreProcess, PostProcess
-from .transforms import apply_transform
+from .dim_reduction import dimensionality_reduction
+from .transforms import apply_transform, scaler
 from .feedback import progress_bar, vprint
+from .utilities import density_dependent_downsample, faithful_downsampling
+from .plotting import CreatePlot
 from anytree import Node, findall
 from warnings import warn
 import pandas as pd
@@ -55,6 +58,7 @@ class Gating:
         self.tree = self._construct_tree()
         self.verbose = verbose
         self.vprint = vprint(verbose)
+        self.preview_cache = None
 
     def _construct_tree(self):
         if not self.filegroup.populations:
@@ -138,7 +142,7 @@ class Gating:
         ----------
         population_name : str
             name of population to retrieve
-        transform : str, (default='logicle')
+        transform : str or None, (default='logicle')
             transformation method to apply, default = 'logicle' (ignored if transform is False)
         transform_features : list or str, (default='all')
             argument specifying which columns to transform in the returned dataframe. Can either
@@ -233,10 +237,11 @@ class Gating:
                     gate_name: str,
                     parent: str,
                     x: str,
-                    y: str,
                     shape: str,
+                    y: str or None = None,
+                    binary: bool = True,
                     method: str or None = None,
-                    model_kwargs: dict or None = None,
+                    method_kwargs: dict or None = None,
                     preprocessing_kwargs: dict or None = None,
                     postprocessing_kwargs: dict or None = None):
         assert gate_name not in self.gates.keys(), f"{gate_name} already exists!"
@@ -250,22 +255,25 @@ class Gating:
                 assert x == "embedding1", "If using dim_reduction, x should have a value 'embedding1'"
                 assert y == "embedding2", "If using dim_reduction, x should have a value 'embedding2'"
         if shape == "threshold":
+            if "method" != "DensityGate":
+                warn("Shape set to 'threshold', defaulting to DensityGate")
             method = "DensityGate"
         if shape == "ellipse":
-            err = "For an elliptical gate, expect method 'GaussianMixtureGate', 'BayesGaussianMixtureGate', " \
-                  "or 'KMeansGate'"
-            assert method in ["GaussianMixtureGate", "BayesGaussianMixtureGate"], err
+            err = "For an elliptical gate, expect method 'GaussianMixture', 'BayesianGaussianMixture', " \
+                  "or 'KMeans'"
+            assert method in ["GaussianMixture", "BayesianGaussianMixture"], err
             if method is None:
-                warn("Method not given, defaulting to BayesGaussianMixtureGate")
-                method = "BayesGaussianMixtureGate"
+                warn("Method not given, defaulting to BayesianGaussianMixture")
+                method = "BayesianGaussianMixture"
+                method_kwargs = {"n_com"}
         if shape == "polygon":
-            accepted_methods = ["AffinityGate",
-                                "HierarchicalGate",
-                                "BirchGate",
-                                "DbscanGate",
-                                "HdbscanGate",
-                                "MeanShiftGate",
-                                "SpectralGate"]
+            accepted_methods = ["Affinity",
+                                "Hierarchical",
+                                "Birch",
+                                "Dbscan",
+                                "Hdbscan",
+                                "MeanShift",
+                                "Spectral"]
             err = f"For a polygon gate, accepted methods are: {accepted_methods}"
             assert method in accepted_methods, err
             assert method, "For a polygon gate, the user must specify the method"
@@ -274,19 +282,81 @@ class Gating:
                     geom_type=shape,
                     x=x,
                     y=y,
+                    binary=binary,
                     method=method,
-                    method_kwargs=[(k, v) for k, v in model_kwargs.items()],
+                    method_kwargs=[(k, v) for k, v in method_kwargs.items()],
                     preprocessing_kwargs=PreProcess(**preprocessing_kwargs),
                     postprocessing_kwargs=PostProcess(**postprocessing_kwargs))
         gate.initialise_model()
         return gate
 
-    def preview(self, gate: Gate):
-        # Apply preprocessing
+    def _preprocessing(self,
+                       gate: Gate):
+        # Get the population data and transform if required
+        if gate.preprocessing.dim_reduction:
+            # Perform dimensionality reduction
+            err = "Invalid Gate: when performing dimensionality reduction, transform_x and transform_y must be equal"
+            assert gate.preprocessing.transform_x == gate.preprocessing.transform_y, err
+            data = self.get_population_df(population_name=gate.parent,
+                                          transform=gate.preprocessing.transform_x,
+                                          transform_features="all")
+            kwargs = {k: v for k, v in gate.preprocessing.dim_reduction_kwargs}
+            data = pd.DataFrame(dimensionality_reduction(data=data,
+                                                         method=gate.preprocessing.dim_reduction,
+                                                         n_components=2,
+                                                         return_reducer=False,
+                                                         return_embeddings_only=True,
+                                                         **kwargs),
+                                columns=["embedding1", "embedding2"])
+        else:
+            data = self.get_population_df(population_name=gate.parent, transform=None)
+            if gate.preprocessing.transform_x:
+                data = apply_transform(data=data,
+                                       transform_method=gate.preprocessing.transform_x,
+                                       features_to_transform=[gate.x])
+            if gate.preprocessing.transform_y:
+                data = apply_transform(data=data,
+                                       transform_method=gate.preprocessing.transform_y,
+                                       features_to_transform=[gate.y])
+            data = data[[gate.x, gate.y]]
+        # Perform additional scaling if requested
+        if gate.preprocessing.scale:
+            kwargs = {k: v for k, v in gate.preprocessing.scale_kwargs}
+            data = pd.DataFrame(scaler(data.values, gate.preprocessing.scale, **kwargs),
+                                columns=data.columns)
+        # Perform downsampling if requested
+        if gate.preprocessing.downsample_method:
+            kwargs = {k: v for k, v in gate.preprocessing.downsample_kwargs}
+            if gate.preprocessing.downsample_method == "uniform":
+                assert "sample_n" in kwargs.keys(), "Invalid Gate: for uniform downsampling expect 'sample_n' in " \
+                                                    "downsample_kwargs"
+                n = kwargs.get("sample_n")
+                if type(n) == int:
+                    return data.sample(n=n)
+                return data.sample(frac=float(n))
+            elif gate.preprocessing.downsample_method == "density":
+                return density_dependent_downsample(data=data,
+                                                    features=data.columns,
+                                                    **kwargs)
+            elif gate.preprocessing.downsample_method == "faithful":
+                assert "h" in kwargs.keys(), "Invalid Gate: for faithful downsampling, 'h' expected in " \
+                                             "downsampling_kwargs"
+                return pd.DataFrame(faithful_downsampling(data=data, h=kwargs.get("h")),
+                                    columns=data.columns)
+            raise ValueError("Invalid Gate: downsampling_method must be one of: uniform, density, or faithful")
+        return data
+
+    def preview(self,
+                gate: Gate,
+                stats: bool = True):
+        data = self._preprocessing(gate=gate)
         # fit model
-        # Generate geoms
+        populations = gate.model.fit(data)
         # Cache results
+        self.preview_cache = {"data": data,
+                              "populations": populations}
         # Plot with CreatePlot, complete with legend
+        plotting = CreatePlot()
         # Print stats
         return gate
 
@@ -294,7 +364,10 @@ class Gating:
               gate: Gate or None = None,
               gate_name: str or None = None,
               labels: dict or None = None,
-              plot_outcome: bool = True):
+              plot_outcome: bool = True,
+              preprocess_kwargs: dict or None = None,
+              method_kwargs: dict or None = None,
+              postprocess_kwargs: dict or None = None):
         # If Gate, check cache. If cached, label populations using labels and save
         # If Gate but not cache, fit and then label using labels, then save
         # If gate name, load and init Gate object. Fit model and estimate population labels, save.
@@ -331,6 +404,3 @@ class Gating:
 
     def check_downstream_overlaps(self):
         pass
-
-
-

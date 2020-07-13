@@ -30,8 +30,8 @@ class TestGating(unittest.TestCase):
 
     def test_build(self):
         gate = self._build()
-        self.assertEqual(gate.data.shape, (100, 3))
-        self.assertEqual(gate.ctrl.get('dummy_ctrl').shape, (100, 3))
+        self.assertEqual(gate.data.geom, (100, 3))
+        self.assertEqual(gate.ctrl.get('dummy_ctrl').geom, (100, 3))
         self.assertEqual(len(gate.populations), 1)
 
     @staticmethod
@@ -94,21 +94,21 @@ class TestGating(unittest.TestCase):
                                       transform_features='all',
                                       label=False,
                                       ctrl_id=None)
-        self.assertEqual(test.shape, (100, 3))
+        self.assertEqual(test.geom, (100, 3))
         test = gate.get_population_df(population_name='root',
                                       transform=True,
                                       transform_method='logicle',
                                       transform_features='all',
                                       label=True,
                                       ctrl_id=None)
-        self.assertEqual(test.shape, (100, 4))
+        self.assertEqual(test.geom, (100, 4))
         test = gate.get_population_df(population_name='root',
                                       transform=True,
                                       transform_method='logicle',
                                       transform_features='all',
                                       label=False,
                                       ctrl_id='dummy_ctrl')
-        self.assertEqual(test.shape, (100, 3))
+        self.assertEqual(test.geom, (100, 3))
 
     def test_valid_pops(self):
         gate = self._build()
@@ -128,7 +128,7 @@ class TestGating(unittest.TestCase):
         df = gate.search_ctrl_cache(target_population='root',
                                     ctrl_id='dummy_ctrl',
                                     return_dataframe=True)
-        self.assertEqual(df.shape, (100, 3))
+        self.assertEqual(df.geom, (100, 3))
 
     def test_update_populations(self):
         g = self._add_population(self._build())
@@ -142,13 +142,13 @@ class TestGating(unittest.TestCase):
         self.assertListEqual(list(g.populations.get('negative').index),
                              list(neg_idx))
         self.assertEqual(g.populations.get('positive').prop_of_parent,
-                         len(pos_idx)/data.shape[0])
+                         len(pos_idx) / data.geom[0])
         self.assertEqual(g.populations.get('positive').prop_of_total,
-                         len(pos_idx)/data.shape[0])
+                         len(pos_idx) / data.geom[0])
         self.assertEqual(g.populations.get('negative').prop_of_parent,
-                         len(neg_idx)/data.shape[0])
+                         len(neg_idx) / data.geom[0])
         self.assertEqual(g.populations.get('negative').prop_of_total,
-                         len(neg_idx)/data.shape[0])
+                         len(neg_idx) / data.geom[0])
         self.assertEqual(g.populations.get('positive').parent.name, 'root')
         self.assertEqual(g.populations.get('negative').parent.name, 'root')
         self.assertDictEqual(g.populations.get('positive').geom,

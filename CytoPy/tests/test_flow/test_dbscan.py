@@ -58,7 +58,7 @@ class TestDBSCAN(unittest.TestCase):
         data = gate.data.copy()
         data['chunk_idx'] = 0
         cluster_centroids = gate._meta_clustering(clustered_chunks=[data])
-        self.assertEqual(cluster_centroids.shape[0], 3)
+        self.assertEqual(cluster_centroids.geom[0], 3)
 
     def test_post_cluster_checks(self):
         gate = self._build()
