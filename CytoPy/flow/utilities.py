@@ -1,11 +1,13 @@
-from sklearn.neighbors import BallTree, KernelDensity
-from sklearn.model_selection import GridSearchCV
-from scipy.stats import entropy as kl_divergence
-import pandas as pd
-import numpy as np
 from ..data.fcs_experiments import FCSExperiment
 from .gating.actions import Gating
 from .transforms import scaler
+from functools import partial
+from sklearn.neighbors import BallTree, KernelDensity, KDTree
+from sklearn.model_selection import GridSearchCV
+from shapely.geometry import Polygon, Point
+from scipy.stats import entropy as kl_divergence
+import pandas as pd
+import numpy as np
 
 
 def faithful_downsampling(data: np.array,
@@ -28,7 +30,7 @@ def faithful_downsampling(data: np.array,
         Down-sampled array
     """
     communities = None
-    registered = np.zeros(data.shape[0])
+    registered = np.zeros(data.geom[0])
     tree = BallTree(data)
     while not all([x == 1 for x in registered]):
         i_ = np.random.choice(np.where(registered == 0)[0])
@@ -155,7 +157,7 @@ def kde_multivariant(x: np.array,
     kde = KernelDensity(bandwidth=bandwidth, **kwargs)
     kde.fit(x)
     if bins is not None:
-        x_grid = np.array([np.linspace(np.amin(x), np.amax(x), bins) for _ in range(x.shape[1])])
+        x_grid = np.array([np.linspace(np.amin(x), np.amax(x), bins) for _ in range(x.geom[1])])
         log_pdf = kde.score_samples(x_grid.T)
     else:
         log_pdf = kde.score_samples(x)
@@ -253,3 +255,158 @@ def load_and_transform(sample_id: str,
     return data
 
 
+def inside_ellipse(data: np.array,
+                   center: tuple,
+                   width: int or float,
+                   height: int or float,
+                   angle: int or float) -> object:
+    """
+    Return mask of two dimensional matrix specifying if a data point (row) falls
+    within an ellipse
+
+    Parameters
+    -----------
+    data: Numpy.array
+        two dimensional matrix (x,y)
+    center: tuple
+        x,y coordinate corresponding to center of elipse
+    width: int or float
+        semi-major axis of eplipse
+    height: int or float
+        semi-minor axis of elipse
+    angle: int or float
+        angle of ellipse
+
+    Returns
+    --------
+    Numpy.array
+        numpy array of indices for values inside specified ellipse
+    """
+    cos_angle = np.cos(np.radians(180.-angle))
+    sin_angle = np.sin(np.radians(180.-angle))
+
+    x = data[:, 0]
+    y = data[:, 1]
+
+    xc = x - center[0]
+    yc = y - center[1]
+
+    xct = xc * cos_angle - yc * sin_angle
+    yct = xc * sin_angle + yc * cos_angle
+
+    rad_cc = (xct ** 2 / (width / 2.)**2) + (yct**2 / (height / 2.)**2)
+
+    in_ellipse = []
+
+    for r in rad_cc:
+        if r <= 1.:
+            # point in ellipse
+            in_ellipse.append(True)
+        else:
+            # point not in ellipse
+            in_ellipse.append(False)
+    return in_ellipse
+
+
+def density_dependent_downsample(data: pd.DataFrame,
+                                 features: list,
+                                 frac: float = 0.1,
+                                 sample_n: int or None = None,
+                                 alpha: int = 5,
+                                 mmd_sample_n: int = 2000,
+                                 outlier_dens: float = 1,
+                                 target_dens: float = 5):
+    """
+    Perform density dependent down-sampling to remove risk of under-sampling rare populations;
+    adapted from SPADE*
+
+    * Extracting a cellular hierarchy from high-dimensional cytometry data with SPADE
+    Peng Qiu-Erin Simonds-Sean Bendall-Kenneth Gibbs-Robert
+    Bruggner-Michael Linderman-Karen Sachs-Garry Nolan-Sylvia Plevritis - Nature Biotechnology - 2011
+
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+        Data to sample
+    features: list
+        Name of columns to be used as features in down-sampling algorithm
+    frac: float, (default=0.1)
+        fraction of dataset to return as a sample
+    sample_n: int, optional
+        number of events to return in sample (used as alternative to frac)
+    alpha: int, (default=5)
+        used for estimating distance threshold between cell and nearest neighbour (default = 5 used in
+        original paper)
+    mmd_sample_n: int, (default=2000)
+        number of cells to sample for generation of KD tree
+    outlier_dens: float, (default=1)
+        used to exclude cells with the lowest local densities; int value as a percentile of the
+        lowest local densities e.g. 1 (the default value) means the bottom 1% of cells with lowest local densities
+        are regarded as noise
+    target_dens: float, (default=5)
+        determines how many cells will survive the down-sampling process; int value as a
+        percentile of the lowest local densities e.g. 5 (the default value) means the density of bottom 5% of cells
+        will serve as the density threshold for rare cell populations
+
+    Returns
+    -------
+    Pandas.DataFrame
+        Down-sampled pandas dataframe
+    """
+
+    def prob_downsample(local_d, target_d, outlier_d):
+        if local_d <= outlier_d:
+            return 0
+        if outlier_d < local_d <= target_d:
+            return 1
+        if local_d > target_d:
+            return target_d / local_d
+
+    df = data.copy()
+    mmd_sample = df.sample(mmd_sample_n)
+    tree = KDTree(mmd_sample[features], metric='manhattan')
+    dist, _ = tree.query(mmd_sample[features], k=2)
+    dist = np.median([x[1] for x in dist])
+    dist_threshold = dist * alpha
+    ld = tree.query_radius(df[features], r=dist_threshold, count_only=True)
+    od = np.percentile(ld, q=outlier_dens)
+    td = np.percentile(ld, q=target_dens)
+    prob_f = partial(prob_downsample, target_d=td, outlier_d=od)
+    prob = list(map(lambda x: prob_f(x), ld))
+    if sum(prob) == 0:
+        print('Error: density dependendent downsampling failed; weights sum to zero. Defaulting to uniform '
+              'samplings')
+        if sample_n is not None:
+            return df.sample(n=sample_n)
+        return df.sample(frac=frac)
+    if sample_n is not None:
+        return df.sample(n=sample_n, weights=prob)
+    return df.sample(frac=frac, weights=prob)
+
+
+def inside_polygon(df: pd.DataFrame,
+                   x: str,
+                   y: str,
+                   poly: Polygon):
+    """
+    Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
+
+    Parameters
+    ----------
+    df: Pandas.DataFrame
+        Data to query
+    x: str
+        name of x-axis plane
+    y: str
+        name of y-axis plane
+    poly: shapely.geometry.Polygon
+        Polygon object to search
+
+    Returns
+    --------
+    Pandas.DataFrame
+        Masked DataFrame containing only those rows that fall within the Polygon
+    """
+    xy = df[[x, y]].values
+    pos_idx = list(map(lambda i: poly.contains(Point(i)), xy))
+    return df.iloc[pos_idx]

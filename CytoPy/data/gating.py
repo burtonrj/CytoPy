@@ -1,4 +1,5 @@
 from .fcs import PopulationGeometry, Population, merge_populations
+from ..flow.gates import Base, ManualGate, DensityGate
 from functools import reduce
 from typing import List
 from warnings import warn
@@ -18,8 +19,10 @@ class ControlGate(mongoengine.Document):
 class PreProcess(mongoengine.EmbeddedDocument):
     downsample_method = mongoengine.StringField()
     downsample_kwargs = mongoengine.ListField()
-    transform = mongoengine.StringField()
+    transform_x = mongoengine.StringField()
+    transform_y = mongoengine.StringField()
     scale = mongoengine.StringField()
+    scale_kwargs = mongoengine.ListField()
     dim_reduction = mongoengine.StringField()
     dim_reduction_kwargs = mongoengine.ListField()
 
@@ -82,7 +85,7 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
                    value: list or str):
         if self._instance.binary:
             assert value in ["+", "-"], "Binary gate assumes Child definition is either '+' or '-'"
-        elif self._instance.geom_type == "threshold":
+        elif self._instance.geom == "threshold":
             acceptable = ["++", "--", "+-", "-+"]
             err = f"Non-binary gate of type threshold assumes Child " \
                   f"definition is one or more of {acceptable}"
@@ -100,14 +103,14 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
     def template_geometry(self,
                           properties: dict):
         new_template = PopulationGeometry()
-        if self._instance.geom_type == "threshold":
+        if self._instance.geom == "threshold":
             warn("Threshold gate does not require template geometry. Input will be ignored.")
-        elif self._instance.geom_type == "polygon":
+        elif self._instance.geom == "polygon":
             for required in ["x_values", "y_values"]:
                 assert required in properties.keys(), f"{required} required for polygon gate"
                 new_template[required] = properties.get(required)
             self._template_geometry = new_template
-        elif self._instance.geom_type == "ellipse":
+        elif self._instance.geom == "ellipse":
             for required in ["width", "height", "center", "angle"]:
                 assert required in properties.keys(), f"{required} required for ellipse gate"
                 new_template[required] = properties.get(required)
@@ -122,9 +125,9 @@ class Gate(mongoengine.Document):
     parent = mongoengine.StringField(required=True)
     children = mongoengine.EmbeddedDocumentListField(ChildDefinition)
     binary = mongoengine.BooleanField(default=True)
-    geom_type = mongoengine.StringField(required=True, choices=["threshold",
-                                                                "polygon",
-                                                                "ellipse"])
+    shape = mongoengine.StringField(required=True, choices=["threshold",
+                                                            "polygon",
+                                                            "ellipse"])
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField(required=True)
     preprocessing = mongoengine.EmbeddedDocument(PreProcess)
@@ -141,7 +144,7 @@ class Gate(mongoengine.Document):
                  *args,
                  **values):
         super().__init__(*args, **values)
-        self.model = None
+        self.model = values.get("model", None)
 
     def initialise_model(self):
         assert self.method, "No method set"
@@ -149,24 +152,43 @@ class Gate(mongoengine.Document):
             method_kwargs = {}
         else:
             method_kwargs = {k: v for k, v in self.method_kwargs}
-        self.model = importlib.import_module('.'.join(['CytoPy.flow.gates', self.method]))(**method_kwargs)
+        if self.method == "ManualGate":
+            self.model = ManualGate(x=self.x,
+                                    y=self.y,
+                                    shape=self.shape,
+                                    parent=self.parent,
+                                    binary=self.binary,
+                                    **method_kwargs)
+        elif self.method == "DensityGate":
+            self.model = DensityGate(x=self.x,
+                                     y=self.y,
+                                     shape=self.shape,
+                                     parent=self.parent,
+                                     binary=self.binary,
+                                     **method_kwargs)
+        else:
+            self.model = Base(x=self.x,
+                              y=self.y,
+                              shape=self.shape,
+                              parent=self.parent,
+                              binary=self.binary,
+                              **method_kwargs)
 
     def get_child_by_definition(self,
-                                definition: str or list) -> ChildDefinition or None:
+                                definition: str) -> ChildDefinition or None:
         """
         Given a definition (assume a binary gate or threshold gate) return the corresponding ChildDefinition i.e.
         the child population this gate associates to this definition. Returns None if no match found.
 
         Parameters
         ----------
-        definition: str or list
+        definition: str
         Returns
         -------
         ChildDefinition or None
         """
-        if type(definition) == list:
-            assert not self.binary, "Binary gate: definition should be a string of value '+' or '-'"
-            definition = ",".join(definition)
+        if self.binary:
+            assert definition in ["+", "-"], "Binary gate: definition should be a string of value '+' or '-'"
         for child in self.children:
             if child.definition == definition:
                 return child
@@ -225,15 +247,18 @@ class Gate(mongoengine.Document):
                 warn(err)
             else:
                 raise ValueError(err)
+        # Merge where a population has multiple definitions
+        if len(set([c.population_name for c in new_children])) < len(new_children):
+            return self._merge(new_children, assignments=[c.population_name for c in new_children])
         return new_children
 
-    def label_populations(self,
-                          new_children: List[Population],
-                          errors: str = "warn",
-                          overlaps: str = "merge",
-                          overlap_threshold: float = .1):
+    def _assign_new_populations(self,
+                                new_children: List[Population],
+                                errors: str = "warn",
+                                overlaps: str = "merge",
+                                overlap_threshold: float = .1):
         """
-        Given a new lift of Population's generated by the application of this Gate, label the Population's according
+        Given a list of new Population's generated by the application of this Gate, label the Population's according
         to the expected population's (as defined in the ChildDefinition's embedded in this document) and their
         associated PopulationGeometry's.
 
@@ -269,7 +294,7 @@ class Gate(mongoengine.Document):
                 warn(err)
             else:
                 raise ValueError(err)
-        elif self.geom_type == "threshold":
+        elif self.shape == "threshold":
             new_children = self._label_threshold(new_children=new_children,
                                                  errors=errors)
         else:
@@ -303,10 +328,10 @@ class Gate(mongoengine.Document):
         # Build geometries
         assignments = list()
         for child in new_children:
-            ranking = [child.geom.overlap(comparison_poly=template.template_geometry.shape,
+            ranking = [child.geom.overlap(comparison_poly=template.template_geometry.geom,
                                           threshold=overlap_threshold) for template in self.children]
             if all(x == 0. for x in ranking):
-                ranking = [child.geom.centroid.distance(template.template_geometry.shape.centroid)
+                ranking = [child.geom.centroid.distance(template.template_geometry.geom.centroid)
                            for template in self.children]
                 assignments.append(self.children[int(np.argmin(ranking))].population_name)
             else:

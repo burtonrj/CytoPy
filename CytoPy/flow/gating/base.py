@@ -1,6 +1,6 @@
 from .defaults import ChildPopulationCollection
 from ..transforms import apply_transform
-from .utilities import density_dependent_downsample
+from ..utilities import density_dependent_downsample
 from shapely.geometry.polygon import Polygon
 from scipy.spatial import ConvexHull
 from functools import partial

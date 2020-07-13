@@ -126,7 +126,7 @@ class DeepGating(CellClassifier):
         # Construct a feed-forward neural network.
         # Input layer
         model.add(Dense(self.hidden_layer_sizes[0], activation=self.activation_func,
-                        W_regularizer=l2(self.l2_penalty), input_shape=(self.train_X.shape[1],)))
+                        W_regularizer=l2(self.l2_penalty), input_shape=(self.train_X.geom[1],)))
 
         for i in range(self.n_layers - 2):
             model.add(Dense(self.hidden_layer_sizes[i+1], activation=self.activation_func,

@@ -1,4 +1,5 @@
-from .utilities import inside_ellipse, rectangular_filter
+from .utilities import rectangular_filter
+from ..utilities import inside_ellipse
 from .base import Gate, GateError
 from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
 from scipy import linalg, stats

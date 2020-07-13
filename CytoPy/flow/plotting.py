@@ -1,8 +1,10 @@
-from ...flow.transforms import apply_transform
+from ..data.gating import Gate
+from ..data.fcs import Population
+from ..flow.transforms import apply_transform
 from warnings import warn
+from typing import List
 import matplotlib
 import matplotlib.pyplot as plt
-from .actions import Gating
 from matplotlib.colors import LogNorm
 from matplotlib import patches
 from itertools import cycle
@@ -20,8 +22,6 @@ class CreatePlot:
 
     Parameters
     -----------
-    gating: Gating, required
-        Gating object with associated cytometry sample and gating hierarchy
     transform_x: str (default = "logicle")
         How to transform the x-axis. Method 'plot_gate' overwrites this value with the value associated with
         the gate
@@ -53,8 +53,8 @@ class CreatePlot:
     bw: str or float, (default="scott")
         Bandwidth for 1D KDE (see seaborn.kdeplot)
     """
+
     def __init__(self,
-                 gating: Gating,
                  transform_x: str = "logicle",
                  transform_y: str = "logicle",
                  xlabel: str or None = None,
@@ -69,7 +69,6 @@ class CreatePlot:
                  style: str or None = "white",
                  font_scale: float or None = 1.2,
                  bw: str or float = "scott"):
-        self.gating = gating
         self.tranforms = {'x': transform_x, 'y': transform_y}
         self.labels = {'x': xlabel, 'y': ylabel}
         self.lims = {'x': xlim, 'y': ylim}
@@ -210,7 +209,7 @@ class CreatePlot:
             Data to plot
         x: str
             Name of X-axis channel
-        y: str
+        y: str or None
             Name of Y-axis channel
 
         Returns
@@ -245,27 +244,27 @@ class CreatePlot:
         if type(self.bins) == int:
             return self.bins
         if self.bins == "scotts":
-            return int(3.49 * x.std()) / np.cbrt(x.shape[0])
+            return int(3.49 * x.std()) / np.cbrt(x.geom[0])
         if self.bins == "sturges":
-            return int(np.log2(x.shape[0])) + 1
+            return int(np.log2(x.geom[0])) + 1
         if self.bins == "rice":
-            return int(2 * np.cbrt(x.shape[0]))
+            return int(2 * np.cbrt(x.geom[0]))
         if self.bins == "sqrt":
             return int(np.sqrt(x))
         raise ValueError("""bins should be an integer or one of : "scotts", "sturges", "rice", or "sqrt""")
 
-    def plot_population(self,
-                        population_name: str,
-                        x: str,
-                        y: str or None = None,
-                        **kwargs):
+    def plot(self,
+             data: pd.DataFrame,
+             x: str,
+             y: str or None = None,
+             **kwargs):
         """
         Plot a single population as either a 2D histogram or 1D KDE
 
         Parameters
         ----------
-        population_name: str
-            Name of the population to view
+        data: Pandas.DataFrame
+            Population dataframe
         x: str
             Channel to plot on the x-axis
         y: str, optional
@@ -279,8 +278,6 @@ class CreatePlot:
         Matplotlib.pyplot.axes
             Axis object
         """
-        data = self.gating.get_population_df(population_name=population_name,
-                                             transform=False).copy()
         if y is None:
             self._hist1d(data=data, x=x, **kwargs)
         else:
@@ -290,7 +287,9 @@ class CreatePlot:
         return self._ax
 
     def plot_gate(self,
-                  gate_name: str,
+                  gate: Gate,
+                  parent: pd.DataFrame,
+                  children: List[Population],
                   lw: float = 2.5,
                   plot_kwargs: dict or None = None,
                   legend_kwargs: dict or None = None):
@@ -301,8 +300,9 @@ class CreatePlot:
 
         Parameters
         ----------
-        gate_name: str
-            Name of the Gate to plot
+        children
+        parent
+        gate
         lw: float (default = 2.5)
             Linewidth for shapes to plot
         plot_kwargs:
@@ -325,55 +325,51 @@ class CreatePlot:
                               "#000000",
                               "#64b9c4",
                               "#9e3657"])
+        assert len(children) == len(gate.children), f"Number of given geometries does not match expected " \
+                                                    f"number of children from gate {gate.gate_name}"
+        for child in gate.children:
+            err = f"{child.population_name} missing from given geometries"
+            assert child.population_name in [c.population_name for c in children], err
         if plot_kwargs is None:
             plot_kwargs = {}
         if legend_kwargs is None:
             legend_kwargs = {}
-        gate = self.gating.gates.get(gate_name)
-        assert gate is not None, "Invalid gate name"
-        data = self.gating.get_population_df(population_name=gate.patent,
-                                             transform=False)
-        self.tranforms = {"x": gate.x_transform,
-                                  "y": gate.y_transform}
-        self._ax = self.plot_population(data=data,
-                                        x=gate.x,
-                                        y=gate.y,
-                                        **plot_kwargs)
-        children = [self.gating.populations.get(c) for c in gate.children]
-        if gate.shape == "threshold_1d" or gate.shape == "threshold_2d":
-            x, y = children[0].shape.x, children[0].shape.y
+        # Plot the parent population
+        self.tranforms = {"x": gate.preprocessing.transform_x,
+                          "y": gate.preprocessing.transform_y}
+        self._ax = self.plot(data=parent,
+                             x=gate.x,
+                             y=gate.y,
+                             **plot_kwargs)
+        # If threshold, add threshold lines to plot and return axes
+        if gate.shape == "threshold":
+            x = children[0].geom.x_threshold
+            y = children[0].geom.y_threshold
             self._add_threshold(x=x,
                                 y=y,
-                                labels={c.definition: c.name for c in children},
+                                labels={c.definition: c.population_name for c in children},
                                 lw=lw)
             return self._ax
+        # Otherwise, we assume some other shape
         count = 0
         for child_name in gate.children:
             count += 1
             colour = next(gate_colours)
-            child = self.gating.populations.get(child_name)
+            child_shape = [c for c in children if c.population_name == child_name][0].geom
             if gate.shape == "polygon":
-                self._add_polygon(x_values=child.shape.x_values,
-                                  y_values=child.shape.y_values,
+                self._add_polygon(x_values=child_shape.x_values,
+                                  y_values=child_shape.y_values,
                                   colour=colour,
                                   label=child_name,
                                   lw=lw)
             elif gate.shape == "ellipse":
-                self._add_ellipse(center=child.shape.center,
-                                  width=child.shape.width,
-                                  height=child.shape.height,
-                                  angle=child.shape.height,
+                self._add_ellipse(center=child_shape.center,
+                                  width=child_shape.width,
+                                  height=child_shape.height,
+                                  angle=child_shape.height,
                                   colour=colour,
                                   lw=lw,
                                   label=child_name)
-            elif gate.shape == "rectangle":
-                self._add_rectangle(xmin=child.shape.xmin,
-                                    xmax=child.shape.xmax,
-                                    ymin=child.shape.ymin,
-                                    ymax=child.shape.ymax,
-                                    colour=colour,
-                                    lw=lw,
-                                    label=child_name)
                 raise ValueError(f"Gate shape not recognised: {gate.shape}")
             if len(gate.children) == 2 and gate.binary:
                 # Gate produces exactly two populations: within gate and outside of gate
@@ -451,47 +447,6 @@ class CreatePlot:
                                   label=label)
         self._ax.add_patch(ellipse)
 
-    def _add_rectangle(self,
-                       xmin: float,
-                       xmax: float,
-                       ymin: float,
-                       ymax: float,
-                       colour: str,
-                       lw: float,
-                       label: str):
-        """
-        Add rectangular shape to axis
-
-        Parameters
-        ----------
-        xmin: float
-            Where does the rectangle start on the x-axis?
-        xmax: float
-            Where does the rectangle end on the x-axis?
-        ymin: float
-            Where does the rectangle start on the y-axis?
-        ymax: float
-            Where does the rectangle end on the y-axis?
-        colour: str
-            colour of the rectangle edge
-        lw: float
-            linewidth of rectangle edge
-        label: str
-            label for axis legend
-
-        Returns
-        -------
-        None
-        """
-        rect = patches.Rectangle(xy=(xmin, ymin),
-                                 width=(xmax - xmin),
-                                 height=(ymax - ymin),
-                                 fill=False,
-                                 edgecolor=colour,
-                                 lw=lw,
-                                 label=label)
-        self._ax.add_patch(rect)
-
     def _add_threshold(self,
                        x: float,
                        y: float or None,
@@ -552,8 +507,8 @@ class CreatePlot:
                               backgroudcolor="white")
 
     def backgate(self,
-                 parent: str,
-                 children: list,
+                 parent: pd.DataFrame,
+                 children: dict,
                  x: str,
                  y: str or None = None,
                  colour: str = "#db4b6a",
@@ -562,20 +517,19 @@ class CreatePlot:
                  method: str = "scatter",
                  shade: bool = True,
                  plot_kwargs: dict or None = None,
-                 overlay_kwargs: dict or None = None):
+                 overlay_kwargs: dict or None = None,
+                 **legend_kwargs):
         if plot_kwargs is None:
             plot_kwargs = {}
         if overlay_kwargs is None:
             overlay_kwargs = {}
-        self._ax = self.plot_population(population_name=parent,
-                                        x=x,
-                                        y=y,
-                                        **plot_kwargs)
-        for child in children:
-            child = self.gating.get_population_df(population_name=child,
-                                                  transform=False).copy()
+        self._ax = self.plot(data=parent,
+                             x=x,
+                             y=y,
+                             **plot_kwargs)
+        for child_name, df in children.items():
             if method == "kde":
-                self._overlay(data=child,
+                self._overlay(data=df,
                               x=x,
                               y=y,
                               method=method,
@@ -583,7 +537,7 @@ class CreatePlot:
                               shade=shade,
                               **overlay_kwargs)
             else:
-                self._overlay(data=child,
+                self._overlay(data=df,
                               x=x,
                               y=y,
                               method=method,
@@ -591,6 +545,7 @@ class CreatePlot:
                               size=size,
                               alpha=alpha,
                               **overlay_kwargs)
+        self._set_legend(shape_n=len(children), **legend_kwargs)
         return self._ax
 
     def _overlay(self,
@@ -598,6 +553,7 @@ class CreatePlot:
                  x: str,
                  y: str or None,
                  method: str,
+                 label: str,
                  **kwargs):
         assert method in ["scatter", "kde"], "Overlay method should be 'scatter' or 'kde'"
         if y is None and method == "scatter":
@@ -609,21 +565,24 @@ class CreatePlot:
         if method == "scatter":
             self._ax.scatter(x=data[x],
                              y=data[y],
+                             label=label,
                              **kwargs)
         else:
             if y is None:
                 sns.kdeplot(data=data[x],
                             ax=self._ax,
+                            label=label,
                             **kwargs)
             else:
                 sns.kdeplot(data=data[x],
                             data2=data[y],
                             ax=self._ax,
+                            label=label,
                             **kwargs)
 
     def overlay_control(self,
-                        population_name: str,
-                        ctrl_id: str,
+                        data: pd.DataFrame,
+                        ctrl: pd.DataFrame,
                         x: str,
                         y: str or None = None,
                         colour: str = "#db4b6a",
@@ -638,13 +597,10 @@ class CreatePlot:
             plot_kwargs = {}
         if overlay_kwargs is None:
             overlay_kwargs = {}
-        self._ax = self.plot_population(population_name=population_name,
-                                        x=x,
-                                        y=y,
-                                        **plot_kwargs)
-        ctrl = self.gating.get_population_df(population_name=population_name,
-                                             transform=False,
-                                             ctrl_id=ctrl_id).copy()
+        self._ax = self.plot(data=data,
+                             x=x,
+                             y=y,
+                             **plot_kwargs)
         if method == "kde":
             self._overlay(data=ctrl,
                           x=x,
@@ -680,4 +636,3 @@ class CreatePlot:
                             ncol=ncol,
                             fancybox=fancy,
                             shadow=shadow)
-

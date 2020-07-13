@@ -1,5 +1,6 @@
 from .base import Gate, GateError
-from .utilities import rectangular_filter, inside_ellipse
+from .utilities import rectangular_filter
+from ..utilities import inside_ellipse
 
 
 class Static(Gate):

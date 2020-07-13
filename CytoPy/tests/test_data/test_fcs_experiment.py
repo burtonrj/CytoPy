@@ -43,13 +43,13 @@ class TextFCSExperiment(unittest.TestCase):
         self.assertEqual(len(data), 2)
         self.assertEqual(type(primary), dict)
         self.assertEqual(type(ctrl), dict)
-        self.assertEqual(primary.get('data').shape, (30000, 7))
+        self.assertEqual(primary.get('data').geom, (30000, 7))
         self.assertListEqual(primary.get('data').columns.tolist(),
                              ['FS Lin', 'SS Log', 'IgG1-FITC', 'IgG1-PE', 'CD45-ECD', 'IgG1-PC5', 'IgG1-PC7'])
         data = test_exp.pull_sample_data('test_sample', include_controls=False)
         self.assertEqual(len(data), 1)
         data = test_exp.pull_sample_data('test_sample', sample_size=5000, include_controls=False)
-        self.assertEqual(data[0].get('data').shape, (5000, 7))
+        self.assertEqual(data[0].get('data').geom, (5000, 7))
 
 
 if __name__ == '__main__':

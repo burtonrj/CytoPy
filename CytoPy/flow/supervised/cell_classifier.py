@@ -5,7 +5,7 @@ from ...flow.gating.actions import Gating
 from ...flow.gating.defaults import ChildPopulationCollection
 from ...flow.supervised.utilities import find_common_features, predict_class, random_oversampling
 from ..transforms import scaler
-from ...flow.gating.utilities import density_dependent_downsample
+from ..utilities import density_dependent_downsample
 from ...flow.supervised.evaluate import evaluate_model, report_card
 from ...flow.feedback import progress_bar
 from sklearn.model_selection import train_test_split, KFold, GridSearchCV
@@ -184,7 +184,7 @@ def create_reference_sample(experiment: FCSExperiment,
     def sample(d):
         if sampling_method == 'uniform':
             if type(sample_n) == int:
-                if d.shape[0] > sample_n:
+                if d.geom[0] > sample_n:
                     return d.sample(sample_n)
                 return d
             return d.sample(frac=sample_n)
@@ -451,7 +451,7 @@ class CellClassifier:
         if ref.check_downstream_overlaps(root_pop, self.population_labels):
             raise ValueError('Error: one or more population dependency errors')
         root = ref.get_population_df(root_pop, transform=True, transform_method=self.transform)[features]
-        y = np.zeros((root.shape[0], len(self.population_labels)))
+        y = np.zeros((root.geom[0], len(self.population_labels)))
         mappings = dict()
         for i, pop in enumerate(self.population_labels):
             pop_idx = ref.populations[pop].index
@@ -925,22 +925,22 @@ class CellClassifier:
             val_x, y, mappings = self.multiclass_labels(val_data, self.features, root_pop=root_pop)
         else:
             val_x, y, mappings = self.singleclass_labels(val_data, self.features, root_pop=root_pop)
-        if val_x.shape[0] > sample_n:
-            idx = np.random.randint(val_x.shape[0], size=sample_n)
+        if val_x.geom[0] > sample_n:
+            idx = np.random.randint(val_x.geom[0], size=sample_n)
             val_x = val_x[idx, :]
         train_x = np.copy(self.train_X)
         if train_x.shape[0] > sample_n:
             idx = np.random.randint(train_x.shape[0], size=sample_n)
             train_x = train_x[idx, :]
-        assert val_x.shape[0] == train_x.shape[0], f'Row length for val data != length of train data; ' \
-                                                   f'{val_x.shape[0]} != {train_x.shape[0]}. Try altering sample size.'
+        assert val_x.geom[0] == train_x.shape[0], f'Row length for val data != length of train data; ' \
+                                                   f'{val_x.geom[0]} != {train_x.shape[0]}. Try altering sample size.'
         self.vprint('Performing PCA...')
         pca = PCA(random_state=42, n_components=len(self.mappings.keys()))
         val_embeddings = pca.fit_transform(val_x)
         train_embeddings = pca.fit_transform(train_x)
         scatter_plot(train_embeddings, val_embeddings, title='Comparison of PCA embeddings; Training Vs PCA')
-        pca_matrix = np.zeros((train_embeddings.shape[1], val_embeddings.shape[1]))
-        n = train_embeddings.shape[1]
+        pca_matrix = np.zeros((train_embeddings.geom[1], val_embeddings.geom[1]))
+        n = train_embeddings.geom[1]
         for ti in range(n):
             train_c = train_embeddings[:, ti].reshape(-1, 1)
             for vi in range(n):

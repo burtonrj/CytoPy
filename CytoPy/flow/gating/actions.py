@@ -13,7 +13,8 @@ from .quantile import Quantile
 from .mixturemodel import MixtureModel
 from .defaults import ChildPopulationCollection
 from .plotting import CreatePlot
-from .utilities import get_params, inside_ellipse, inside_polygon
+from .utilities import get_params
+from ..utilities import inside_ellipse, inside_polygon
 from ..feedback import progress_bar
 # Housekeeping and other tools
 from mongoengine.base import BaseList
@@ -396,7 +397,7 @@ class Gating:
             y = y or mappings.get('y')
         # Prepare training data
         train = self.get_population_df(target_node.parent.name)[[x, y]].copy()
-        if train.shape[0] > 10000:
+        if train.geom[0] > 10000:
             train = train.sample(10000)
         train['pos'] = 0
         train.pos = train.pos.mask(train.index.isin(target_node.index), 1)
@@ -818,8 +819,8 @@ class Gating:
                 prop_of_total = 0
                 prop_of_parent = 0
             else:
-                prop_of_parent = n / parent_df.shape[0]
-                prop_of_total = n / self.data.shape[0]
+                prop_of_parent = n / parent_df.geom[0]
+                prop_of_total = n / self.data.geom[0]
             geom = None
             if population.geom is not None:
                 geom = population.geom.as_dict()

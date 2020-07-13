@@ -1,4 +1,7 @@
 import sys
+
+import CytoPy.flow.utilities
+
 sys.path.append('/home/ross/CytoPy')
 
 from CytoPy.data.mongo_setup import global_init
@@ -47,11 +50,11 @@ class TestInsideEllipse(unittest.TestCase):
     @staticmethod
     def _build():
         data = make_example_date()
-        mask = utilities.inside_ellipse(data[['feature0', 'feature1']].values,
-                                        center=(4.5, 2.5),
-                                        width=2.3,
-                                        height=3,
-                                        angle=0)
+        mask = CytoPy.flow.utilities.inside_ellipse(data[['feature0', 'feature1']].values,
+                                                    center=(4.5, 2.5),
+                                                    width=2.3,
+                                                    height=3,
+                                                    angle=0)
         return data, mask
 
     def test(self):
@@ -73,15 +76,15 @@ class TestRectangularFilter(unittest.TestCase):
 class TestDensityDependentDownsample(unittest.TestCase):
     @staticmethod
     def _equal_ratio(data, samples):
-        ratios = [data[data.blobID == x[0]].shape[0] / data[data.blobID == x[1]].shape[0]
+        ratios = [data[data.blobID == x[0]].geom[0] / data[data.blobID == x[1]].geom[0]
                   for x in combinations(samples.blobID.unique(), 2)]
         return combinations(ratios, 2)
 
     def test(self):
         data = make_example_date(n_samples=10000)
-        samples = utilities.density_dependent_downsample(data=data,
-                                                         features=['feature0', 'feature1'],
-                                                         mmd_sample_n=2000)
+        samples = CytoPy.flow.utilities.density_dependent_downsample(data=data,
+                                                                     features=['feature0', 'feature1'],
+                                                                     mmd_sample_n=2000)
         for x, y in self._equal_ratio(data, samples):
             self.assertAlmostEqual(x, y, places=1)
 
