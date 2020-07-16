@@ -29,7 +29,7 @@ class Base:
                  shape: str,
                  binary: bool,
                  parent: str,
-                 model: str,
+                 model: str or None = None,
                  **kwargs):
         assert shape in ["threshold", "polygon", "ellipse"], """Invalid shape, must be one of: 
         ["threshold", "polygon", "ellipse"]"""
@@ -38,7 +38,9 @@ class Base:
         self.shape = shape
         self.binary = binary
         self.parent = parent
-        self.model = _load_model(model=model, **kwargs)
+        self.model = None
+        if model:
+            self.model = _load_model(model=model, **kwargs)
 
     def _threshold_2d(self,
                       data: pd.DataFrame,
@@ -133,49 +135,65 @@ class Base:
                           geom=geom,
                           definition="+")
 
+    def fit_predict(self,
+                    data: pd.DataFrame):
+        pass
+
+    def predict(self):
+        pass
+
 
 class ManualGate(Base):
     def __init__(self,
-                 *args,
-                 **kwargs):
-        super().__init__(*args, **kwargs)
-        self.binary = True
+                 x: str or None,
+                 y: str or None,
+                 shape: str,
+                 parent: str,
+                 x_threshold: float or None = None,
+                 y_threshold: float or None = None,
+                 center: list or None = None,
+                 width: float or None = None,
+                 height: float or None = None,
+                 angle: float or None = None,
+                 x_values: list or None = None,
+                 y_values: list or None = None):
+        super().__init__(x=x, y=y, shape=shape, binary=True, parent=parent)
+        self.x_threshold = x_threshold
+        self.y_threshold = y_threshold
+        self.center = center
+        self.width = width
+        self.height = height
+        self.angle=angle
+        self.x_values = x_values
+        self.y_values = y_values
 
-    def fit(self,
-            data: pd.DataFrame,
-            x_threshold: float or None = None,
-            y_threshold: float or None = None,
-            center: list or None = None,
-            width: float or None = None,
-            height: float or None = None,
-            angle: float or None = None,
-            x_values: list or None = None,
-            y_values: list or None = None):
+    def fit_predict(self,
+                    data: pd.DataFrame):
         if self.shape == "threshold":
-            if x_threshold is not None and y_threshold is not None:
+            if self.x_threshold is not None and self.y_threshold is not None:
                 return self._threshold_2d(data=data,
-                                          x=x_threshold,
-                                          y=y_threshold)
-            if x_threshold is not None and y_threshold is None:
-                return self._threshold_1d(data=data, x=x_threshold)
+                                          x=self.x_threshold,
+                                          y=self.y_threshold)
+            if self.x_threshold is not None and self.y_threshold is None:
+                return self._threshold_1d(data=data, x=self.x_threshold)
             raise ValueError("For a threshold gate you must provide either x_threshold or both x_threshold "
                              "and y_threshold")
         if self.shape == "ellipse":
             err = "For an ellipse gate you must provide center, width, height, and angle"
-            assert all([x is not None for x in [center,
-                                                width,
-                                                height,
-                                                angle]]), err
+            assert all([x is not None for x in [self.center,
+                                                self.width,
+                                                self.height,
+                                                self.angle]]), err
             return self._ellipse(data=data,
-                                 center=center,
-                                 width=width,
-                                 height=height,
-                                 angle=angle)
-        assert all([x is not None for x in [x_values, y_values]]), "Polygon gate requires x_values and y_values"
+                                 center=self.center,
+                                 width=self.width,
+                                 height=self.height,
+                                 angle=self.angle)
+        assert all([x is not None for x in [self.x_values, self.y_values]]), "Polygon gate requires x_values and y_values"
         return self._polygon(data=data,
-                             x_values=x_values,
-                             y_values=y_values)
+                             x_values=self.x_values,
+                             y_values=self.y_values)
 
 
-class DensityGate:
-    pass
+class DensityGate(Base):
+

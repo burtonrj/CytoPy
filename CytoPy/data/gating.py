@@ -153,11 +153,11 @@ class Gate(mongoengine.Document):
         else:
             method_kwargs = {k: v for k, v in self.method_kwargs}
         if self.method == "ManualGate":
+            assert not self.binary, "ManualGate is for use with binary gates only"
             self.model = ManualGate(x=self.x,
                                     y=self.y,
                                     shape=self.shape,
                                     parent=self.parent,
-                                    binary=self.binary,
                                     **method_kwargs)
         elif self.method == "DensityGate":
             self.model = DensityGate(x=self.x,
@@ -172,6 +172,7 @@ class Gate(mongoengine.Document):
                               shape=self.shape,
                               parent=self.parent,
                               binary=self.binary,
+                              model=self.method
                               **method_kwargs)
 
     def get_child_by_definition(self,
