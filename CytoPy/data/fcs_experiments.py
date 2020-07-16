@@ -1,7 +1,7 @@
 from mongoengine import connection
 from .fcs import FileGroup, File
 from .subject import Subject
-from .gating import GatingStrategy
+from .gating_structures import GatingStrategy
 from .utilities import data_from_file
 from .panel import Panel, ChannelMap
 from ..flow.read_write import FCSFile
