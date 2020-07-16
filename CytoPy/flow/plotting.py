@@ -1,4 +1,4 @@
-from ..data.gating import Gate
+from ..data.gating_structures import Gate
 from ..data.fcs import Population
 from ..flow.transforms import apply_transform
 from warnings import warn

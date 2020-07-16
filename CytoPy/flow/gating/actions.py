@@ -1,6 +1,6 @@
 # Dependencies
 # Immunova.data
-from ...data.gating import Gate as DataGate, GatingStrategy
+from ...data.gating_structures import Gate as DataGate, GatingStrategy
 from ...data.fcs import FileGroup, Population, ControlIndex
 from ...data.fcs_experiments import FCSExperiment
 # Immunova.flow

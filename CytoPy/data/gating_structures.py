@@ -1,9 +1,13 @@
 from .fcs import PopulationGeometry, Population, merge_populations
-from ..flow.gates import Base, ManualGate, DensityGate
+from ..flow.gating_analyst import Analyst, ManualGate, DensityGate
+from ..flow.utilities import faithful_downsampling, density_dependent_downsample
+from ..flow.transforms import apply_transform, scaler
+from ..flow.dim_reduction import dimensionality_reduction
 from functools import reduce
 from typing import List
 from warnings import warn
 import mongoengine
+import pandas as pd
 import numpy as np
 import importlib
 import datetime
@@ -164,16 +168,14 @@ class Gate(mongoengine.Document):
                                      y=self.y,
                                      shape=self.shape,
                                      parent=self.parent,
-                                     binary=self.binary,
                                      **method_kwargs)
         else:
-            self.model = Base(x=self.x,
-                              y=self.y,
-                              shape=self.shape,
-                              parent=self.parent,
-                              binary=self.binary,
-                              model=self.method
-                              **method_kwargs)
+            self.model = Analyst(x=self.x,
+                                 y=self.y,
+                                 shape=self.shape,
+                                 parent=self.parent,
+                                 model=self.method,
+                                 **method_kwargs)
 
     def get_child_by_definition(self,
                                 definition: str) -> ChildDefinition or None:
@@ -358,6 +360,61 @@ class Gate(mongoengine.Document):
             new_child.population_name = assignment
             merged_children.append(new_child)
         return merged_children
+
+    def execute_preprocessing(self,
+                              data: pd.Dataframe):
+        # Get the population data and transform if required
+        if self.preprocessing.dim_reduction:
+            # Perform dimensionality reduction
+            err = "Invalid Gate: when performing dimensionality reduction, transform_x and transform_y must be equal"
+            assert self.preprocessing.transform_x == self.preprocessing.transform_y, err
+            data = apply_transform(data=data,
+                                   transform_method=self.preprocessing.transform_x,
+                                   features_to_transform=data.columns)
+            kwargs = {k: v for k, v in self.preprocessing.dim_reduction_kwargs}
+            data = pd.DataFrame(dimensionality_reduction(data=data,
+                                                         method=self.preprocessing.dim_reduction,
+                                                         n_components=2,
+                                                         return_reducer=False,
+                                                         return_embeddings_only=True,
+                                                         **kwargs),
+                                columns=["embedding1", "embedding2"])
+        else:
+            if self.preprocessing.transform_x:
+                data = apply_transform(data=data,
+                                       transform_method=self.preprocessing.transform_x,
+                                       features_to_transform=[self.x])
+            if self.preprocessing.transform_y:
+                data = apply_transform(data=data,
+                                       transform_method=self.preprocessing.transform_y,
+                                       features_to_transform=[self.y])
+            data = data[[self.x, self.y]]
+        # Perform additional scaling if requested
+        if self.preprocessing.scale:
+            kwargs = {k: v for k, v in self.preprocessing.scale_kwargs}
+            data = pd.DataFrame(scaler(data.values, self.preprocessing.scale, **kwargs),
+                                columns=data.columns)
+        # Perform downsampling if requested
+        if self.preprocessing.downsample_method:
+            kwargs = {k: v for k, v in self.preprocessing.downsample_kwargs}
+            if self.preprocessing.downsample_method == "uniform":
+                assert "sample_n" in kwargs.keys(), "Invalid Gate: for uniform downsampling expect 'sample_n' in " \
+                                                    "downsample_kwargs"
+                n = kwargs.get("sample_n")
+                if type(n) == int:
+                    return data.sample(n=n)
+                return data.sample(frac=float(n))
+            elif self.preprocessing.downsample_method == "density":
+                return density_dependent_downsample(data=data,
+                                                    features=data.columns,
+                                                    **kwargs)
+            elif self.preprocessing.downsample_method == "faithful":
+                assert "h" in kwargs.keys(), "Invalid Gate: for faithful downsampling, 'h' expected in " \
+                                             "downsampling_kwargs"
+                return pd.DataFrame(faithful_downsampling(data=data, h=kwargs.get("h")),
+                                    columns=data.columns)
+            raise ValueError("Invalid Gate: downsampling_method must be one of: uniform, density, or faithful")
+        return data
 
 
 class GatingStrategy(mongoengine.Document):

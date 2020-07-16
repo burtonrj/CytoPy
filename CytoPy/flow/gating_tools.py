@@ -1,6 +1,6 @@
 from ..data.fcs_experiments import FCSExperiment
 from ..data.fcs import Population, ControlIndex, PopulationGeometry
-from ..data.gating import Gate, ControlGate, PreProcess, PostProcess
+from ..data.gating_structures import Gate, ControlGate, PreProcess, PostProcess
 from .dim_reduction import dimensionality_reduction
 from .transforms import apply_transform, scaler
 from .feedback import progress_bar, vprint
@@ -260,8 +260,8 @@ class Gating:
             method = "DensityGate"
         if shape == "ellipse":
             err = "For an elliptical gate, expect method 'GaussianMixture', 'BayesianGaussianMixture', " \
-                  "or 'KMeans'"
-            assert method in ["GaussianMixture", "BayesianGaussianMixture"], err
+                  "or 'MiniBatchKMeans'"
+            assert method in ["GaussianMixture", "BayesianGaussianMixture", 'MiniBatchKMeans'], err
             if method is None:
                 warn("Method not given, defaulting to BayesianGaussianMixture")
                 method = "BayesianGaussianMixture"
@@ -290,66 +290,11 @@ class Gating:
         gate.initialise_model()
         return gate
 
-    def _preprocessing(self,
-                       gate: Gate):
-        # Get the population data and transform if required
-        if gate.preprocessing.dim_reduction:
-            # Perform dimensionality reduction
-            err = "Invalid Gate: when performing dimensionality reduction, transform_x and transform_y must be equal"
-            assert gate.preprocessing.transform_x == gate.preprocessing.transform_y, err
-            data = self.get_population_df(population_name=gate.parent,
-                                          transform=gate.preprocessing.transform_x,
-                                          transform_features="all")
-            kwargs = {k: v for k, v in gate.preprocessing.dim_reduction_kwargs}
-            data = pd.DataFrame(dimensionality_reduction(data=data,
-                                                         method=gate.preprocessing.dim_reduction,
-                                                         n_components=2,
-                                                         return_reducer=False,
-                                                         return_embeddings_only=True,
-                                                         **kwargs),
-                                columns=["embedding1", "embedding2"])
-        else:
-            data = self.get_population_df(population_name=gate.parent, transform=None)
-            if gate.preprocessing.transform_x:
-                data = apply_transform(data=data,
-                                       transform_method=gate.preprocessing.transform_x,
-                                       features_to_transform=[gate.x])
-            if gate.preprocessing.transform_y:
-                data = apply_transform(data=data,
-                                       transform_method=gate.preprocessing.transform_y,
-                                       features_to_transform=[gate.y])
-            data = data[[gate.x, gate.y]]
-        # Perform additional scaling if requested
-        if gate.preprocessing.scale:
-            kwargs = {k: v for k, v in gate.preprocessing.scale_kwargs}
-            data = pd.DataFrame(scaler(data.values, gate.preprocessing.scale, **kwargs),
-                                columns=data.columns)
-        # Perform downsampling if requested
-        if gate.preprocessing.downsample_method:
-            kwargs = {k: v for k, v in gate.preprocessing.downsample_kwargs}
-            if gate.preprocessing.downsample_method == "uniform":
-                assert "sample_n" in kwargs.keys(), "Invalid Gate: for uniform downsampling expect 'sample_n' in " \
-                                                    "downsample_kwargs"
-                n = kwargs.get("sample_n")
-                if type(n) == int:
-                    return data.sample(n=n)
-                return data.sample(frac=float(n))
-            elif gate.preprocessing.downsample_method == "density":
-                return density_dependent_downsample(data=data,
-                                                    features=data.columns,
-                                                    **kwargs)
-            elif gate.preprocessing.downsample_method == "faithful":
-                assert "h" in kwargs.keys(), "Invalid Gate: for faithful downsampling, 'h' expected in " \
-                                             "downsampling_kwargs"
-                return pd.DataFrame(faithful_downsampling(data=data, h=kwargs.get("h")),
-                                    columns=data.columns)
-            raise ValueError("Invalid Gate: downsampling_method must be one of: uniform, density, or faithful")
-        return data
-
     def preview(self,
                 gate: Gate,
                 stats: bool = True):
-        data = self._preprocessing(gate=gate)
+        data = gate.execute_preprocessing(data=self.get_population_df(population_name=gate.parent,
+                                                                      transform=None))
         # fit model
         populations = gate.model.fit(data)
         # Cache results
