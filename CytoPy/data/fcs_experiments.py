@@ -300,8 +300,7 @@ class FCSExperiment(mongoengine.Document):
         try:
             fcs = FCSFile(path, comp_matrix=comp_matrix)
         except ValueError as e:
-            print(f'Unable to load data from {path}; encountered the following exception: {e}')
-            return None
+            raise ValueError(f'Unable to load data from {path}; encountered the following exception: {str(e)}')
         new_file = File()
         new_file.file_id = file_id
         if compensate:
