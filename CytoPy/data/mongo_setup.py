@@ -1,3 +1,5 @@
+from dask.distributed import Client
+from multiprocessing import cpu_count
 import mongoengine
 
 
@@ -21,3 +23,24 @@ def global_init(database_name: str,
     None
     """
     mongoengine.register_connection(alias='core', name=database_name, **kwargs)
+
+
+def dask_client(n_cores: int or None = None,
+                **kwargs):
+    """
+    Setup Dask client for session.
+
+    Parameters
+    ----------
+    n_cores: int (optional)
+        Number of processes to use (if not provided, will use all available processes)
+    kwargs:
+        Additional keyword arguments to pass to dask.distributed.Client call
+
+    Returns
+    -------
+    dask.distributed.Client
+    """
+    if n_cores is None:
+        n_cores = cpu_count()
+    return Client(n_workers=n_cores, **kwargs)

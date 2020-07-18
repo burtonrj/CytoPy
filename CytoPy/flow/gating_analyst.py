@@ -1,6 +1,4 @@
 from ..data.fcs import Population, PopulationGeometry
-from sklearn.cluster import SpectralClustering
-from .utilities import inside_ellipse, inside_polygon
 from scipy import linalg, stats
 from warnings import warn
 import pandas as pd
@@ -96,7 +94,7 @@ class Analyst:
         # ---- Find the furthest data point from the center
         # ---- draw a circle of width distance to furthest point
         # ---- measure overlap of circles
-        #
+        # ---- incrementally reduce circle size until no overlap occurs
         pass
 
     def _ellipse(self,

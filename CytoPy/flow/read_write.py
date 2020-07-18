@@ -75,6 +75,64 @@ def explore_channel_mappings(fcs_dir: str,
     return [json.loads(x) for x in unique_mappings]
 
 
+def _get_spill_matrix(matrix_string: str) -> pd.DataFrame:
+    """
+    Generate pandas dataframe for the fluorochrome spillover matrix used for compensation calc
+
+    Code is modified from: https://github.com/whitews/FlowUtils
+    Pedersen NW, Chandran PA, Qian Y, et al. Automated Analysis of Flow Cytometry
+    Data to Reduce Inter-Lab Variation in the Detection of Major Histocompatibility
+    Complex Multimer-Binding T Cells. Front Immunol. 2017;8:858.
+    Published 2017 Jul 26. doi:10.3389/fimmu.2017.00858
+
+    Parameters
+    -----------
+    matrix_string: str
+        string value extracted from the 'spill' parameter of the FCS file
+
+    Returns
+    --------
+    Pandas.DataFrame
+    """
+    matrix_list = matrix_string.split(',')
+    n = int(matrix_list[0])
+    header = matrix_list[1:(n+1)]
+    header = [i.strip().replace('\n', '') for i in header]
+    values = [i.strip().replace('\n', '') for i in matrix_list[n+1:]]
+    matrix = np.reshape(list(map(float, values)), (n, n))
+    matrix_df = pd.DataFrame(matrix)
+    matrix_df = matrix_df.rename(index={k: v for k, v in zip(matrix_df.columns.to_list(), header)},
+                                 columns={k: v for k, v in zip(matrix_df.columns.to_list(), header)})
+    return matrix_df
+
+
+def _get_fluoro_mapping(fluoro_dict: dict) -> list:
+    """
+    Generates a list of dictionary objects that describe the fluorochrome mappings in this FCS file
+
+    Parameters
+    -----------
+    fluoro_dict: dict
+        dictionary object from the channels param of the fcs file
+
+    Returns
+    --------
+    List
+        List of dict obj with keys 'channel' and 'marker'. Use to map fluorochrome channels to
+    corresponding marker
+    """
+    fm = [x for k, x in fluoro_dict.items()]
+    mappings = []
+    for fm_ in fm:
+        channel = fm_['PnN'].replace('_', '-')
+        if 'PnS' in fm_.keys():
+            marker = fm_['PnS'].replace('_', '-')
+        else:
+            marker = ''
+        mappings.append({'channel': channel, 'marker': marker})
+    return mappings
+
+
 class FCSFile:
     """
     Utilising FlowIO to generate an object for representing an FCS file
@@ -97,7 +155,7 @@ class FCSFile:
         self.cytometer = fcs.text.get('cyt', 'Unknown')
         self.creator = fcs.text.get('creator', 'Unknown')
         self.operator = fcs.text.get('export user name', 'Unknown')
-        self.fluoro_mappings = self._get_fluoro_mapping(fcs.channels)
+        self.fluoro_mappings = _get_fluoro_mapping(fcs.channels)
         self.cst_pass = False
         self.data = fcs.events
         self.event_data = np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count))
@@ -127,7 +185,7 @@ class FCSFile:
                     path to relevant csv file with 'comp_matrix' argument if compensation is necessary""")
                     self.spill = None
                 else:
-                    self.spill = self._get_spill_matrix(self.spill_txt)
+                    self.spill = _get_spill_matrix(self.spill_txt)
             else:
                 self.spill = None
         if 'cst_setup_status' in fcs.text:
@@ -139,64 +197,6 @@ class FCSFile:
         columns = [f"{x['channel']}_{x['marker']}" for x in self.fluoro_mappings]
         return pd.DataFrame(self.event_data, columns=columns)
 
-    @staticmethod
-    def _get_fluoro_mapping(fluoro_dict: dict) -> list:
-        """
-        Generates a list of dictionary objects that describe the fluorochrome mappings in this FCS file
-
-        Parameters
-        -----------
-        fluoro_dict: dict
-            dictionary object from the channels param of the fcs file
-
-        Returns
-        --------
-        List
-            List of dict obj with keys 'channel' and 'marker'. Use to map fluorochrome channels to
-        corresponding marker
-        """
-        fm = [x for k, x in fluoro_dict.items()]
-        mappings = []
-        for fm_ in fm:
-            channel = fm_['PnN'].replace('_', '-')
-            if 'PnS' in fm_.keys():
-                marker = fm_['PnS'].replace('_', '-')
-            else:
-                marker = ''
-            mappings.append({'channel': channel, 'marker': marker})
-        return mappings
-
-    @staticmethod
-    def _get_spill_matrix(matrix_string: str) -> pd.DataFrame:
-        """
-        Generate pandas dataframe for the fluorochrome spillover matrix used for compensation calc
-
-        Code is modified from: https://github.com/whitews/FlowUtils
-        Pedersen NW, Chandran PA, Qian Y, et al. Automated Analysis of Flow Cytometry
-        Data to Reduce Inter-Lab Variation in the Detection of Major Histocompatibility
-        Complex Multimer-Binding T Cells. Front Immunol. 2017;8:858.
-        Published 2017 Jul 26. doi:10.3389/fimmu.2017.00858
-
-        Parameters
-        -----------
-        matrix_string: str
-            string value extracted from the 'spill' parameter of the FCS file
-
-        Returns
-        --------
-        Pandas.DataFrame
-        """
-        matrix_list = matrix_string.split(',')
-        n = int(matrix_list[0])
-        header = matrix_list[1:(n+1)]
-        header = [i.strip().replace('\n', '') for i in header]
-        values = [i.strip().replace('\n', '') for i in matrix_list[n+1:]]
-        matrix = np.reshape(list(map(float, values)), (n, n))
-        matrix_df = pd.DataFrame(matrix)
-        matrix_df = matrix_df.rename(index={k: v for k, v in zip(matrix_df.columns.to_list(), header)},
-                                     columns={k: v for k, v in zip(matrix_df.columns.to_list(), header)})
-        return matrix_df
-
     def compensate(self):
         """
         Apply compensation to event data
@@ -207,9 +207,7 @@ class FCSFile:
         """
         # Remove FSC, SSC, and Time data for compensation
         assert self.spill is not None, f'Unable to locate spillover matrix, please provide a compensation matrix'
-        channels = [x['channel'] for x in self.fluoro_mappings]
-        channel_idx = [i for i, x in enumerate(channels) if not any([x.find(s) != -1 for
-                                                                     s in ['FSC', 'SSC', 'Time', 'FS', 'SS']])]
+        channel_idx = [i for i, x in enumerate(self.fluoro_mappings) if x['marker'] != '']
         comp_data = self.event_data[:, channel_idx]
         comp_data = np.linalg.solve(self.spill.values.T, comp_data.T).T
         self.event_data[:, channel_idx] = comp_data
