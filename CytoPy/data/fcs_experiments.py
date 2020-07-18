@@ -1,10 +1,13 @@
+from warnings import warn
 from mongoengine import connection
+from mongoengine.errors import DoesNotExist
 from .fcs import FileGroup, File
 from .subject import Subject
 from .gating_structures import GatingStrategy
 from .utilities import data_from_file
 from .panel import Panel, ChannelMap
 from ..flow.read_write import FCSFile
+from ..flow.feedback import vprint
 from multiprocessing import Pool, cpu_count
 from functools import partial
 import mongoengine
@@ -322,7 +325,7 @@ class FCSExperiment(mongoengine.Document):
                        subject_id: str or None = None,
                        comp_matrix: str or None = None,
                        compensate: bool = True,
-                       feedback: bool = True,
+                       verbose: bool = True,
                        catch_standardisation_errors: bool = False,
                        processing_datetime: str or None = None,
                        collection_datetime: str or None = None) -> None or str:
@@ -345,7 +348,7 @@ class FCSExperiment(mongoengine.Document):
             the matrix linked within the fcs file will be used, if not present will present an error
         compensate: bool, (default=True)
             Boolean value as to whether compensation should be applied before data entry (default=True)
-        feedback: bool, (default=True)
+        verbose: bool, (default=True)
             If True function will provide feedback in the form of print statements
             (default=True)
         catch_standardisation_errors: bool, (default=True)
@@ -358,49 +361,42 @@ class FCSExperiment(mongoengine.Document):
         str or None
             MongoDB ObjectID string for new FileGroup entry
         """
+        vp = vprint(verbose)
         if controls is None:
             controls = list()
-        assert type(controls) == list, 'Invalid type, controls should be of type list'
-        if self.panel is None:
-            print('Error: no panel design assigned to this experiment')
-            return None
-        if sample_id in self.list_samples():
-            print(f'Error: a file group with id {sample_id} already exists')
-            return None
-        if feedback:
-            print('Generating main file entry...')
+        assert self.panel is not None, 'Error: no panel design assigned to this experiment'
+        assert sample_id not in self.list_samples(), 'Error: a file group with id {sample_id} already exists'
+        vp('Generating main file entry...')
         file_collection = FileGroup()
         if processing_datetime is not None:
             file_collection.processing_datetime = processing_datetime
         if collection_datetime is not None:
             file_collection.collection_datetime = collection_datetime
         file_collection.primary_id = sample_id
-        primary_file = self._create_file_entry(file_path, sample_id, comp_matrix=comp_matrix, compensate=compensate,
+        primary_file = self._create_file_entry(file_path,
+                                               sample_id,
+                                               comp_matrix=comp_matrix,
+                                               compensate=compensate,
                                                catch_standardisation_errors=catch_standardisation_errors)
-        if not primary_file:
-            return None
         file_collection.files.append(primary_file)
-        if feedback:
-            print('Generating file entries for controls...')
+        vp('Generating file entries for controls...')
         for c in controls:
-            control = self._create_file_entry(c['path'], f"{sample_id}_{c['control_id']}",
-                                              comp_matrix=comp_matrix, compensate=compensate,
+            control = self._create_file_entry(c['path'],
+                                              f"{sample_id}_{c['control_id']}",
+                                              comp_matrix=comp_matrix,
+                                              compensate=compensate,
                                               catch_standardisation_errors=catch_standardisation_errors,
                                               control=True)
-            if not control:
-                return None
             file_collection.files.append(control)
         file_collection.save()
         self.fcs_files.append(file_collection)
         if subject_id is not None:
-            p = Subject.objects(subject_id=subject_id)
-            if len(p) == 0:
-                print(f'Error: no such patient {subject_id}, continuing without association.')
-            else:
-                p = p[0]
+            try:
+                p = Subject.objects(subject_id=subject_id).get()
                 p.files.append(file_collection)
                 p.save()
-        if feedback:
-            print(f'Successfully created {sample_id} and associated to {self.experiment_id}')
+            except DoesNotExist:
+                warn(f'Error: no such patient {subject_id}, continuing without association.')
+        vp(f'Successfully created {sample_id} and associated to {self.experiment_id}')
         self.save()
         return file_collection.id.__str__()
