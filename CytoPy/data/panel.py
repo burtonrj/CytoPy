@@ -1,4 +1,5 @@
 from datetime import datetime
+from warnings import warn
 from collections import Counter
 from functools import partial
 import pandas as pd
@@ -25,8 +26,9 @@ def create_regex(s: str, initials: bool = True) -> str:
     str
         Formatted regex string
     """
-    def has_numbers(inputString):
-        return any(char.isdigit() for char in inputString)
+
+    def has_numbers(input_string):
+        return any(char.isdigit() for char in input_string)
 
     s = [i for ls in [_.split('-') for _ in s.split(' ')] for i in ls]
     s = [i for ls in [_.split('.') for _ in s] for i in ls]
@@ -119,7 +121,7 @@ class ChannelMap(mongoengine.EmbeddedDocument):
             return True
         return False
 
-    def to_python(self) -> dict:
+    def to_dict(self) -> dict:
         """
         Convert object to python dictionary
 
@@ -221,6 +223,52 @@ def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
     return nomenclature, mappings
 
 
+def _query(x: str or None,
+           ref: list) -> str:
+    """
+    Internal static method for querying a channel/marker against a reference list
+
+    Parameters
+    ----------
+    x: str or None
+        channel/marker to query
+    ref: list
+        list of ChannelMap objects for reference search
+
+    Returns
+    --------
+    str
+        Standardised name
+    """
+    corrected = list(filter(None.__ne__, [n.query(x) for n in ref]))
+    assert len(corrected) != 0, f'Unable to normalise {x}; no match in linked panel'
+    err = f'Unable to normalise {x}; matched multiple in linked panel, check ' \
+          f'panel for incorrect definitions. Matches found: {corrected}'
+    assert len(corrected) < 2, err
+    return corrected[0]
+
+
+def _check_duplication(x: list) -> bool:
+    """
+    Internal method. Given a list check for duplicates. Duplicates are printed.
+
+    Parameters
+    ----------
+    x: list
+
+    Returns
+    --------
+    bool
+        True if duplicates are found, else False
+    """
+    x = [i if i else None for i in x]
+    duplicates = [item for item, count in Counter(x).items() if count > 1 and item is not None]
+    if duplicates:
+        print(f'Duplicate channel/markers identified: {duplicates}')
+        return True
+    return False
+
+
 class Panel(mongoengine.Document):
     """
     Document representation of channel/marker definition for an experiment. A panel, once associated to an experiment
@@ -251,7 +299,7 @@ class Panel(mongoengine.Document):
         'collection': 'fcs_panels'
     }
 
-    def create_from_excel(self, path: str) -> bool:
+    def create_from_excel(self, path: str) -> None:
         """
         Populate panel attributes from an excel template
 
@@ -262,38 +310,23 @@ class Panel(mongoengine.Document):
 
         Returns
         --------
-        bool
-            True is successful else False
+        None
         """
-        if not os.path.isfile(path):
-            print(f'Error: no such file {path}')
-            return False
-        templates = check_excel_template(path)
-        if templates is None:
-            print('Error: invalid excel template')
-            return False
-        nomenclature, mappings = templates
-
-        def create_def(n):
-            d = nomenclature[nomenclature['name'] == n].fillna('').to_dict(orient='list')
-            return NormalisedName(standard=d['name'][0],
-                                  regex_str=d['regex'][0],
-                                  case_sensitive=d['case'][0],
-                                  permutations=d['permutations'][0])
-        for name in mappings['channel']:
-            if not pd.isnull(name):
-                definition = create_def(name)
-                self.channels.append(definition)
-        for name in mappings['marker']:
-            if not pd.isnull(name):
-                definition = create_def(name)
-                self.markers.append(definition)
+        assert os.path.isfile(path), f'Error: no such file {path}'
+        nomenclature, mappings = check_excel_template(path)
+        for col_name, attr in zip(['channel', 'marker'], [self.channels, self.markers]):
+            for name in mappings[col_name]:
+                if not pd.isnull(name):
+                    d = nomenclature[nomenclature['name'] == name].fillna('').to_dict(orient='list')
+                    attr.append(NormalisedName(standard=d['name'][0],
+                                               regex_str=d['regex'][0],
+                                               case_sensitive=d['case'][0],
+                                               permutations=d['permutations'][0]))
         mappings = mappings.fillna('').to_dict(orient='list')
         self.mappings = [ChannelMap(channel=c, marker=m)
                          for c, m in zip(mappings['channel'], mappings['marker'])]
-        return True
 
-    def create_from_dict(self, x: dict) -> bool:
+    def create_from_dict(self, x: dict):
         """
         Populate panel attributes from a python dictionary
 
@@ -304,25 +337,20 @@ class Panel(mongoengine.Document):
 
         Returns
         --------
-        bool
-            True if successful else False
+        None
         """
 
         # Check validity of input dictionary
-        if not all([k in ['channels', 'markers', 'mappings'] for k in x.keys()]):
-            print('Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers')
-            return False
+        err = 'Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers'
+        assert all([k in ['channels', 'markers', 'mappings'] for k in x.keys()]), err
+        err = f'Invalid template dictionary; nested dictionaries must contain keys: name, regex case, ' \
+              f'and permutations'
         for k in ['channels', 'markers']:
-            if not all([i.keys() == ['name', 'regex', 'case', 'permutations'] for i in x[k]]):
-                print(f'Invalid template dictionary; nested dictionaries for {k} must contain keys: name, regex '
-                      f'case, and permutations')
-                return False
-        if type(x['mappings']) != list:
-            print('Invalid template dictionary; mappings must be a list of tuples')
-            return False
-        if not all([type(k) != tuple for k in x['mappings']]):
-            print('Invalid template dictionary; mappings must be a list of tuples')
-            return False
+            assert all([i.keys() == ['name', 'regex', 'case', 'permutations'] for i in x[k]]), err
+
+        assert type(x['mappings']) == list, 'Invalid template dictionary; mappings must be a list of tuples'
+        err = 'Invalid template dictionary; mappings must be a list of tuples'
+        assert all([type(k) != tuple for k in x['mappings']]), err
         self.markers = [NormalisedName(standard=k['name'],
                                        regex_str=k['regex'],
                                        case_sensitive=k['case'],
@@ -334,40 +362,10 @@ class Panel(mongoengine.Document):
                                         permutations=k['permutations'])
                          for k in x['channels']]
         self.mappings = [ChannelMap(channel=c, marker=m) for c, m in x['mappings']]
-        return True
 
-    @staticmethod
-    def _query(x: str or None, ref: list, e: bool) -> str or None and bool:
-        """
-        Internal static method for querying a channel/marker against a reference list
-
-        Parameters
-        ----------
-        x: str or None
-            channel/marker to query
-        ref: list
-            list of ChannelMap objects for reference search
-        e: bool
-            error state
-
-        Returns
-        --------
-        str or None and bool
-            Standardised name and error state
-        """
-        corrected = list(filter(None.__ne__, [n.query(x) for n in ref]))
-        if len(corrected) == 0:
-            print(f'Unable to normalise {x}; no match in linked panel')
-            e = True
-            return x, e
-        if len(corrected) > 1:
-            print(f'Unable to normalise {x}; matched multiple in linked panel, check'
-                  f' panel for incorrect definitions. Matches found: {corrected}')
-            e = True
-            return x, e
-        return corrected[0], e
-
-    def _check_pairing(self, channel: str, marker: str or None) -> bool:
+    def _check_pairing(self,
+                       channel: str,
+                       marker: str or None) -> bool:
         """
         Internal method. Given a channel and marker check that a valid pairing exists for this panel.
 
@@ -389,28 +387,7 @@ class Panel(mongoengine.Document):
             return False
         return True
 
-    @staticmethod
-    def _check_duplication(x: list) -> bool:
-        """
-        Internal method. Given a list check for duplicates. Duplicates are printed.
-
-        Parameters
-        ----------
-        x: list
-
-        Returns
-        --------
-        bool
-            True if duplicates are found, else False
-        """
-        x = [i if i else None for i in x]
-        duplicates = [item for item, count in Counter(x).items() if count > 1 and item is not None]
-        if duplicates:
-            print(f'Duplicate channel/markers identified: {duplicates}')
-            return True
-        return False
-
-    def standardise_names(self, column_mappings: list) -> list or None and bool:
+    def standardise_names(self, column_mappings: list) -> list:
         """
         Given a dictionary of column mappings, apply standardisation defined by this panel object and return
         standardised column mappings.
@@ -423,9 +400,8 @@ class Panel(mongoengine.Document):
         Returns
         --------
         list or None and bool
-            standardised column mappings and error state
+            standardised column mappings
         """
-        err = False
         new_column_mappings = list()
         for channel, marker in column_mappings:
             # Normalise channel
@@ -433,44 +409,37 @@ class Panel(mongoengine.Document):
                 if channel.isspace():
                     channel = None
                 else:
-                    channel, err = self._query(channel, self.channels, err)
+                    channel = _query(channel, self.channels)
             # Normalise marker
             if marker:
-                marker, err = self._query(marker, self.markers, err)
+                marker, err = _query(marker, self.markers)
             else:
                 # If marker is None, default to that assigned by panel
                 default = [x for x in self.mappings if x.channel == channel]
-                if not default:
-                    print(f'No marker name provided for channel {channel}. Was unable to establish default as'
-                          f' {channel} is not recognised in this panel design.')
-                    err = True
-                else:
-                    marker = default[0].marker
+                err = f'No marker name provided for channel {channel}. Was unable to establish default as ' \
+                      f'{channel} is not recognised in this panel design.'
+                assert len(default) > 0, err
+                marker = default[0].marker
             # Check channel/marker pairing is correct
-            if not self._check_pairing(channel, marker):
-                print(f'The channel/marker pairing {channel}/{marker} does not correspond to any defined in panel')
-                err = True
+            err = f'The channel/marker pairing {channel}/{marker} does not correspond to any defined in panel'
+            assert self._check_pairing(channel, marker), err
             new_column_mappings.append((channel, marker))
+
         # Check for duplicate channels/markers
         channels = [c for c, _ in new_column_mappings]
-        if self._check_duplication(channels):
-            err = True
+        assert not _check_duplication(channels), "Duplicate channels provided"
         markers = [m for _, m in new_column_mappings]
-        if self._check_duplication(markers):
-            err = True
+        assert not _check_duplication(markers), "Duplicate markers provided"
         # Check for missing channels
         for x in self.channels:
-            if x.standard not in channels:
-                print(f'Missing channel {x.standard}')
-                err = True
-        return new_column_mappings, err
+            assert x.standard in channels, f'Missing channel {x.standard}'
+        return new_column_mappings
 
-    def standardise(self, data: pd.DataFrame, catch_standardisation_errors: bool = False) -> pd.DataFrame or None:
+    def standardise(self,
+                    data: pd.DataFrame) -> pd.DataFrame or None:
         """
         Given a dataframe of fcs events, standardise the columns according to the panel definition
 
-        catch_standardisation_errors: bool
-            if True, any error in standardisation will cause function to return Null
         data: Pandas.DataFrame
             Pandas DataFrame of cell events
 
@@ -480,10 +449,10 @@ class Panel(mongoengine.Document):
         """
         # Standardise the names
         # channel_marker -> channel_marker: [channel, marker]
-        column_mappings = [[_ if not _.isspace() else None for _ in x.split('_')] for x in data.columns]
-        column_mappings, err = self.standardise_names(column_mappings)
-        if err and catch_standardisation_errors:
-            return None
+
+        column_mappings = [(c, m) if not m.isspace() else (c, None)
+                           for c, m in zip(data.channel.values, data.marker.values)]
+        column_mappings = self.standardise_names(column_mappings)
 
         # Insert missing marker names using matched channel in panel
         updated_mappings = list()
