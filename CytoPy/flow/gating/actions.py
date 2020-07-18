@@ -131,7 +131,7 @@ class Gating:
         root = fg.get_population('root').to_python()
         root.pop('parent')
         populations['root'] = Node(**root, parent=None)
-        database_populations = [p.to_python() for p in fg.populations if p.population_name != 'root']
+        database_populations = [p.to_dict() for p in fg.populations if p.population_name != 'root']
         i = 0
         while len(database_populations) > 0:
             if i >= len(database_populations):

@@ -23,9 +23,9 @@ class TestPanel(unittest.TestCase):
         self.assertEqual(test.check_matched_pair('test_channel', 'dummy'), False)
         self.assertEqual(test.check_matched_pair('dummy', 'test_marker'), False)
         self.assertEqual(test.check_matched_pair('dummy', 'dummy'), False)
-        self.assertEqual(type(test.to_python()), dict)
-        self.assertTrue(test.to_python().get('marker') == 'test_marker')
-        self.assertTrue(test.to_python().get('channel') == 'test_channel')
+        self.assertEqual(type(test.to_dict()), dict)
+        self.assertTrue(test.to_dict().get('marker') == 'test_marker')
+        self.assertTrue(test.to_dict().get('channel') == 'test_channel')
 
     def test_NormalisedName(self):
         test = NormalisedName(standard='testing',
