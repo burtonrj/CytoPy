@@ -1,10 +1,43 @@
-from multiprocessing import Pool, cpu_count
-from ..data.utilities import filter_fcs_files
+from dask import delayed, bag as db
 import flowio
 import dateutil.parser as date_parser
 import numpy as np
 import pandas as pd
 import json
+import os
+
+
+def filter_fcs_files(fcs_dir: str,
+                     exclude_comps: bool = True,
+                     exclude_dir: str = 'DUPLICATES') -> list:
+    """
+    Given a directory, return file paths for all fcs files in directory and subdirectories contained within
+
+    Parameters
+    ----------
+    fcs_dir: str
+        path to directory for search
+    exclude_comps: bool
+        if True, compensation files will be ignored (note: function searches for 'comp' in file name
+        for exclusion)
+    exclude_dir: str (default = 'DUPLICATES')
+        Will ignore any directories with this name
+    Returns
+    --------
+    list
+        list of fcs file paths
+    """
+    fcs_files = []
+    for root, dirs, files in os.walk(fcs_dir):
+        if os.path.basename(root) == exclude_dir:
+            continue
+        if exclude_comps:
+            fcs = [f for f in files if f.endswith('.fcs') and f.lower().find('comp') == -1]
+        else:
+            fcs = [f for f in files if f.endswith('.fcs')]
+        fcs = [os.path.join(root, f) for f in fcs]
+        fcs_files = fcs_files + fcs
+    return fcs_files
 
 
 def chunks(df_list: list,
@@ -67,12 +100,9 @@ def explore_channel_mappings(fcs_dir: str,
     List
         list of all unique channel/marker mappings
     """
-    fcs_files = filter_fcs_files(fcs_dir, exclude_comps)
-    pool = Pool(cpu_count())
-    all_mappings = pool.map(fcs_mappings, fcs_files)
-    all_mappings_json = [json.dumps(x) for x in all_mappings]
-    unique_mappings = set(all_mappings_json)
-    return [json.loads(x) for x in unique_mappings]
+    fcs_files = db.from_sequence(filter_fcs_files(fcs_dir, exclude_comps))
+    mappings = set(fcs_files.map(fcs_mappings).map(json.dumps).compute())
+    return [json.loads(x) for x in mappings]
 
 
 def _get_spill_matrix(matrix_string: str) -> pd.DataFrame:
@@ -194,8 +224,11 @@ class FCSFile:
 
     @property
     def dataframe(self):
-        columns = [f"{x['channel']}_{x['marker']}" for x in self.fluoro_mappings]
-        return pd.DataFrame(self.event_data, columns=columns)
+        df = pd.DataFrame(self.event_data, columns=[x['channel'] for x in self.fluoro_mappings])
+        df = df.melt(var_name="channel", value_name="intensity")
+        df['marker'] = df.channel.apply(lambda x: [fm['marker'] for fm in self.fluoro_mappings
+                                                   if fm['channel'] == x][0])
+        return df
 
     def compensate(self):
         """
@@ -205,7 +238,6 @@ class FCSFile:
         -------
         None
         """
-        # Remove FSC, SSC, and Time data for compensation
         assert self.spill is not None, f'Unable to locate spillover matrix, please provide a compensation matrix'
         channel_idx = [i for i, x in enumerate(self.fluoro_mappings) if x['marker'] != '']
         comp_data = self.event_data[:, channel_idx]

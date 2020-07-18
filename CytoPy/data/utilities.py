@@ -5,36 +5,6 @@ import numpy as np
 import os
 
 
-def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True) -> list:
-    """
-    Given a directory, return file paths for all fcs files in directory and subdirectories contained within
-
-    Parameters
-    ----------
-    fcs_dir: str
-        path to directory for search
-    exclude_comps: bool
-        if True, compensation files will be ignored (note: function searches for 'comp' in file name
-        for exclusion)
-
-    Returns
-    --------
-    list
-        list of fcs file paths
-    """
-    fcs_files = []
-    for root, dirs, files in os.walk(fcs_dir):
-        if os.path.basename(root) == 'DUPLICATES':
-            continue
-        if exclude_comps:
-            fcs = [f for f in files if f.endswith('.fcs') and f.lower().find('comp') == -1]
-        else:
-            fcs = [f for f in files if f.endswith('.fcs')]
-        fcs = [f'{root}/{f}' for f in fcs]
-        fcs_files = fcs_files + fcs
-    return fcs_files
-
-
 def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_comp: bool = True) -> dict:
     """
     Generate a standard dictionary object of fcs files in given directory
