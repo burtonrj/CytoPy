@@ -178,6 +178,49 @@ class NormalisedName(mongoengine.EmbeddedDocument):
         return None
 
 
+def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
+    """
+    Check excel template and if valid return pandas dataframes
+
+    Parameters
+    ----------
+    path: str
+        file path for excel template
+
+    Returns
+    --------
+    (Pandas.DataFrame, Pandas.DataFrame) or None
+        tuple of pandas dataframes (nomenclature, mappings) or None
+    """
+    # Check sheet names
+    xls = xlrd.open_workbook(path, on_demand=True)
+    err = f"Template must contain two sheets: nomenclature and mappings"
+    assert all([x in ['nomenclature', 'mappings'] for x in xls.sheet_names()]), err
+    nomenclature = pd.read_excel(path, sheet_name='nomenclature')
+    mappings = pd.read_excel(path, sheet_name='mappings')
+
+    # Check nomenclature column headers
+    err = "Nomenclature sheet of excel template must contain the following column headers: " \
+          "'name','regex','case','permutations'"
+    assert all([x in ['name', 'regex', 'permutations', 'case'] for x in nomenclature.columns]), err
+
+    # Check mappings column headers
+    err = "Mappings sheet of excel template must contain the following column headers: 'channel', 'marker'"
+    assert all([x in ['channel', 'marker'] for x in mappings.columns]), err
+
+    # Check for duplicate entries
+    err = 'Duplicate entries in nomenclature, please remove duplicates before continuing'
+    assert sum(nomenclature['name'].duplicated()) == 0, err
+
+    # Check that all mappings have a corresponding entry in nomenclature
+    for x in ['channel', 'marker']:
+        for name in mappings[x]:
+            if pd.isnull(name):
+                continue
+            assert name in nomenclature.name.values, f'{name} missing from nomenclature, please review template'
+    return nomenclature, mappings
+
+
 class Panel(mongoengine.Document):
     """
     Document representation of channel/marker definition for an experiment. A panel, once associated to an experiment
@@ -208,52 +251,6 @@ class Panel(mongoengine.Document):
         'collection': 'fcs_panels'
     }
 
-    @staticmethod
-    def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
-        """
-        Check excel template and if valid return pandas dataframes
-
-        Parameters
-        ----------
-        path: str
-            file path for excel template
-
-        Returns
-        --------
-        (Pandas.DataFrame, Pandas.DataFrame) or None
-            tuple of pandas dataframes (nomenclature, mappings) or None
-        """
-        # Check sheet names
-        xls = xlrd.open_workbook(path, on_demand=True)
-        if not all([x in ['nomenclature', 'mappings'] for x in xls.sheet_names()]):
-            return None
-        else:
-            nomenclature = pd.read_excel(path, sheet_name='nomenclature')
-            mappings = pd.read_excel(path, sheet_name='mappings')
-        # Check nomenclature column headers
-        if not all([x in ['name', 'regex', 'permutations', 'case'] for x in nomenclature.columns]):
-            print("Nomenclature sheet of excel template must contain the following column headers: "
-                  "'name','regex','case','permutations'")
-            return None
-        # Check mappings column headers
-        if not all([x in ['channel', 'marker'] for x in mappings.columns]):
-            print("Mappings sheet of excel template must contain the following column headers:"
-                  "'channel', 'marker'")
-            return None
-        # Check for duplicate entries
-        if sum(nomenclature['name'].duplicated()) != 0:
-            print('Duplicate entries in nomenclature, please remove duplicates before continuing')
-            return None
-        # Check that all mappings have a corresponding entry in nomenclature
-        for x in ['channel', 'marker']:
-            for name in mappings[x]:
-                if pd.isnull(name):
-                    continue
-                if name not in nomenclature.name.values:
-                    print(f'{name} missing from nomenclature, please review template')
-                    return None
-        return nomenclature, mappings
-
     def create_from_excel(self, path: str) -> bool:
         """
         Populate panel attributes from an excel template
@@ -271,7 +268,7 @@ class Panel(mongoengine.Document):
         if not os.path.isfile(path):
             print(f'Error: no such file {path}')
             return False
-        templates = self.check_excel_template(path)
+        templates = check_excel_template(path)
         if templates is None:
             print('Error: invalid excel template')
             return False
