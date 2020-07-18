@@ -1,14 +1,16 @@
 anytree==2.8.0
+dask[complete]
 Cython==0.29.21
 FlowIO==0.9.5
 FlowUtils==0.7.1
 future==0.18.2
+graphviz==0.14.1
 hdbscan==0.8.26
 imbalanced-learn==0.7.0
 Keras==2.4.3
 Keras-Applications==1.0.8
 Keras-Preprocessing==1.1.2
-matplotlib==3.2.2
+matplotlib==3.3.0
 MiniSom==2.2.6
 mongoengine==0.20.0
 nbconvert==5.6.1
@@ -16,6 +18,7 @@ numpy==1.16.0
 oauthlib==3.1.0
 pandas==1.0.5
 phate==1.0.4
+python-dateutil==2.8.1
 scikit-learn==0.23.1
 scipy==1.5.1
 scprep==1.0.5.post2
@@ -26,7 +29,7 @@ Sphinx==3.1.2
 sphinx-rtd-theme==0.5.0
 sphinx-theme==1.0
 tensorflow==2.2.0
-tqdm==4.47.0
+tqdm==4.48.0
 umap-learn==0.4.6
 xgboost==1.1.1
 xlrd==1.2.0
