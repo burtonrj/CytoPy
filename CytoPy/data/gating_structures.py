@@ -72,9 +72,9 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
                                                       db_field="template_geometry")
 
     def __init__(self, *args, **kwargs):
+        if "definition" in kwargs.keys():
+            self.definition = kwargs.pop("definition")
         super().__init__(*args, **kwargs)
-        if "definition" in kwargs:
-            self.definition = kwargs.get("definition")
 
     @property
     def definition(self):
