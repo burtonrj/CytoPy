@@ -113,7 +113,8 @@ class FCSExperiment(mongoengine.Document):
             return False
         return True
     
-    def pull_sample(self, sample_id: str) -> FileGroup or None:
+    def get_sample(self,
+                   sample_id: str) -> FileGroup or None:
         """
         Given a sample ID, return the corresponding FileGroup object
 
@@ -161,7 +162,8 @@ class FCSExperiment(mongoengine.Document):
         """
         return [f.primary_id for f in self.fcs_files if not f.validity()]
 
-    def fetch_sample_mid(self, sample_id: str) -> str or None:
+    def fetch_sample_mid(self,
+                         sample_id: str) -> str or None:
         """
         Given a sample ID (for a sample belonging to this experiment) return it's mongo ObjectID as a string
 
@@ -180,8 +182,12 @@ class FCSExperiment(mongoengine.Document):
         file_grp = [f for f in self.fcs_files if f.primary_id == sample_id][0]
         return file_grp.id.__str__()
 
-    def pull_sample_data(self, sample_id: str, sample_size: int or None = None, include_controls: bool = True,
-                         output_format: str = 'dataframe', columns_default: str = 'marker') -> None or list:
+    def get_sample_data(self,
+                        sample_id: str,
+                        sample_size: int or None = None,
+                        include_controls: bool = True,
+                        output_format: str = 'dataframe',
+                        columns_default: str = 'marker') -> None or list:
         """
         Given a sample ID, associated to this experiment, fetch the fcs data
 
@@ -207,9 +213,8 @@ class FCSExperiment(mongoengine.Document):
         """
         db = connection.get_db(alias='core')
         db_name = db.name
-        file_grp = self.pull_sample(sample_id)
-        if not file_grp:
-            return None
+        file_grp = self.get_sample(sample_id)
+        assert file_grp is not None, f"Sample ID {sample_id} not recognised"
         files = file_grp.files
         # Fetch data
         if not include_controls:  # Fetch data for primary file only
@@ -219,6 +224,7 @@ class FCSExperiment(mongoengine.Document):
             connection._connection_settings = {}
             connection._dbs = {}
             FileGroup._collection = None
+
 
             complete = data_from_file(file_id=file_id,
                                       filegrp_id=file_grp.id,
@@ -249,7 +255,7 @@ class FCSExperiment(mongoengine.Document):
         connection.connect(db=db_name, alias='core')
         return data
 
-    def remove_sample(self, sample_id: str) -> bool:
+    def remove_sample(self, sample_id: str):
         """
         Remove sample (FileGroup) from experiment.
 
@@ -260,18 +266,19 @@ class FCSExperiment(mongoengine.Document):
 
         Returns
         --------
-        bool
-            True if successful
+        None
         """
         assert sample_id in self.list_samples(), f'{sample_id} not associated to this experiment'
-        fg = self.pull_sample(sample_id)
+        fg = self.get_sample(sample_id)
         self.fcs_files = [f for f in self.fcs_files if f.primary_id != sample_id]
         fg.delete()
         self.save()
-        return True
 
-    def _create_file_entry(self, path: str, file_id: str, comp_matrix: str or None,
-                           compensate: bool, catch_standardisation_errors: bool,
+    def _create_file_entry(self,
+                           path: str,
+                           file_id: str,
+                           comp_matrix: str or None,
+                           compensate: bool,
                            control: bool = False) -> File or None:
         """
         Internal method. Create a new File object.
@@ -287,9 +294,6 @@ class FCSExperiment(mongoengine.Document):
             Path to compensation matrix (if Null, matrix expected to be embedded in fcs file)
         compensate: bool
             If True, compensation will be applied else False
-        catch_standardisation_errors: bool
-            If True, standardisation errors will result in no File generation
-            and function will return Null
         control: bool
             If True, File will be created as file type 'control'
 
@@ -309,10 +313,7 @@ class FCSExperiment(mongoengine.Document):
         if control:
             new_file.file_type = 'control'
         data = fcs.dataframe
-        column_mappings = self.panel.standardise(data, catch_standardisation_errors)
-        if column_mappings is None:
-            print(f'Error: invalid channel/marker mappings for {file_id}, at path {path}, aborting.')
-            return None
+        column_mappings = self.panel.standardise(data)
         new_file.put(data.values)
         new_file.channel_mappings = [ChannelMap(channel=c, marker=m) for c, m in column_mappings]
         return new_file
@@ -325,7 +326,6 @@ class FCSExperiment(mongoengine.Document):
                        comp_matrix: str or None = None,
                        compensate: bool = True,
                        verbose: bool = True,
-                       catch_standardisation_errors: bool = False,
                        processing_datetime: str or None = None,
                        collection_datetime: str or None = None) -> None or str:
         """
@@ -350,8 +350,6 @@ class FCSExperiment(mongoengine.Document):
         verbose: bool, (default=True)
             If True function will provide feedback in the form of print statements
             (default=True)
-        catch_standardisation_errors: bool, (default=True)
-            If True, standardisation errors will cause process to abort
         processing_datetime: str, optional
         collection_datetime: str, optional
 
@@ -375,8 +373,7 @@ class FCSExperiment(mongoengine.Document):
         primary_file = self._create_file_entry(file_path,
                                                sample_id,
                                                comp_matrix=comp_matrix,
-                                               compensate=compensate,
-                                               catch_standardisation_errors=catch_standardisation_errors)
+                                               compensate=compensate)
         file_collection.files.append(primary_file)
         vp('Generating file entries for controls...')
         for c in controls:
@@ -384,7 +381,6 @@ class FCSExperiment(mongoengine.Document):
                                               f"{sample_id}_{c['control_id']}",
                                               comp_matrix=comp_matrix,
                                               compensate=compensate,
-                                              catch_standardisation_errors=catch_standardisation_errors,
                                               control=True)
             file_collection.files.append(control)
         file_collection.save()

@@ -26,7 +26,7 @@ class TextFCSExperiment(unittest.TestCase):
                                 compensate=False)
         self.assertEqual(test_exp.list_samples(), ['test_sample'])
         self.assertTrue(test_exp.sample_exists('test_sample'))
-        self.assertEqual(test_exp.pull_sample('test_sample').primary_id, 'test_sample')
+        self.assertEqual(test_exp.get_sample('test_sample').primary_id, 'test_sample')
         correct_mappings = {'FS Lin': 'FS Lin',
                             'SS Log': 'SS Log',
                             'FL1 Log': 'IgG1-FITC',
@@ -36,7 +36,7 @@ class TextFCSExperiment(unittest.TestCase):
                             'FL5 Log': 'IgG1-PC7'}
         correct_mappings = [{'channel': k, 'marker': v} for k, v in correct_mappings.items()]
         self.assertListEqual(test_exp.pull_sample_mappings('test_sample').get('test_sample'), correct_mappings)
-        data = test_exp.pull_sample_data('test_sample', include_controls=True)
+        data = test_exp.get_sample_data('test_sample', include_controls=True)
         primary = [d for d in data if d.get('typ') == 'complete'][0]
         ctrl = [d for d in data if d.get('typ') == 'control'][0]
         self.assertEqual(type(data), list)
@@ -46,9 +46,9 @@ class TextFCSExperiment(unittest.TestCase):
         self.assertEqual(primary.get('data').geom, (30000, 7))
         self.assertListEqual(primary.get('data').columns.tolist(),
                              ['FS Lin', 'SS Log', 'IgG1-FITC', 'IgG1-PE', 'CD45-ECD', 'IgG1-PC5', 'IgG1-PC7'])
-        data = test_exp.pull_sample_data('test_sample', include_controls=False)
+        data = test_exp.get_sample_data('test_sample', include_controls=False)
         self.assertEqual(len(data), 1)
-        data = test_exp.pull_sample_data('test_sample', sample_size=5000, include_controls=False)
+        data = test_exp.get_sample_data('test_sample', sample_size=5000, include_controls=False)
         self.assertEqual(data[0].get('data').geom, (5000, 7))
 
 

@@ -59,9 +59,8 @@ class Gating:
                  include_controls=True,
                  default_axis='FSC-A'):
         try:
-            data = experiment.pull_sample_data(sample_id=sample_id,
-                                               sample_size=sample,
-                                               include_controls=include_controls)
+            data = experiment.get_sample_data(sample_id=sample_id, sample_size=sample,
+                                              include_controls=include_controls)
             assert data is not None
         except AssertionError:
             raise GateError(f'Error: failed to fetch data for {sample_id}. Aborting.')
@@ -79,7 +78,7 @@ class Gating:
         self.experiment = experiment
         self.plotting = Plot(self, default_axis)
         del data
-        fg = experiment.pull_sample(sample_id)
+        fg = experiment.get_sample(sample_id)
         self.filegroup = fg
         self.gates = dict()
         self.populations = dict()

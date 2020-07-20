@@ -4,9 +4,12 @@ from shapely.ops import unary_union
 from shapely import affinity
 from bson.binary import Binary
 from warnings import warn
+from dask import dataframe as dd
+import pandas as pd
 import numpy as np
 import mongoengine
 import pickle
+import os
 
 
 class ClusteringDefinition(mongoengine.Document):
@@ -468,7 +471,9 @@ class File(mongoengine.EmbeddedDocument):
     compensated = mongoengine.BooleanField(default=False)
     channel_mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
 
-    def pull(self, sample: int or None = None) -> np.array:
+    def get(self,
+            sample: int or None = None,
+            as_type: str = 'dataframe') -> np.array:
         """
         Retrieve single cell data from database
 
@@ -482,11 +487,19 @@ class File(mongoengine.EmbeddedDocument):
         Numpy.array
             Array of single cell data
         """
+
+        assert as_type in ['dataframe', 'array'], "as_type should be 'array' or 'dataframe'"
         self.data.seek(0)
-        data = pickle.loads(self.data.read())
-        if sample and sample < data.geom[0]:
-            idx = np.random.randint(0, data.geom[0], size=sample)
-            return data[idx, :]
+        if as_type == 'dataframe':
+            df = pd.read_pickle(self.data.read())
+            if sample and sample < df.shape[0]:
+                return df.sample(sample)
+            return df
+        else:
+            data = np.load(self.data.read(), allow_pickle=True)
+            if sample and sample < data.shape[0]:
+                idx = np.random.randint(0, data.shape[0], size=sample)
+                return data[idx, :]
         return data
 
     def put(self, data: np.array) -> None:

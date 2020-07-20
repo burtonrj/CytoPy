@@ -128,9 +128,7 @@ def pull_data(sid: str,
     -------
     Pandas.DataFrame
     """
-    d = experiment.pull_sample_data(sample_id=sid,
-                                    include_controls=False,
-                                    sample_size=sample_n)
+    d = experiment.get_sample_data(sample_id=sid, sample_size=sample_n, include_controls=False)
     if d is None:
         return None
     d = [x for x in d if x['typ'] == 'complete'][0]['data'][features]

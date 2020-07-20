@@ -35,9 +35,7 @@ class Gating:
                  sample: int or None = None,
                  include_controls=True,
                  verbose: bool = True):
-        data = experiment.pull_sample_data(sample_id=sample_id,
-                                           sample_size=sample,
-                                           include_controls=include_controls)
+        data = experiment.get_sample_data(sample_id=sample_id, sample_size=sample, include_controls=include_controls)
         assert data is not None, f'Error: failed to fetch data for {sample_id}. Aborting.'
         self.data = [x for x in data
                      if x['typ'] == 'complete'][0]['data']
@@ -52,7 +50,7 @@ class Gating:
         self.id = sample_id
         self.mongo_id = experiment.fetch_sample_mid(sample_id)
         self.experiment = experiment
-        self.filegroup = experiment.pull_sample(sample_id)
+        self.filegroup = experiment.get_sample(sample_id)
         self.gates = dict()
         self.populations = dict()
         self.tree = self._construct_tree()
