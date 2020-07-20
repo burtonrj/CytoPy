@@ -2,9 +2,8 @@ import sys
 sys.path.append('/home/ross/CytoPy')
 
 from CytoPy.data.project import Project
-from CytoPy.data.panel import Panel
 from CytoPy.data.mongo_setup import global_init
-from mongoengine import connect
+from mongoengine import connect, disconnect
 from mongoengine.errors import DoesNotExist
 import unittest
 
@@ -14,6 +13,14 @@ global_init('test')
 
 
 class TestProject(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        connect('testing', host='mongomock://localhost')
+
+    @classmethod
+    def tearDownClass(cls):
+        disconnect()
 
     def test_Project(self):
         test_panel = Panel(panel_name='test')

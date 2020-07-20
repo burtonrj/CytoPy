@@ -44,3 +44,12 @@ def dask_client(n_cores: int or None = None,
     if n_cores is None:
         n_cores = cpu_count()
     return Client(n_workers=n_cores, **kwargs)
+
+
+class Settings(mongoengine.Document):
+    _data_directory = mongoengine.StringField(db_field="data_directory")
+
+    def __init__(self, *args, **kwargs):
+        if "data_directory" in kwargs.keys():
+            self.definition = kwargs.pop("definition")
+        super().__init__(*args, **kwargs)
