@@ -784,7 +784,7 @@ class SingleClustering(Clustering):
         """
         self.experiment = experiment
         self.sample_id = sample_id
-        fg = experiment.pull_sample(sample_id)
+        fg = experiment.get_sample(sample_id)
         root_p = fg.get_population(self.ce.root_population)
         if self.ce.clustering_uid in root_p.list_clustering_experiments():
             self._load_clusters(root_p)
@@ -864,7 +864,7 @@ class SingleClustering(Clustering):
         """
         # Is the given UID unique?
         self._has_data()
-        fg = self.experiment.pull_sample(self.sample_id)
+        fg = self.experiment.get_sample(self.sample_id)
         root_p = fg.get_population(self.ce.root_population)
         if self.ce.clustering_uid in root_p.list_clustering_experiments():
             if overwrite:
@@ -1065,7 +1065,7 @@ class MetaClustering(Clustering):
         Meta-clusters are saved to DataFrame in column 'meta_cluster_id'.
         """
         def load(sample_id, cluster_id):
-            fg = self.experiment.pull_sample(sample_id)
+            fg = self.experiment.get_sample(sample_id)
             root = fg.get_population(self.ce.root_population)
             clusters = root.get_many_clusters(self.ce.meta_clustering_uid_target)
             cluster = [c for c in clusters if c.cluster_id == cluster_id][0]
@@ -1172,7 +1172,7 @@ class MetaClustering(Clustering):
 
         """
         def _save(x):
-            fg = self.experiment.pull_sample(x.sample_id)
+            fg = self.experiment.get_sample(x.sample_id)
             pop = fg.get_population(self.ce.root_population)
             cluster = [c for c in pop.clustering if c.cluster_id == x.cluster_id][0]
             cluster.meta_cluster_id = x.meta_cluster_id

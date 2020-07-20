@@ -1,8 +1,14 @@
 from mongoengine import connection
+from multiprocessing import cpu_count
 from .fcs import File, FileGroup
 import pandas as pd
 import numpy as np
-import os
+import psutil
+
+
+def optimal_partitions(obj_bytes: int):
+    cores = cpu_count()
+    mem = psutil.virtual_memory().available
 
 
 def get_fcs_file_paths(fcs_dir: str, control_names: list, ctrl_id: str, ignore_comp: bool = True) -> dict:
@@ -80,7 +86,7 @@ def data_from_file(file_id: str,
     file = [f for f in fg.files if f.file_id == file_id]
     assert file, f'Invalid file ID {file_id} for FileGroup {fg.primary_id}'
     assert len(file) == 1, f'Multiple files of ID {file_id} found in FileGroup {fg.primary_id}'
-    data = file[0].pull(sample=sample_size)
+    data = file[0].get(sample=sample_size)
     if output_format == 'dataframe':
         data = as_dataframe(data, column_mappings=file[0].channel_mappings, columns_default=columns_default)
     data = dict(id=file[0].file_id, typ=file[0].file_type, data=data)

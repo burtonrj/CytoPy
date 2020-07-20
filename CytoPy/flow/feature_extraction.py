@@ -129,15 +129,15 @@ class ControlComparisons:
                                                                                 'given experiment'
 
         filtered_samples = list(filter(lambda s: any([f.file_type == 'control' for
-                                                      f in self.experiment.pull_sample(s).files]), samples))
+                                                      f in self.experiment.get_sample(s).files]), samples))
         assert filtered_samples, 'No files in the provided experiment have associated control data'
         no_ctrls = [s for s in samples if s not in filtered_samples]
         if no_ctrls:
             print(f'The following samples are missing control data and therefore will be omitted from '
                   f'analysis: {no_ctrls}')
             print('\n')
-        return {s: {'all': self.experiment.pull_sample(s).list_controls(),
-                    'gated': self.experiment.pull_sample(s).list_gated_controls()} for s in filtered_samples}
+        return {s: {'all': self.experiment.get_sample(s).list_controls(),
+                    'gated': self.experiment.get_sample(s).list_gated_controls()} for s in filtered_samples}
 
     def _has_control_data(self,
                           sample_id: str,
@@ -331,7 +331,7 @@ def meta_labelling(experiment: FCSExperiment,
 
     """
     def fetch_meta(sample_id):
-        subject = Subject.objects(files=experiment.pull_sample(sample_id))
+        subject = Subject.objects(files=experiment.get_sample(sample_id))
         assert subject, f'Sample {sample_id} is not associated to any subject!'
         try:
             return subject[0][meta_label]
@@ -480,7 +480,7 @@ class Proportions:
                                                        f'are you sure this is a valid sample?'
         self.experiment = experiment
         self.sample_id = sample_id
-        self.file_group: FileGroup = self.experiment.pull_sample(self.sample_id)
+        self.file_group: FileGroup = self.experiment.get_sample(self.sample_id)
 
     def get_population_n(self,
                          population: str):

@@ -70,7 +70,7 @@ def _get_features(experiment: FCSExperiment,
     if sample_id is None:
         return _genetate_feature_list(experiment.panel.mappings)
     assert sample_id in experiment.list_samples(), f'{sample_id} not found in experiment {experiment.experiment_id}'
-    sample = experiment.pull_sample(sample_id)
+    sample = experiment.get_sample(sample_id)
     return _genetate_feature_list(sample.files[0].channel_mappings)
 
 
