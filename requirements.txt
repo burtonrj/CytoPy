@@ -5,6 +5,7 @@ FlowIO==0.9.5
 FlowUtils==0.7.1
 future==0.18.2
 graphviz==0.14.1
+h5py==2.10.0
 hdbscan==0.8.26
 imbalanced-learn==0.7.0
 Keras==2.4.3

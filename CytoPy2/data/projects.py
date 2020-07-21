@@ -1,6 +1,5 @@
 from .experiments import Experiment
 from .subjects import Subject
-from ..feedback import vprint
 from typing import Generator
 import mongoengine
 import datetime
@@ -25,7 +24,6 @@ class Project(mongoengine.Document):
         List of references for associated fcs files
     """
     project_id = mongoengine.StringField(required=True, unique=True)
-    _data_directory = mongoengine.StringField(db_field="data_directory")
     subjects = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
     start_date = mongoengine.DateTimeField(default=datetime.datetime.now)
     owner = mongoengine.StringField(requred=True)
@@ -35,24 +33,6 @@ class Project(mongoengine.Document):
         'db_alias': 'core',
         'collection': 'projects'
     }
-
-    def __init__(self, *args, **kwargs):
-        verbose = False
-        if "definition" in kwargs.keys():
-            self.data_directory = kwargs.pop("data_directory")
-        if "verbose" in kwargs.keys():
-            verbose = kwargs.pop("verbose")
-        self.print = vprint(verbose)
-        super().__init__(*args, **kwargs)
-
-    @property
-    def data_directory(self):
-        return self._data_directory
-
-    @data_directory.setter
-    def data_directory(self, value):
-        assert os.path.isdir(value)
-        self._data_directory = value
 
     def list_experiments(self) -> Generator:
         """
@@ -114,7 +94,6 @@ class Project(mongoengine.Document):
         exp.save()
         self.experiments.append(exp)
         self.save()
-        self.print(f"Experiment {experiment_id} created successfully!")
         return exp
 
     def add_subject(self,
@@ -154,7 +133,6 @@ class Project(mongoengine.Document):
         new_subject.save()
         self.subjects.append(new_subject)
         self.save()
-        self.print(f"Subject {subject_id} created successfully!")
         return new_subject
 
     def list_subjects(self) -> Generator:
@@ -205,11 +183,9 @@ class Project(mongoengine.Document):
         experiments = [self.load_experiment(e) for e in list(self.list_experiments())]
         for e in experiments:
             samples = e.list_samples()
-            for s in samples: add .
-
+            for s in samples:
                 e.remove_sample(s)
             e.delete()
         for p in self.subjects:
             p.delete()
         super().delete(*args, **kwargs)
-        self.print(f"Project deleted!")
