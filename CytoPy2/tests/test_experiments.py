@@ -59,7 +59,7 @@ class TextExperiment(unittest.TestCase):
         data = exp.get_sample_data('test_sample', include_controls=False)
         self.assertIsNone(data.get("controls"))
         data = exp.get_sample_data('test_sample', sample_size=5000, include_controls=False)
-        self.assertEqual(data.get('primary').geom, (5000, 7))
+        self.assertEqual(data.get('primary').shape, (5000, 7))
 
 
 if __name__ == '__main__':

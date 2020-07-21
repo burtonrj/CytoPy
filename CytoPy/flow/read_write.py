@@ -1,4 +1,4 @@
-from dask import delayed, bag as db
+from dask import bag as db
 import flowio
 import dateutil.parser as date_parser
 import numpy as np
