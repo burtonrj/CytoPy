@@ -1,3 +1,4 @@
+from ..utilities import _valid_directory
 from ..feedback import vprint
 from .fcs import FileGroup
 from .subjects import Subject
@@ -101,13 +102,6 @@ def _check_duplication(x: list) -> bool:
         print(f'Duplicate channel/markers identified: {duplicates}')
         return True
     return False
-
-
-class ClusteringExperiment(mongoengine.Document):
-    pass
-
-
-class MetaClusteringExperiment(mongoengine.Document)
 
 
 class NormalisedName(mongoengine.EmbeddedDocument):
@@ -373,7 +367,7 @@ class Panel(mongoengine.Document):
             yield cm.marker
 
 
-class FCSExperiment(mongoengine.Document):
+class Experiment(mongoengine.Document):
     """
     Document representation of Flow Cytometry experiment
 
@@ -395,21 +389,18 @@ class FCSExperiment(mongoengine.Document):
         List of IDs for meta clusters belonging to this experiment
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
-    _data_directory = mongoengine.StringField(db_field="data_directory")
+    data_directory = mongoengine.StringField(required=True,
+                                             validation=_valid_directory)
     panel = mongoengine.ReferenceField(Panel, reverse_delete_rule=4)
     fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4))
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
     gating_templates = mongoengine.ListField(mongoengine.ReferenceField(GatingStrategy, reverse_delete_rule=4))
-    meta_cluster_ids = mongoengine.ListField()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         panel_definition = None
         panel_name = None
-        if not self.data_directory:
-            assert kwargs.get("data_directory") is not None, "No data directory provided"
-            self.data_directory = kwargs.pop("data_directory")
         if not self.panel:
             if kwargs.get("panel_definition") is not None:
                 panel_definition = kwargs.pop("panel_definition")
@@ -420,15 +411,6 @@ class FCSExperiment(mongoengine.Document):
                 panel_name = kwargs.pop("panel_name")
             self.panel = self._generate_panel(panel_definition=panel_definition,
                                               panel_name=panel_name)
-
-    @property
-    def data_directory(self):
-        return self._data_directory
-
-    @data_directory.setter
-    def data_directory(self, value):
-        assert os.path.isdir(value), f"{value} is not a valid directory"
-        self._data_directory = value
 
     def _generate_panel(self,
                         panel_definition: str or None,
@@ -650,16 +632,20 @@ class FCSExperiment(mongoengine.Document):
             MongoDB ObjectID string for new FileGroup entry
         """
         def add_file(_id, path):
+            control = False
+            if _id is not None:
+                control = True
             fcs = FCSFile(filepath=path,
                           comp_matrix=comp_matrix)
             channel_mappings = self.panel.standardise(fcs.channel_mappings)
             if compensate:
                 fcs.compensate()
-            filegrp.add_file(file_id=_id,
-                             data=fcs.event_data,
+            filegrp.add_file(data=fcs.event_data,
                              channel_mappings=channel_mappings,
                              compression=compression,
-                             chunks=chunks)
+                             chunks=chunks,
+                             control=control,
+                             ctrl_id=_id)
 
         feedback = vprint(verbose)
         assert not self.sample_exists(sample_id), f'A file group with id {sample_id} already exists'
@@ -672,10 +658,10 @@ class FCSExperiment(mongoengine.Document):
             filegrp.collection_datetime = collection_datetime
         # Add the primary file
         feedback(f"...adding primary file")
-        add_file(self, sample_id, primary_path)
+        add_file(None, primary_path)
         for ctrl, ctrl_path in controls_path.items():
             feedback(f"...adding {ctrl} file")
-            add_file(self, ctrl, ctrl_path)
+            add_file(ctrl, ctrl_path)
         if subject_id is not None:
             try:
                 p = Subject.objects(subject_id=subject_id).get()
