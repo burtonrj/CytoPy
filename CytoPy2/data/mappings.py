@@ -1,5 +1,6 @@
 import mongoengine
 
+
 class ChannelMap(mongoengine.EmbeddedDocument):
     """
     Defines channel/marker mapping. Each document will contain a single value for channel and a single value for marker,
