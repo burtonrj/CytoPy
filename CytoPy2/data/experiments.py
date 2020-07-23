@@ -103,6 +103,13 @@ def _check_duplication(x: list) -> bool:
     return False
 
 
+class ClusteringExperiment(mongoengine.Document):
+    pass
+
+
+class MetaClusteringExperiment(mongoengine.Document)
+
+
 class NormalisedName(mongoengine.EmbeddedDocument):
     """
     Defines a standardised name for a channel or marker and provides method for testing if a channel/marker
@@ -420,7 +427,7 @@ class FCSExperiment(mongoengine.Document):
 
     @data_directory.setter
     def data_directory(self, value):
-        assert os.path.isdir(value)
+        assert os.path.isdir(value), f"{value} is not a valid directory"
         self._data_directory = value
 
     def _generate_panel(self,
@@ -642,31 +649,33 @@ class FCSExperiment(mongoengine.Document):
         str
             MongoDB ObjectID string for new FileGroup entry
         """
+        def add_file(_id, path):
+            fcs = FCSFile(filepath=path,
+                          comp_matrix=comp_matrix)
+            channel_mappings = self.panel.standardise(fcs.channel_mappings)
+            if compensate:
+                fcs.compensate()
+            filegrp.add_file(file_id=_id,
+                             data=fcs.event_data,
+                             channel_mappings=channel_mappings,
+                             compression=compression,
+                             chunks=chunks)
+
         feedback = vprint(verbose)
         assert not self.sample_exists(sample_id), f'A file group with id {sample_id} already exists'
-        filegrp = FileGroup(primary_id=sample_id)
+        filegrp = FileGroup(primary_id=sample_id,
+                            data_directory=self.data_directory)
         feedback('Generating main file entry...')
         if processing_datetime is not None:
             filegrp.processing_datetime = processing_datetime
         if collection_datetime is not None:
             filegrp.collection_datetime = collection_datetime
-        primary_path = {sample_id: primary_path}
-        for file_type, files in zip(["primary", "control"], [primary_path, controls_path]):
-            feedback(f"...adding {file_type} files")
-            for name, path in files.items():
-                fcs = FCSFile(filepath=path,
-                              comp_matrix=comp_matrix)
-                if compensate:
-                    fcs.compensate()
-                channel_mappings = self.panel.standardise(fcs.channel_mappings)
-                # compensate
-                filegrp.add_file(file_id=name,
-                                 file_type=file_type,
-                                 data_directory=self.data_directory,
-                                 data=fcs.event_data,
-                                 channel_mappings=channel_mappings,
-                                 compression=compression,
-                                 chunks=chunks)
+        # Add the primary file
+        feedback(f"...adding primary file")
+        add_file(self, sample_id, primary_path)
+        for ctrl, ctrl_path in controls_path.items():
+            feedback(f"...adding {ctrl} file")
+            add_file(self, ctrl, ctrl_path)
         if subject_id is not None:
             try:
                 p = Subject.objects(subject_id=subject_id).get()
