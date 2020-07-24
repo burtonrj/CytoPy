@@ -12,8 +12,8 @@ IMPORTS = {"GaussianMixture": "sklearn.mixture.GaussianMixture",
            "MiniBatchKMeans": "sklearn.cluster.MiniBatchKMeans",
            "Hierarchical": "sklearn.cluster.AgglomerativeClustering",
            "Birch": "sklearn.cluster.Birch",
-           "Dbscan": "sklearn.cluster.DBSCAN",
-           "Hdbscan": "hdbscan.HDBSCAN",
+           "DBSCAN": "sklearn.cluster.DBSCAN",
+           "HDBSCAN": "hdbscan.HDBSCAN",
            "MeanShift": "sklearn.cluster.MeanShift",
            "Spectral": "sklearn.cluster.SpectralClustering"}
 
@@ -102,7 +102,7 @@ class Analyst:
                  labels: list,
                  centers: list,
                  covar_matrix: np.array or None = None):
-        # if cover matrix is none, for each center, expand a circle to the most distant assigned point
+        # if covar matrix is none, for each center, expand a circle to the most distant assigned point
         # if circles overlap, reduce circle until silhoutte is 0
         populations = list()
         names = list(string.ascii_uppercase)
@@ -118,7 +118,8 @@ class Analyst:
                                       angle=angle)
             populations.append(Population(population_name=names[i],
                                           parent=self.parent,
-                                          geom=geom))
+                                          geom=geom,
+                                          index=index))
         return populations
 
     def _polygon(self,
