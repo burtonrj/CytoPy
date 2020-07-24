@@ -1,5 +1,6 @@
 from .mappings import ChannelMap
 from shapely.geometry import Polygon, Point
+from shapely.ops import unary_union
 from shapely import affinity
 from warnings import warn
 from typing import List, Generator
@@ -146,6 +147,28 @@ class Population(mongoengine.EmbeddedDocument):
         assert type(ctrl_idx[0]) == str, "first item in ctrl_idx should be type str"
         assert type(ctrl_idx[1]) == np.array, "second item in ctrl_idx should be type numpy.array"
         self._ctrl_index[ctrl_idx[0]] = ctrl_idx[1]
+
+
+def merge_populations(left_p: Population,
+                      right_p: Population):
+    assert left_p.parent == right_p.parent, "Parent populations do not match"
+    # check that geometries overlap
+    assert left_p.geom.shape.intersects(right_p.geom.shape), "Invalid: cannot merge non-overlapping populations"
+    # TODO lookup all clusters applied to this population and delete
+    warn("Associated clusters are now void. Repeat clustering on new population")
+    if len(left_p._ctrl_index) > 0 or len(right_p._ctrl_index) > 0:
+        warn("Associated control indexes are now void. Repeat control gating on new population")
+    new_definition = None
+    if left_p.definition and right_p.definition:
+        new_definition = ",".join([left_p.definition, right_p.definition])
+    new_population = Population(population_name=left_p.population_name,
+                                n=len(left_p.index) + len(right_p.index),
+                                parent=left_p.parent,
+                                warnings=left_p.warnings+right_p.warnings+["MERGED POPULATION"],
+                                index=np.unique(np.concatenate(left_p.index, right_p.index)),
+                                geom=unary_union([p.geom.shape for p in [left_p, right_p]]),
+                                definition=new_definition)
+    return new_population
 
 
 class FileGroup(mongoengine.Document):
