@@ -72,17 +72,15 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
                                                       db_field="template_geometry")
 
     def __init__(self, *args, **kwargs):
-        if "definition" in kwargs.keys():
-            self.definition = kwargs.pop("definition")
         super().__init__(*args, **kwargs)
+        if "definition" in kwargs.keys():
+            self._definition = kwargs.pop("definition")
+        if "template_geometry" in kwargs.keys():
+            self._template_geometry = kwargs.pop("template_geometry")
 
     @property
     def definition(self):
         return self._definition
-
-    @property
-    def template_geometry(self):
-        return self._template_geometry
 
     @definition.setter
     def definition(self,
@@ -102,6 +100,10 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
         else:
             warn("Definition given for a non-binary Gate that does not generate a threshold. Definition will be"
                  "ignored")
+
+    @property
+    def template_geometry(self):
+        return self._template_geometry
 
     @template_geometry.setter
     def template_geometry(self,
@@ -129,9 +131,7 @@ class Gate(mongoengine.Document):
     parent = mongoengine.StringField(required=True)
     children = mongoengine.EmbeddedDocumentListField(ChildDefinition)
     binary = mongoengine.BooleanField(default=True)
-    shape = mongoengine.StringField(required=True, choices=["threshold",
-                                                            "polygon",
-                                                            "ellipse"])
+    shape = mongoengine.StringField(required=True, choices=["threshold", "polygon", "ellipse"])
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField(required=True)
     preprocessing = mongoengine.EmbeddedDocument(PreProcess)

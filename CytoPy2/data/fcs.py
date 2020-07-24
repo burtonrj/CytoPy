@@ -100,6 +100,7 @@ class Population(mongoengine.EmbeddedDocument):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # If the Population existed previously, fetched the index
         self._index = None
         self._ctrl_index = dict()
         self.h5path = os.path.join(self._instance.data_directory, f"{self._instance.id.__str__()}.hdf5")
@@ -111,6 +112,11 @@ class Population(mongoengine.EmbeddedDocument):
             for ctrl in self._instance.controls:
                 if f'/index/{self.population_name}/{ctrl}' in f.keys():
                     self._ctrl_index[ctrl] = f[f'/index/{self.population_name}/{ctrl}'][:]
+        # If this is a new instance of Population and index has been given in kwargs, set self._index
+        if self._index is None and "index" in kwargs.keys():
+            self._index = kwargs.get("index")
+        if not self._ctrl_index and "ctrl_index" in kwargs.keys():
+            self._ctrl_index = kwargs.get("ctrl_index")
 
     population_name = mongoengine.StringField()
     n = mongoengine.IntField()
@@ -127,8 +133,7 @@ class Population(mongoengine.EmbeddedDocument):
 
     @index.setter
     def index(self, idx: np.array):
-        with h5py.File(self.h5path, "r") as f:
-            f.create_dataset(f'/index/{self.population_name}', data=idx)
+        self.n = len(idx)
         self._index = idx
 
     @property
@@ -140,8 +145,6 @@ class Population(mongoengine.EmbeddedDocument):
         assert len(ctrl_idx) == 2, "ctrl_idx should be a tuple of length 2"
         assert type(ctrl_idx[0]) == str, "first item in ctrl_idx should be type str"
         assert type(ctrl_idx[1]) == np.array, "second item in ctrl_idx should be type numpy.array"
-        with h5py.File(self.h5path, "r") as f:
-            f.create_dataset(f'/index/{self.population_name}/{ctrl_idx[0]}', data=ctrl_idx[1])
         self._ctrl_index[ctrl_idx[0]] = ctrl_idx[1]
 
 
@@ -366,9 +369,15 @@ class FileGroup(mongoengine.Document):
                 yield p
 
     def save(self, *args, **kwargs):
+        # Calculate meta and save indexes to disk
         root_n = [p for p in self.populations if p.population_name == "root"][0].n
-        for p in self.populations:
-            parent_n = [p for p in self.populations if p.population_name == p.parent][0].n
-            p.prop_of_parent = p.n/parent_n
-            p.prop_of_total = p.n/root_n
+        with h5py.File(self.h5path, "r") as f:
+            for p in self.populations:
+                parent_n = [p for p in self.populations if p.population_name == p.parent][0].n
+                p.prop_of_parent = p.n/parent_n
+                p.prop_of_total = p.n/root_n
+                f.create_dataset(f'/index/{p.population_name}', data=p.index)
+                for ctrl, idx in p.ctrl_index.items():
+                    f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
         super().save(*args, **kwargs)
+
