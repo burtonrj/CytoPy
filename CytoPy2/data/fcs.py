@@ -3,11 +3,21 @@ from shapely.geometry import Polygon, Point
 from shapely import affinity
 from warnings import warn
 from typing import List, Generator
-from dask import dataframe as dd, array as da
+import pandas as pd
 import numpy as np
 import mongoengine
 import h5py
 import os
+
+
+def _column_names(df: pd.DataFrame,
+                  mappings: list,
+                  preference: str = "marker"):
+    assert preference in ["marker", "channel"], "preference should be either 'marker' or 'channel'"
+    other = [x for x in ["marker", "channel"] if x != preference][0]
+    col_names = list(map(lambda x: x[preference] if x[preference] else x[other], mappings))
+    df.columns = col_names
+    return df
 
 
 class PopulationGeometry(mongoengine.EmbeddedDocument):
@@ -90,17 +100,17 @@ class Population(mongoengine.EmbeddedDocument):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.index = None
-        self.ctrl_index = dict()
-        f = h5py.File(os.path.join(self._instance.data_directory, f"{self._instance.id.__str__()}.hdf5"), "r")
-        # Load the population index (if population exists)
-        if f'/index/{self.population_name}' in f.keys():
-            self.index = da.from_array(f[f'/index/{self.population_name}'])
-            f.close()
-        # Load the control index (if population exists)
-        for ctrl in self._instance.controls:
-            if f'/index/{self.population_name}/{ctrl}' in f.keys():
-                self.ctrl_index[ctrl] = da.from_array(f[f'/index/{self.population_name}/{ctrl}'])
+        self._index = None
+        self._ctrl_index = dict()
+        self.h5path = os.path.join(self._instance.data_directory, f"{self._instance.id.__str__()}.hdf5")
+        with h5py.File(self.h5path, "r") as f:
+            # Load the population index (if population exists)
+            if f'/index/{self.population_name}' in f.keys():
+                self._index = f[f'/index/{self.population_name}'][:]
+            # Load the control index (if population exists)
+            for ctrl in self._instance.controls:
+                if f'/index/{self.population_name}/{ctrl}' in f.keys():
+                    self._ctrl_index[ctrl] = f[f'/index/{self.population_name}/{ctrl}'][:]
 
     population_name = mongoengine.StringField()
     n = mongoengine.IntField()
@@ -116,9 +126,23 @@ class Population(mongoengine.EmbeddedDocument):
         return self._index
 
     @index.setter
-    def index(self, arr: da):
-        arr.to_hdf5(self._instance.primary_file.data, f'/index/{self.population_name}', arr)
-        self._index = arr
+    def index(self, idx: np.array):
+        with h5py.File(self.h5path, "r") as f:
+            f.create_dataset(f'/index/{self.population_name}', data=idx)
+        self._index = idx
+
+    @property
+    def ctrl_index(self):
+        return self._ctrl_index
+
+    @ctrl_index.setter
+    def ctrl_index(self, ctrl_idx: tuple):
+        assert len(ctrl_idx) == 2, "ctrl_idx should be a tuple of length 2"
+        assert type(ctrl_idx[0]) == str, "first item in ctrl_idx should be type str"
+        assert type(ctrl_idx[1]) == np.array, "second item in ctrl_idx should be type numpy.array"
+        with h5py.File(self.h5path, "r") as f:
+            f.create_dataset(f'/index/{self.population_name}/{ctrl_idx[0]}', data=ctrl_idx[1])
+        self._ctrl_index[ctrl_idx[0]] = ctrl_idx[1]
 
 
 class FileGroup(mongoengine.Document):
@@ -160,46 +184,52 @@ class FileGroup(mongoengine.Document):
         'collection': 'fcs_files'
     }
 
+    def __init__(self, *args, **values):
+        super().__init__(*args, **values)
+        self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
+
     def load(self,
-             sample_size: int or None = None,
+             sample_size: int or float or None = None,
              include_controls: bool = True,
              columns: str = "marker"):
-        filename = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
-        data = {"primary": dd.read_hdf(filename,
-                                       "primary",
-                                       columns=[x[columns] for x in self.channel_mappings])}
+        data = {"primary": _column_names(df=pd.read_hdf(self.h5path, "primary"),
+                                         mappings=self.channel_mappings,
+                                         preference=columns)}
         if include_controls:
-            data["controls"] = {ctrl_id: dd.read_hdf(filename,
-                                                     ctrl_id,
-                                                     columns=[x[columns] for x in self.channel_mappings])
+            data["controls"] = {ctrl_id: _column_names(df=pd.read_hdf(self.h5path, ctrl_id),
+                                                       mappings=self.channel_mappings,
+                                                       preference=columns)
                                 for ctrl_id in self.controls}
         if sample_size is not None:
-            data["primary"] = data["primary"].sample(n=sample_size)
-            data["controls"] = {file_id: x.sample(n=sample_size) for file_id, x in data["controls"].items()}
+            if type(sample_size) == int:
+                data["primary"] = data["primary"].sample(n=sample_size)
+                data["controls"] = {file_id: x.sample(n=sample_size)
+                                    for file_id, x in data["controls"].items()}
+            else:
+                data["primary"] = data["primary"].sample(frac=sample_size)
+                data["controls"] = {file_id: x.sample(frac=sample_size)
+                                    for file_id, x in data["controls"].items()}
         return data
 
     def add_file(self,
                  data: np.array,
                  channel_mappings: List[dict],
                  control: bool = False,
-                 ctrl_id: str or None = None,
-                 chunks: bool = True,
-                 compression: str = "lzf"):
-        assert compression in ["lzf", "gzip"], "Valid compression values: 'lzf' or 'gzip'"
-        f = h5py.File(os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5"), "w")
-        if self.channel_mappings:
-            self._valid_mappings(channel_mappings)
-        else:
-            self.channel_mappings = [ChannelMap(channel=x["channel"], marker=x["marker"]) for x in channel_mappings]
-        if control:
-            assert ctrl_id, "No ctrl_id given"
-            assert ctrl_id not in f.keys(), f"Control file with ID {ctrl_id} already exists"
-            f.create_dataset(ctrl_id, data=data, compression=compression, chunks=chunks, dtype='f8')
-            self.controls.append(ctrl_id)
-        else:
-            assert "primary" not in f.keys(), "There can only be one primary file associated to each file group"
-            f.create_dataset("primary", data=data, compression=compression, chunks=chunks, dtype='f8')
-        f.close()
+                 ctrl_id: str or None = None):
+        with h5py.File(self.h5path, "w") as f:
+            if self.channel_mappings:
+                self._valid_mappings(channel_mappings)
+            else:
+                self.channel_mappings = [ChannelMap(channel=x["channel"], marker=x["marker"])
+                                         for x in channel_mappings]
+            if control:
+                assert ctrl_id, "No ctrl_id given"
+                assert ctrl_id not in f.keys(), f"Control file with ID {ctrl_id} already exists"
+                pd.DataFrame(data).to_hdf(self.h5path, key=ctrl_id)
+                self.controls.append(ctrl_id)
+            else:
+                assert "primary" not in f.keys(), "There can only be one primary file associated to each file group"
+                pd.DataFrame(data).to_hdf(self.h5path, key="primary")
 
     def _valid_mappings(self, channel_mappings: List[dict]):
         for cm in channel_mappings:
@@ -341,7 +371,4 @@ class FileGroup(mongoengine.Document):
             parent_n = [p for p in self.populations if p.population_name == p.parent][0].n
             p.prop_of_parent = p.n/parent_n
             p.prop_of_total = p.n/root_n
-            for ctrl in p.control_idx:
-                ctrl.save_index()
-            p.save_index()
         super().save(*args, **kwargs)
