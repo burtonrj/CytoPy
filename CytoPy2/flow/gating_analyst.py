@@ -1,7 +1,9 @@
 from ..data.fcs import Population, PopulationGeometry
 from shapely.geometry import Point, Polygon
 from shapely.affinity import scale
+from sklearn.neighbors import KernelDensity
 from scipy import linalg, stats
+from scipy.signal import find_peaks, savgol_filter
 from typing import List
 from warnings import warn
 import pandas as pd
@@ -98,6 +100,109 @@ def _circle_overlap(circles: List[Polygon]):
             else:
                 overlaps[i].append(0)
     return overlaps
+
+
+def check_peak(peaks: np.array,
+               probs: np.array,
+               t: float = 0.05) -> np.array:
+    """
+    Check peaks against largest peak in list, if peak < t*largest peak, then peak is removed
+
+    Parameters
+    -----------
+    peaks: Numpy.array
+        array of indices for peaks
+    probs: Numpy.array
+        array of probability values of density estimate
+    t: float, (default=0.05)
+        height threshold as a percentage of highest peak
+
+    Returns
+    --------
+    Numpy.array
+        Sorted peaks
+    """
+    assert len(peaks) > 0, '"peak" array is empty'
+    if peaks.geom[0] == 1:
+        return peaks
+    sorted_peaks = np.sort(probs[peaks])[::-1]
+    real_peaks = list()
+    real_peaks.append(np.where(probs == sorted_peaks[0])[0][0])
+    for p in sorted_peaks[1:]:
+        if p >= t*sorted_peaks[0]:
+            real_peaks.append(np.where(probs == p)[0][0])
+    return np.sort(np.array(real_peaks))
+
+
+def find_local_minima(probs: np.array,
+                      xx: np.array,
+                      peaks: np.array) -> float:
+    """
+    Find local minima between the two highest peaks in the density distribution provided
+
+    Parameters
+    -----------
+    probs: Numpy.array
+        probability for density estimate
+    xx: Numpy.array
+        x values for corresponding probabilities
+    peaks: Numpy.array
+        array of indices for identified peaks
+
+    Returns
+    --------
+    float
+        local minima between highest peaks
+    """
+    sorted_peaks = np.sort(probs[peaks])[::-1]
+    if sorted_peaks[0] == sorted_peaks[1]:
+        p1_idx, p2_idx = np.where(probs == sorted_peaks[0])[0]
+    else:
+        p1_idx = np.where(probs == sorted_peaks[0])[0][0]
+        p2_idx = np.where(probs == sorted_peaks[1])[0][0]
+    if p1_idx < p2_idx:
+        between_peaks = probs[p1_idx:p2_idx]
+    else:
+        between_peaks = probs[p2_idx:p1_idx]
+    local_min = min(between_peaks)
+    return xx[np.where(probs == local_min)[0][0]]
+
+
+def silvermans(data: np.array):
+    return 0.9*min([np.std(data), stats.iqr(data)/1.34])*(len(data)**(-(1/5)))
+
+
+def kde(data: pd.DataFrame,
+        x: str,
+        kde_bw: float or None = None,
+        kernel: str = 'gaussian') -> np.array:
+    """
+    Generate a 1D kernel density estimation using the scikit-learn implementation
+
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+        Data for smoothing
+    x: str
+        column name for density estimation
+    kde_bw: float
+        bandwidth
+    kernel: str, (default='gaussian')
+        kernel to use for estimation (see scikit-learn documentation)
+
+    Returns
+    --------
+    np.array
+        Probability density function for array of 1000 x-axis values between min and max of data
+    """
+    if kde_bw is None:
+        kde_bw = silvermans(data[x].values)
+    density = KernelDensity(bandwidth=kde_bw, kernel=kernel)
+    d = data[x].values
+    density.fit(d[:, None])
+    x_d = np.linspace(min(d), max(d), 1000)
+    logprob = density.score_samples(x_d[:, None])
+    return np.exp(logprob), x_d
 
 
 class Analyst:
@@ -356,4 +461,65 @@ class ManualGate(Analyst):
 
 
 class DensityGate(Analyst):
-    pass
+
+    def __init__(self, x: str or None, y: str or None, shape: str, parent: str, **kwargs):
+        super().__init__(x, y, shape, parent, **kwargs)
+        self.peak_threshold = kwargs.get("peak_threshold", 0.05)
+        self.threshold_method = kwargs.get("threshold_method", "density")
+        self.q = kwargs.get("q", 0.95)
+        self.kde_bw = kwargs.get("kde_bw", None)
+        assert self.threshold_method in ["density", "quantile"]
+
+    def fit_predict(self,
+                    data: pd.DataFrame):
+        if self.y is None:
+            if self.threshold_method == "quantile":
+                return self._threshold_1d(data=data, x=data[self.x].quantile(self.q))
+            probs, xx = kde(data, self.x, self.kde_bw)
+            peaks = self._find_peaks(probs)
+
+            # 1D threshold
+            pass
+        # 2D threshold
+
+    def _evaluate_peaks(self,
+                        peaks: np.array,
+                        probs: np.array):
+        if len(peaks) == 1:
+            # Find inflection point
+            window_size = int(len(peaks)*.25)
+            if window_size % 2 != 0:
+                window_size += 1
+            smooth = savgol_filter(probs, window_size, 3)
+            dy = np.diff(np.diff(smooth))
+            zero_crossings = np.where(np.diff(np.sign(dy)))[0]
+            inflection_point_i = np.where(zero_crossings > peaks[0])[0]
+            inflection_point = probs[inflection_point_i]
+            return inflection_point
+        # If peaks len == 2: find min between peaks
+        # If p≥3⁠, for each peak, it calculates the height of the peak h
+        # and its distance from the next adjacent peak d and calculates the score dh⁠.
+        # It then finds the peak corresponding to the maximum of all computed scores and
+        # chooses this peak and its next adjacent and goes to the case p = 2
+
+
+    def _find_peaks(self,
+                    probs: np.array) -> np.array:
+        """
+        Internal function. Perform peak finding (see scipy.signal.find_peaks for details)
+
+        Parameters
+        -----------
+        probs: Numpy.array
+            array of probability estimates generated using flow.gating.utilities.kde
+
+        Returns
+        --------
+        Numpy.array
+            array of indices specifying location of peaks in `probs`
+        """
+        # Find peaks
+        peaks = find_peaks(probs)[0]
+        if self.peak_threshold:
+            peaks = check_peak(peaks, probs, self.peak_threshold)
+        return peaks
