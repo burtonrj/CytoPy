@@ -58,8 +58,8 @@ def inside_ellipse(data: np.array,
     Numpy.array
         numpy array of indices for values inside specified ellipse
     """
-    cos_angle = np.cos(np.radians(180.-angle))
-    sin_angle = np.sin(np.radians(180.-angle))
+    cos_angle = np.cos(np.radians(180. - angle))
+    sin_angle = np.sin(np.radians(180. - angle))
 
     x = data[:, 0]
     y = data[:, 1]
@@ -70,7 +70,7 @@ def inside_ellipse(data: np.array,
     xct = xc * cos_angle - yc * sin_angle
     yct = xc * sin_angle + yc * cos_angle
 
-    rad_cc = (xct ** 2 / (width / 2.)**2) + (yct**2 / (height / 2.)**2)
+    rad_cc = (xct ** 2 / (width / 2.) ** 2) + (yct ** 2 / (height / 2.) ** 2)
 
     in_ellipse = []
 
@@ -94,7 +94,7 @@ def _circle_overlap(circles: List[Polygon]):
     for i, c in enumerate(circles):
         for x in circles:
             if c.intersects(x):
-                overlaps[i].append(c.intersection(x).area/c.area)
+                overlaps[i].append(c.intersection(x).area / c.area)
             else:
                 overlaps[i].append(0)
     return overlaps
@@ -241,6 +241,7 @@ class Analyst:
             populations.append(Population(population_name=names[i],
                                           parent=self.parent,
                                           geom=geom))
+        return populations
 
     def fit_predict(self,
                     data: pd.DataFrame):
@@ -254,7 +255,7 @@ class Analyst:
                                      centers=self.model.means_,
                                      covar_matrix=self.model.covariances_)
             elif "cluster_centers_" in dir(self.model):
-                return _circle(data=data,
+                return self._circle(data=data,
                                     labels=labels,
                                     centers=self.model.means_)
             else:
@@ -309,16 +310,49 @@ class ManualGate(Analyst):
                                                 self.width,
                                                 self.height,
                                                 self.angle]]), err
-            return self._ellipse(data=data,
-                                 center=self.center,
-                                 width=self.width,
-                                 height=self.height,
-                                 angle=self.angle)
+            return self._manual_ellipse(data=data,
+                                        center=self.center,
+                                        width=self.width,
+                                        height=self.height,
+                                        angle=self.angle)
         assert all(
             [x is not None for x in [self.x_values, self.y_values]]), "Polygon gate requires x_values and y_values"
-        return self._polygon(data=data,
-                             x_values=self.x_values,
-                             y_values=self.y_values)
+        return self._manual_polygon(data=data,
+                                    x_values=self.x_values,
+                                    y_values=self.y_values)
+
+    def _manual_ellipse(self,
+                        data: pd.DataFrame,
+                        center: tuple,
+                        width: float,
+                        height: float,
+                        angle: float):
+        populations = list()
+        geom = PopulationGeometry(center=center,
+                                  width=width,
+                                  height=height,
+                                  angle=angle)
+        populations.append(Population(population_name="manual_ellipse",
+                                      parent=self.parent,
+                                      geom=geom,
+                                      index=data[inside_ellipse(data=data.values,
+                                                                center=center,
+                                                                width=width,
+                                                                height=height,
+                                                                angle=angle)].index.values))
+        return populations
+
+    def _manual_polygon(self,
+                        data: pd.DataFrame,
+                        x_values: list,
+                        y_values: list):
+        populations = list()
+        geom = PopulationGeometry(x_values=x_values,
+                                  y_values=y_values)
+        populations.append(Population(population_name="manual_polygon",
+                                      parent=self.parent,
+                                      geom=geom))
+        return populations
 
 
 class DensityGate(Analyst):
