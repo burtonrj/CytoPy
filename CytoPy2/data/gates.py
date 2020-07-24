@@ -1,5 +1,6 @@
 from ..flow.dim_reduction import dimensionality_reduction
 from ..flow.transforms import apply_transform, scaler
+from ..flow.sampling import density_dependent_downsampling, faithful_downsampling, upsample_knn, upsample_svm
 from .fcs import Population, PopulationGeometry, merge_populations
 from functools import reduce
 from typing import List
@@ -244,9 +245,9 @@ class Gate(mongoengine.Document):
                     return data, data.sample(n=n)
                 return data, data.sample(frac=float(n))
             elif self.preprocessing.downsample_method == "density":
-                return data, density_dependent_downsample(data=data,
-                                                          features=data.columns,
-                                                          **kwargs)
+                return data, density_dependent_downsampling(data=data,
+                                                            features=data.columns,
+                                                            **kwargs)
             elif self.preprocessing.downsample_method == "faithful":
                 assert "h" in kwargs.keys(), "Invalid Gate: for faithful downsampling, 'h' expected in " \
                                              "downsampling_kwargs"
@@ -278,6 +279,15 @@ class Gate(mongoengine.Document):
     def _apply_postprocessing(self,
                               new_populations: List[Population],
                               original_data: pd.DataFrame or None = None):
+        if self.preprocessing.downsample_method:
+            upsample_method = self.preprocessing.upsample_method
+            if not upsample_method:
+                warn("Downsampling was performed yet not upsampling method has been defined, defaulting to KNN")
+                upsample_method = 'knn'
+            if upsample_method == "knn":
+                new_populations = upsample_knn(new_populations, original_data)
+            else:
+                new_populations = upsample_svm(new_populations, original_data)
         return new_populations
 
     def _add_child(self,
