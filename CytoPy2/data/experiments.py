@@ -4,6 +4,7 @@ from .fcs import FileGroup
 from .subjects import Subject
 from .read_write import FCSFile
 from .mappings import ChannelMap
+from .gates import GatingStrategy
 from typing import Generator, List
 from datetime import datetime
 from collections import Counter
