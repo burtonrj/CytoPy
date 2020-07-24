@@ -597,9 +597,7 @@ class Experiment(mongoengine.Document):
                        compensate: bool = True,
                        verbose: bool = True,
                        processing_datetime: str or None = None,
-                       collection_datetime: str or None = None,
-                       compression: str = "lzf",
-                       chunks: bool = True) -> str:
+                       collection_datetime: str or None = None) -> str:
         """
         Add a new sample (FileGroup) to this experiment
 
@@ -642,8 +640,6 @@ class Experiment(mongoengine.Document):
                 fcs.compensate()
             filegrp.add_file(data=fcs.event_data,
                              channel_mappings=channel_mappings,
-                             compression=compression,
-                             chunks=chunks,
                              control=control,
                              ctrl_id=_id)
 

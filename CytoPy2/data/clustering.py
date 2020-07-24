@@ -1,6 +1,7 @@
 from ..utilities import _valid_directory
 from .experiments import Experiment
-from dask import array
+from .fcs import FileGroup
+import numpy as np
 import mongoengine
 import h5py
 import os
@@ -25,14 +26,33 @@ class Cluster(mongoengine.EmbeddedDocument):
     meta_cluster_id: str, optional
         associated meta-cluster
     """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        with h5py.File(self._instance.h5path, "w") as f:
+            if f"{self.cluster_id}" in f.keys():
+                self._index = f[self.cluster_id][:]
+            else:
+                self._index = None
+
     cluster_id = mongoengine.StringField(required=True, unique=True)
+    label = mongoengine.StringField(required=False)
+    file = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.CASCADE)
     n_events = mongoengine.IntField(required=True)
     prop_of_root = mongoengine.FloatField(required=True)
-    label = mongoengine.StringField(required=False)
+
+    @property
+    def index(self):
+        return self._index
+
+    @index.setter
+    def index(self, idx: np.array):
+        with h5py.File(self._instance.h5path, "w") as f:
+            f.create_dataset(self.cluster_id, data=idx)
+        self._index = idx
 
 
 class ClusteringExperiment(mongoengine.Document):
-    experiment_name = mongoengine.StringField(required=True)
+    experiment_name = mongoengine.StringField(required=True, unique=True)
     data_directory = mongoengine.StringField(required=True, validation=_valid_directory)
     method = mongoengine.StringField(required=True, choices=["PhenoGraph", "FlowSOM"])
     parameters = mongoengine.ListField(required=True)
@@ -48,15 +68,27 @@ class ClusteringExperiment(mongoengine.Document):
         "collection": "clustering_experiments"
     }
 
+    def __init__(self, *args, **values):
+        super().__init__(*args, **values)
+        self.h5path = os.path.join(self.data_directory, f"ClusteringExp_{self.experiment_name}.hdf5")
+
     def add_cluster(self,
-                    cluster_idx: array,
+                    file: FileGroup,
+                    cluster_idx: np.array,
                     root_n: int,
                     label: str or None = None):
+        assert label not in [c.label for c in self.clusters], f"Label must be unique: {label} already exists"
         cluster_i = max([int(c.cluster_id.split("_")[1]) for c in self.clusters]) + 1
-        f = h5py.File(os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5"), "w")
-        f.create_dataset(f"{self.cluster_prefix}_{cluster_i}", data=cluster_idx)
-        f.close()
+        cluster_id = "_".join([self.cluster_prefix, cluster_i])
+        new_cluster = Cluster(cluster_id=cluster_id,
+                              file=file,
+                              n_events=cluster_idx.shape[0],
+                              prop_of_root=cluster_idx.shape[0]/root_n,
+                              label=label)
+        new_cluster.index = cluster_idx
+
         self.clusters.append(Cluster(cluster_id=f"{self.cluster_prefix}_{cluster_i}",
+                                     file=file,
                                      n_events=cluster_idx.shape[0],
                                      prop_of_root=cluster_idx.shape[0]/root_n,
                                      label=label))
@@ -65,30 +97,23 @@ class ClusteringExperiment(mongoengine.Document):
     def remove_cluster(self,
                        cluster_id: str or None = None,
                        label: str or None = None):
-        f = h5py.File(os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5"), "w")
-        if cluster_id:
-            del f[cluster_id]
-        elif label:
-            del f[label]
+        if label is not None:
+            clusters = [c for c in self.clusters if c.label == label]
+            assert len(clusters) != 1, f"No cluster with label {label}"
+            cluster_id = clusters[0].cluster_id
         else:
-            raise ValueError("Must provide either cluster ID or label")
-        f.close()
+            assert cluster_id, "Must provide either cluster ID or label"
+            assert cluster_id in [c.cluster_id for c in self.clusters], f"No cluster with id {cluster_id}"
+        with h5py.File(self.h5path, "w") as f:
+            del f[cluster_id]
+        self.clusters = [c for c in self.clusters if c.cluster_id != cluster_id]
 
     def label_cluster(self,
                       cluster_id: str,
                       label: str):
+        assert label not in [c.label for c in self.clusters], f"Label must be unique: {label} already exists"
         cluster = [c for c in self.clusters if c.cluster_id == cluster_id][0]
         cluster.label = label
-
-    def get_cluster(self,
-                    cluster_id: str or None = None,
-                    label: str or None = None):
-        if cluster_id:
-            del f[cluster_id]
-        elif label:
-            del f[label]
-        else:
-            raise ValueError("Must provide either cluster ID or label")
 
 
 def _valid_meta_assignments(cluster_ids: list,
@@ -99,7 +124,7 @@ def _valid_meta_assignments(cluster_ids: list,
                                                  "are not contained within the target clustering experiment")
 
 
-class MetaClusters(mongoengine.EmbeddedDocument):
+class MetaCluster(mongoengine.EmbeddedDocument):
     cluster_id = mongoengine.StringField(required=True)
     _contents = mongoengine.ListField(required=True, db_field="contents")
 
@@ -127,6 +152,7 @@ class MetaClusteringExperiment(mongoengine.Document):
     features = mongoengine.ListField(required=True)
     transform_method = mongoengine.StringField(required=False, default='logicle')
     target = mongoengine.ReferenceField(ClusteringExperiment, reverse_delete_rule=mongoengine.CASCADE)
+    clusters = mongoengine.EmbeddedDocumentListField(MetaCluster)
     meta = {
         'db_alias': 'core',
         'collection': 'meta_clustering_experiments'
