@@ -29,26 +29,16 @@ class Cluster(mongoengine.EmbeddedDocument):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         with h5py.File(self._instance.h5path, "w") as f:
-            if f"{self.cluster_id}" in f.keys():
-                self._index = f[self.cluster_id][:]
+            if self.cluster_id in f.keys():
+                self.index = f[self.cluster_id][:]
             else:
-                self._index = None
+                self.index = kwargs.get("index", None)
 
     cluster_id = mongoengine.StringField(required=True, unique=True)
     label = mongoengine.StringField(required=False)
     file = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.CASCADE)
     n_events = mongoengine.IntField(required=True)
     prop_of_root = mongoengine.FloatField(required=True)
-
-    @property
-    def index(self):
-        return self._index
-
-    @index.setter
-    def index(self, idx: np.array):
-        with h5py.File(self._instance.h5path, "w") as f:
-            f.create_dataset(self.cluster_id, data=idx)
-        self._index = idx
 
 
 class ClusteringExperiment(mongoengine.Document):
@@ -84,14 +74,9 @@ class ClusteringExperiment(mongoengine.Document):
                               file=file,
                               n_events=cluster_idx.shape[0],
                               prop_of_root=cluster_idx.shape[0]/root_n,
-                              label=label)
-        new_cluster.index = cluster_idx
-
-        self.clusters.append(Cluster(cluster_id=f"{self.cluster_prefix}_{cluster_i}",
-                                     file=file,
-                                     n_events=cluster_idx.shape[0],
-                                     prop_of_root=cluster_idx.shape[0]/root_n,
-                                     label=label))
+                              label=label,
+                              index=cluster_idx)
+        self.clusters.append(new_cluster)
         self.save()
 
     def remove_cluster(self,
@@ -114,6 +99,12 @@ class ClusteringExperiment(mongoengine.Document):
         assert label not in [c.label for c in self.clusters], f"Label must be unique: {label} already exists"
         cluster = [c for c in self.clusters if c.cluster_id == cluster_id][0]
         cluster.label = label
+
+    def save(self, *args, **kwargs):
+        for c in self.clusters:
+            with h5py.File(self.h5path, "w") as f:
+                f.create_dataset(c.cluster_id, data=c.index)
+        super().save(*args, **kwargs)
 
 
 def _valid_meta_assignments(cluster_ids: list,
