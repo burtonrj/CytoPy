@@ -2,6 +2,7 @@ from ..flow.dim_reduction import dimensionality_reduction
 from ..flow.transforms import apply_transform, scaler
 from ..flow.sampling import density_dependent_downsampling, faithful_downsampling, upsample_knn, upsample_svm
 from .fcs import Population, PopulationGeometry, merge_populations
+from datetime import datetime
 from functools import reduce
 from typing import List
 from warnings import warn
@@ -421,3 +422,35 @@ class Gate(mongoengine.Document):
         assert self._defined, "Gate is newly created and has not been defined. Call 'label_children' to complete " \
                               "gating definition"
         super().save(*args, **kwargs)
+
+
+class GatingStrategy(mongoengine.Document):
+    """
+    Document representation of a gating template; a gating template is a collection of gating objects
+    that can be applied to multiple fcs files or an entire experiment in bulk
+
+    Parameters
+    -----------
+    template_name: str, required
+        unique identifier for template
+    gates: EmbeddedDocumentList
+        list of Gate documents; see Gate
+    creation_date: DateTime
+        date of creation
+    last_edit: DateTime
+        date of last edit
+    flags: str, optional
+        warnings associated to this gating template
+    notes: str, optional
+        free text comments
+    """
+    template_name = mongoengine.StringField(required=True)
+    gates = mongoengine.EmbeddedDocumentListField(Gate)
+    creation_date = mongoengine.DateTimeField(default=datetime.now)
+    last_edit = mongoengine.DateTimeField(default=datetime.now)
+    flags = mongoengine.StringField(required=False)
+    notes = mongoengine.StringField(required=False)
+    meta = {
+        'db_alias': 'core',
+        'collection': 'gating_strategy'
+    }
