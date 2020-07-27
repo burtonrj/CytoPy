@@ -1,6 +1,7 @@
 from ..flow.dim_reduction import dimensionality_reduction
 from ..flow.transforms import apply_transform, scaler
 from ..flow.sampling import density_dependent_downsampling, faithful_downsampling, upsample_knn, upsample_svm
+from ..flow.gating_analyst import Analyst, ManualGate, DensityGate
 from .fcs import Population, PopulationGeometry, merge_populations
 from datetime import datetime
 from functools import reduce
