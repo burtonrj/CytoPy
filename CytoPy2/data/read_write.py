@@ -80,7 +80,7 @@ def fcs_mappings(path: str) -> list or None:
     except ValueError as e:
         print(f'Failed to load file {path}; {e}')
         return None
-    return fo.fluoro_mappings
+    return fo.channel_mappings
 
 
 def explore_channel_mappings(fcs_dir: str,
