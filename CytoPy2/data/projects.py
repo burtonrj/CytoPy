@@ -3,7 +3,6 @@ from .subjects import Subject
 from typing import Generator
 import mongoengine
 import datetime
-import os
 
 
 class Project(mongoengine.Document):

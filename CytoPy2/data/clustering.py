@@ -28,7 +28,7 @@ class Cluster(mongoengine.EmbeddedDocument):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        with h5py.File(self._instance.h5path, "w") as f:
+        with h5py.File(self._instance.h5path, "r") as f:
             if self.cluster_id in f.keys():
                 self.index = f[self.cluster_id][:]
             else:
