@@ -33,6 +33,34 @@ def _probablistic_ellipse(covariances: np.array,
     return eigen_val[0], eigen_val[1], (180. + angle)
 
 
+def inside_polygon(df: pd.DataFrame,
+                   x: str,
+                   y: str,
+                   poly: Polygon):
+    """
+    Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
+
+    Parameters
+    ----------
+    df: Pandas.DataFrame
+        Data to query
+    x: str
+        name of x-axis plane
+    y: str
+        name of y-axis plane
+    poly: shapely.geometry.Polygon
+        Polygon object to search
+
+    Returns
+    --------
+    Pandas.DataFrame
+        Masked DataFrame containing only those rows that fall within the Polygon
+    """
+    xy = df[[x, y]].values
+    pos_idx = list(map(lambda i: poly.contains(Point(i)), xy))
+    return df.iloc[pos_idx]
+
+
 def inside_ellipse(data: np.array,
                    center: tuple,
                    width: int or float,
@@ -341,11 +369,13 @@ class Analyst:
         populations = list()
         names = list(string.ascii_uppercase)
         for i, label in enumerate(np.unique(labels)):
-            geom = PopulationGeometry(x_values=data[data.labels == label][self.x].values,
-                                      y_values=data[data.labels == label][self.y].values)
+            label_df = data[data.labels == label]
+            geom = PopulationGeometry(x_values=label_df[self.x].values,
+                                      y_values=label_df[self.y].values)
             populations.append(Population(population_name=names[i],
                                           parent=self.parent,
-                                          geom=geom))
+                                          geom=geom,
+                                          index=label_df.index.values))
         return populations
 
     def fit_predict(self,
@@ -366,7 +396,7 @@ class Analyst:
             else:
                 err = """Model does not contain attributes 'means_', 'covariances_', or 'cluster_centers_', 
                 for an elliptical gate, valid automonous methods are: GaussianMixtureModel, BayesianGaussianMixtureModel
-                ir MiniBatchKMeans. Are you using one of these Scikit-Learn classes?"""
+                or MiniBatchKMeans. Are you using one of these Scikit-Learn classes?"""
                 raise ValueError(err)
         elif self.shape == "polygon":
             return self._polygon(data=data, labels=labels)
@@ -456,8 +486,25 @@ class ManualGate(Analyst):
                                   y_values=y_values)
         populations.append(Population(population_name="manual_polygon",
                                       parent=self.parent,
-                                      geom=geom))
+                                      geom=geom,
+                                      index=inside_polygon(df=data, x=self.x, y=self.y, poly=geom.shape)))
         return populations
+
+
+def _find_inflection_point(xx: np.array,
+                           peaks: np.array,
+                           probs: np.array):
+    # Find inflection point
+    window_size = int(len(probs)*.1)
+    if window_size % 2 == 0:
+        # Window size must be odd
+        window_size += 1
+    # Fit a 3rd polynomial kernel
+    smooth = savgol_filter(probs, window_size, 3)
+    # Take the second derivative of this slope
+    ddy = np.diff(np.diff(smooth[peaks[0]:]))
+    # Return the point where the second derivative peaks
+    return xx[peaks[0]+np.argmax[ddy]]
 
 
 class DensityGate(Analyst):
@@ -468,40 +515,55 @@ class DensityGate(Analyst):
         self.threshold_method = kwargs.get("threshold_method", "density")
         self.q = kwargs.get("q", 0.95)
         self.kde_bw = kwargs.get("kde_bw", None)
+        self.downsampling_threshold = kwargs.get("downsampling_threshold", 10000)
+        self.downsampling_frac = kwargs.get("downsample_frac", 0.01)
+        self.cutoff_point = kwargs.get("cutoff_point", "inflection")
         assert self.threshold_method in ["density", "quantile"]
+        assert self.cutoff_point in ["inflection", "quantile"]
 
     def fit_predict(self,
                     data: pd.DataFrame):
-        if self.y is None:
+        if data.shape[0] > self.downsampling_threshold:
+            sample_n = int((data.shape[0] - self.downsampling_threshold) * self.downsampling_frac)
+            data = data.sample(n=sample_n)
+        thresholds = list()
+        for d in [self.x, self.y]:
+            if d is None:
+                continue
             if self.threshold_method == "quantile":
-                return self._threshold_1d(data=data, x=data[self.x].quantile(self.q))
-            probs, xx = kde(data, self.x, self.kde_bw)
-            peaks = self._find_peaks(probs)
-
-            # 1D threshold
-            pass
-        # 2D threshold
-
-    def _evaluate_peaks(self,
-                        peaks: np.array,
-                        probs: np.array):
-        if len(peaks) == 1:
-            # Find inflection point
-            window_size = int(len(peaks)*.25)
-            if window_size % 2 != 0:
-                window_size += 1
-            smooth = savgol_filter(probs, window_size, 3)
-            dy = np.diff(np.diff(smooth))
-            zero_crossings = np.where(np.diff(np.sign(dy)))[0]
-            inflection_point_i = np.where(zero_crossings > peaks[0])[0]
-            inflection_point = probs[inflection_point_i]
-            return inflection_point
-        # If peaks len == 2: find min between peaks
-        # If p≥3⁠, for each peak, it calculates the height of the peak h
-        # and its distance from the next adjacent peak d and calculates the score dh⁠.
-        # It then finds the peak corresponding to the maximum of all computed scores and
-        # chooses this peak and its next adjacent and goes to the case p = 2
-
+                thresholds.append(data[d].quantile(self.q))
+            else:
+                probs, xx = kde(data, d, self.kde_bw)
+                peaks = self._find_peaks(probs)
+                if len(peaks) == 0 and self.cutoff_point == "quantile":
+                    thresholds.append(data[d].quantile(self.q))
+                elif len(peaks) == 1:
+                    thresholds.append(_find_inflection_point(xx=xx, probs=probs, peaks=peaks))
+                elif len(peaks) == 2:
+                    thresholds.append(find_local_minima(probs=probs, xx=xx, peaks=peaks))
+                else:
+                    # If peaks len > 2: incrementally increase the bw until the density estimate is smooth
+                    # and the number of peaks is equal to two (in other words, increase the variance
+                    # at expense of bias)
+                    bw = silvermans(data[d].values)
+                    probs, xx = kde(data, d, kde_bw=bw)
+                    peaks = self._find_peaks(probs)
+                    increment = bw * 0.05
+                    while len(peaks) > 2:
+                        probs, xx = kde(data, d, kde_bw=bw)
+                        peaks = self._find_peaks(probs)
+                        bw = bw + increment
+                    if len(peaks) == 1:
+                        if len(peaks) == 0 and self.cutoff_point == "quantile":
+                            thresholds.append(data[d].quantile(self.q))
+                        else:
+                            thresholds.append(_find_inflection_point(xx=xx, probs=probs, peaks=peaks))
+                    else:
+                        thresholds.append(find_local_minima(probs=probs, xx=xx, peaks=peaks))
+        if len(thresholds) == 1:
+            return self._threshold_1d(data=data, x=thresholds[0])
+        else:
+            return self._threshold_2d(data=data, x=thresholds[0], y=thresholds[1])
 
     def _find_peaks(self,
                     probs: np.array) -> np.array:
