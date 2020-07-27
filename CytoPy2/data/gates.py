@@ -2,6 +2,7 @@ from ..flow.dim_reduction import dimensionality_reduction
 from ..flow.transforms import apply_transform, scaler
 from ..flow.sampling import density_dependent_downsampling, faithful_downsampling, upsample_knn, upsample_svm
 from ..flow.gating_analyst import Analyst, ManualGate, DensityGate
+from ..feedback import vprint
 from .fcs import Population, PopulationGeometry, merge_populations
 from datetime import datetime
 from functools import reduce
@@ -259,37 +260,56 @@ class Gate(mongoengine.Document):
         return data, None
 
     def apply(self,
-              data: pd.DataFrame):
+              data: pd.DataFrame,
+              verbose: bool = True):
+        feedback = vprint(verbose)
+        feedback("---- Applying gate ----")
         if not self._defined:
+            feedback("This gate has not been previously defined. Gate will be applied to example data "
+                     "and child population definitions populated.")
             # Applying for the first time, resulting populations should populate the child definitions
             data, sample = self._apply_preprocessing(data=data)
             if sample is not None:
-                populations = self._apply_postprocessing(self.model.fit_predict(sample), original_data=data)
+                feedback("Downsampling applied prior to fit...")
+                populations = self._apply_postprocessing(self.model.fit_predict(sample),
+                                                         original_data=data,
+                                                         sample=sample,
+                                                         verbose=verbose)
             else:
-                populations = self._apply_postprocessing(self.model.fit_predict(data))
+                populations = self._apply_postprocessing(self.model.fit_predict(data),
+                                                         original_data=data,
+                                                         verbose=verbose)
+            feedback("Adding children to gate...")
             for pop in populations:
                 self._add_child(pop)
         else:
+            feedback("Applying pre-defined gate to data")
             # Pre-defined gate, resulting populations should be matched to the child definitions
             data, sample = self._apply_preprocessing(data=data)
             if sample is not None:
-                populations = self._apply_postprocessing(self.model.fit_predict(sample), original_data=data)
+                feedback("Downsampling applied prior to fit...")
+                populations = self._apply_postprocessing(self.model.fit_predict(sample),
+                                                         sample=sample,
+                                                         original_data=data)
             else:
-                populations = self._apply_postprocessing(self.model.fit_predict(data))
+                populations = self.model.fit_predict(data)
+            feedback("Matching detected populations to expected children...")
             return self._match_to_children(populations)
 
     def _apply_postprocessing(self,
                               new_populations: List[Population],
-                              original_data: pd.DataFrame or None = None):
-        if self.preprocessing.downsample_method:
+                              original_data: pd.DataFrame,
+                              sample: pd.DataFrame or None = None,
+                              verbose: bool = True):
+        if sample is not None:
             upsample_method = self.preprocessing.upsample_method
             if not upsample_method:
                 warn("Downsampling was performed yet not upsampling method has been defined, defaulting to KNN")
                 upsample_method = 'knn'
             if upsample_method == "knn":
-                new_populations = upsample_knn(new_populations, original_data)
+                new_populations = upsample_knn(new_populations, original_data, verbose=verbose)
             else:
-                new_populations = upsample_svm(new_populations, original_data)
+                new_populations = upsample_svm(new_populations, original_data, verbose=verbose)
         return new_populations
 
     def _add_child(self,
