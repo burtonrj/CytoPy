@@ -1,15 +1,14 @@
-from ..data.fcs_experiments import FCSExperiment
-from ..data.fcs import Population, ControlIndex, PopulationGeometry
-from ..data.gating_structures import Gate, ControlGate, PreProcess, PostProcess
+from ..data.experiments import Experiment
+from ..data.fcs import Population, PopulationGeometry
+from ..data.gates import Gate, PreProcess, PostProcess
 from .dim_reduction import dimensionality_reduction
 from .transforms import apply_transform, scaler
-from .feedback import progress_bar, vprint
-from .utilities import density_dependent_downsample, faithful_downsampling
+from ..feedback import progress_bar, vprint
+from .sampling import density_dependent_downsampling, faithful_downsampling
 from .plotting import CreatePlot
 from anytree import Node, findall
 from warnings import warn
 import pandas as pd
-import importlib
 
 
 class Gating:
@@ -30,12 +29,12 @@ class Gating:
     """
 
     def __init__(self,
-                 experiment: FCSExperiment,
+                 experiment: Experiment,
                  sample_id: str,
                  sample: int or None = None,
                  include_controls=True,
                  verbose: bool = True):
-        data = experiment.get_sample_data(sample_id=sample_id, sample_size=sample, include_controls=include_controls)
+        data = experiment.get_data(sample_id=sample_id, sample_size=sample, include_controls=include_controls)
         assert data is not None, f'Error: failed to fetch data for {sample_id}. Aborting.'
         self.data = [x for x in data
                      if x['typ'] == 'complete'][0]['data']
@@ -48,7 +47,7 @@ class Gating:
             self.ctrl = {}
         del data
         self.id = sample_id
-        self.mongo_id = experiment.fetch_sample_mid(sample_id)
+        self.mongo_id = experiment.get_sample_mid(sample_id)
         self.experiment = experiment
         self.filegroup = experiment.get_sample(sample_id)
         self.gates = dict()
