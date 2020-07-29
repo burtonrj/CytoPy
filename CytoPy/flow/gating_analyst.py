@@ -521,6 +521,9 @@ class DensityGate(Analyst):
         assert self.threshold_method in ["density", "quantile"]
         assert self.cutoff_point in ["inflection", "quantile"]
 
+    def ctrl_gate(self):
+        pass
+
     def fit_predict(self,
                     data: pd.DataFrame):
         if data.shape[0] > self.downsampling_threshold:

@@ -1,4 +1,4 @@
-from CytoPy2.data.gates import Gate
+from .gates import Gate
 from datetime import datetime
 import mongoengine
 

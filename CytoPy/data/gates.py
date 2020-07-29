@@ -262,14 +262,18 @@ class Gate(mongoengine.Document):
 
     def apply(self,
               data: pd.DataFrame,
+              ctrl: pd.DataFrame or None,
               verbose: bool = True):
         feedback = vprint(verbose)
         feedback("---- Applying gate ----")
+        if ctrl is not None:
+            assert self.method == "DensityGate", "CytoPy v0.1.0 only supports control assisted gating using DensityGate method"
+            ctrl, ctrl_sample = self._apply_preprocessing(data=ctrl)
+        data, sample = self._apply_preprocessing(data=data)
         if not self.defined:
             feedback("This gate has not been previously defined. Gate will be applied to example data "
                      "and child population definitions populated.")
             # Applying for the first time, resulting populations should populate the child definitions
-            data, sample = self._apply_preprocessing(data=data)
             if sample is not None:
                 feedback("Downsampling applied prior to fit...")
                 populations = self._apply_postprocessing(self.model.fit_predict(sample),
@@ -288,7 +292,6 @@ class Gate(mongoengine.Document):
         else:
             feedback("Applying pre-defined gate to data")
             # Pre-defined gate, resulting populations should be matched to the child definitions
-            data, sample = self._apply_preprocessing(data=data)
             if sample is not None:
                 feedback("Downsampling applied prior to fit...")
                 populations = self._apply_postprocessing(self.model.fit_predict(sample),

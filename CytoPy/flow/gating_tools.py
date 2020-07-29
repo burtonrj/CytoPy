@@ -8,8 +8,8 @@ from .plotting import CreatePlot
 from mongoengine.errors import DoesNotExist
 from anytree import Node, findall
 from warnings import warn
+import matplotlib.pyplot as plt
 import pandas as pd
-import matplotlib
 
 
 class Gating:
@@ -32,6 +32,7 @@ class Gating:
     def __init__(self,
                  experiment: Experiment,
                  sample_id: str,
+                 gating_strategy: str or None = None,
                  sample: int or None = None,
                  include_controls=True,
                  verbose: bool = True):
@@ -40,11 +41,22 @@ class Gating:
         self.mongo_id = experiment.get_sample_mid(sample_id)
         self.experiment = experiment
         self.filegroup = experiment.get_sample(sample_id)
-        self.gates = dict()
         self.populations = dict()
         self.tree = self._construct_tree()
         self.verbose = verbose
         self.vprint = vprint(verbose)
+
+        if gating_strategy is None:
+            assert self.filegroup.gating_strategy, f"{sample_id} has not been previously 'gated', please provide the name to " \
+                                                   f"an existing gating strategy to be applied or provide a new name if you wish " \
+                                                   f"to create a new gating strategy."
+            self.template = self.filegroup.gating_strategy
+        else:
+            try:
+                self.template = GatingStrategy.objects(template_name=gating_strategy).get()
+            except DoesNotExist:
+                self.template = GatingStrategy(template_name=gating_strategy)
+        self.gates = {g.gate_name: g for g in self.template.gates}
 
     def _construct_tree(self):
         if not self.filegroup.populations:
@@ -82,26 +94,23 @@ class Gating:
                                                     parent=new_population.parent)
         return tree
 
-    def save(self,
-             template_name: str or None = None,
-             overwrite: bool = False):
-        if len(GatingStrategy.objects(template_name=template_name)) > 0:
-            assert overwrite, f"Template with name {template_name} already exists. Set 'overwrite' to True to overwrite existing template"
-            GatingStrategy.objects(template_name=template_name).get().delete()
-        gating_strategy = GatingStrategy(template_name=template_name,
-                                         gates=self.gates)
-        gating_strategy.save()
+    def save_sample(self,
+                    overwrite: bool = False):
+        if self.filegroup.populations:
+            assert overwrite, f"{self.id} has previously been gated and has existing populations. To overwrite " \
+                              f"this data set 'overwrite' to True"
         self.filegroup.populations = self.populations
-        self.filegroup.gating_strategy = gating_strategy
+        self.filegroup.gating_strategy = self.template
         self.filegroup.save()
 
-    def load_template(self,
-                      template_name):
-        try:
-            gating_strategy = GatingStrategy.objects(template_name=template_name).get()
-            self.gates = {g.gate_name: g for g in gating_strategy.gates}
-        except DoesNotExist:
-            raise ValueError(f"No such template {template_name}")
+    def save_gating_strategy(self,
+                             overwrite: bool = False):
+        if len(GatingStrategy.objects(template_name=self.template.template_name)) > 0:
+            assert overwrite, f"Template with name {self.template.template_name} already exists. " \
+                              f"Set 'overwrite' to True to overwrite existing template"
+            GatingStrategy.objects(template_name=self.template.template_name).get().delete()
+        self.template.gates = self.gates.values()
+        self.template.save()
 
     def clear_gates(self):
         """Remove all currently associated gates."""
@@ -176,14 +185,14 @@ class Gating:
                                       transform,
                                       transform_features)
         data['label'] = None
-        dependencies = self.find_dependencies(population_name)
+        dependencies = self.list_downstream_populations(population_name)
         for pop in dependencies:
             idx = self.populations[pop].index
             data.loc[idx, 'label'] = pop
         return data
 
-    def find_dependencies(self,
-                          population: str) -> list or None:
+    def list_downstream_populations(self,
+                                    population: str) -> list or None:
         """For a given population find all dependencies
 
         Parameters
@@ -197,14 +206,18 @@ class Gating:
             List of populations dependent on given population
 
         """
-        if population not in self.populations.keys():
-            print(f'Error: population {population} does not exist; '
-                  f'valid population names include: {self.populations.keys()}')
-            return None
+        assert population in self.populations.keys(), f'population {population} does not exist; ' \
+                                                      f'valid population names include: {self.populations.keys()}'
         root = self.populations['root']
         node = self.populations[population]
         dependencies = [x.name for x in findall(root, filter_=lambda n: node in n.path)]
         return [p for p in dependencies if p != population]
+
+    def list_child_populations(self,
+                               population: str):
+        assert population in self.populations.keys(), f'population {population} does not exist; ' \
+                                                      f'valid population names include: {self.populations.keys()}'
+        return [x.name for x in self.tree.get(population).children]
 
     def valid_populations(self,
                           populations: list):
@@ -246,7 +259,8 @@ class Gating:
         assert parent in self.populations.keys(), "Invalid parent (does not exist)"
         if any(c not in self.data.get("primary").columns for c in [x, y]):
             if not preprocessing_kwargs.get("dim_reduction"):
-                raise ValueError(f"x or y are invalid values are invalid; valid column names as: {self.data.get('primary').columns}")
+                raise ValueError(
+                    f"x or y are invalid values are invalid; valid column names as: {self.data.get('primary').columns}")
             else:
                 assert x == "embedding1", "If using dim_reduction, x should have a value 'embedding1'"
                 assert y == "embedding2", "If using dim_reduction, y should have a value 'embedding2'"
@@ -261,7 +275,7 @@ class Gating:
             if method is None:
                 warn("Method not given, defaulting to BayesianGaussianMixture")
                 method = "BayesianGaussianMixture"
-                # TODO set some default params for Bayes mix model
+                method_kwargs = {"n_components": 5}
         if shape == "polygon":
             accepted_methods = ["Affinity",
                                 "Hierarchical",
@@ -286,52 +300,98 @@ class Gating:
         gate.initialise_model()
         return gate
 
-    def preview(self,
-                gate: Gate,
-                verbose: bool = True,
-                stats: bool = True,
-                plot_xlim: (float, float) or None = None,
-                plot_ylim: (float, float) or None = None,
-                ax: matplotlib.pyplot.axes or None = None,
-                ):
+    def plot_gate(self,
+                  gate: Gate,
+                  create_plot_kwargs: dict or None = None,
+                  gate_plot_kwargs: dict or None = None,
+                  populations: list or None = None):
+        if create_plot_kwargs is None:
+            create_plot_kwargs = {}
+        if gate_plot_kwargs is None:
+            gate_plot_kwargs = {}
         data = self.get_population_df(population_name=gate.parent, transform=None)
-        populations = gate.apply(data=data,
-                                 verbose=verbose)
-        # Plot with CreatePlot, complete with legend
-        # TODO
-
+        if populations is None:
+            children = self.list_child_populations(gate.parent)
+            assert children, f"{gate.parent} children do not exist in current population tree. Has this gate been applied?"
+            populations = [self.populations.get(x) for x in children]
         plotting = CreatePlot(transform_x=gate.preprocessing.transform_x,
                               transform_y=gate.preprocessing.transform_y,
                               xlabel=gate.x,
                               ylabel=gate.y,
-                              xlim=plot_xlim,
-                              ylim=plot_ylim,
                               title=f"Preview: {gate.gate_name}",
-                              )
+                              **create_plot_kwargs)
+        return plotting.plot_gate(gate=gate,
+                                  parent=data,
+                                  children=populations,
+                                  **gate_plot_kwargs)
 
-        #         ylabel: str or None = None,
-        #         xlim: (float, float) or None = None,
-        #         ylim: (float, float) or None = None,
-        #         title: str or None = None,
-        #         ax: matplotlib.pyplot.axes or None = None,
-        #         figsize: (int, int) = (5, 5),
-        #         bins: int or str = "scotts",
-        #         cmap: str = "jet",
-        #         style: str or None = "white",
-        #         font_scale: float or None = 1.2,
-        #         bw: str or float = "scott")
-        # Print stats
-        # TODO
-        return gate
+    def plot_population(self,
+                        population: str,
+                        x: str,
+                        y: str or None = None,
+                        create_plot_kwargs: dict or None = None,
+                        matplotlib_hist2d_kwargs: dict or None = None):
+        if create_plot_kwargs is None:
+            create_plot_kwargs = {}
+        if matplotlib_hist2d_kwargs is None:
+            matplotlib_hist2d_kwargs = {}
+        data = self.get_population_df(population_name=population, transform=None)
+        plotting = CreatePlot(**create_plot_kwargs)
+        return plotting.plot(data=data,
+                             x=x,
+                             y=y,
+                             **matplotlib_hist2d_kwargs)
+
+    def plot_backgate(self,
+                      parent: str,
+                      children: list,
+                      x: str,
+                      y: str or None = None,
+                      create_plot_kwargs: dict or None = None,
+                      backgate_kwargs: dict or None = None):
+        if create_plot_kwargs is None:
+            create_plot_kwargs = {}
+        if backgate_kwargs is None:
+            backgate_kwargs = {}
+        valid_children = self.list_downstream_populations(parent)
+        assert all([x in valid_children for x in children]), f"One or more given children is not a valid downstream " \
+                                                             f"population of {parent}. Valid downstream populations: {valid_children}"
+        parent = self.get_population_df(population_name=parent, transform=None)
+        children = {x: self.get_population_df(population_name=x, transform=None) for x in children}
+        plotting = CreatePlot(**create_plot_kwargs)
+        return plotting.backgate(parent=parent,
+                                 children=children,
+                                 x=x,
+                                 y=y,
+                                 **backgate_kwargs)
+
+    def preview(self,
+                gate: Gate,
+                verbose: bool = True,
+                stats: bool = True,
+                create_plot_kwargs: dict or None = None,
+                gate_plot_kwargs: dict or None = None):
+        data = self.get_population_df(population_name=gate.parent, transform=None)
+        populations = gate.apply(data=data,
+                                 verbose=verbose)
+        if stats:
+            print(f"---- {gate.gate_name} outputs ----")
+            print(f"Generated {len(populations)} populations:")
+            for p in populations:
+                print(f"{p.population_name}: n={len(p.index)}; {round(len(p.index) / data.shape[0] * 100, 3)}% of parent")
+            print("----------------------------------")
+        return self.plot_gate(gate=gate,
+                              populations=populations,
+                              create_plot_kwargs=create_plot_kwargs,
+                              gate_plot_kwargs=gate_plot_kwargs)
 
     def apply(self,
               gate: Gate or None = None,
               gate_name: str or None = None,
               verbose: bool = True,
               plot_outcome: bool = True,
-              preprocess_kwargs: dict or None = None,
-              method_kwargs: dict or None = None,
-              postprocess_kwargs: dict or None = None):
+              create_plot_kwargs: dict or None = None,
+              gate_plot_kwargs: dict or None = None):
         if gate is None and gate_name is None:
             raise ValueError("Must provide Gate object or name of an existing gate in the loaded template")
         if gate is None:
@@ -340,16 +400,14 @@ class Gating:
         assert gate.defined, "Gate children have not been labelled, call the 'label_children' method on the chosen Gate object"
         data = self.get_population_df(population_name=gate.parent, transform=None)
         populations = gate.apply(data=data,
-                                 verbose=verbose,
-                                 preprocessing_kwargs=preprocess_kwargs,
-                                 method_kwargs=method_kwargs,
-                                 postprocess_kwargs=postprocess_kwargs)
+                                 verbose=verbose)
         for p in populations:
             self.populations[p.population_name] = p
-        # Plot if specified
+            self.tree[p.population_name] = Node(name=p.population_name, parent=gate.parent)
         if plot_outcome:
-            pass
-            # TODO plot outcome
+            return self.plot_gate(gate=gate,
+                                  create_plot_kwargs=create_plot_kwargs,
+                                  gate_plot_kwargs=gate_plot_kwargs)
         return gate
 
     def control_gate(self):
