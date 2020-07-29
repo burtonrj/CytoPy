@@ -240,6 +240,10 @@ class Gate(mongoengine.Document):
             data = self._scale(data)
         # Perform downsampling if requested
         if self.preprocessing.downsample_method:
+            if self.method == "DensityGate":
+                warn("DensityGate handles downsampling internally. Downsampling params ignored. To control "
+                     "downsampling methodology alter the method_kwargs as per documentation")
+                return data, None
             kwargs = {k: v for k, v in self.preprocessing.downsample_kwargs}
             if self.preprocessing.downsample_method == "uniform":
                 assert "sample_n" in kwargs.keys(), "Invalid Gate: for uniform downsampling expect 'sample_n' in " \
@@ -260,6 +264,18 @@ class Gate(mongoengine.Document):
             raise ValueError("Invalid Gate: downsampling_method must be one of: uniform, density, or faithful")
         return data, None
 
+    def _ctrl_gating(self,
+                     data: pd.DataFrame,
+                     ctrl: pd.DataFrame,
+                     verbose: bool):
+        feedback = vprint(verbose)
+        data, _ = self._apply_preprocessing(data=data)
+        ctrl, _ = self._apply_preprocessing(data=ctrl)
+        if not self.defined:
+            feedback("This gate has not been previously defined. Gate will be applied to example data "
+                     "and child population definitions populated.")
+        populations = self.method.ctrl_gate(data=data, ctrl=ctrl)
+
     def apply(self,
               data: pd.DataFrame,
               ctrl: pd.DataFrame or None,
@@ -267,38 +283,29 @@ class Gate(mongoengine.Document):
         feedback = vprint(verbose)
         feedback("---- Applying gate ----")
         if ctrl is not None:
-            assert self.method == "DensityGate", "CytoPy v0.1.0 only supports control assisted gating using DensityGate method"
-            ctrl, ctrl_sample = self._apply_preprocessing(data=ctrl)
+            assert self.method == "DensityGate", "Control driven gates are currently only supported for DensityGate method"
+            return self._ctrl_gating(data=data, ctrl=ctrl, verbose=verbose)
         data, sample = self._apply_preprocessing(data=data)
+        if sample is not None:
+            feedback("Downsampling applied prior to fit...")
+            populations = self._apply_postprocessing(self.model.fit_predict(sample),
+                                                     original_data=data,
+                                                     sample=sample,
+                                                     verbose=verbose)
+        else:
+            populations = self._apply_postprocessing(self.model.fit_predict(data),
+                                                     original_data=data,
+                                                     verbose=verbose)
         if not self.defined:
             feedback("This gate has not been previously defined. Gate will be applied to example data "
-                     "and child population definitions populated.")
-            # Applying for the first time, resulting populations should populate the child definitions
-            if sample is not None:
-                feedback("Downsampling applied prior to fit...")
-                populations = self._apply_postprocessing(self.model.fit_predict(sample),
-                                                         original_data=data,
-                                                         sample=sample,
-                                                         verbose=verbose)
-            else:
-                populations = self._apply_postprocessing(self.model.fit_predict(data),
-                                                         original_data=data,
-                                                         verbose=verbose)
-            feedback("Adding children to gate...")
+                     "and child population definitions populated. Labels will need to be provided for "
+                     "resulting child populations")
+            feedback("Adding definitions of child populations to gate...")
             self.children = []
             for pop in populations:
                 self._add_child(pop)
             return populations
         else:
-            feedback("Applying pre-defined gate to data")
-            # Pre-defined gate, resulting populations should be matched to the child definitions
-            if sample is not None:
-                feedback("Downsampling applied prior to fit...")
-                populations = self._apply_postprocessing(self.model.fit_predict(sample),
-                                                         sample=sample,
-                                                         original_data=data)
-            else:
-                populations = self.model.fit_predict(data)
             feedback("Matching detected populations to expected children...")
             return self._match_to_children(populations)
 
