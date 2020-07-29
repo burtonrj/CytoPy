@@ -30,6 +30,8 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
         super().__init__(*args, **kwargs)
         self._shape = None
 
+    x = mongoengine.StringField(required=True)
+    y = mongoengine.StringField()
     x_values = mongoengine.ListField()
     y_values = mongoengine.ListField()
     width = mongoengine.FloatField()
