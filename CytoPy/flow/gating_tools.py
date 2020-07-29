@@ -376,7 +376,7 @@ class Gating:
                 verbose: bool = True,
                 stats: bool = True,
                 create_plot_kwargs: dict or None = None,
-                gate_plot_kwargs: dict or None = None):
+                plot_gate_kwargs: dict or None = None):
         data = self.get_population_df(population_name=gate.parent, transform=None)
         ctrl = None
         if gate.ctrl_id:
@@ -388,12 +388,13 @@ class Gating:
             print(f"---- {gate.gate_name} outputs ----")
             print(f"Generated {len(populations)} populations:")
             for p in populations:
-                print(f"{p.population_name}: n={len(p.index)}; {round(len(p.index) / data.shape[0] * 100, 3)}% of parent")
+                print(
+                    f"{p.population_name}: n={len(p.index)}; {round(len(p.index) / data.shape[0] * 100, 3)}% of parent")
             print("----------------------------------")
         return self.plot_gate(gate=gate,
                               populations=populations,
                               create_plot_kwargs=create_plot_kwargs,
-                              gate_plot_kwargs=gate_plot_kwargs)
+                              gate_plot_kwargs=plot_gate_kwargs)
 
     def apply(self,
               gate: Gate or None = None,
@@ -401,7 +402,7 @@ class Gating:
               verbose: bool = True,
               plot_outcome: bool = True,
               create_plot_kwargs: dict or None = None,
-              gate_plot_kwargs: dict or None = None):
+              plot_gate_kwargs: dict or None = None):
         if gate is None and gate_name is None:
             raise ValueError("Must provide Gate object or name of an existing gate in the loaded template")
         if gate is None:
@@ -426,16 +427,46 @@ class Gating:
         if plot_outcome:
             return self.plot_gate(gate=gate,
                                   create_plot_kwargs=create_plot_kwargs,
-                                  gate_plot_kwargs=gate_plot_kwargs)
-        return gate
+                                  gate_plot_kwargs=plot_gate_kwargs)
+        self.gates[gate.gate_name] = gate
 
-    def apply_all(self):
+    def apply_all(self,
+                  verbose: bool = True,
+                  return_plots: bool = True,
+                  create_plot_kwargs: dict or None = None,
+                  plot_gate_kwargs: dict or None = None):
         assert len(self.gates) > 0, "No gates to apply"
+        plots = list()
+        feedback = vprint(verbose)
         # First apply all gates that act on root
-
+        root_gates = [g for g in self.gates.values() if g.parent == "root"]
+        for gate in root_gates:
+            feedback(f"-------------- {gate.gate_name} --------------")
+            plots.append(self.apply(gate=gate,
+                                    verbose=verbose,
+                                    plot_outcome=return_plots,
+                                    create_plot_kwargs=create_plot_kwargs,
+                                    plot_gate_kwargs=plot_gate_kwargs))
+            feedback(f"----------------------------------------------")
         # Then loop through all gates applying where parent exists
-        # Stop once every gate has been applied
-        pass
+        downstream_gates = [g for g in self.gates.values() if g.parent != "root"]
+        i = 0
+        while len(downstream_gates) > 0:
+            if i >= len(downstream_gates):
+                i = 0
+            if return_plots:
+                gate = downstream_gates[i]
+                if gate.parent in self.populations.keys():
+                    feedback(f"-------------- {gate.gate_name} --------------")
+                    plots.append(self.apply(gate=downstream_gates[i],
+                                            verbose=verbose,
+                                            plot_outcome=return_plots,
+                                            create_plot_kwargs=create_plot_kwargs,
+                                            plot_gate_kwargs=plot_gate_kwargs))
+                    feedback(f"----------------------------------------------")
+            i += 1
+        if return_plots:
+            return plots
 
     def control_gate(self,
                      population: Population,
@@ -491,6 +522,7 @@ class Gating:
         ctrl_data["label"] = knn.predict(ctrl_data[features].values)
         population.ctrl_index = (ctrl_id, ctrl_data[ctrl_data["label"] == 1].index.values)
         self.populations[population.population_name] = population
+        feedback("-------------- Complete --------------")
 
     def merge(self):
         pass
