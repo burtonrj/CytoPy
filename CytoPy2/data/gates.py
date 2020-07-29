@@ -4,7 +4,6 @@ from ..flow.sampling import density_dependent_downsampling, faithful_downsamplin
 from ..flow.gating_analyst import Analyst, ManualGate, DensityGate
 from ..feedback import vprint
 from .fcs import Population, PopulationGeometry, merge_populations
-from datetime import datetime
 from functools import reduce
 from typing import List
 from warnings import warn
@@ -139,7 +138,9 @@ class Gate(mongoengine.Document):
                  **values):
         super().__init__(*args, **values)
         self.model = values.get("model", None)
-        self._defined = False
+        self.defined = True
+        if not self.children:
+            self.defined = False
 
     def initialise_model(self):
         assert self.method, "No method set"
@@ -172,12 +173,12 @@ class Gate(mongoengine.Document):
                                  **method_kwargs)
 
     def clear_children(self):
-        self._defined = False
+        self.defined = False
         self.children = []
 
     def label_children(self,
                        labels: dict):
-        assert not self._defined, "Children already defined. To clear children and relabel call 'clear_children'"
+        assert not self.defined, "Children already defined. To clear children and relabel call 'clear_children'"
         if self.binary and self.shape != "threshold":
             assert len(labels) == 1, "Non-threshold binary gate's should only have a single population"
         elif self.binary and self.shape == "threshold":
@@ -192,7 +193,7 @@ class Gate(mongoengine.Document):
         self.children = [c for c in self.children if c.population_name not in drop]
         for child in self.children:
             child.population_name = labels.get(child)
-        self._defined = True
+        self.defined = True
 
     def _scale(self,
                data: pd.DataFrame):
@@ -264,7 +265,7 @@ class Gate(mongoengine.Document):
               verbose: bool = True):
         feedback = vprint(verbose)
         feedback("---- Applying gate ----")
-        if not self._defined:
+        if not self.defined:
             feedback("This gate has not been previously defined. Gate will be applied to example data "
                      "and child population definitions populated.")
             # Applying for the first time, resulting populations should populate the child definitions
@@ -280,8 +281,10 @@ class Gate(mongoengine.Document):
                                                          original_data=data,
                                                          verbose=verbose)
             feedback("Adding children to gate...")
+            self.children = []
             for pop in populations:
                 self._add_child(pop)
+            return populations
         else:
             feedback("Applying pre-defined gate to data")
             # Pre-defined gate, resulting populations should be matched to the child definitions
@@ -440,38 +443,6 @@ class Gate(mongoengine.Document):
         return assignments
 
     def save(self, *args, **kwargs):
-        assert self._defined, "Gate is newly created and has not been defined. Call 'label_children' to complete " \
+        assert self.defined, f"Gate {self.gate_name} is newly created and has not been defined. Call 'label_children' to complete " \
                               "gating definition"
         super().save(*args, **kwargs)
-
-
-class GatingStrategy(mongoengine.Document):
-    """
-    Document representation of a gating template; a gating template is a collection of gating objects
-    that can be applied to multiple fcs files or an entire experiment in bulk
-
-    Parameters
-    -----------
-    template_name: str, required
-        unique identifier for template
-    gates: EmbeddedDocumentList
-        list of Gate documents; see Gate
-    creation_date: DateTime
-        date of creation
-    last_edit: DateTime
-        date of last edit
-    flags: str, optional
-        warnings associated to this gating template
-    notes: str, optional
-        free text comments
-    """
-    template_name = mongoengine.StringField(required=True)
-    gates = mongoengine.EmbeddedDocumentListField(Gate)
-    creation_date = mongoengine.DateTimeField(default=datetime.now)
-    last_edit = mongoengine.DateTimeField(default=datetime.now)
-    flags = mongoengine.StringField(required=False)
-    notes = mongoengine.StringField(required=False)
-    meta = {
-        'db_alias': 'core',
-        'collection': 'gating_strategy'
-    }
