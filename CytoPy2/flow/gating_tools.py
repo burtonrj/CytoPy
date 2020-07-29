@@ -1,14 +1,15 @@
 from ..data.experiments import Experiment
 from ..data.fcs import Population, PopulationGeometry
 from ..data.gates import Gate, PreProcess, PostProcess
-from .dim_reduction import dimensionality_reduction
+from ..data.gating_strategy import GatingStrategy
 from .transforms import apply_transform, scaler
 from ..feedback import progress_bar, vprint
-from .sampling import density_dependent_downsampling, faithful_downsampling
 from .plotting import CreatePlot
+from mongoengine.errors import DoesNotExist
 from anytree import Node, findall
 from warnings import warn
 import pandas as pd
+import matplotlib
 
 
 class Gating:
@@ -34,18 +35,7 @@ class Gating:
                  sample: int or None = None,
                  include_controls=True,
                  verbose: bool = True):
-        data = experiment.get_data(sample_id=sample_id, sample_size=sample, include_controls=include_controls)
-        assert data is not None, f'Error: failed to fetch data for {sample_id}. Aborting.'
-        self.data = [x for x in data
-                     if x['typ'] == 'complete'][0]['data']
-        if include_controls:
-            self.ctrl = [x for x in data
-                         if x['typ'] == 'control']
-            self.ctrl = {x['id'].replace(f'{sample_id}_', ''): x['data']
-                         for x in self.ctrl}
-        else:
-            self.ctrl = {}
-        del data
+        self.data = experiment.get_data(sample_id=sample_id, sample_size=sample, include_controls=include_controls)
         self.id = sample_id
         self.mongo_id = experiment.get_sample_mid(sample_id)
         self.experiment = experiment
@@ -55,18 +45,16 @@ class Gating:
         self.tree = self._construct_tree()
         self.verbose = verbose
         self.vprint = vprint(verbose)
-        self.preview_cache = None
 
     def _construct_tree(self):
         if not self.filegroup.populations:
             # No population currently exist for this FileGroup. Init with root population
             self.populations = {"root": Population(population_name="root",
-                                                   index=self.data.index.values,
+                                                   index=self.data.get("primary").index.values,
                                                    parent="root")}
-            if self.ctrl:
-                for ctrl_id, ctrl_data in self.ctrl.items():
-                    self.populations["root"]["control_idx"].append(ControlIndex(control_id=ctrl_id,
-                                                                                index=ctrl_data.index.values))
+            if "controls" in self.data.keys():
+                for ctrl_id, ctrl_data in self.data.get("controls").items():
+                    self.populations["root"].ctrl_index = (ctrl_id, ctrl_data.index.values)
             return {"root": Node(name="root", parent=None)}
         self.populations["root"] = self.filegroup.get_population("root")
         tree = {"root": Node(name="root", parent=None)}
@@ -94,15 +82,26 @@ class Gating:
                                                     parent=new_population.parent)
         return tree
 
-    def save(self):
-        # SAVE GATING FOR SAMPLE
-        pass
+    def save(self,
+             template_name: str or None = None,
+             overwrite: bool = False):
+        if len(GatingStrategy.objects(template_name=template_name)) > 0:
+            assert overwrite, f"Template with name {template_name} already exists. Set 'overwrite' to True to overwrite existing template"
+            GatingStrategy.objects(template_name=template_name).get().delete()
+        gating_strategy = GatingStrategy(template_name=template_name,
+                                         gates=self.gates)
+        gating_strategy.save()
+        self.filegroup.populations = self.populations
+        self.filegroup.gating_strategy = gating_strategy
+        self.filegroup.save()
 
-    def save_template(self):
-        pass
-
-    def load_template(self):
-        pass
+    def load_template(self,
+                      template_name):
+        try:
+            gating_strategy = GatingStrategy.objects(template_name=template_name).get()
+            self.gates = {g.gate_name: g for g in gating_strategy.gates}
+        except DoesNotExist:
+            raise ValueError(f"No such template {template_name}")
 
     def clear_gates(self):
         """Remove all currently associated gates."""
@@ -157,12 +156,12 @@ class Gating:
         assert population_name in self.populations.keys(), f'Population {population_name} not recognised'
         if ctrl_id is None:
             idx = self.populations[population_name].index
-            data = self.data.loc[idx]
+            data = self.data.get("primary").loc[idx]
         else:
-            idx = self.populations[population_name].get_ctrl(population_name)
+            idx = self.populations[population_name].ctrl_index.get(ctrl_id)
             assert idx is not None, f'No cached index for {ctrl_id} associated to population {population_name}, ' \
                                     f'have you called "control_gating" previously?'
-            data = self.ctrl[ctrl_id].loc[idx]
+            data = self.data.get("controls").get(ctrl_id).loc[idx]
         if transform is None:
             return data
         return apply_transform(data,
@@ -245,12 +244,12 @@ class Gating:
         err = """Gate should have one of the following shapes: ["threshold", "polygon", "ellipse"]"""
         assert shape in ["threshold", "polygon", "ellipse"], err
         assert parent in self.populations.keys(), "Invalid parent (does not exist)"
-        if any(c not in self.data.columns for c in [x, y]):
+        if any(c not in self.data.get("primary").columns for c in [x, y]):
             if not preprocessing_kwargs.get("dim_reduction"):
-                raise ValueError("x or y are invalid given that dim_reduction is None or undefined")
+                raise ValueError(f"x or y are invalid values are invalid; valid column names as: {self.data.get('primary').columns}")
             else:
                 assert x == "embedding1", "If using dim_reduction, x should have a value 'embedding1'"
-                assert y == "embedding2", "If using dim_reduction, x should have a value 'embedding2'"
+                assert y == "embedding2", "If using dim_reduction, y should have a value 'embedding2'"
         if shape == "threshold":
             if "method" != "DensityGate":
                 warn("Shape set to 'threshold', defaulting to DensityGate")
@@ -262,7 +261,7 @@ class Gating:
             if method is None:
                 warn("Method not given, defaulting to BayesianGaussianMixture")
                 method = "BayesianGaussianMixture"
-                method_kwargs = {"n_com"}
+                # TODO set some default params for Bayes mix model
         if shape == "polygon":
             accepted_methods = ["Affinity",
                                 "Hierarchical",
@@ -289,31 +288,68 @@ class Gating:
 
     def preview(self,
                 gate: Gate,
-                stats: bool = True):
-        data = gate.execute_preprocessing(data=self.get_population_df(population_name=gate.parent,
-                                                                      transform=None))
-        # fit model
-        populations = gate.model.fit(data)
-        # Cache results
-        self.preview_cache = {"data": data,
-                              "populations": populations}
+                verbose: bool = True,
+                stats: bool = True,
+                plot_xlim: (float, float) or None = None,
+                plot_ylim: (float, float) or None = None,
+                ax: matplotlib.pyplot.axes or None = None,
+                ):
+        data = self.get_population_df(population_name=gate.parent, transform=None)
+        populations = gate.apply(data=data,
+                                 verbose=verbose)
         # Plot with CreatePlot, complete with legend
-        plotting = CreatePlot()
+        # TODO
+
+        plotting = CreatePlot(transform_x=gate.preprocessing.transform_x,
+                              transform_y=gate.preprocessing.transform_y,
+                              xlabel=gate.x,
+                              ylabel=gate.y,
+                              xlim=plot_xlim,
+                              ylim=plot_ylim,
+                              title=f"Preview: {gate.gate_name}",
+                              )
+
+        #         ylabel: str or None = None,
+        #         xlim: (float, float) or None = None,
+        #         ylim: (float, float) or None = None,
+        #         title: str or None = None,
+        #         ax: matplotlib.pyplot.axes or None = None,
+        #         figsize: (int, int) = (5, 5),
+        #         bins: int or str = "scotts",
+        #         cmap: str = "jet",
+        #         style: str or None = "white",
+        #         font_scale: float or None = 1.2,
+        #         bw: str or float = "scott")
         # Print stats
+        # TODO
         return gate
 
     def apply(self,
               gate: Gate or None = None,
               gate_name: str or None = None,
-              labels: dict or None = None,
+              verbose: bool = True,
               plot_outcome: bool = True,
               preprocess_kwargs: dict or None = None,
               method_kwargs: dict or None = None,
               postprocess_kwargs: dict or None = None):
-        # If Gate, check cache. If cached, label populations using labels and save
-        # If Gate but not cache, fit and then label using labels, then save
-        # If gate name, load and init Gate object. Fit model and estimate population labels, save.
+        if gate is None and gate_name is None:
+            raise ValueError("Must provide Gate object or name of an existing gate in the loaded template")
+        if gate is None:
+            assert gate_name in self.gates.keys(), f"Invalid gate, must be one of: {self.gates.keys()}"
+            gate = self.gates.get(gate_name)
+        assert gate.defined, "Gate children have not been labelled, call the 'label_children' method on the chosen Gate object"
+        data = self.get_population_df(population_name=gate.parent, transform=None)
+        populations = gate.apply(data=data,
+                                 verbose=verbose,
+                                 preprocessing_kwargs=preprocess_kwargs,
+                                 method_kwargs=method_kwargs,
+                                 postprocess_kwargs=postprocess_kwargs)
+        for p in populations:
+            self.populations[p.population_name] = p
         # Plot if specified
+        if plot_outcome:
+            pass
+            # TODO plot outcome
         return gate
 
     def control_gate(self):
@@ -327,6 +363,9 @@ class Gating:
 
     def apply_all(self):
         # Apply all gates
+        # First apply all gates that act on root
+        # Then loop through all gates applying where parent exists
+        # Stop once every gate has been applied
         pass
 
     def edit_gate(self,

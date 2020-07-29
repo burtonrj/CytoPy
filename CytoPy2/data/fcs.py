@@ -1,4 +1,5 @@
 from .mappings import ChannelMap
+from .gating_strategy import GatingStrategy
 from shapely.geometry import Polygon, Point
 from shapely.ops import unary_union
 from shapely import affinity
@@ -203,6 +204,7 @@ class FileGroup(mongoengine.Document):
     processing_datetime = mongoengine.DateTimeField(required=False)
     channel_mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
     populations = mongoengine.EmbeddedDocumentListField(Population)
+    gating_strategy = mongoengine.ReferenceField(GatingStrategy, reverse_delete_rule=mongoengine.PULL)
     valid = mongoengine.BooleanField(default=True)
     notes = mongoengine.StringField(required=False)
     meta = {
@@ -366,11 +368,7 @@ class FileGroup(mongoengine.Document):
         Population
         """
         assert population_name in list(self.list_populations()), f'Population {population_name} does not exist'
-        p = [p for p in self.populations if p.population_name == population_name][0]
-        p.load_index()
-        for ctrl in p.control_idx:
-            ctrl.load_index()
-        return p
+        return [p for p in self.populations if p.population_name == population_name][0]
 
     def get_population_by_parent(self,
                                  parent: str) -> Generator:
