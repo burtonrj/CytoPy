@@ -264,7 +264,7 @@ class Analyst:
         top_right = data[(data[self.x] > x) & (data[self.x] > y)].index.values
         populations = list()
         for definition, idx in zip(["--", "-+", "++", "+-"], [bottom_left, top_left, top_right, bottom_right]):
-            geom = PopulationGeometry(x_threshold=x, y_threshold=y)
+            geom = PopulationGeometry(x=self.x, y=self.y, x_threshold=x, y_threshold=y)
             populations.append(Population(index=idx,
                                           parent=self.parent,
                                           geom=geom,
@@ -278,7 +278,7 @@ class Analyst:
         right = data[data[self.x] >= x].index.values
         populations = list()
         for definition, idx in zip(["-", "+"], [left, right]):
-            geom = PopulationGeometry(x_threshold=x)
+            geom = PopulationGeometry(x=self.x, x_threshold=x)
             populations.append(Population(index=idx,
                                           parent=self.parent,
                                           geom=geom,
@@ -316,7 +316,9 @@ class Analyst:
             box = circle.minimum_rotated_rectangle
             x, y = box.exterior.coords.xy
             width = max(Point(x[0], y[0]).distance(Point(x[1], y[1])))
-            geom = PopulationGeometry(center=circle.centroid,
+            geom = PopulationGeometry(x=self.x,
+                                      y=self.y,
+                                      center=circle.centroid,
                                       width=width,
                                       height=width,
                                       angle=0)
@@ -346,7 +348,9 @@ class Analyst:
                 self._conf = 0.95
             width, height, angle = _probablistic_ellipse(covariances=covar_matrix[i],
                                                          conf=self._conf)
-            geom = PopulationGeometry(center=centers[i],
+            geom = PopulationGeometry(x=self.x,
+                                      y=self.y,
+                                      center=centers[i],
                                       width=width,
                                       height=height,
                                       angle=angle)
@@ -370,7 +374,9 @@ class Analyst:
         names = list(string.ascii_uppercase)
         for i, label in enumerate(np.unique(labels)):
             label_df = data[data.labels == label]
-            geom = PopulationGeometry(x_values=label_df[self.x].values,
+            geom = PopulationGeometry(x=self.x,
+                                      y=self.y,
+                                      x_values=label_df[self.x].values,
                                       y_values=label_df[self.y].values)
             populations.append(Population(population_name=names[i],
                                           parent=self.parent,
@@ -463,7 +469,9 @@ class ManualGate(Analyst):
                         height: float,
                         angle: float):
         populations = list()
-        geom = PopulationGeometry(center=center,
+        geom = PopulationGeometry(x=self.x,
+                                  y=self.y,
+                                  center=center,
                                   width=width,
                                   height=height,
                                   angle=angle)
@@ -482,7 +490,9 @@ class ManualGate(Analyst):
                         x_values: list,
                         y_values: list):
         populations = list()
-        geom = PopulationGeometry(x_values=x_values,
+        geom = PopulationGeometry(x=self.x,
+                                  y=self.y,
+                                  x_values=x_values,
                                   y_values=y_values)
         populations.append(Population(population_name="manual_polygon",
                                       parent=self.parent,

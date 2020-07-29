@@ -123,6 +123,7 @@ class Gate(mongoengine.Document):
     shape = mongoengine.StringField(required=True, choices=["threshold", "polygon", "ellipse"])
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField(required=True)
+    ctrl_id = mongoengine.StringField(required=False)
     preprocessing = mongoengine.EmbeddedDocument(PreProcess)
     method = mongoengine.StringField()
     method_kwargs = mongoengine.ListField()
@@ -266,7 +267,7 @@ class Gate(mongoengine.Document):
 
     def apply(self,
               data: pd.DataFrame,
-              ctrl: pd.DataFrame or None,
+              ctrl: pd.DataFrame or None = None,
               verbose: bool = True):
         feedback = vprint(verbose)
         feedback("---- Applying gate ----")

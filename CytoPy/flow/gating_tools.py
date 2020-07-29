@@ -5,11 +5,14 @@ from ..data.gating_strategy import GatingStrategy
 from .transforms import apply_transform, scaler
 from ..feedback import progress_bar, vprint
 from .plotting import CreatePlot
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.metrics import balanced_accuracy_score
 from mongoengine.errors import DoesNotExist
 from anytree import Node, findall
 from warnings import warn
-import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 
 
 class Gating:
@@ -35,7 +38,8 @@ class Gating:
                  gating_strategy: str or None = None,
                  sample: int or None = None,
                  include_controls=True,
-                 verbose: bool = True):
+                 verbose: bool = True,
+                 gate_ctrls_adhoc: bool = True):
         self.data = experiment.get_data(sample_id=sample_id, sample_size=sample, include_controls=include_controls)
         self.id = sample_id
         self.mongo_id = experiment.get_sample_mid(sample_id)
@@ -45,6 +49,7 @@ class Gating:
         self.tree = self._construct_tree()
         self.verbose = verbose
         self.vprint = vprint(verbose)
+        self.crtl_gate_ad_hoc = gate_ctrls_adhoc
 
         if gating_strategy is None:
             assert self.filegroup.gating_strategy, f"{sample_id} has not been previously 'gated', please provide the name to " \
@@ -168,8 +173,9 @@ class Gating:
             data = self.data.get("primary").loc[idx]
         else:
             idx = self.populations[population_name].ctrl_index.get(ctrl_id)
-            assert idx is not None, f'No cached index for {ctrl_id} associated to population {population_name}, ' \
-                                    f'have you called "control_gating" previously?'
+            if idx is None:
+                self.control_gate(population=self.populations.get(population_name), ctrl_id=ctrl_id)
+            idx = self.populations[population_name].ctrl_index.get(ctrl_id)
             data = self.data.get("controls").get(ctrl_id).loc[idx]
         if transform is None:
             return data
@@ -372,7 +378,11 @@ class Gating:
                 create_plot_kwargs: dict or None = None,
                 gate_plot_kwargs: dict or None = None):
         data = self.get_population_df(population_name=gate.parent, transform=None)
+        ctrl = None
+        if gate.ctrl_id:
+            ctrl = self.get_population_df(population_name=gate.parent, transform=None, ctrl_id=gate.ctrl_id)
         populations = gate.apply(data=data,
+                                 ctrl=ctrl,
                                  verbose=verbose)
         if stats:
             print(f"---- {gate.gate_name} outputs ----")
@@ -399,31 +409,93 @@ class Gating:
             gate = self.gates.get(gate_name)
         assert gate.defined, "Gate children have not been labelled, call the 'label_children' method on the chosen Gate object"
         data = self.get_population_df(population_name=gate.parent, transform=None)
+        ctrl = None
+        if gate.ctrl_id:
+            ctrl = self.get_population_df(population_name=gate.parent, transform=None, ctrl_id=gate.ctrl_id)
         populations = gate.apply(data=data,
+                                 ctrl=ctrl,
                                  verbose=verbose)
         for p in populations:
             self.populations[p.population_name] = p
             self.tree[p.population_name] = Node(name=p.population_name, parent=gate.parent)
+            if not self.crtl_gate_ad_hoc:
+                self.control_gate(population=p,
+                                  ctrl_id="all",
+                                  plot_outcome=plot_outcome,
+                                  verbose=verbose)
         if plot_outcome:
             return self.plot_gate(gate=gate,
                                   create_plot_kwargs=create_plot_kwargs,
                                   gate_plot_kwargs=gate_plot_kwargs)
         return gate
 
-    def control_gate(self):
+    def apply_all(self):
+        assert len(self.gates) > 0, "No gates to apply"
+        # First apply all gates that act on root
+
+        # Then loop through all gates applying where parent exists
+        # Stop once every gate has been applied
         pass
+
+    def control_gate(self,
+                     population: Population,
+                     ctrl_id: str,
+                     plot_outcome: bool = False,
+                     verbose: bool = False):
+        if ctrl_id == "all":
+            for ctrl in self.data.get("controls").keys():
+                self.control_gate(population=population,
+                                  ctrl_id=ctrl,
+                                  plot_outcome=plot_outcome,
+                                  verbose=verbose)
+        feedback = vprint(verbose)
+        feedback(f"---- Estimating {population.population_name} for {ctrl_id} ----")
+        if self.populations.get(population.parent).ctrl_index.get(ctrl_id) is None:
+            feedback(f"Missing data for parent {population.parent}....")
+            self.control_gate(population=population.parent,
+                              ctrl_id=ctrl_id,
+                              plot_outcome=plot_outcome,
+                              verbose=verbose)
+        training_data = self.get_population_df(population_name=population.parent,
+                                               transform="logicle",
+                                               transform_features="all")
+        training_data["label"] = 0
+        training_data.loc[population.index, "label"] = 1
+        ctrl_data = self.get_population_df(population_name=population.parent,
+                                           transform="logicle",
+                                           transform_features="all",
+                                           ctrl_id=ctrl_id)
+        x, y = population.geom.x, population.geom.y
+        features = [x, y] if y is not None else [x]
+        feedback("Calculating optimal n by cross-validation...")
+        n = np.arange(int(training_data.shape[0] * 0.01),
+                      int(training_data.shape[0] * 0.05),
+                      int(training_data.shape[0] * 0.01) / 2, dtype=np.int)
+        knn = KNeighborsClassifier()
+        grid_cv = GridSearchCV(knn, {"n": n}, scoring="balanced_accuracy", n_jobs=-1, cv=10)
+        grid_cv.fit(training_data[features].values, training_data["label"].values)
+        n = grid_cv.best_params_.get("n")
+        feedback(f"Continuing with n={n}; chosen with balanced accuracy of {round(grid_cv.best_score_, 3)}...")
+        feedback("Training on population data...")
+        X_train, X_test, y_train, y_test = train_test_split(training_data[features].values,
+                                                            training_data["label"].values,
+                                                            test_size=0.2,
+                                                            random_state=42)
+        knn = KNeighborsClassifier(n=n)
+        knn.fit(X_train, y_train)
+        train_acc = balanced_accuracy_score(y_pred=knn.predict(X_train), y_true=y_train)
+        val_acc = balanced_accuracy_score(y_pred=knn.predict(X_test), y_true=y_test)
+        feedback(f"...training balanced accuracy score: {train_acc}")
+        feedback(f"...validation balanced accuracy score: {val_acc}")
+        feedback(f"Predicting {population.population_name} in {ctrl_id} control...")
+        ctrl_data["label"] = knn.predict(ctrl_data[features].values)
+        population.ctrl_index = (ctrl_id, ctrl_data[ctrl_data["label"] == 1].index.values)
+        self.populations[population.population_name] = population
 
     def merge(self):
         pass
 
     def subtract(self):
-        pass
-
-    def apply_all(self):
-        # Apply all gates
-        # First apply all gates that act on root
-        # Then loop through all gates applying where parent exists
-        # Stop once every gate has been applied
         pass
 
     def edit_gate(self,
