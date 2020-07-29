@@ -1,7 +1,7 @@
 from ..data.experiments import Experiment
-from ..data.fcs import Population, PopulationGeometry
+from ..data.fcs import Population, PopulationGeometry, merge_populations
 from ..data.gates import Gate, PreProcess, PostProcess
-from ..data.gating_strategy import GatingStrategy
+from ..data.gating_strategy import GatingStrategy, Action
 from .transforms import apply_transform, scaler
 from ..feedback import progress_bar, vprint
 from .plotting import CreatePlot
@@ -62,6 +62,7 @@ class Gating:
             except DoesNotExist:
                 self.template = GatingStrategy(template_name=gating_strategy)
         self.gates = {g.gate_name: g for g in self.template.gates}
+        self.actions = {x.action_name: x for x in self.template.actions}
 
     def _construct_tree(self):
         if not self.filegroup.populations:
@@ -450,6 +451,7 @@ class Gating:
             feedback(f"----------------------------------------------")
         # Then loop through all gates applying where parent exists
         downstream_gates = [g for g in self.gates.values() if g.parent != "root"]
+        actions = list(self.actions.keys())
         i = 0
         while len(downstream_gates) > 0:
             if i >= len(downstream_gates):
@@ -464,6 +466,20 @@ class Gating:
                                             create_plot_kwargs=create_plot_kwargs,
                                             plot_gate_kwargs=plot_gate_kwargs))
                     feedback(f"----------------------------------------------")
+            applied_actions = list()
+            for a in actions:
+                if all([p in self.populations.keys() for p in [self.actions.get(a).left,
+                                                               self.actions.get(a).right]]):
+                    applied_actions.append(a)
+                    if self.actions.get("a").method == "merge":
+                        self.merge(left=self.actions.get(a).left,
+                                   right=self.actions.get(a).right,
+                                   new_population_name=self.actions.get(a).new_population_name)
+                    else:
+                        self.subtract(left=self.actions.get(a).left,
+                                      right=self.actions.get(a).right,
+                                      new_population_name=self.actions.get(a).new_population_name)
+            actions = [a for a in actions if a not in applied_actions]
             i += 1
         if return_plots:
             return plots
@@ -524,11 +540,43 @@ class Gating:
         self.populations[population.population_name] = population
         feedback("-------------- Complete --------------")
 
-    def merge(self):
-        pass
+    def merge(self,
+              left: str,
+              right: str,
+              new_population_name: str,
+              save_to_actions: bool = True):
+        assert left in self.populations.keys(), f"{left} does not exist"
+        assert right in self.populations.keys(), f"{right} does not exist"
+        name = f"merge_{left}_{right}"
+        if save_to_actions:
+            assert name not in self.actions.keys(), "Merge action already exists in gating strategy"
+        left, right = self.populations.get(left), self.populations.get(right)
+        assert left.parent == right.parent, "Populations must have the same parent in order to merge"
+        new_population = merge_populations(left=left,
+                                           right=right)
+        new_population.population_name = new_population_name
+        self.populations[new_population.population_name] = new_population
+        if save_to_actions:
+            self.actions[name] = Action(action_name=name,
+                                        method="merge",
+                                        left=left.population_name,
+                                        right=right.population_name,
+                                        new_population_name=new_population_name)
 
-    def subtract(self):
-        pass
+    def subtract(self,
+                 left: str,
+                 right: str,
+                 new_population_name: str,
+                 save_to_actions: bool = True):
+        assert left in self.populations.keys(), f"{left} does not exist"
+        assert right in self.populations.keys(), f"{right} does not exist"
+        name = f"subtract_{left}_{right}"
+        if save_to_actions:
+            assert name not in self.actions.keys(), "Subtract action already exists in gating strategy"
+        left, right = self.populations.get(left), self.populations.get(right)
+        left_downstream = self.list_downstream_populations(left.population_name)
+        assert right.population_name in left_downstream, "Right population must be downstream of left population"
+
 
     def edit_gate(self,
                   new_geom: PopulationGeometry or None = None,

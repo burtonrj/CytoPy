@@ -3,6 +3,14 @@ from datetime import datetime
 import mongoengine
 
 
+class Action(mongoengine.EmbeddedDocument):
+    action_name = mongoengine.StringField()
+    method = mongoengine.StringField(choices=["merge", "subtract"])
+    left = mongoengine.StringField()
+    right = mongoengine.StringField()
+    new_population_name = mongoengine.StringField()
+
+
 class GatingStrategy(mongoengine.Document):
     """
     Document representation of a gating template; a gating template is a collection of gating objects
@@ -25,6 +33,7 @@ class GatingStrategy(mongoengine.Document):
     """
     template_name = mongoengine.StringField(required=True, unique=True)
     gates = mongoengine.ListField(mongoengine.ReferenceField(Gate, reverse_delete_rule=mongoengine.PULL))
+    actions = mongoengine.EmbeddedDocumentListField(Action)
     creation_date = mongoengine.DateTimeField(default=datetime.now)
     last_edit = mongoengine.DateTimeField(default=datetime.now)
     flags = mongoengine.StringField(required=False)

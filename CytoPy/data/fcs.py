@@ -152,24 +152,24 @@ class Population(mongoengine.EmbeddedDocument):
         self._ctrl_index[ctrl_idx[0]] = ctrl_idx[1]
 
 
-def merge_populations(left_p: Population,
-                      right_p: Population):
-    assert left_p.parent == right_p.parent, "Parent populations do not match"
+def merge_populations(left: Population,
+                      right: Population):
+    assert left.parent == right.parent, "Parent populations do not match"
     # check that geometries overlap
-    assert left_p.geom.shape.intersects(right_p.geom.shape), "Invalid: cannot merge non-overlapping populations"
+    assert left.geom.shape.intersects(right.geom.shape), "Invalid: cannot merge non-overlapping populations"
     # TODO lookup all clusters applied to this population and delete
     warn("Associated clusters are now void. Repeat clustering on new population")
-    if len(left_p._ctrl_index) > 0 or len(right_p._ctrl_index) > 0:
+    if len(left.ctrl_index) > 0 or len(right.ctrl_index) > 0:
         warn("Associated control indexes are now void. Repeat control gating on new population")
     new_definition = None
-    if left_p.definition and right_p.definition:
-        new_definition = ",".join([left_p.definition, right_p.definition])
-    new_population = Population(population_name=left_p.population_name,
-                                n=len(left_p.index) + len(right_p.index),
-                                parent=left_p.parent,
-                                warnings=left_p.warnings+right_p.warnings+["MERGED POPULATION"],
-                                index=np.unique(np.concatenate(left_p.index, right_p.index)),
-                                geom=unary_union([p.geom.shape for p in [left_p, right_p]]),
+    if left.definition and right.definition:
+        new_definition = ",".join([left.definition, right.definition])
+    new_population = Population(population_name=left.population_name,
+                                n=len(left.index) + len(right.index),
+                                parent=left.parent,
+                                warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
+                                index=np.unique(np.concatenate(left.index, right.index)),
+                                geom=unary_union([p.geom.shape for p in [left, right]]),
                                 definition=new_definition)
     return new_population
 
