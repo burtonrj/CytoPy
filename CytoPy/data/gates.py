@@ -264,18 +264,6 @@ class Gate(mongoengine.Document):
             raise ValueError("Invalid Gate: downsampling_method must be one of: uniform, density, or faithful")
         return data, None
 
-    def _ctrl_gating(self,
-                     data: pd.DataFrame,
-                     ctrl: pd.DataFrame,
-                     verbose: bool):
-        feedback = vprint(verbose)
-        data, _ = self._apply_preprocessing(data=data)
-        ctrl, _ = self._apply_preprocessing(data=ctrl)
-        if not self.defined:
-            feedback("This gate has not been previously defined. Gate will be applied to example data "
-                     "and child population definitions populated.")
-        populations = self.method.ctrl_gate(data=data, ctrl=ctrl)
-
     def apply(self,
               data: pd.DataFrame,
               ctrl: pd.DataFrame or None,
@@ -284,18 +272,21 @@ class Gate(mongoengine.Document):
         feedback("---- Applying gate ----")
         if ctrl is not None:
             assert self.method == "DensityGate", "Control driven gates are currently only supported for DensityGate method"
-            return self._ctrl_gating(data=data, ctrl=ctrl, verbose=verbose)
-        data, sample = self._apply_preprocessing(data=data)
-        if sample is not None:
-            feedback("Downsampling applied prior to fit...")
-            populations = self._apply_postprocessing(self.model.fit_predict(sample),
-                                                     original_data=data,
-                                                     sample=sample,
-                                                     verbose=verbose)
+            data, _ = self._apply_preprocessing(data=data)
+            ctrl, _ = self._apply_preprocessing(data=ctrl)
+            populations = self.method.ctrl_gate(data=data, ctrl=ctrl)
         else:
-            populations = self._apply_postprocessing(self.model.fit_predict(data),
-                                                     original_data=data,
-                                                     verbose=verbose)
+            data, sample = self._apply_preprocessing(data=data)
+            if sample is not None:
+                feedback("Downsampling applied prior to fit...")
+                populations = self._apply_postprocessing(self.model.fit_predict(sample),
+                                                         original_data=data,
+                                                         sample=sample,
+                                                         verbose=verbose)
+            else:
+                populations = self._apply_postprocessing(self.model.fit_predict(data),
+                                                         original_data=data,
+                                                         verbose=verbose)
         if not self.defined:
             feedback("This gate has not been previously defined. Gate will be applied to example data "
                      "and child population definitions populated. Labels will need to be provided for "
