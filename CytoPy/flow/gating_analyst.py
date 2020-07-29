@@ -521,11 +521,18 @@ class DensityGate(Analyst):
         assert self.threshold_method in ["density", "quantile"]
         assert self.cutoff_point in ["inflection", "quantile"]
 
-    def ctrl_gate(self):
-        pass
+    def ctrl_gate(self,
+                  data: pd.DataFrame,
+                  ctrl: pd.DataFrame):
+        thresholds = self.fit_predict(data=ctrl, return_thresholds=True)
+        if len(thresholds) == 1:
+            return self._threshold_1d(data=data, x=thresholds[0])
+        else:
+            return self._threshold_2d(data=data, x=thresholds[0], y=thresholds[1])
 
     def fit_predict(self,
-                    data: pd.DataFrame):
+                    data: pd.DataFrame,
+                    return_thresholds: bool = False):
         if data.shape[0] > self.downsampling_threshold:
             sample_n = int((data.shape[0] - self.downsampling_threshold) * self.downsampling_frac)
             data = data.sample(n=sample_n)
@@ -563,6 +570,8 @@ class DensityGate(Analyst):
                             thresholds.append(_find_inflection_point(xx=xx, probs=probs, peaks=peaks))
                     else:
                         thresholds.append(find_local_minima(probs=probs, xx=xx, peaks=peaks))
+        if return_thresholds:
+            return thresholds
         if len(thresholds) == 1:
             return self._threshold_1d(data=data, x=thresholds[0])
         else:
