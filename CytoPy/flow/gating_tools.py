@@ -9,6 +9,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import balanced_accuracy_score
 from mongoengine.errors import DoesNotExist
+from typing import List
 from anytree import Node, findall
 from warnings import warn
 import pandas as pd
@@ -547,36 +548,57 @@ class Gating:
               save_to_actions: bool = True):
         assert left in self.populations.keys(), f"{left} does not exist"
         assert right in self.populations.keys(), f"{right} does not exist"
-        name = f"merge_{left}_{right}"
+        action_name = f"merge_{left}_{right}"
         if save_to_actions:
-            assert name not in self.actions.keys(), "Merge action already exists in gating strategy"
+            assert action_name not in self.actions.keys(), "Merge action already exists in gating strategy"
         left, right = self.populations.get(left), self.populations.get(right)
         assert left.parent == right.parent, "Populations must have the same parent in order to merge"
         new_population = merge_populations(left=left,
-                                           right=right)
-        new_population.population_name = new_population_name
+                                           right=right,
+                                           new_population_name=new_population_name)
         self.populations[new_population.population_name] = new_population
         if save_to_actions:
-            self.actions[name] = Action(action_name=name,
-                                        method="merge",
-                                        left=left.population_name,
-                                        right=right.population_name,
-                                        new_population_name=new_population_name)
+            self.actions[action_name] = Action(action_name=action_name,
+                                               method="merge",
+                                               left=left.population_name,
+                                               right=right.population_name,
+                                               new_population_name=new_population_name)
 
     def subtract(self,
-                 left: str,
-                 right: str,
+                 parent: str,
+                 targets: List[str],
                  new_population_name: str,
                  save_to_actions: bool = True):
-        assert left in self.populations.keys(), f"{left} does not exist"
-        assert right in self.populations.keys(), f"{right} does not exist"
-        name = f"subtract_{left}_{right}"
+        # Checks and balances
+        targets = sorted(targets)
+        for x in [parent] + targets:
+            assert x in self.populations.keys(), f"{x} does not exist"
+        action_name = f"subtract_{parent}_{','.join(targets)}"
         if save_to_actions:
-            assert name not in self.actions.keys(), "Subtract action already exists in gating strategy"
-        left, right = self.populations.get(left), self.populations.get(right)
-        left_downstream = self.list_downstream_populations(left.population_name)
-        assert right.population_name in left_downstream, "Right population must be downstream of left population"
-
+            assert action_name not in self.actions.keys(), "Subtract action already exists in gating strategy"
+        parent = self.populations.get(parent)
+        targets = [self.populations.get(t) for t in targets]
+        assert all([t.parent == parent.population_name for t in targets]), \
+            "Target populations must all derive directly from the given parent"
+        if any([len(t.ctrl_index) > 0 for t in targets]):
+            warn("Associated control indexes are not copied to new population. "
+                 "Repeat control gating on new population")
+        # TODO lookup all clusters applied to this population and delete
+        warn("Associated clusters are not copied to new population. "
+             "Repeat control gating on new population")
+        # Estimate new index
+        target_idx = np.unique(np.concatenate([t.index for t in targets], axis=0))
+        new_population_idx = np.setdiff1d(parent.index, target_idx)
+        # Create new polygon geom
+        x, y = parent.geom.x, parent.geom.y
+        parent_data = self.get_population_df(parent.population_name)
+        new_population = Population(population_name=new_population_name,
+                                    n=len(left.index) - len(right.index),
+                                    parent=left.parent,
+                                    warnings=left.warnings + right.warnings + ["SUBTRACTED POPULATION"],
+                                    index=np.delete(left.index, np.searchsorted(left.index, right.index)),
+                                    geom=left.geom.shape.symmetric_difference,
+                                    definition=new_definition)
 
     def edit_gate(self,
                   new_geom: PopulationGeometry or None = None,

@@ -275,7 +275,7 @@ class Gate(mongoengine.Document):
             assert self.method == "DensityGate", "Control driven gates are currently only supported for DensityGate method"
             data, _ = self._apply_preprocessing(data=data)
             ctrl, _ = self._apply_preprocessing(data=ctrl)
-            populations = self.method.ctrl_gate(data=data, ctrl=ctrl)
+            populations = self._apply_postprocessing(self.method.ctrl_gate(data=data, ctrl=ctrl))
         else:
             data, sample = self._apply_preprocessing(data=data)
             if sample is not None:
@@ -306,15 +306,31 @@ class Gate(mongoengine.Document):
                               original_data: pd.DataFrame,
                               sample: pd.DataFrame or None = None,
                               verbose: bool = True):
+        # Upsample if necessary
         if sample is not None:
             upsample_method = self.preprocessing.upsample_method
             if not upsample_method:
                 warn("Downsampling was performed yet not upsampling method has been defined, defaulting to KNN")
                 upsample_method = 'knn'
             if upsample_method == "knn":
-                new_populations = upsample_knn(new_populations, original_data, verbose=verbose)
+                new_populations = upsample_knn(populations=new_populations,
+                                               features=[self.x, self.y],
+                                               original=original_data,
+                                               sample=sample,
+                                               verbose=verbose)
             else:
-                new_populations = upsample_svm(new_populations, original_data, verbose=verbose)
+                new_populations = upsample_svm(populations=new_populations,
+                                               features=[self.x, self.y],
+                                               original=original_data,
+                                               sample=sample,
+                                               verbose=verbose)
+        # Add transformation information to Populations
+        if self.preprocessing.transform_x:
+            for p in new_populations:
+                p.geom.transform_x = self.preprocessing.transform_x
+        if self.preprocessing.transform_y:
+            for p in new_populations:
+                p.geom.transform_y = self.preprocessing.transform_y
         return new_populations
 
     def _add_child(self,
