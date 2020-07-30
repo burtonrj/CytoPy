@@ -9,9 +9,11 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import balanced_accuracy_score
 from mongoengine.errors import DoesNotExist
-from typing import List
-from anytree import Node, findall
+from anytree.exporter import DotExporter
+from anytree import Node, RenderTree
+from anytree.search import findall
 from warnings import warn
+from typing import List
 import pandas as pd
 import numpy as np
 
@@ -645,7 +647,7 @@ class Gating:
                                                                              transform=None),
                                                geom=new_geom,
                                                **plot_population_geom_kwargs)
-        warn(f"The following populations are downstream from {population} and will be removed")
+        warn(f"The following populations are downstream from {population} and will be removed: {dependecies}")
         for p in dependecies:
             self.populations.pop(p)
             self.tree.pop(p)
@@ -658,14 +660,39 @@ class Gating:
         if plot_outcome:
             return ax
 
-    def remove_population(self):
-        pass
+    def remove_population(self,
+                          population: str):
+        if population not in self.populations.keys():
+            warn(f"{population} does not exist")
+            return None
+        dependecies = self.list_downstream_populations(population)
+        if dependecies:
+            warn(f"The following populations are downstream from {population} and will also be removed: {dependecies}")
+        for p in dependecies:
+            self.populations.pop(p.population_name)
+            self.tree.pop(p.population_name)
 
-    def remove_gate(self):
-        pass
+    def remove_gate(self,
+                    gate_name: str):
+        assert gate_name in self.gates.keys(), f"{gate_name} does not exist"
+        gate = self.gates.get(gate_name)
+        if any([c in self.populations.keys() for c in gate.children]):
+            dependences = [self.list_downstream_populations(c) for c in self.gates.get(gate_name).children]
+            dependences = gate.children + [x in sl for sl in dependences for x in sl]
+            warn(f"The following populations are a direct result of this gate and will be removed {dependences}")
+            for p in dependences:
+                self.populations.pop(p)
+                self.tree.pop(p)
+        self.gates.pop(gate_name)
 
-    def print_population_tree(self):
-        pass
+    def print_population_tree(self,
+                              image: bool = False,
+                              image_name: str or None = None):
+        root = self.tree['root']
+        if image:
+            if image_name is None:
+                image_name = f'{self.id}_population_tree.png'
+            DotExporter(root).to_picture(image_name)
+        for pre, fill, node in RenderTree(root):
+            print('%s%s' % (pre, node.name))
 
-    def check_downstream_overlaps(self):
-        pass
