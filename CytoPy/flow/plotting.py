@@ -1,5 +1,5 @@
 from ..data.gates import Gate
-from ..data.fcs import Population
+from ..data.fcs import Population, PopulationGeometry
 from ..flow.transforms import apply_transform
 from warnings import warn
 from typing import List
@@ -286,6 +286,47 @@ class CreatePlot:
         self._set_aesthetics(x=x, y=y)
         return self._ax
 
+    def plot_population_geom(self,
+                             parent: pd.DataFrame,
+                             geom: PopulationGeometry,
+                             lw: float = 2.5,
+                             line_colour: str = "#c92c2c",
+                             population_name: str or None = None,
+                             plot_kwargs: dict or None = None,
+                             legend_kwargs: dict or None = None):
+        if population_name is None:
+            population_name = ""
+        self.tranforms = {"x": geom.transform_x,
+                          "y": geom.transform_y}
+        self._ax = self.plot(data=parent,
+                             x=geom.x,
+                             y=geom.y,
+                             **plot_kwargs)
+        if geom.x_threshold:
+            x = geom.x_threshold
+            y = geom.y_threshold
+            self._add_threshold(x=x,
+                                y=y,
+                                lw=lw)
+            return self._ax
+        if geom.x_values is not None and geom.y_values is not None:
+            self._add_polygon(x_values=geom.x_values,
+                              y_values=geom.y_values,
+                              colour=line_colour,
+                              label=population_name,
+                              lw=lw)
+        elif all(geom[x] is not None for x in ["center", "width", "height", "angle"]):
+            self._add_ellipse(center=geom.center,
+                              width=geom.width,
+                              height=geom.height,
+                              angle=geom.angle,
+                              colour=line_colour,
+                              lw=lw,
+                              label=population_name)
+            raise ValueError(f"Geom shape is invalid")
+        self._set_legend(shape_n=1, **legend_kwargs)
+        return self._ax
+
     def plot_gate(self,
                   gate: Gate,
                   parent: pd.DataFrame,
@@ -366,7 +407,7 @@ class CreatePlot:
                 self._add_ellipse(center=child_shape.center,
                                   width=child_shape.width,
                                   height=child_shape.height,
-                                  angle=child_shape.height,
+                                  angle=child_shape.angle,
                                   colour=colour,
                                   lw=lw,
                                   label=child_name)
@@ -450,8 +491,8 @@ class CreatePlot:
     def _add_threshold(self,
                        x: float,
                        y: float or None,
-                       labels: dict,
-                       lw: float):
+                       lw: float,
+                       labels: dict or None = None):
         """
         Add a 1D or 2D threshold (red horizontal axis line and optionally a red vertical axis line)
 
@@ -461,7 +502,7 @@ class CreatePlot:
             Axis position for horizontal threshold
         y: float, optional
             Axis position for vertical threshold
-        labels: str
+        labels: dict or None
             label for axis legend
         lw: float
             linewidth
@@ -476,35 +517,37 @@ class CreatePlot:
         if y is not None:
             self._ax.axvline(y, lw=lw, c="#c92c2c")
             # Label regions for two axis
-            xy = [(x + ((x_range[1] - x_range[0]) * .1),
-                   y + ((y_range[1] - y_range[0]) * .1)),
-                  (x - ((x_range[1] - x_range[0]) * .1),
-                   y - ((y_range[1] - y_range[0]) * .1)),
-                  (x + ((x_range[1] - x_range[0]) * .1),
-                   y - ((y_range[1] - y_range[0]) * .1)),
-                  (x - ((x_range[1] - x_range[0]) * .1),
-                   y + ((y_range[1] - y_range[0]) * .1))]
-            for d, xy_ in zip(["++", "--", "+-", "-+"], xy):
-                label = [v for l, v in labels.items() if d in l][0]
-                self._ax.annotate(text=label,
-                                  xy=xy_,
+            if labels is not None:
+                xy = [(x + ((x_range[1] - x_range[0]) * .1),
+                       y + ((y_range[1] - y_range[0]) * .1)),
+                      (x - ((x_range[1] - x_range[0]) * .1),
+                       y - ((y_range[1] - y_range[0]) * .1)),
+                      (x + ((x_range[1] - x_range[0]) * .1),
+                       y - ((y_range[1] - y_range[0]) * .1)),
+                      (x - ((x_range[1] - x_range[0]) * .1),
+                       y + ((y_range[1] - y_range[0]) * .1))]
+                for d, xy_ in zip(["++", "--", "+-", "-+"], xy):
+                    label = [v for l, v in labels.items() if d in l][0]
+                    self._ax.annotate(text=label,
+                                      xy=xy_,
+                                      fontsize="small",
+                                      c="black",
+                                      backgroudcolor="white")
+        else:
+            # Label regions for one axis
+            if labels is not None:
+                self._ax.annotate(text=labels.get("+"),
+                                  xy=(x + ((x_range[1] - x_range[0]) * .1),
+                                      y_range[1] * .75),
                                   fontsize="small",
                                   c="black",
                                   backgroudcolor="white")
-        else:
-            # Label regions for one axis
-            self._ax.annotate(text=labels.get("+"),
-                              xy=(x + ((x_range[1] - x_range[0]) * .1),
-                                  y_range[1] * .75),
-                              fontsize="small",
-                              c="black",
-                              backgroudcolor="white")
-            self._ax.annotate(text=labels.get("-"),
-                              xy=(x - ((x_range[1] - x_range[0]) * .1),
-                                  y_range[1] * .75),
-                              fontsize="small",
-                              c="black",
-                              backgroudcolor="white")
+                self._ax.annotate(text=labels.get("-"),
+                                  xy=(x - ((x_range[1] - x_range[0]) * .1),
+                                      y_range[1] * .75),
+                                  fontsize="small",
+                                  c="black",
+                                  backgroudcolor="white")
 
     def backgate(self,
                  parent: pd.DataFrame,

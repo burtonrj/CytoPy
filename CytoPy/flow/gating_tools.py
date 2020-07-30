@@ -420,7 +420,7 @@ class Gating:
                                  verbose=verbose)
         for p in populations:
             self.populations[p.population_name] = p
-            self.tree[p.population_name] = Node(name=p.population_name, parent=gate.parent)
+            self.tree[p.population_name] = Node(name=p.population_name, parent=self.tree[gate.parent])
             if not self.crtl_gate_ad_hoc:
                 self.control_gate(population=p,
                                   ctrl_id="all",
@@ -477,8 +477,8 @@ class Gating:
                                    right=self.actions.get(a).right,
                                    new_population_name=self.actions.get(a).new_population_name)
                     else:
-                        self.subtract(left=self.actions.get(a).left,
-                                      right=self.actions.get(a).right,
+                        self.subtract(parent=self.actions.get(a).left,
+                                      targets=self.actions.get(a).right.split(","),
                                       new_population_name=self.actions.get(a).new_population_name)
             actions = [a for a in actions if a not in applied_actions]
             i += 1
@@ -557,6 +557,8 @@ class Gating:
                                            right=right,
                                            new_population_name=new_population_name)
         self.populations[new_population.population_name] = new_population
+        self.tree[new_population.population_name] = Node(name=new_population.population_name,
+                                                         parent=self.tree[left.parent])
         if save_to_actions:
             self.actions[action_name] = Action(action_name=action_name,
                                                method="merge",
@@ -569,17 +571,25 @@ class Gating:
                  targets: List[str],
                  new_population_name: str,
                  save_to_actions: bool = True):
-        # Checks and balances
+        # Check the populations are valid
         targets = sorted(targets)
         for x in [parent] + targets:
-            assert x in self.populations.keys(), f"{x} does not exist"
-        action_name = f"subtract_{parent}_{','.join(targets)}"
-        if save_to_actions:
-            assert action_name not in self.actions.keys(), "Subtract action already exists in gating strategy"
+            assert x in self.populations.keys(), "One or more given populations does not exist"
         parent = self.populations.get(parent)
         targets = [self.populations.get(t) for t in targets]
         assert all([t.parent == parent.population_name for t in targets]), \
             "Target populations must all derive directly from the given parent"
+        assert len(set([x.geom.transform_x for x in [parent] + targets])) == 1, \
+            "All populations must have the same transformation in the X-axis"
+        assert len(set([x.geom.transform_y for x in [parent] + targets])) == 1, \
+            "All populations must have the same transformation in the Y-axis"
+        assert all([x.geom.y is not None for x in [parent] + targets]), \
+            "Subtractions can only be performed on 2 dimensional gates"
+        # Check that this is a unique action (if save_to_actions is True)
+        action_name = f"subtract_{parent}_{','.join(targets)}"
+        if save_to_actions:
+            assert action_name not in self.actions.keys(), "Subtract action already exists in gating strategy"
+        # Provide appropriate warnings
         if any([len(t.ctrl_index) > 0 for t in targets]):
             warn("Associated control indexes are not copied to new population. "
                  "Repeat control gating on new population")
@@ -590,21 +600,63 @@ class Gating:
         target_idx = np.unique(np.concatenate([t.index for t in targets], axis=0))
         new_population_idx = np.setdiff1d(parent.index, target_idx)
         # Create new polygon geom
-        x, y = parent.geom.x, parent.geom.y
-        parent_data = self.get_population_df(parent.population_name)
+        parent_data = self.get_population_df(parent.population_name)[[parent.geom.x, parent.geom.y]]
+        parent_data = parent_data[parent_data.index.isin(new_population_idx)]
+        x_values, y_values = parent_data[parent.geom.x].values, parent_data[parent.geom.y].values
+        new_population_geom = PopulationGeometry(x=parent.geom.x,
+                                                 y=parent.geom.y,
+                                                 transform_x=parent.geom.transform_x,
+                                                 transform_y=parent.geom.transform_y,
+                                                 x_values=x_values,
+                                                 y_values=y_values)
         new_population = Population(population_name=new_population_name,
-                                    n=len(left.index) - len(right.index),
-                                    parent=left.parent,
-                                    warnings=left.warnings + right.warnings + ["SUBTRACTED POPULATION"],
-                                    index=np.delete(left.index, np.searchsorted(left.index, right.index)),
-                                    geom=left.geom.shape.symmetric_difference,
-                                    definition=new_definition)
+                                    n=len(parent.index) - len(new_population_idx),
+                                    parent=parent.population_name,
+                                    warnings=[t.warnings for t in targets] + ["SUBTRACTED POPULATION"],
+                                    index=new_population_idx,
+                                    geom=new_population_geom)
+        self.populations[new_population_name] = new_population
+        self.tree[new_population_name] = Node(name=new_population_name,
+                                              parent=self.tree[parent.population_name])
+        if save_to_actions:
+            if save_to_actions:
+                self.actions[action_name] = Action(action_name=action_name,
+                                                   method="subtract",
+                                                   left=parent.population_name,
+                                                   right=",".join([t.population_name for t in targets]),
+                                                   new_population_name=new_population_name)
 
     def edit_gate(self,
+                  population: str,
                   new_geom: PopulationGeometry or None = None,
-                  new_x: float or None = None,
-                  new_y: float or None = None):
-        pass
+                  plot_outcome: bool = True,
+                  create_plot_kwargs: dict or None = None,
+                  plot_population_geom_kwargs: dict or None = None):
+        if create_plot_kwargs is None:
+            create_plot_kwargs = {}
+        if plot_population_geom_kwargs is None:
+            plot_population_geom_kwargs = {}
+        assert population in self.populations.keys(), "Given population does not exist"
+        dependecies = self.list_downstream_populations(population)
+        ax = None
+        if plot_outcome:
+            plotting = CreatePlot(**create_plot_kwargs)
+            ax = plotting.plot_population_geom(parent=self.get_population_df(self.populations[population].parent,
+                                                                             transform=None),
+                                               geom=new_geom,
+                                               **plot_population_geom_kwargs)
+        warn(f"The following populations are downstream from {population} and will be removed")
+        for p in dependecies:
+            self.populations.pop(p)
+            self.tree.pop(p)
+        self.populations[population].geom = new_geom
+        if not self.crtl_gate_ad_hoc:
+            self.control_gate(self.populations[population], ctrl_id="all", plot_outcome=plot_outcome)
+        else:
+            warn(f"{population} in control files will need to be estimated again, if required")
+        # TODO remove clusters
+        if plot_outcome:
+            return ax
 
     def remove_population(self):
         pass
