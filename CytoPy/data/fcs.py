@@ -32,6 +32,8 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
 
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField()
+    transform_x = mongoengine.StringField()
+    transform_y = mongoengine.StringField()
     x_values = mongoengine.ListField()
     y_values = mongoengine.ListField()
     width = mongoengine.FloatField()
@@ -153,18 +155,25 @@ class Population(mongoengine.EmbeddedDocument):
 
 
 def merge_populations(left: Population,
-                      right: Population):
+                      right: Population,
+                      new_population_name: str or None = None):
     assert left.parent == right.parent, "Parent populations do not match"
     # check that geometries overlap
-    assert left.geom.shape.intersects(right.geom.shape), "Invalid: cannot merge non-overlapping populations"
+    has_shape = [p.geom.shape is not None for p in [left, right]]
+    new_definition = None
+    if new_population_name is None:
+        new_population_name = f"merge_{left.population_name}_{right.population_name}"
+    assert sum(has_shape) != 1, "To merge populations, both gates must be elliptical or polygon gates or both " \
+                                "must be threshold gates. Cannot merge one type with the other."
+    if all(has_shape):
+        assert left.geom.shape.intersects(right.geom.shape), "Invalid: cannot merge non-overlapping populations"
+    else:
+        new_definition = ",".join([left.definition, right.definition])
     # TODO lookup all clusters applied to this population and delete
     warn("Associated clusters are now void. Repeat clustering on new population")
     if len(left.ctrl_index) > 0 or len(right.ctrl_index) > 0:
         warn("Associated control indexes are now void. Repeat control gating on new population")
-    new_definition = None
-    if left.definition and right.definition:
-        new_definition = ",".join([left.definition, right.definition])
-    new_population = Population(population_name=left.population_name,
+    new_population = Population(population_name=new_population_name,
                                 n=len(left.index) + len(right.index),
                                 parent=left.parent,
                                 warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
