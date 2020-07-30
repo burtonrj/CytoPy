@@ -29,7 +29,7 @@ class Gating:
         experiment you're currently working on
     sample_id: str
         name of the sample to analyse (must belong to experiment)
-    sample: int, optional
+    sample_n: int, optional
         number of events to sample from FCS file(s) (optional)
     include_controls: bool, (default=True)
         if True and FMOs are included for specified samples, the FMO data will also be loaded into the Gating object
@@ -39,11 +39,11 @@ class Gating:
                  experiment: Experiment,
                  sample_id: str,
                  gating_strategy: str or None = None,
-                 sample: int or None = None,
+                 sample_n: int or None = None,
                  include_controls=True,
                  verbose: bool = True,
                  gate_ctrls_adhoc: bool = True):
-        self.data = experiment.get_data(sample_id=sample_id, sample_size=sample, include_controls=include_controls)
+        self.data = experiment.get_data(sample_id=sample_id, sample_size=sample_n, include_controls=include_controls)
         self.id = sample_id
         self.mongo_id = experiment.get_sample_mid(sample_id)
         self.experiment = experiment
