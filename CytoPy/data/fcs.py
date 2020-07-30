@@ -165,6 +165,10 @@ def merge_populations(left: Population,
         new_population_name = f"merge_{left.population_name}_{right.population_name}"
     assert sum(has_shape) != 1, "To merge populations, both gates must be elliptical or polygon gates or both " \
                                 "must be threshold gates. Cannot merge one type with the other."
+    assert left.geom.transform_x == left.geom.transform_x, "X dimension transform differs between left and right" \
+                                                           "populations"
+    assert left.geom.transform_y == left.geom.transform_y, "Y dimension transform differs between left and right" \
+                                                           "populations"
     if all(has_shape):
         assert left.geom.shape.intersects(right.geom.shape), "Invalid: cannot merge non-overlapping populations"
     else:
@@ -173,12 +177,20 @@ def merge_populations(left: Population,
     warn("Associated clusters are now void. Repeat clustering on new population")
     if len(left.ctrl_index) > 0 or len(right.ctrl_index) > 0:
         warn("Associated control indexes are now void. Repeat control gating on new population")
+    new_shape = unary_union([p.geom.shape for p in [left, right]])
+    x, y = new_shape.exterior.coords.xy
+    new_geom = PopulationGeometry(x=left.geom.x,
+                                  y=left.geom.y,
+                                  transform_x=left.geom.transform_x,
+                                  transform_y=left.geom.transform_y,
+                                  x_values=x,
+                                  y_values=y)
     new_population = Population(population_name=new_population_name,
                                 n=len(left.index) + len(right.index),
                                 parent=left.parent,
                                 warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
                                 index=np.unique(np.concatenate(left.index, right.index)),
-                                geom=unary_union([p.geom.shape for p in [left, right]]),
+                                geom=new_geom,
                                 definition=new_definition)
     return new_population
 
