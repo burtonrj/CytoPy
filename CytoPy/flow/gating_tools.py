@@ -2,8 +2,8 @@ from ..data.experiments import Experiment
 from ..data.fcs import Population, PopulationGeometry, merge_populations
 from ..data.gates import Gate, PreProcess, PostProcess
 from ..data.gating_strategy import GatingStrategy, Action
-from .transforms import apply_transform, scaler
-from ..feedback import progress_bar, vprint
+from .transforms import apply_transform
+from ..feedback import vprint
 from .plotting import CreatePlot
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split
