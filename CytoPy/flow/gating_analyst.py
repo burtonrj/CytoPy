@@ -239,8 +239,8 @@ class Analyst:
                  y: str or None,
                  shape: str,
                  parent: str,
-                 model: str or None = None,
-                 **kwargs):
+                 model: object or None = None,
+                 conf: float or None = None):
         assert shape in ["threshold", "polygon", "ellipse"], """Invalid shape, must be one of: 
         ["threshold", "polygon", "ellipse"]"""
         self.x = x
@@ -248,11 +248,8 @@ class Analyst:
         self.shape = shape
         self.parent = parent
         self.model = None
-        self._conf = None
-        if 'conf' in kwargs:
-            self._conf = kwargs.pop("conf")
-        if model:
-            self.model = _load_model(model=model, **kwargs)
+        self.conf = conf
+        self.model = model
 
     def _threshold_2d(self,
                       data: pd.DataFrame,
@@ -343,11 +340,11 @@ class Analyst:
         populations = list()
         names = list(string.ascii_uppercase)
         for i, label in enumerate(np.unique(labels)):
-            if not self._conf:
+            if not self.conf:
                 warn("No confidence interval set for mixture model, defaulting to 95%")
-                self._conf = 0.95
+                self.conf = 0.95
             width, height, angle = _probablistic_ellipse(covariances=covar_matrix[i],
-                                                         conf=self._conf)
+                                                         conf=self.conf)
             geom = PopulationGeometry(x=self.x,
                                       y=self.y,
                                       center=centers[i],
