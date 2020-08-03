@@ -84,6 +84,7 @@ def apply_transform(data: pd.DataFrame,
 
 def scaler(data: np.array,
            scale_method: str,
+           return_scaler: bool = True,
            **kwargs) -> np.array and callable:
     """
     Wrapper for Sklearn transformation methods
@@ -113,4 +114,6 @@ def scaler(data: np.array,
     else:
         raise ValueError('Method should be one of the following: [standard, norm, power, robust]')
     data = preprocessor.transform(data)
+    if not return_scaler:
+        return data
     return data, preprocessor
