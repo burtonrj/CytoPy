@@ -696,3 +696,29 @@ class Gating:
         for pre, fill, node in RenderTree(root):
             print('%s%s' % (pre, node.name))
 
+
+def load_population(sample_id: str,
+                    experiment: Experiment,
+                    population: str,
+                    sample_n: int or None = None,
+                    ctrl_id: str or None = None,
+                    transform: str or None = None,
+                    transform_features: list or str = "all",
+                    indexed: bool = False):
+    include_ctrls = ctrl_id is not None
+    gating = Gating(experiment=experiment,
+                    sample_id=sample_id,
+                    include_controls=include_ctrls,
+                    verbose=False)
+    data = gating.get_population_df(population_name=population,
+                                    transform=transform,
+                                    transform_features=transform_features,
+                                    ctrl_id=ctrl_id)
+    if sample_n is not None:
+        if data.shape[0] < sample_n:
+            warn(f"{sample_id} has less than {sample_n} events (n={data.shape[0]}). Using all available data.")
+        else:
+            data = data.sample(n=sample_n)
+    if indexed:
+        return sample_id, data
+    return data

@@ -63,5 +63,7 @@ def dimensionality_reduction(data: pd.DataFrame,
     for i, e in enumerate(embeddings.T):
         data[f'{method}_{i}'] = e
     if return_reducer:
+        if return_embeddings_only:
+            return embeddings, reducer
         return data, reducer
     return data
