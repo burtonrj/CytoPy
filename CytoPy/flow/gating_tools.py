@@ -4,8 +4,11 @@ from ..data.gates import Gate, PreProcess, PostProcess
 from ..data.gating_strategy import GatingStrategy, Action
 from .transforms import apply_transform
 from ..feedback import vprint
+from .gating_analyst import ManualGate, DensityGate, Analyst
 from .plotting import CreatePlot
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.mixture import BayesianGaussianMixture
+from sklearn.cluster import MiniBatchKMeans
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import balanced_accuracy_score
 from mongoengine.errors import DoesNotExist
@@ -259,44 +262,55 @@ class Gating:
                     shape: str,
                     y: str or None = None,
                     binary: bool = True,
-                    method: str or None = None,
                     method_kwargs: dict or None = None,
+                    method: object or None = None,
                     preprocessing_kwargs: dict or None = None,
                     postprocessing_kwargs: dict or None = None):
+        preprocessing_kwargs = preprocessing_kwargs or dict()
+        postprocessing_kwargs = postprocessing_kwargs or dict()
         assert gate_name not in self.gates.keys(), f"{gate_name} already exists!"
         err = """Gate should have one of the following shapes: ["threshold", "polygon", "ellipse"]"""
         assert shape in ["threshold", "polygon", "ellipse"], err
         assert parent in self.populations.keys(), "Invalid parent (does not exist)"
         if any(c not in self.data.get("primary").columns for c in [x, y]):
             if not preprocessing_kwargs.get("dim_reduction"):
-                raise ValueError(
-                    f"x or y are invalid values are invalid; valid column names as: {self.data.get('primary').columns}")
+                err = f"x or y are invalid values are invalid; valid column names as: {self.data.get('primary').columns}"
+                raise ValueError(err)
             else:
                 assert x == "embedding1", "If using dim_reduction, x should have a value 'embedding1'"
                 assert y == "embedding2", "If using dim_reduction, y should have a value 'embedding2'"
-        if shape == "threshold":
-            if "method" != "DensityGate":
+
+        if method == "ManualGate":
+            assert binary, "ManualGate is for use with binary gates only"
+            method = ManualGate(x=x, y=y, shape=shape, parent=parent, **method_kwargs)
+        elif shape == "threshold":
+            if method != "DensityThreshold":
                 warn("Shape set to 'threshold', defaulting to DensityGate")
-            method = "DensityGate"
-        if shape == "ellipse":
-            err = "For an elliptical gate, expect method 'GaussianMixture', 'BayesianGaussianMixture', " \
-                  "or 'MiniBatchKMeans'"
-            assert method in ["GaussianMixture", "BayesianGaussianMixture", 'MiniBatchKMeans'], err
+            method = DensityGate(x=x, y=y, shape=shape, parent=parent, **method_kwargs)
+        elif shape == "ellipse":
             if method is None:
                 warn("Method not given, defaulting to BayesianGaussianMixture")
-                method = "BayesianGaussianMixture"
-                method_kwargs = {"n_components": 5}
-        if shape == "polygon":
-            accepted_methods = ["Affinity",
-                                "Hierarchical",
-                                "Birch",
-                                "Dbscan",
-                                "Hdbscan",
-                                "MeanShift",
-                                "Spectral"]
-            err = f"For a polygon gate, accepted methods are: {accepted_methods}"
-            assert method in accepted_methods, err
-            assert method, "For a polygon gate, the user must specify the method"
+                method = Analyst(x=x, y=y, shape=shape, parent=parent,
+                                 model=BayesianGaussianMixture(n_components=5))
+            else:
+                err = "For an elliptical gate, expect method 'GaussianMixture', 'BayesianGaussianMixture', " \
+                      "or 'MiniBatchKMeans'"
+                assert method.__class__ in ["sklearn.mixture._gaussian_mixture.GaussianMixture",
+                                            "sklearn.mixture._bayesian_mixture.BayesianGaussianMixture",
+                                            'sklearn.cluster._kmeans.MiniBatchKMeans'], err
+                method = Analyst(x=x, y=y, shape=shape, parent=parent,
+                                 model=method)
+        elif shape == "polygon":
+            if not method:
+                warn("No method specified for Polygon Gate, defaulting to MiniBatchKMeans")
+                method = MiniBatchKMeans(n=5)
+            assert "fit_predict" in dir(method), "Invalid method, must contain signature 'fit_predict', is the " \
+                                                 "provided method a valid Scikit-Learn object?"
+            if "dbscan" in str(method.__class__).lower():
+                if preprocessing_kwargs.get("downsample_method") is None:
+                    warn("DBSCAN and HDBSCAN do not scale well and it is recommended that downsampling is performed")
+            method = Analyst(x=x, y=y, shape=shape, parent=parent,
+                             model=method)
         gate = Gate(gate_name=gate_name,
                     parent=parent,
                     geom_type=shape,
@@ -307,7 +321,6 @@ class Gating:
                     method_kwargs=[(k, v) for k, v in method_kwargs.items()],
                     preprocessing_kwargs=PreProcess(**preprocessing_kwargs),
                     postprocessing_kwargs=PostProcess(**postprocessing_kwargs))
-        gate.initialise_model()
         return gate
 
     def plot_gate(self,
@@ -412,7 +425,8 @@ class Gating:
         if gate is None:
             assert gate_name in self.gates.keys(), f"Invalid gate, must be one of: {self.gates.keys()}"
             gate = self.gates.get(gate_name)
-        assert gate.defined, "Gate children have not been labelled, call the 'label_children' method on the chosen Gate object"
+        assert gate.defined, "Gate children have not been labelled, call the 'label_children' " \
+                             "method on the chosen Gate object"
         data = self.get_population_df(population_name=gate.parent, transform=None)
         ctrl = None
         if gate.ctrl_id:

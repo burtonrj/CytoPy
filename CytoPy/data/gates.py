@@ -127,7 +127,7 @@ class Gate(mongoengine.Document):
     y = mongoengine.StringField(required=True)
     ctrl_id = mongoengine.StringField(required=False)
     preprocessing = mongoengine.EmbeddedDocument(PreProcess)
-    _method = mongoengine.FileField(db_alias='core', collection_name='gate_method')
+    _method = mongoengine.FileField(db_alias='core', collection_name='gate_method', db_field="method")
     method_kwargs = mongoengine.ListField()
     postprocessing = mongoengine.EmbeddedDocument(PostProcess)
 
@@ -146,8 +146,9 @@ class Gate(mongoengine.Document):
 
     @property
     def method(self):
-        self._method.seek(0)
-        return pickle.loads(self._method.read())
+        if self._method:
+            self._method.seek(0)
+            return pickle.loads(self._method.read())
 
     @method.setter
     def method(self, method: object):
@@ -158,35 +159,8 @@ class Gate(mongoengine.Document):
             self._method.write(Binary(pickle.dumps(method, protocol=2)))
             self._method.close()
 
-    def initialise_model(self):
-        assert self.method, "No method set"
-        if not self.method_kwargs:
-            method_kwargs = {}
-        else:
-            method_kwargs = {k: v for k, v in self.method_kwargs}
-        if self.method == "ManualGate":
-            assert not self.binary, "ManualGate is for use with binary gates only"
-            self.model = ManualGate(x=self.x,
-                                    y=self.y,
-                                    shape=self.shape,
-                                    parent=self.parent,
-                                    **method_kwargs)
-        elif self.method == "DensityGate":
-            self.model = DensityGate(x=self.x,
-                                     y=self.y,
-                                     shape=self.shape,
-                                     parent=self.parent,
-                                     **method_kwargs)
-        else:
-            if self.method in ["DBSCAN", "HDBSCAN"] and not self.preprocessing.downsample_method:
-                warn("DBSCAN and HDBSCAN do not scale well and it is recommended that downsampling "
-                     "is performed")
-            self.model = Analyst(x=self.x,
-                                 y=self.y,
-                                 shape=self.shape,
-                                 parent=self.parent,
-                                 model=self.method,
-                                 **method_kwargs)
+    def _save_method(self):
+        assert self._method is not None, "No associated method"
 
     def clear_children(self):
         self.defined = False
@@ -287,20 +261,22 @@ class Gate(mongoengine.Document):
         feedback = vprint(verbose)
         feedback("---- Applying gate ----")
         if ctrl is not None:
-            assert self.method == "DensityGate", "Control driven gates are currently only supported for DensityGate method"
+            assert self.method.__class__ == "DensityGate", \
+                "Control driven gates are currently only supported for DensityGate method"
             data, _ = self._apply_preprocessing(data=data)
             ctrl, _ = self._apply_preprocessing(data=ctrl)
-            populations = self._apply_postprocessing(self.method.ctrl_gate(data=data, ctrl=ctrl))
+            populations = self._apply_postprocessing(self.method.ctrl_gate(data=data, ctrl=ctrl),
+                                                     original_data=data)
         else:
             data, sample = self._apply_preprocessing(data=data)
             if sample is not None:
                 feedback("Downsampling applied prior to fit...")
-                populations = self._apply_postprocessing(self.model.fit_predict(sample),
+                populations = self._apply_postprocessing(self.method.fit_predict(sample),
                                                          original_data=data,
                                                          sample=sample,
                                                          verbose=verbose)
             else:
-                populations = self._apply_postprocessing(self.model.fit_predict(data),
+                populations = self._apply_postprocessing(self.method.fit_predict(data),
                                                          original_data=data,
                                                          verbose=verbose)
         if not self.defined:
@@ -476,6 +452,6 @@ class Gate(mongoengine.Document):
         return assignments
 
     def save(self, *args, **kwargs):
-        assert self.defined, f"Gate {self.gate_name} is newly created and has not been defined. Call 'label_children' to complete " \
-                              "gating definition"
+        assert self.defined, f"Gate {self.gate_name} is newly created and has not been defined. " \
+                             f"Call 'label_children' to complete gating definition"
         super().save(*args, **kwargs)
