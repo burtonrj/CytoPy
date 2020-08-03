@@ -3,7 +3,9 @@ from ..feedback import progress_bar, vprint
 from .dim_reduction import dimensionality_reduction
 from .transforms import scaler
 from .gating_tools import load_population
+from scipy.spatial.distance import jensenshannon as jsd
 from multiprocessing import Pool, cpu_count
+from collections import defaultdict
 from functools import partial
 from typing import Dict
 from warnings import warn
@@ -14,15 +16,12 @@ import numpy as np
 import math
 
 
-def calculate_ref_sample(experiment: Experiment,
-                         exclude_samples: list or None = None,
-                         sample_n: int = 1000,
+def covar_euclidean_norm(data: Dict[str: pd.DataFrame],
                          verbose: bool = True):
     """
-    Given an FCS Experiment with multiple FCS files, calculate the optimal reference file.
 
     This is performed as described in Li et al paper (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5860171/) on
-    DeepCyTOF: for every 2 samples i, j compute the Frobenius norm of the difference between their covariance matrics
+    DeepCyTOF: for every 2 samples i, j compute the euclidean norm of the difference between their covariance matrics
     and then select the sample with the smallest average distance to all other samples.
 
     This is an optimised version of supervised.ref.calculate_red_sample that leverages the multi-processing library
@@ -30,12 +29,7 @@ def calculate_ref_sample(experiment: Experiment,
 
     Parameters
     ----------
-    experiment: FCSExperiment
-        Experiment to find reference sample for
-    exclude_samples: list, optional
-        If given, any samples in list will be excluded
-    sample_n: int, (default=1000)
-        Data is downsampled prior to running algorithm, this specifies how many observations to sample from each
+    data: dict
     verbose: bool, (default=True)
         Feedback
     Returns
@@ -43,44 +37,24 @@ def calculate_ref_sample(experiment: Experiment,
     str
         Sample ID of reference sample
     """
-    vprint = print if verbose else lambda *a, **k: None
-    if exclude_samples is None:
-        exclude_samples = []
-    vprint('-------- Calculating Reference Sample (Multi-processing) --------')
-    # Calculate common features
-    vprint('...match feature space between samples')
-    features = find_common_features(experiment)
-    # List samples
-    all_samples = [x for x in experiment.list_samples() if x not in exclude_samples]
-    vprint('...pulling data')
-    # Fetch data
-    pool = Pool(cpu_count())
-    f = partial(pull_data_hashtable, experiment=experiment, features=features, sample_n=sample_n)
-    all_data_ = pool.map(f, all_samples)
-    vprint('...calculate covariance matrix for each sample')
+    feedback = vprint(verbose)
+    feedback('Calculate covariance matrix for each sample...')
     # Calculate covar for each
-    all_data = dict()
-    for d in all_data_:
-        all_data.update(d)
-    del all_data_
-    all_data = {k: np.cov(v, rowvar=False) for k, v in all_data.items()}
-    vprint('...search for sample with smallest average euclidean distance to all other samples')
+    covar = {k: np.cov(v, rowvar=False) for k, v in data.items()}
+    feedback('Search for sample with smallest average euclidean distance to all other samples...')
     # Make comparisons
-    n = len(all_samples)
+    sample_ids = list(data.keys())
+    n = len(sample_ids)
     norms = np.zeros(shape=[n, n])
     ref_ind = None
-    for i in range(0, n):
-        cov_i = all_data[all_samples[i]]
-        for j in range(0, n):
-            cov_j = all_data[all_samples[j]]
-            cov_diff = cov_i - cov_j
+    for i, sample_i in enumerate(sample_ids):
+        for j, sample_j in enumerate(sample_ids):
+            cov_diff = covar.get(sample_i) - covar.get(sample_j)
             norms[i, j] = np.linalg.norm(cov_diff, ord='fro')
             norms[j, i] = norms[i, j]
             avg = np.mean(norms, axis=1)
             ref_ind = np.argmin(avg)
-    pool.close()
-    pool.join()
-    return all_samples[int(ref_ind)]
+    return sample_ids[int(ref_ind)]
 
 
 def _indexed_dimensionality_reduction(indexed_data: (str, pd.DataFrame),
@@ -92,26 +66,63 @@ def _transform(indexed_data: (str, np.array),
                reducers: dict):
     return reducers.get(indexed_data[0]).transform(indexed_data[1])
 
-def _jsd_n_comparison(embeddings: Dict[dict]):
 
+def _check_ref_n(embeddings: Dict[str, dict],
+                 reference: str):
+    # Does the reference sample hold the sample N's seen in other samples?
+    all_sample_n = [list(embeddings.get(x).keys()) for x in embeddings.keys() if x != reference]
+    all_sample_n = set([x for sl in all_sample_n for x in sl])
+    reference = embeddings.get(reference)
+    for n in all_sample_n:
+        if n not in reference.keys():
+            warn(f"Reference sample is missing sample N {n} so comparisons will not be missing in some cases.")
+
+
+def _jsd_n_comparison(pdfs: Dict[str: dict],
+                      reference: str):
+    jsd_comparisons = defaultdict(dict)
+    _check_ref_n(embeddings=pdfs, reference=reference)
+    reference = pdfs.pop(reference)
+    # For each sample, compare pdf for sample size N to the equivalent reference
+    for sample_id in pdfs.keys():
+        for n, sample_embeddings in pdfs.get(sample_id).items():
+            if reference.get(n) is None:
+                continue
+            jsd_comparisons[sample_id][n] = [jsd(sample_embeddings, reference.get(n))]
     # Wrangle into a dataframe
-    all_data = pd.DataFrame()
-    for sample_id, sample_embeddings in embeddings.items():
-        sample_data = pd.DataFrame()
-        for n, embedding_values in sample_embeddings.items():
-            df = pd.DataFrame(embedding_values, columns=["component_1", "component_2"])
-            df["n"] = n
-            sample_data = pd.concat([sample_data, df])
-        sample_data["sample_id"] = sample_id
-        all_data = pd.concat([all_data, sample_data])
+    df = pd.DataFrame()
+    for sample_id in jsd_comparisons.keys():
+        df_ = pd.DataFrame(jsd_comparisons.get(sample_id)).melt(var_name="n", value_name="JSD(p, q)")
+        df_["Sample ID"] = sample_id
+        df = pd.concat([df, df_])
+    # Plot results
+    fig, ax = plt.subplots(figsize=(10, 10))
+    sns.lineplot(x="n", y="JSD(p, q)", hue="Sample ID", ci=None, ax=ax, alpha=.75)
+    sns.scatterplot(x="n", y="JSD(p, q)", s=10, alpha=.5, c="black", ax=ax)
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    return ax
 
 
-def _visual_n_comparison(embeddings: Dict[dict]):
-    pass
+def _visual_n_comparison(embeddings: Dict[str: dict]):
+    plots = dict()
+    for sample_id in embeddings.keys():
+        total_n = len(embeddings.get(sample_id).keys())
+        fig, axes = plt.subplots(1, total_n, figsize=(10, 5))
+        fig.suptitle(sample_id)
+        for i, n in enumerate(embeddings.get(sample_id).keys()):
+            axes[0, i].scatter(x=embeddings.get(sample_id).get(n)[:, 0],
+                               y=embeddings.get(sample_id).get(n)[:, 1],
+                               c="#5982d4",
+                               s=3.5,
+                               alpha=0.5)
+            axes[0, i].set_title(f"Sample n={n}")
+        plots[sample_id] = (fig, axes)
+    return plots
 
 
 class EvaluateBatchEffects:
-    def __init__(self, experiment: Experiment,
+    def __init__(self,
+                 experiment: Experiment,
                  root_population: str,
                  samples: list or None = None,
                  reference_sample: str or None = None,
@@ -124,15 +135,16 @@ class EvaluateBatchEffects:
         self.root_population = root_population
         self.verbose = verbose
         self.print = vprint(verbose)
-        self.reference_id = reference_sample
         self.kde_cache = dict()
         self.data = dict()
         self.njobs = njobs
         if self.njobs < 0:
             self.njobs = cpu_count()
+        self.reference_id = reference_sample or self._calc_ref_sample()
 
     def load_and_sample(self,
-                        sample_n: int = 10000):
+                        sample_n: int = 10000,
+                        save: bool = True):
         _load = partial(load_population,
                         experiment=self.experiment,
                         population=self.root_population,
@@ -143,10 +155,15 @@ class EvaluateBatchEffects:
             data = list(progress_bar(pool.imap(_load, self.sample_ids),
                                      verbose=self.verbose,
                                      total=len(self.sample_ids)))
-        self.data = {x[0]: x[1] for x in data}
+        if not save:
+            self.data = {x[0]: x[1] for x in data}
+        return {x[0]: x[1] for x in data}
 
-    def select_optimal_reference(self):
-        pass
+    def _calc_ref_sample(self,
+                         sample_n: int = 1000):
+        self.print("--- Calculating Reference Sample ---")
+        return covar_euclidean_norm(data=self.load_and_sample(sample_n=sample_n, save=False),
+                                    verbose=self.verbose)
 
     def select_optimal_sample_n(self,
                                 method: str = "jsd",
@@ -209,7 +226,9 @@ class EvaluateBatchEffects:
                                                        total=len(indexed_data)))
             embeddings[n] = {x[0]: x[1] for x in indexed_embeddings}
         if method == "jsd":
-            return _jsd_n_comparison(embeddings=embeddings)
+
+            return _jsd_n_comparison(embeddings=embeddings,
+                                     reference=self.reference_id)
         return _visual_n_comparison(embeddings=embeddings)
 
     def scale_data(self,

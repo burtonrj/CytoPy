@@ -4,12 +4,14 @@ from ..flow.sampling import density_dependent_downsampling, faithful_downsamplin
 from ..flow.gating_analyst import Analyst, ManualGate, DensityGate
 from ..feedback import vprint
 from .fcs import Population, PopulationGeometry, merge_populations
+from bson.binary import Binary
 from functools import reduce
 from typing import List
 from warnings import warn
 import pandas as pd
 import numpy as np
 import mongoengine
+import pickle
 
 
 def _merge(new_children: List[Population],
@@ -125,7 +127,7 @@ class Gate(mongoengine.Document):
     y = mongoengine.StringField(required=True)
     ctrl_id = mongoengine.StringField(required=False)
     preprocessing = mongoengine.EmbeddedDocument(PreProcess)
-    method = mongoengine.StringField()
+    _method = mongoengine.FileField(db_alias='core', collection_name='gate_method')
     method_kwargs = mongoengine.ListField()
     postprocessing = mongoengine.EmbeddedDocument(PostProcess)
 
@@ -138,10 +140,23 @@ class Gate(mongoengine.Document):
                  *args,
                  **values):
         super().__init__(*args, **values)
-        self.model = values.get("model", None)
         self.defined = True
         if not self.children:
             self.defined = False
+
+    @property
+    def method(self):
+        self._method.seek(0)
+        return pickle.loads(self._method.read())
+
+    @method.setter
+    def method(self, method: object):
+        if self._method:
+            self._method.replace(Binary(pickle.dumps(method, protocol=2)))
+        else:
+            self._method.new_file()
+            self._method.write(Binary(pickle.dumps(method, protocol=2)))
+            self._method.close()
 
     def initialise_model(self):
         assert self.method, "No method set"
