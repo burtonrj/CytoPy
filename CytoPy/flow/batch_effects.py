@@ -1,5 +1,7 @@
 from ..data.experiments import Experiment
 from ..feedback import progress_bar, vprint
+from ..utilities import indexed_parallel_func
+from .density_estimation import multivariate_kde
 from .dim_reduction import dimensionality_reduction
 from .transforms import scaler
 from .gating_tools import load_population
@@ -57,11 +59,6 @@ def covar_euclidean_norm(data: Dict[str: pd.DataFrame],
     return sample_ids[int(ref_ind)]
 
 
-def _indexed_dimensionality_reduction(indexed_data: (str, pd.DataFrame),
-                                      **kwargs):
-    return indexed_data[0], dimensionality_reduction(indexed_data[1].values, **kwargs)
-
-
 def _transform(indexed_data: (str, np.array),
                reducers: dict):
     return reducers.get(indexed_data[0]).transform(indexed_data[1])
@@ -69,26 +66,23 @@ def _transform(indexed_data: (str, np.array),
 
 def _check_ref_n(embeddings: Dict[str, dict],
                  reference: str):
-    # Does the reference sample hold the sample N's seen in other samples?
-    all_sample_n = [list(embeddings.get(x).keys()) for x in embeddings.keys() if x != reference]
-    all_sample_n = set([x for sl in all_sample_n for x in sl])
-    reference = embeddings.get(reference)
-    for n in all_sample_n:
-        if n not in reference.keys():
+    for n in embeddings.keys():
+        if reference not in embeddings.get(n).keys():
             warn(f"Reference sample is missing sample N {n} so comparisons will not be missing in some cases.")
 
 
 def _jsd_n_comparison(pdfs: Dict[str: dict],
                       reference: str):
+
     jsd_comparisons = defaultdict(dict)
     _check_ref_n(embeddings=pdfs, reference=reference)
-    reference = pdfs.pop(reference)
-    # For each sample, compare pdf for sample size N to the equivalent reference
-    for sample_id in pdfs.keys():
-        for n, sample_embeddings in pdfs.get(sample_id).items():
-            if reference.get(n) is None:
+    # For each sample N, compare each PDF to the equivalent PDF of the reference sample
+    for n in pdfs.keys():
+        q = pdfs.get(n).get(reference)
+        for _id, p in pdfs.get(n).items():
+            if _id == reference:
                 continue
-            jsd_comparisons[sample_id][n] = [jsd(sample_embeddings, reference.get(n))]
+            jsd_comparisons[_id][n] = [jsd(p, q)]
     # Wrangle into a dataframe
     df = pd.DataFrame()
     for sample_id in jsd_comparisons.keys():
@@ -104,14 +98,19 @@ def _jsd_n_comparison(pdfs: Dict[str: dict],
 
 
 def _visual_n_comparison(embeddings: Dict[str: dict]):
+    # Wrangle dictionary to have sample ID as primary key
+    sample_embeddings = defaultdict(dict)
+    for n in embeddings.keys():
+        for _id in embeddings.get(n).keys():
+            sample_embeddings[_id][n] = embeddings.get(n).get(_id)
     plots = dict()
-    for sample_id in embeddings.keys():
-        total_n = len(embeddings.get(sample_id).keys())
+    for sample_id in sample_embeddings.keys():
+        total_n = len(sample_embeddings.get(sample_id).keys())
         fig, axes = plt.subplots(1, total_n, figsize=(10, 5))
         fig.suptitle(sample_id)
-        for i, n in enumerate(embeddings.get(sample_id).keys()):
-            axes[0, i].scatter(x=embeddings.get(sample_id).get(n)[:, 0],
-                               y=embeddings.get(sample_id).get(n)[:, 1],
+        for i, n in enumerate(sample_embeddings.get(sample_id).keys()):
+            axes[0, i].scatter(x=sample_embeddings.get(sample_id).get(n)[:, 0],
+                               y=sample_embeddings.get(sample_id).get(n)[:, 1],
                                c="#5982d4",
                                s=3.5,
                                alpha=0.5)
@@ -171,9 +170,11 @@ class EvaluateBatchEffects:
                                 scale: str or None = "standard",
                                 dimensionality_reduction_method: str = "UMAP",
                                 scaler_kwargs: dict or None = None,
-                                **kwargs):
-        if scaler_kwargs is None:
-            scaler_kwargs = {}
+                                dim_reduction_kwargs: dict or None = None,
+                                kde_kwargs: dict or None = None):
+        scaler_kwargs = scaler_kwargs or dict()
+        dim_reduction_kwargs = dim_reduction_kwargs or dict()
+        kde_kwargs = kde_kwargs or dict()
         assert method in ["jsd", "visual"], "Method should be either 'jsd' or 'visual'"
         sample_range = sample_range or np.arange(1000, 11000, 1000)
         self.print("=============================================")
@@ -191,13 +192,15 @@ class EvaluateBatchEffects:
         if scale:
             self.print("...scaling data...")
             self.scale_data(scale=scale, **scaler_kwargs)
-        _dim_reduction = partial(_indexed_dimensionality_reduction,
+
+        _dim_reduction = partial(indexed_parallel_func,
+                                 func=dimensionality_reduction,
                                  features=list(self.data.values())[0].columns.values,
                                  method=dimensionality_reduction_method,
                                  n_components=2,
                                  return_embeddings_only=True,
                                  return_reducer=True,
-                                 **kwargs)
+                                 **dim_reduction_kwargs)
         self.print("...fitting data...")
         with Pool(self.njobs) as pool:
             indexed_data = [(k, v) for k, v in self.data.items()]
@@ -226,8 +229,19 @@ class EvaluateBatchEffects:
                                                        total=len(indexed_data)))
             embeddings[n] = {x[0]: x[1] for x in indexed_embeddings}
         if method == "jsd":
-
-            return _jsd_n_comparison(embeddings=embeddings,
+            self.print("...estimating PDF for embeddings...")
+            kde_func = partial(indexed_parallel_func,
+                               func=multivariate_kde,
+                               **kde_kwargs)
+            pdfs = dict()
+            for n in progress_bar(embeddings.keys(), verbose=self.verbose):
+                indexed_data = [(_id, data) for _id, data in embeddings.get(n).items()]
+                with Pool(self.njobs) as pool:
+                    indexed_pdfs = list(progress_bar(pool.imap(kde_func, indexed_data),
+                                                     verbose=self.verbose,
+                                                     total=len(indexed_data)))
+                pdfs[n] = {x[0]: x[1] for x in indexed_pdfs}
+            return _jsd_n_comparison(pdfs=pdfs,
                                      reference=self.reference_id)
         return _visual_n_comparison(embeddings=embeddings)
 
