@@ -263,7 +263,7 @@ class Gating:
                     y: str or None = None,
                     binary: bool = True,
                     method_kwargs: dict or None = None,
-                    method: object or None = None,
+                    method: object or str or None = None,
                     preprocessing_kwargs: dict or None = None,
                     postprocessing_kwargs: dict or None = None):
         preprocessing_kwargs = preprocessing_kwargs or dict()
@@ -284,32 +284,33 @@ class Gating:
             assert binary, "ManualGate is for use with binary gates only"
             method = ManualGate(x=x, y=y, shape=shape, parent=parent, **method_kwargs)
         elif shape == "threshold":
-            if method != "DensityThreshold":
+            if method != "DensityGate":
                 warn("Shape set to 'threshold', defaulting to DensityGate")
             method = DensityGate(x=x, y=y, shape=shape, parent=parent, **method_kwargs)
         elif shape == "ellipse":
             if method is None:
                 warn("Method not given, defaulting to BayesianGaussianMixture")
-                method = Analyst(x=x, y=y, shape=shape, parent=parent,
+                method = Analyst(x=x, y=y, shape=shape, parent=parent, binary=binary,
                                  model=BayesianGaussianMixture(n_components=5))
             else:
                 err = "For an elliptical gate, expect method 'GaussianMixture', 'BayesianGaussianMixture', " \
                       "or 'MiniBatchKMeans'"
-                assert method.__class__ in ["sklearn.mixture._gaussian_mixture.GaussianMixture",
-                                            "sklearn.mixture._bayesian_mixture.BayesianGaussianMixture",
-                                            'sklearn.cluster._kmeans.MiniBatchKMeans'], err
-                method = Analyst(x=x, y=y, shape=shape, parent=parent,
+                valid = ["sklearn.mixture._gaussian_mixture.GaussianMixture",
+                         "sklearn.mixture._bayesian_mixture.BayesianGaussianMixture",
+                         "sklearn.cluster._kmeans.MiniBatchKMeans"]
+                assert any(x in str(method.__class__) for x in valid), err
+                method = Analyst(x=x, y=y, shape=shape, parent=parent, binary=binary,
                                  model=method)
         elif shape == "polygon":
             if not method:
                 warn("No method specified for Polygon Gate, defaulting to MiniBatchKMeans")
                 method = MiniBatchKMeans(n=5)
             assert "fit_predict" in dir(method), "Invalid method, must contain signature 'fit_predict', is the " \
-                                                 "provided method a valid Scikit-Learn object?"
+                                                 "provided method a valid Scikit-Learn object with method fit_predict?"
             if "dbscan" in str(method.__class__).lower():
                 if preprocessing_kwargs.get("downsample_method") is None:
                     warn("DBSCAN and HDBSCAN do not scale well and it is recommended that downsampling is performed")
-            method = Analyst(x=x, y=y, shape=shape, parent=parent,
+            method = Analyst(x=x, y=y, shape=shape, parent=parent, binary=binary,
                              model=method)
         gate = Gate(gate_name=gate_name,
                     parent=parent,
@@ -335,7 +336,8 @@ class Gating:
         data = self.get_population_df(population_name=gate.parent, transform=None)
         if populations is None:
             children = self.list_child_populations(gate.parent)
-            assert children, f"{gate.parent} children do not exist in current population tree. Has this gate been applied?"
+            assert children, \
+                f"{gate.parent} children do not exist in current population tree. Has this gate been applied?"
             populations = [self.populations.get(x) for x in children]
         plotting = CreatePlot(transform_x=gate.preprocessing.transform_x,
                               transform_y=gate.preprocessing.transform_y,

@@ -1,9 +1,9 @@
 from ..flow.dim_reduction import dimensionality_reduction
 from ..flow.transforms import apply_transform, scaler
 from ..flow.sampling import density_dependent_downsampling, faithful_downsampling, upsample_knn, upsample_svm
-from ..flow.gating_analyst import Analyst, ManualGate, DensityGate
 from ..feedback import vprint
 from .fcs import Population, PopulationGeometry, merge_populations
+from sklearn.base import clone
 from bson.binary import Binary
 from functools import reduce
 from typing import List
@@ -139,28 +139,15 @@ class Gate(mongoengine.Document):
     def __init__(self,
                  *args,
                  **values):
+        self.method = None
+        if "method" in values.keys():
+            self.method = values.pop("method")
         super().__init__(*args, **values)
+        if self._method:
+            self.method = pickle.load(self._method.read())
         self.defined = True
         if not self.children:
             self.defined = False
-
-    @property
-    def method(self):
-        if self._method:
-            self._method.seek(0)
-            return pickle.loads(self._method.read())
-
-    @method.setter
-    def method(self, method: object):
-        if self._method:
-            self._method.replace(Binary(pickle.dumps(method, protocol=2)))
-        else:
-            self._method.new_file()
-            self._method.write(Binary(pickle.dumps(method, protocol=2)))
-            self._method.close()
-
-    def _save_method(self):
-        assert self._method is not None, "No associated method"
 
     def clear_children(self):
         self.defined = False
@@ -261,7 +248,7 @@ class Gate(mongoengine.Document):
         feedback = vprint(verbose)
         feedback("---- Applying gate ----")
         if ctrl is not None:
-            assert self.method.__class__ == "DensityGate", \
+            assert "DensityGate" in str(self.method.__class__), \
                 "Control driven gates are currently only supported for DensityGate method"
             data, _ = self._apply_preprocessing(data=data)
             ctrl, _ = self._apply_preprocessing(data=ctrl)
@@ -454,4 +441,13 @@ class Gate(mongoengine.Document):
     def save(self, *args, **kwargs):
         assert self.defined, f"Gate {self.gate_name} is newly created and has not been defined. " \
                              f"Call 'label_children' to complete gating definition"
+        assert self.method is not None, "No method associated to Gate"
+        self.method.model = clone(self.method.model)
+        if self._method:
+            self._method.replace(Binary(pickle.dumps(self.method, protocol=2)))
+        else:
+            self._method.new_file()
+            self._method.write(Binary(pickle.dumps(self.method, protocol=2)))
+            self._method.close()
         super().save(*args, **kwargs)
+
