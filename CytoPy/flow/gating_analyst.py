@@ -11,17 +11,6 @@ import numpy as np
 import importlib
 import string
 
-IMPORTS = {"GaussianMixture": "sklearn.mixture.GaussianMixture",
-           "BayesianGaussianMixture": "sklearn.mixture.BayesianGaussianMixture",
-           "Affinity": "sklearn.cluster.AffinityPropagation",
-           "MiniBatchKMeans": "sklearn.cluster.MiniBatchKMeans",
-           "Hierarchical": "sklearn.cluster.AgglomerativeClustering",
-           "Birch": "sklearn.cluster.Birch",
-           "DBSCAN": "sklearn.cluster.DBSCAN",
-           "HDBSCAN": "hdbscan.HDBSCAN",
-           "MeanShift": "sklearn.cluster.MeanShift",
-           "Spectral": "sklearn.cluster.SpectralClustering"}
-
 
 def _probablistic_ellipse(covariances: np.array,
                           conf: float):
@@ -112,11 +101,6 @@ def inside_ellipse(data: np.array,
             # point not in ellipse
             in_ellipse.append(False)
     return in_ellipse
-
-
-def _load_model(model: str,
-                **kwargs):
-    return importlib.import_module(IMPORTS.get(model))(**kwargs)
 
 
 def _circle_overlap(circles: List[Polygon]):
@@ -239,6 +223,7 @@ class Analyst:
                  y: str or None,
                  shape: str,
                  parent: str,
+                 binary: bool,
                  model: object or None = None,
                  conf: float or None = None):
         assert shape in ["threshold", "polygon", "ellipse"], """Invalid shape, must be one of: 
@@ -250,6 +235,7 @@ class Analyst:
         self.model = None
         self.conf = conf
         self.model = model
+        self.binary = binary
 
     def _threshold_2d(self,
                       data: pd.DataFrame,
