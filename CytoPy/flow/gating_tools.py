@@ -4,13 +4,11 @@ from ..data.gates import Gate, PreProcess, PostProcess
 from ..data.gating_strategy import GatingStrategy, Action
 from .transforms import apply_transform
 from ..feedback import vprint
-from .gating_analyst import ManualGate, DensityGate, Analyst
 from .plotting import CreatePlot
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.mixture import BayesianGaussianMixture
-from sklearn.cluster import MiniBatchKMeans
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import balanced_accuracy_score
+from sklearn import cluster, mixture
 from mongoengine.errors import DoesNotExist
 from anytree.exporter import DotExporter
 from anytree import Node, RenderTree
@@ -19,6 +17,19 @@ from warnings import warn
 from typing import List
 import pandas as pd
 import numpy as np
+import inspect
+
+
+def valid_sklearn(klass: str):
+    valid_clusters = [x[0] for x in inspect.getmembers(cluster, inspect.isclass)
+                      if 'sklearn.cluster' in x[1].__module__]
+    valid_mixtures = [x[0] for x in inspect.getmembers(mixture, inspect.isclass)
+                      if 'sklearn.mixture' in x[1].__module__]
+    valid = valid_clusters + valid_mixtures + ["HDBSCAN"]
+    err = f"""Invalid class name. Must be one of the following from Scikit-Learn's cluster module: {valid_clusters};
+ or from Scikit-Learn's mixture module: {valid_mixtures}; or 'HDBSCAN'"""
+    assert klass in valid, err
+    return klass
 
 
 class Gating:
@@ -262,8 +273,8 @@ class Gating:
                     shape: str,
                     y: str or None = None,
                     binary: bool = True,
+                    method: str or None = None,
                     method_kwargs: dict or None = None,
-                    method: object or str or None = None,
                     preprocessing_kwargs: dict or None = None,
                     postprocessing_kwargs: dict or None = None):
         preprocessing_kwargs = preprocessing_kwargs or dict()
@@ -282,36 +293,29 @@ class Gating:
 
         if method == "ManualGate":
             assert binary, "ManualGate is for use with binary gates only"
-            method = ManualGate(x=x, y=y, shape=shape, parent=parent, **method_kwargs)
         elif shape == "threshold":
             if method != "DensityGate":
                 warn("Shape set to 'threshold', defaulting to DensityGate")
-            method = DensityGate(x=x, y=y, shape=shape, parent=parent, **method_kwargs)
+            method = "DensityGate"
         elif shape == "ellipse":
             if method is None:
                 warn("Method not given, defaulting to BayesianGaussianMixture")
-                method = Analyst(x=x, y=y, shape=shape, parent=parent, binary=binary,
-                                 model=BayesianGaussianMixture(n_components=5))
+                method = "BayesianGaussianMixture"
+                method_kwargs["n_components"] = 5
             else:
                 err = "For an elliptical gate, expect method 'GaussianMixture', 'BayesianGaussianMixture', " \
                       "or 'MiniBatchKMeans'"
-                valid = ["sklearn.mixture._gaussian_mixture.GaussianMixture",
-                         "sklearn.mixture._bayesian_mixture.BayesianGaussianMixture",
-                         "sklearn.cluster._kmeans.MiniBatchKMeans"]
-                assert any(x in str(method.__class__) for x in valid), err
-                method = Analyst(x=x, y=y, shape=shape, parent=parent, binary=binary,
-                                 model=method)
+                valid = ["GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans"]
+                assert method in valid, err
         elif shape == "polygon":
             if not method:
                 warn("No method specified for Polygon Gate, defaulting to MiniBatchKMeans")
-                method = MiniBatchKMeans(n=5)
-            assert "fit_predict" in dir(method), "Invalid method, must contain signature 'fit_predict', is the " \
-                                                 "provided method a valid Scikit-Learn object with method fit_predict?"
-            if "dbscan" in str(method.__class__).lower():
+                method = "MiniBatchKMeans"
+                method_kwargs["n"] = 5
+            method = valid_sklearn(method)
+            if "dbscan" in method.lower():
                 if preprocessing_kwargs.get("downsample_method") is None:
                     warn("DBSCAN and HDBSCAN do not scale well and it is recommended that downsampling is performed")
-            method = Analyst(x=x, y=y, shape=shape, parent=parent, binary=binary,
-                             model=method)
         gate = Gate(gate_name=gate_name,
                     parent=parent,
                     geom_type=shape,
