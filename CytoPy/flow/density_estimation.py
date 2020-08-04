@@ -78,17 +78,18 @@ def kde(data: pd.DataFrame,
 
 
 def multivariate_kde(data: pd.DataFrame or np.array,
-                     features: list,
+                     features: list or None = None,
                      kde_bw: float or str or None = None,
                      bandwidth_search: list or None = None,
                      kernel: str = 'gaussian',
                      bins: int or None = 1000,
                      **kwargs):
     if type(data) == pd.DataFrame:
-        features = [i for i, x in enumerate(data.columns) if x in features]
+        features = features or [i for i, x in enumerate(data.columns) if x in features]
         data = data[features].values
     else:
-        data = data[features]
+        if features is not None:
+            data = data[features]
     kde_bw = kde_bw or "silvermans"
     if kde_bw == "silvermans":
         kde_bw = silvermans(data)

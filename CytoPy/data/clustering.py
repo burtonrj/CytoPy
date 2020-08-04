@@ -1,4 +1,4 @@
-from ..utilities import _valid_directory
+from ..utilities import valid_directory
 from .experiments import Experiment
 from .fcs import FileGroup
 import numpy as np
@@ -43,7 +43,7 @@ class Cluster(mongoengine.EmbeddedDocument):
 
 class ClusteringExperiment(mongoengine.Document):
     experiment_name = mongoengine.StringField(required=True, unique=True)
-    data_directory = mongoengine.StringField(required=True, validation=_valid_directory)
+    data_directory = mongoengine.StringField(required=True, validation=valid_directory)
     method = mongoengine.StringField(required=True, choices=["PhenoGraph", "FlowSOM"])
     parameters = mongoengine.ListField(required=True)
     features = mongoengine.ListField(required=True)

@@ -1,4 +1,4 @@
-from ..utilities import _valid_directory
+from ..utilities import valid_directory
 from ..feedback import vprint
 from .fcs import FileGroup
 from .subjects import Subject
@@ -391,7 +391,7 @@ class Experiment(mongoengine.Document):
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
     data_directory = mongoengine.StringField(required=True,
-                                             validation=_valid_directory)
+                                             validation=valid_directory)
     panel = mongoengine.ReferenceField(Panel, reverse_delete_rule=4)
     fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4))
     flags = mongoengine.StringField(required=False)
