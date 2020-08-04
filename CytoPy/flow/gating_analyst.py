@@ -1,11 +1,9 @@
+from .density_estimation import silvermans, kde
 from ..data.fcs import Population, PopulationGeometry
 from shapely.geometry import Point, Polygon
 from shapely.affinity import scale
-from sklearn.neighbors import KernelDensity
 from scipy import linalg, stats
 from scipy.signal import find_peaks, savgol_filter
-from sklearn.cluster import *
-from sklearn.mixture import *
 from typing import List
 from warnings import warn
 import pandas as pd
@@ -179,43 +177,6 @@ def find_local_minima(probs: np.array,
         between_peaks = probs[p2_idx:p1_idx]
     local_min = min(between_peaks)
     return xx[np.where(probs == local_min)[0][0]]
-
-
-def silvermans(data: np.array):
-    return 0.9*min([np.std(data), stats.iqr(data)/1.34])*(len(data)**(-(1/5)))
-
-
-def kde(data: pd.DataFrame,
-        x: str,
-        kde_bw: float or None = None,
-        kernel: str = 'gaussian') -> np.array:
-    """
-    Generate a 1D kernel density estimation using the scikit-learn implementation
-
-    Parameters
-    -----------
-    data: Pandas.DataFrame
-        Data for smoothing
-    x: str
-        column name for density estimation
-    kde_bw: float
-        bandwidth
-    kernel: str, (default='gaussian')
-        kernel to use for estimation (see scikit-learn documentation)
-
-    Returns
-    --------
-    np.array
-        Probability density function for array of 1000 x-axis values between min and max of data
-    """
-    if kde_bw is None:
-        kde_bw = silvermans(data[x].values)
-    density = KernelDensity(bandwidth=kde_bw, kernel=kernel)
-    d = data[x].values
-    density.fit(d[:, None])
-    x_d = np.linspace(min(d), max(d), 1000)
-    logprob = density.score_samples(x_d[:, None])
-    return np.exp(logprob), x_d
 
 
 class Analyst:
