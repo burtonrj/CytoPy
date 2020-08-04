@@ -4,11 +4,12 @@ from shapely.affinity import scale
 from sklearn.neighbors import KernelDensity
 from scipy import linalg, stats
 from scipy.signal import find_peaks, savgol_filter
+from sklearn.cluster import *
+from sklearn.mixture import *
 from typing import List
 from warnings import warn
 import pandas as pd
 import numpy as np
-import importlib
 import string
 
 
@@ -224,18 +225,24 @@ class Analyst:
                  shape: str,
                  parent: str,
                  binary: bool,
-                 model: object or None = None,
-                 conf: float or None = None):
+                 model: str or None,
+                 conf: float or None = None,
+                 **kwargs):
         assert shape in ["threshold", "polygon", "ellipse"], """Invalid shape, must be one of: 
         ["threshold", "polygon", "ellipse"]"""
         self.x = x
         self.y = y
         self.shape = shape
         self.parent = parent
-        self.model = None
         self.conf = conf
-        self.model = model
         self.binary = binary
+        self.model = None
+        if self.model is not None:
+            if self.model == "HDBSCAN":
+                from hdbscan import HDBSCAN
+                self.model = HDBSCAN(**kwargs)
+            else:
+                self.model = globals()[model](**kwargs)
 
     def _threshold_2d(self,
                       data: pd.DataFrame,
@@ -407,7 +414,7 @@ class ManualGate(Analyst):
                  angle: float or None = None,
                  x_values: list or None = None,
                  y_values: list or None = None):
-        super().__init__(x=x, y=y, shape=shape, binary=True, parent=parent)
+        super().__init__(x=x, y=y, shape=shape, binary=True, parent=parent, model=None)
         self.x_threshold = x_threshold
         self.y_threshold = y_threshold
         self.center = center
@@ -502,8 +509,8 @@ def _find_inflection_point(xx: np.array,
 
 class DensityGate(Analyst):
 
-    def __init__(self, x: str or None, y: str or None, shape: str, parent: str, **kwargs):
-        super().__init__(x, y, shape, parent, **kwargs)
+    def __init__(self, x: str or None, y: str or None, shape: str, parent: str, binary: bool, **kwargs):
+        super().__init__(x=x, y=y, shape=shape, parent=parent, binary=binary, model=None)
         self.peak_threshold = kwargs.get("peak_threshold", 0.05)
         self.threshold_method = kwargs.get("threshold_method", "density")
         self.q = kwargs.get("q", 0.95)
