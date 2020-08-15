@@ -105,7 +105,6 @@ class Population(mongoengine.EmbeddedDocument):
     """
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
         # If the Population existed previously, fetched the index
         self._index = None
         self._ctrl_index = dict()
@@ -120,9 +119,10 @@ class Population(mongoengine.EmbeddedDocument):
                     self._ctrl_index[ctrl] = f[f'/index/{self.population_name}/{ctrl}'][:]
         # If this is a new instance of Population and index has been given in kwargs, set self._index
         if self._index is None and "index" in kwargs.keys():
-            self._index = kwargs.get("index")
+            self._index = kwargs.pop("index")
         if not self._ctrl_index and "ctrl_index" in kwargs.keys():
-            self._ctrl_index = kwargs.get("ctrl_index")
+            self._ctrl_index = kwargs.pop("ctrl_index")
+        super().__init__(*args, **kwargs)
 
     population_name = mongoengine.StringField()
     n = mongoengine.IntField()
