@@ -36,11 +36,14 @@ def phenograph_metaclustering(data: pd.DataFrame,
                               verbose: bool = False,
                               summary_method: callable = np.median,
                               **kwargs):
+    vprint_ = vprint(verbose)
     metadata = data.groupby(["sample_id", "cluster_id"])[features].apply(summary_method).reset_index()
     metadata["meta_label"] = None
+    vprint_("----- Phenograph meta-clustering ------")
     communities, graph, q = phenograph.cluster(data[features], **kwargs)
     metadata["meta_label"] = communities
-    for sample_id in data.sample_id:
+    vprint_("Assigning clusters...")
+    for sample_id in progress_bar(data.sample_id, verbose=verbose):
         sample_df = data[data.sample_id == sample_id]
         for cluster_id in sample_df.cluster_id:
             meta_label = metadata.loc[(metadata.sample_id == sample_id) & (metadata.cluster_id == cluster_id),
@@ -48,7 +51,66 @@ def phenograph_metaclustering(data: pd.DataFrame,
             data[sample_df[sample_df.cluster_id == cluster_id].index, ["meta_label"]] = meta_label
     return data, graph, q
 
-def
+
+def flowsom(data: pd.DataFrame,
+            features: list,
+            verbose: bool,
+            meta_cluster_class: callable,
+            neighborhood_function: str = "gaussian",
+            normalisation: bool = False,
+            global_clustering: bool = False,
+            som_dim: tuple = (250, 250),
+            sigma: float = 1.0,
+            learning_rate: float = 0.5,
+            batch_size: int = 500,
+            seed: int = 42,
+            weight_init: str = 'random',
+            min_k: int = 5,
+            max_k: int = 50,
+            iter_n: int = 10,
+            resample_proportion: float = .5):
+    if global_clustering:
+        cluster = FlowSOM(data=data,
+                          features=features,
+                          neighborhood_function=neighborhood_function,
+                          normalisation=normalisation,
+                          verbose=verbose)
+        cluster.train(som_dim=som_dim,
+                      sigma=sigma,
+                      learning_rate=learning_rate,
+                      batch_size=batch_size,
+                      seed=seed,
+                      weight_init=weight_init)
+        cluster.meta_cluster(cluster_class=meta_cluster_class,
+                             min_n=min_k,
+                             max_n=max_k,
+                             iter_n=iter_n,
+                             resample_proportion=resample_proportion)
+        data["cluster_id"] = cluster.predict()
+        return data, None, None
+    vprint_ = vprint(verbose)
+    for _id in data.sample_id:
+        vprint_(f"----- Clustering {_id} -----")
+        sample_data = data[data.sample_id == _id]
+        cluster = FlowSOM(data=sample_data,
+                          features=features,
+                          neighborhood_function=neighborhood_function,
+                          normalisation=normalisation,
+                          verbose=verbose)
+        cluster.train(som_dim=som_dim,
+                      sigma=sigma,
+                      learning_rate=learning_rate,
+                      batch_size=batch_size,
+                      seed=seed,
+                      weight_init=weight_init)
+        cluster.meta_cluster(cluster_class=meta_cluster_class,
+                             min_n=min_k,
+                             max_n=max_k,
+                             iter_n=iter_n,
+                             resample_proportion=resample_proportion)
+        sample_data["cluster_id"] = cluster.predict()
+        data.loc[sample_data.index, ["cluster_id"]] = sample_data.cluster_id
+    return data, None, None
 
 
 class Cluster:
