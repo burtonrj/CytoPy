@@ -30,10 +30,20 @@ def phenograph_clustering(data: pd.DataFrame,
         data.loc[sample_data.index, ["cluster_id"]] = sample_data.cluster_id
     return data, graphs, q
 
+def _asign_metalabels(data: pd.DataFrame,
+                      metadata: pd.DataFrame,
+                      verbose: bool):
+    for sample_id in progress_bar(data.sample_id, verbose=verbose):
+        sample_df = data[data.sample_id == sample_id]
+        for cluster_id in sample_df.cluster_id:
+            meta_label = metadata.loc[(metadata.sample_id == sample_id) & (metadata.cluster_id == cluster_id),
+                                      ["meta_label"]]
+            data[sample_df[sample_df.cluster_id == cluster_id].index, ["meta_label"]] = meta_label
+    return data
 
 def phenograph_metaclustering(data: pd.DataFrame,
                               features: list,
-                              verbose: bool = False,
+                              verbose: bool = True,
                               summary_method: callable = np.median,
                               **kwargs):
     vprint_ = vprint(verbose)
@@ -43,14 +53,31 @@ def phenograph_metaclustering(data: pd.DataFrame,
     communities, graph, q = phenograph.cluster(data[features], **kwargs)
     metadata["meta_label"] = communities
     vprint_("Assigning clusters...")
-    for sample_id in progress_bar(data.sample_id, verbose=verbose):
-        sample_df = data[data.sample_id == sample_id]
-        for cluster_id in sample_df.cluster_id:
-            meta_label = metadata.loc[(metadata.sample_id == sample_id) & (metadata.cluster_id == cluster_id),
-                                      ["meta_label"]]
-            data[sample_df[sample_df.cluster_id == cluster_id].index, ["meta_label"]] = meta_label
+    data = _asign_metalabels(data, metadata, verbose)
     return data, graph, q
 
+def consensus_metacluster(data: pd.DataFrame,
+                          features: list,
+                          cluster_class: callable,
+                          verbose: bool = True,
+                          summary_method: callable = np.median,
+                          smallest_cluster_n: int = 5,
+                          largest_cluster_n: int = 50,
+                          n_resamples: int = 10,
+                          resample_proportion: float = 0.5):
+    vprint_ = vprint(verbose)
+    metadata = data.groupby(["sample_id", "cluster_id"])[features].apply(summary_method).reset_index()
+    metadata["meta_label"] = None
+    vprint_("----- Consensus meta-clustering ------")
+    consensus_clust = ConsensusCluster(cluster=cluster_class,
+                                       smallest_cluster_n=smallest_cluster_n,
+                                       largest_cluster_n=largest_cluster_n,
+                                       n_resamples=n_resamples,
+                                       resample_proportion=resample_proportion)
+    consensus_clust.fit(metadata[features].values)
+    metadata["meta_label"] = consensus_clust.predict_data(metadata[features])
+    data = _asign_metalabels(data, metadata, verbose)
+    return data, None, None
 
 def flowsom(data: pd.DataFrame,
             features: list,
@@ -194,6 +221,9 @@ class Cluster:
                                                    features=features,
                                                    verbose=self.verbose,
                                                    **kwargs)
+
+    def explore(self):
+
 
     def save(self):
         for sample_id in self.data.sample_id:
