@@ -1,6 +1,7 @@
 from ...data.clustering import ClusteringExperiment
-from ..gating_tools import load_population
 from ...feedback import vprint, progress_bar
+from ..explore import Explorer
+from ..gating_tools import Gating, load_population
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from multiprocessing import Pool, cpu_count
@@ -222,8 +223,24 @@ class Cluster:
                                                    verbose=self.verbose,
                                                    **kwargs)
 
-    def explore(self):
-
+    def explore(self,
+                include_population_labels: bool = True):
+        data = self.data.copy()
+        if include_population_labels:
+            self.print("Populating with population labels...")
+            labeled_data = pd.DataFrame()
+            for _id in progress_bar(data.sample_id, verbose=self.verbose):
+                g = Gating(experiment=self.ce.experiment, sample_id=_id, include_controls=False)
+                labeled_cells = (g.get_labelled_population_df(population_name=self.ce.root_population,
+                                                              transform=None)
+                                 .reset_index()
+                                 .rename({"index": "original_index",
+                                          "label": "population_label"}, axis=1)
+                                 ["original_index", "population_label"])
+                sample_df = data[data.sample_id == _id].merge(labeled_cells, on="original_index")
+                labeled_data = pd.concat([labeled_data, sample_df])
+                data = labeled_data
+        return Explorer(data=data)
 
     def save(self):
         for sample_id in self.data.sample_id:
