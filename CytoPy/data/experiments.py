@@ -487,7 +487,7 @@ class Experiment(mongoengine.Document):
         bool
             True if exists, else False
         """
-        if sample_id not in (self.list_samples()):
+        if sample_id not in list(self.list_samples()):
             return False
         return True
 

@@ -35,21 +35,18 @@ class Cluster(mongoengine.EmbeddedDocument):
                 self.index = kwargs.get("index", None)
 
     cluster_id = mongoengine.StringField(required=True, unique=True)
-    label = mongoengine.StringField(required=False)
+    meta_label = mongoengine.StringField(required=False)
     file = mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.CASCADE)
     n_events = mongoengine.IntField(required=True)
     prop_of_root = mongoengine.FloatField(required=True)
 
 
 class ClusteringExperiment(mongoengine.Document):
-    experiment_name = mongoengine.StringField(required=True, unique=True)
+    name = mongoengine.StringField(required=True, unique=True)
     data_directory = mongoengine.StringField(required=True, validation=valid_directory)
-    method = mongoengine.StringField(required=True, choices=["PhenoGraph", "FlowSOM"])
-    parameters = mongoengine.ListField(required=True)
     features = mongoengine.ListField(required=True)
     transform_method = mongoengine.StringField(required=False, default="logicle")
     root_population = mongoengine.StringField(required=True, default="root")
-    cluster_prefix = mongoengine.StringField(required=True, default="cluster")
     clusters = mongoengine.EmbeddedDocumentListField(Cluster)
     experiment = mongoengine.ReferenceField(Experiment, reverse_delete_rule=mongoengine.CASCADE)
 
@@ -60,24 +57,23 @@ class ClusteringExperiment(mongoengine.Document):
 
     def __init__(self, *args, **values):
         super().__init__(*args, **values)
-        self.h5path = os.path.join(self.data_directory, f"ClusteringExp_{self.experiment_name}.hdf5")
+        self.h5path = os.path.join(self.data_directory, f"ClusteringExp_{self.name}.hdf5")
 
     def add_cluster(self,
+                    cluster_id: str,
                     file: FileGroup,
                     cluster_idx: np.array,
                     root_n: int,
-                    label: str or None = None):
-        assert label not in [c.label for c in self.clusters], f"Label must be unique: {label} already exists"
-        cluster_i = max([int(c.cluster_id.split("_")[1]) for c in self.clusters]) + 1
-        cluster_id = "_".join([self.cluster_prefix, cluster_i])
+                    meta_label: str or None = None):
+        assert cluster_id not in [c.cluster_id for c in self.clusters],\
+            f"Cluster ID must be unique: {cluster_id} already exists"
         new_cluster = Cluster(cluster_id=cluster_id,
+                              meta_label=meta_label,
                               file=file,
                               n_events=cluster_idx.shape[0],
                               prop_of_root=cluster_idx.shape[0]/root_n,
-                              label=label,
                               index=cluster_idx)
         self.clusters.append(new_cluster)
-        self.save()
 
     def remove_cluster(self,
                        cluster_id: str or None = None,
@@ -113,38 +109,3 @@ def _valid_meta_assignments(cluster_ids: list,
     if not all([x in valid_clusters for x in cluster_ids]):
         raise mongoengine.errors.ValidationError("One or more clusters assigned by this meta clustering experiment "
                                                  "are not contained within the target clustering experiment")
-
-
-class MetaCluster(mongoengine.EmbeddedDocument):
-    cluster_id = mongoengine.StringField(required=True)
-    _contents = mongoengine.ListField(required=True, db_field="contents")
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if "contents" in kwargs.keys():
-            self.contents = kwargs.get("contents")
-
-    @property
-    def contents(self):
-        return self._contents
-
-    @contents.setter
-    def contents(self, cluster_ids: list):
-        valid_clusters = [c.cluster_id for c in self._instance.target.clusters]
-        if not all([x in valid_clusters for x in cluster_ids]):
-            raise ValueError("One or more clusters assigned by this meta clustering experiment "
-                             "are not contained within the target clustering experiment")
-
-
-class MetaClusteringExperiment(mongoengine.Document):
-    experiment_name = mongoengine.StringField(required=True)
-    method = mongoengine.StringField(required=True, choices=['PhenoGraph', 'FlowSOM', 'ConsensusClustering'])
-    parameters = mongoengine.ListField(required=True)
-    features = mongoengine.ListField(required=True)
-    transform_method = mongoengine.StringField(required=False, default='logicle')
-    target = mongoengine.ReferenceField(ClusteringExperiment, reverse_delete_rule=mongoengine.CASCADE)
-    clusters = mongoengine.EmbeddedDocumentListField(MetaCluster)
-    meta = {
-        'db_alias': 'core',
-        'collection': 'meta_clustering_experiments'
-    }

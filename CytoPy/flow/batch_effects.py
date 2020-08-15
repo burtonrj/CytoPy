@@ -479,7 +479,7 @@ class EvaluateBatchEffects:
         distance_df = pd.DataFrame()
 
         # Generate distance matrix
-        for s in progress_bar(samples, verbose=self.verbose)
+        for s in progress_bar(samples, verbose=self.verbose):
             distances = self.calc_divergence(target_id=s,
                                              comparisons=samples,
                                              features=features,
