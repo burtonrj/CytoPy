@@ -1,10 +1,54 @@
 from ...data.clustering import ClusteringExperiment
 from ..gating_tools import load_population
 from ...feedback import vprint, progress_bar
+from .consensus import ConsensusCluster
+from .flowsom import FlowSOM
 from multiprocessing import Pool, cpu_count
 from functools import partial
 from warnings import warn
 import pandas as pd
+import numpy as np
+import phenograph
+
+
+def phenograph_clustering(data: pd.DataFrame,
+                          features: list,
+                          verbose: bool,
+                          global_clustering: bool = False,
+                          **kwargs):
+    if global_clustering:
+        communities, graph, q = phenograph.cluster(data[features], **kwargs)
+        data["cluster_id"] = communities
+        return data, graph, q
+    graphs = dict()
+    q = dict()
+    for _id in progress_bar(data.sample_id, verbose=verbose):
+        sample_data = data[data.sample_id == _id]
+        communities, graph, q_ = phenograph.cluster(sample_data[features], **kwargs)
+        graphs[_id], q[_id] = graph, q_
+        sample_data["cluster_id"] = communities
+        data.loc[sample_data.index, ["cluster_id"]] = sample_data.cluster_id
+    return data, graphs, q
+
+
+def phenograph_metaclustering(data: pd.DataFrame,
+                              features: list,
+                              verbose: bool = False,
+                              summary_method: callable = np.median,
+                              **kwargs):
+    metadata = data.groupby(["sample_id", "cluster_id"])[features].apply(summary_method).reset_index()
+    metadata["meta_label"] = None
+    communities, graph, q = phenograph.cluster(data[features], **kwargs)
+    metadata["meta_label"] = communities
+    for sample_id in data.sample_id:
+        sample_df = data[data.sample_id == sample_id]
+        for cluster_id in sample_df.cluster_id:
+            meta_label = metadata.loc[(metadata.sample_id == sample_id) & (metadata.cluster_id == cluster_id),
+                                      ["meta_label"]]
+            data[sample_df[sample_df.cluster_id == cluster_id].index, ["meta_label"]] = meta_label
+    return data, graph, q
+
+def
 
 
 class Cluster:
@@ -76,6 +120,7 @@ class Cluster:
         self.data, self.graph, self.metrics = func(data=self.data,
                                                    samples=samples,
                                                    features=features,
+                                                   verbose=self.verbose,
                                                    **kwargs)
 
     def meta_cluster(self,
@@ -85,6 +130,7 @@ class Cluster:
         self.data, self.graph, self.metrics = func(data=self.data,
                                                    samples=list(self.ce.experiment.list_samples()),
                                                    features=features,
+                                                   verbose=self.verbose,
                                                    **kwargs)
 
     def save(self):
@@ -92,6 +138,8 @@ class Cluster:
             sample_df = self.data[self.data.sample_id == sample_id]
             fg = self.ce.experiment.get_sample(sample_id)
             for cluster_id in sample_df.cluster_id:
+                if self.ce.prefix:
+                    cluster_id = "_".join([self.ce.prefix, cluster_id])
                 self.ce.add_cluster(cluster_id=cluster_id,
                                     file=fg,
                                     meta_label=sample_df[sample_df.cluster_id == cluster_id].meta_label.values[0],

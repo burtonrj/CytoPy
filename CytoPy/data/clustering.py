@@ -49,6 +49,7 @@ class ClusteringExperiment(mongoengine.Document):
     root_population = mongoengine.StringField(required=True, default="root")
     clusters = mongoengine.EmbeddedDocumentListField(Cluster)
     experiment = mongoengine.ReferenceField(Experiment, reverse_delete_rule=mongoengine.CASCADE)
+    prefix = mongoengine.StringField(default="cluster")
 
     meta = {
         "db_alias": "core",
