@@ -57,20 +57,13 @@ def create_reference_sample(experiment: Experiment,
     vprint_('Sampling experiment data...')
     new_file_name = new_file_name or f'{experiment.experiment_id}_sampled_data'
     data = list()
-    labels = np.array()
     for _id in progress_bar(samples, verbose=verbose):
         g = Gating(experiment, sample_id=_id, include_controls=False)
         if root_population not in g.populations.keys():
             warn(f'Skipping {_id} as {root_population} is absent from gated populations')
             continue
-        if include_population_labels:
-            df = _sample(g.get_labelled_population_df(root_population, transform=None),
-                         n=sample_n)
-            labels = np.concatenate(labels, df.label.values)
-            df.drop("label", inplace=True)
-        else:
-            df = _sample(g.get_population_df(population_name=root_population, transform=None),
-                         n=sample_n)
+        df = _sample(g.get_population_df(population_name=root_population, transform=None),
+                     n=sample_n)
         data.append(df)
     all_columns = list(df.columns.tolist() for df in data)
     features = list()
@@ -87,19 +80,6 @@ def create_reference_sample(experiment: Experiment,
     new_filegroup.notes = 'sampled data'
     new_filegroup.add_file(data=data[features],
                            channel_mappings=mappings)
-
-    vprint_('Creating populations...')
-    root_pop = Population(population_name="root",
-                          index=data.index)
-    new_filegroup.populations.append(root_pop)
-    if labels:
-        for pop in set(labels):
-            idx = np.where(labels == pop)[0]
-            new_population = Population(population_name=pop,
-                                        parent="root",
-                                        index=idx)
-            new_filegroup.populations.append(new_population)
-
     vprint_('Inserting sampled data to database...')
     new_filegroup.save()
     experiment.fcs_files.append(new_filegroup)

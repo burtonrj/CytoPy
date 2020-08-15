@@ -203,6 +203,8 @@ class Analyst:
                 from hdbscan import HDBSCAN
                 self.model = HDBSCAN(**kwargs)
             else:
+                assert model in globals().keys(), f"Module {model} not found, have you imported it into the working " \
+                                                  f"environment?"
                 self.model = globals()[model](**kwargs)
 
     def _threshold_2d(self,
