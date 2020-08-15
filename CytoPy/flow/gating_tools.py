@@ -724,7 +724,8 @@ def load_population(sample_id: str,
                     ctrl_id: str or None = None,
                     transform: str or None = None,
                     transform_features: list or str = "all",
-                    indexed: bool = False):
+                    indexed: bool = False,
+                    indexed_in_dataframe: bool = False):
     include_ctrls = ctrl_id is not None
     gating = Gating(experiment=experiment,
                     sample_id=sample_id,
@@ -740,5 +741,8 @@ def load_population(sample_id: str,
         else:
             data = data.sample(n=sample_n)
     if indexed:
+        if indexed_in_dataframe:
+            data["sample_id"] = sample_id
+            return data
         return sample_id, data
     return data
