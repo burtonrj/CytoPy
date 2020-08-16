@@ -236,6 +236,25 @@ class Gating:
         dependencies = [x.name for x in findall(root, filter_=lambda n: node in n.path)]
         return [p for p in dependencies if p != population]
 
+    def list_dependencies(self,
+                          population: str) -> list:
+        """
+        For given population list all populations that this population depends on (upstream in the same branch)
+
+        Parameters
+        ----------
+        population
+
+        Returns
+        -------
+        list
+        """
+        assert population in self.populations.keys(), f"population {population} does not exist"
+        root = self.populations['root']
+        node = self.populations[population]
+        return [x.name for x in findall(root, filter_=lambda n: node in n.path) if x.name != population]
+
+
     def list_child_populations(self,
                                population: str):
         assert population in self.populations.keys(), f'population {population} does not exist; ' \
@@ -745,3 +764,30 @@ def load_population(sample_id: str,
             return data
         return sample_id, data
     return data
+
+
+def check_population_tree(gating: Gating,
+                          populations: list):
+    """
+    Check that a given list of population names follows the hierarchy described in the given Gating object
+
+    Parameters
+    ----------
+    gating
+    populations
+
+    Returns
+    -------
+
+    """
+    assert all([p in gating.populations.keys() for p in populations]), "One or more given populations does not exist " \
+                                                                       "in the Gating object"
+    root = populations[0]
+    populations = populations[1:]
+    assert all([x in gating.list_downstream_populations(root) for x in populations]), \
+        "Root population does not contain all the subsequent populations provided in the ordered list 'populations'"
+    for i, pop in enumerate(populations):
+        if i == len(populations) - 1:
+            continue
+        assert not any([x in gating.list_dependencies(population=pop) for x in populations[i+1:]]), \
+            "Population list is not ordered; one or more populations follows a population to which it is dependent"
