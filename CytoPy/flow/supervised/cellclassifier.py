@@ -5,26 +5,13 @@ from ..sampling import density_dependent_downsampling, faithful_downsampling
 from ..gating_tools import Gating, check_population_tree
 from ..transforms import scaler
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn import metrics as skmetrics
+from sklearn.exceptions import NotFittedError
 from imblearn.over_sampling import RandomOverSampler
 from warnings import warn
 import pandas as pd
 import numpy as np
-
-
-# class Classifier(mongoengine.document):
-#    klass = mongoengine.StringField(required=True)
-#    params = mongoengine.ListField()
-#    features = mongoengine.ListField()
-#    multi_label = mongoengine.BooleanField(default=True)
-#    test_frac
-#    transform = mongoengine.StringField(default="logicle")
-#    threshold = mongoengine.FloatField(default=0.5)
-#    scale = mongoengine.StringField()
-#    scale_kwargs = mongoengine.ListField()
-#    balance = mongoengine.StringField()
-#    balance_dict
-#    downsample = mongoengine.StringField()
-#    downsample_kwargs = mongoengine.ListField()
+import inspect
 
 
 class CellClassifier:
@@ -33,9 +20,15 @@ class CellClassifier:
                  experiment: Experiment,
                  ref_sample: str,
                  population_labels: list or None = None,
-                 verbose: bool = True):
+                 verbose: bool = True,
+                 metrics: list or None = None):
         assert classifier.klass in globals().keys(), f"Module {classifier.klass} not found, have you imported it into " \
                                                      f"the working environment?"
+        self.metrics = metrics or ["balanced_accuracy_score", "f1_weighted", "roc_auc_score", "roc_curve"]
+        assert all([x in dir(skmetrics) for x in metrics if x not in [f"f1_{i}" for i in ["weighted",
+                                                                                          "macro",
+                                                                                          "micro",
+                                                                                          "binary"]]])
         self.classifier = classifier
         self.experiment = experiment
         kwargs = {k: v for k, v in classifier.params}
@@ -56,8 +49,6 @@ class CellClassifier:
         if len(self.population_labels) != len(population_labels):
             warn("One or more given population labels does not tie up with the populations in the reference "
                  f"sample, defaulting to the following valid labels: {self.population_labels}")
-        else:
-            self.print(f"CellClassifier will attempt to predict the following populations: {self.population_labels}")
         check_population_tree(gating=ref, populations=self.population_labels)
         features = [x for x in ref.data.get("primary").columns if x in classifier.features]
         if len(features) != len(classifier.features):
@@ -169,9 +160,53 @@ class CellClassifier:
             self.train_X = faithful_downsampling(data=self.train_X, **kwargs)
         raise ValueError("Downsample should have a value of: 'uniform', 'density', or 'faithful'")
 
+    def _metrics(self,
+                 y_pred_train: np.array,
+                 y_score_train: np.array,
+                 y_pred_test: np.array,
+                 y_score_test: np.array):
+        try:
+            train = dict()
+            test = dict()
+            for m in self.metrics:
+                if "f1" in m:
+                    avg = m.split("_")[1]
+                    f = getattr(skmetrics, "f1_score")
+                    train[m] = f(y_true=self.train_y, y_pred=y_pred_train, average=avg)
+                    test[m] = f(y_true=self.test_y, y_pred=y_pred_test, average=avg)
+                else:
+                    f = getattr(skmetrics, m)
+                    if "y_score" in inspect.signature(f).parameters.keys():
+                        train[m] = f(y_true=self.train_y, y_score=y_score_train)
+                        test[m] = f(y_true=self.test_y, y_score=y_score_test)
+                    elif "y_pred" in inspect.signature(f).parameters.keys():
+
+                        train[m] = f(y_true=self.train_y, y_pred=y_pred_train)
+                        test[m] = f(y_true=self.test_y, y_pred=y_pred_test)
+                    else:
+                        raise ValueError("Unexpected metric. Signature should contain either 'y_score' or 'y_pred'")
+            return {"test": test, "train": train}
+        except NotFittedError:
+            raise Exception("Model has not been fitted. Make sure to call .fit() before calling _metrics()")
+
     def fit(self,
-            test: bool = True):
-        pass
+            return_yhat: bool = True):
+        self.classifier.fit(self.train_X, self.train_y)
+        y_score_train = self.classifier.predict_proba(self.train_X)[:, 1]
+        y_score_test = self.classifier.predict_proba(self.test_X)[:, 1]
+        y_pred_train = self.classifier.predict(self.train_X)
+        y_pred_test = self.classifier.predict(self.test_X)
+        if return_yhat:
+            yhat = {"train": {"score": y_score_train, "pred": y_pred_train},
+                    "test": {"score": y_score_test, "pred": y_pred_test}}
+            return self._metrics(y_pred_test=y_pred_test,
+                                 y_pred_train=y_pred_train,
+                                 y_score_test=y_score_test,
+                                 y_score_train=y_score_train), yhat
+        return self._metrics(y_pred_test=y_pred_test,
+                             y_pred_train=y_pred_train,
+                             y_score_test=y_score_test,
+                             y_score_train=y_score_train)
 
     def predict(self,
                 sample_id: str):
