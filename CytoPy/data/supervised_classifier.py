@@ -39,7 +39,7 @@ class Layer(mongoengine.EmbeddedDocument):
 
 class KerasClassifier(Classifier):
     model_params = mongoengine.StringField()
-    input_layer = mongoengine.EmbeddedDocument(Layer)
+    input_layer = mongoengine.EmbeddedDocumentField(Layer)
     layers = mongoengine.EmbeddedDocumentListField(Layer)
     optimizer = mongoengine.StringField()
     loss = mongoengine.StringField()

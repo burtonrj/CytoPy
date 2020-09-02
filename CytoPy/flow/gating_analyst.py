@@ -1,5 +1,5 @@
 from .density_estimation import silvermans, kde
-from ..data.fcs import Population, PopulationGeometry
+from ..data.populations import PopulationGeometry, Population
 from shapely.geometry import Point, Polygon
 from shapely.affinity import scale
 from scipy import linalg, stats

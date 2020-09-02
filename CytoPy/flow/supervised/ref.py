@@ -1,5 +1,6 @@
 from ...data.experiments import Experiment
-from ...data.fcs import FileGroup, Population
+from ...data.fcs import FileGroup
+from ...data.populations import Population
 from ...feedback import progress_bar, vprint
 from ..gating_tools import Gating
 from warnings import warn

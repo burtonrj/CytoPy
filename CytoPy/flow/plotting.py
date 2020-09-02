@@ -1,5 +1,5 @@
 from ..data.gates import Gate
-from ..data.fcs import Population, PopulationGeometry
+from ..data.populations import PopulationGeometry, Population
 from ..flow.transforms import apply_transform
 from warnings import warn
 from typing import List

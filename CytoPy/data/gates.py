@@ -3,7 +3,7 @@ from ..flow.transforms import apply_transform, scaler
 from ..flow.sampling import density_dependent_downsampling, faithful_downsampling, upsample_knn, upsample_svm
 from ..flow.gating_analyst import ManualGate, DensityGate, Analyst
 from ..feedback import vprint
-from .fcs import Population, PopulationGeometry, merge_populations
+from .populations import PopulationGeometry, Population, merge_populations
 from functools import reduce
 from typing import List
 from warnings import warn
@@ -64,7 +64,7 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
     """
     population_name = mongoengine.StringField()
     definition = mongoengine.StringField(required=False)
-    template_geometry = mongoengine.EmbeddedDocument(PopulationGeometry)
+    template_geometry = mongoengine.EmbeddedDocumentField(PopulationGeometry)
 
     def match_definition(self, query: str):
         return query in self.definition.split("_")
@@ -124,10 +124,10 @@ class Gate(mongoengine.Document):
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField(required=True)
     ctrl_id = mongoengine.StringField(required=False)
-    preprocessing = mongoengine.EmbeddedDocument(PreProcess)
+    preprocessing = mongoengine.EmbeddedDocumentField(PreProcess)
     method = mongoengine.StringField()
     method_kwargs = mongoengine.ListField()
-    postprocessing = mongoengine.EmbeddedDocument(PostProcess)
+    postprocessing = mongoengine.EmbeddedDocumentField(PostProcess)
 
     meta = {
         'db_alias': 'core',
@@ -367,7 +367,7 @@ class Gate(mongoengine.Document):
         return new_children
 
     def _label_threshold(self,
-                         new_children: List[children]):
+                         new_children: list):
         for i, new_child in enumerate(new_children):
             match = [c for c in self.children if c.match_definition(new_child.definition)]
             if len(match) == 0:
