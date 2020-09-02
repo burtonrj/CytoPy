@@ -30,7 +30,7 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
         super().__init__(*args, **kwargs)
         self._shape = None
 
-    x = mongoengine.StringField(required=True)
+    x = mongoengine.StringField()
     y = mongoengine.StringField()
     transform_x = mongoengine.StringField()
     transform_y = mongoengine.StringField()
