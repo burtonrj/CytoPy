@@ -85,7 +85,7 @@ def apply_transform(data: pd.DataFrame,
 def scaler(data: np.array,
            scale_method: str,
            return_scaler: bool = True,
-           **kwargs) -> np.array and callable:
+           **kwargs) -> np.array and callable or np.array:
     """
     Wrapper for Sklearn transformation methods
 
@@ -100,7 +100,7 @@ def scaler(data: np.array,
 
     Returns
     --------
-    (Numpy.array, callable)
+    (Numpy.array, callable) or Numpy.array
         transformed data and sklearn transformer object
     """
     if scale_method == 'standard':

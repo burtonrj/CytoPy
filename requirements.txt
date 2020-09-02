@@ -1,5 +1,4 @@
 anytree==2.8.0
-dask[complete]
 Cython==0.29.21
 FlowIO==0.9.5
 FlowUtils==0.7.1
