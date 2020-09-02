@@ -1,4 +1,4 @@
-from ..data.fcs import Population
+from ..data.populations import Population
 from ..feedback import vprint
 from sklearn.neighbors import BallTree, KDTree, KNeighborsClassifier
 from sklearn.svm import SVC

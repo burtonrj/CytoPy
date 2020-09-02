@@ -1,5 +1,5 @@
 from ..data.experiments import Experiment
-from ..data.fcs import Population, PopulationGeometry, merge_populations
+from ..data.populations import PopulationGeometry, Population, merge_populations
 from ..data.gates import Gate, PreProcess, PostProcess
 from ..data.gating_strategy import GatingStrategy, Action
 from .transforms import apply_transform

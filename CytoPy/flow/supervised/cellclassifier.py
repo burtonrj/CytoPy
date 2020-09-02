@@ -1,6 +1,6 @@
 from ...data.supervised_classifier import SklearnClassifier, KerasClassifier
 from ...data.experiments import Experiment
-from ...data.fcs import Population, PopulationGeometry
+from ...data.populations import PopulationGeometry, Population
 from ...feedback import vprint, progress_bar
 from ..sampling import density_dependent_downsampling, faithful_downsampling
 from ..gating_tools import Gating, check_population_tree

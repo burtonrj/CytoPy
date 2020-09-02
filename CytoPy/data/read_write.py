@@ -1,4 +1,4 @@
-from dask import bag as db
+from multiprocessing import Pool, cpu_count
 import flowio
 import dateutil.parser as date_parser
 import numpy as np
@@ -100,8 +100,10 @@ def explore_channel_mappings(fcs_dir: str,
     List
         list of all unique channel/marker mappings
     """
-    fcs_files = db.from_sequence(filter_fcs_files(fcs_dir, exclude_comps))
-    mappings = set(fcs_files.map(fcs_mappings).map(json.dumps).compute())
+    fcs_files = filter_fcs_files(fcs_dir, exclude_comps)
+    with Pool(cpu_count()) as pool:
+        mappings = list(pool.map(fcs_mappings, fcs_files))
+        mappings = list(pool.map(json.dumps, mappings))
     return [json.loads(x) for x in mappings]
 
 
