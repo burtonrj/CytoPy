@@ -405,7 +405,7 @@ class Experiment(mongoengine.Document):
         if not self.panel:
             if kwargs.get("panel_definition") is not None:
                 panel_definition = kwargs.pop("panel_definition")
-                assert os.path.isfile(panel_definition), f"{panel_definition} doe not exist"
+                assert os.path.isfile(panel_definition), f"{panel_definition} does not exist"
                 err = "Panel definition is not a valid Excel document"
                 assert os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"], err
             if kwargs.get("panel_name") is not None:
@@ -421,12 +421,17 @@ class Experiment(mongoengine.Document):
         if panel_definition is None:
             assert panel_name in [p.panel_name for p in Panel.objects()], \
                 f"Invalid panel name; {panel_name} doe not exist"
-            self.panel = Panel.objects(panel_name=panel_name).get()
+            return Panel.objects(panel_name=panel_name).get()
         if panel_name is None:
             panel_name = f"{self.experiment_id}_panel"
         new_panel = Panel(panel_name=panel_name)
-        new_panel.create_from_excel(path=panel_definition)
-        self.save()
+        return new_panel.create_from_excel(path=panel_definition)
+
+    def update_data_directory(self, new_path: str):
+        assert os.path.isdir(new_path), "Invalid directory given for new_path"
+        for file in self.fcs_files:
+            file.data_directory = new_path
+            file.save()
 
     def delete_all_populations(self,
                                sample_id: str) -> None:
