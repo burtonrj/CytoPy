@@ -61,6 +61,7 @@ class FileGroup(mongoengine.Document):
 
     def __init__(self, *args, **values):
         super().__init__(*args, **values)
+        self.save()
         self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
 
     def load(self,
@@ -238,14 +239,15 @@ class FileGroup(mongoengine.Document):
 
     def save(self, *args, **kwargs):
         # Calculate meta and save indexes to disk
-        root_n = [p for p in self.populations if p.population_name == "root"][0].n
-        with h5py.File(self.h5path, "r") as f:
-            for p in self.populations:
-                parent_n = [p for p in self.populations if p.population_name == p.parent][0].n
-                p.prop_of_parent = p.n/parent_n
-                p.prop_of_total = p.n/root_n
-                f.create_dataset(f'/index/{p.population_name}', data=p.index)
-                for ctrl, idx in p.ctrl_index.items():
-                    f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
+        if self.populations:
+            root_n = [p for p in self.populations if p.population_name == "root"][0].n
+            with h5py.File(self.h5path, "r") as f:
+                for p in self.populations:
+                    parent_n = [p for p in self.populations if p.population_name == p.parent][0].n
+                    p.prop_of_parent = p.n/parent_n
+                    p.prop_of_total = p.n/root_n
+                    f.create_dataset(f'/index/{p.population_name}', data=p.index)
+                    for ctrl, idx in p.ctrl_index.items():
+                        f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
         super().save(*args, **kwargs)
 

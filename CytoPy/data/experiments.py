@@ -404,7 +404,6 @@ class Experiment(mongoengine.Document):
     def __init__(self, *args, **kwargs):
         panel_definition = kwargs.pop("panel_definition", None)
         panel_name = kwargs.pop("panel_name", None)
-        data_directory = kwargs.pop("data_directory", None)
         super().__init__(*args, **kwargs)
         if not self.panel:
             if panel_definition is None and panel_name is None:
@@ -418,18 +417,18 @@ class Experiment(mongoengine.Document):
             self.panel = self._generate_panel(panel_definition=panel_definition,
                                               panel_name=panel_name)
             self.panel.save()
-        if data_directory is not None:
-            assert os.path.isdir(data_directory), f"{data_directory} does not exist"
-            leading_char = data_directory[len(data_directory) - 1]
+        if self.data_directory:
+            assert os.path.isdir(self.data_directory), f"data directory {self.data_directory} does not exist"
+            leading_char = self.data_directory[len(self.data_directory) - 1]
             if leading_char not in ["\\", "/"]:
-                if len(data_directory.split("\\")) > 0:
+                if len(self.data_directory.split("\\")) > 1:
                     # Assuming a windows OS
-                    data_directory = data_directory + "\\"
+                    self.data_directory = self.data_directory + "\\"
                 else:
                     # Assuming unix OS
-                    data_directory = data_directory + "/"
-            self.data_directory = data_directory
-
+                    self.data_directory = self.data_directory + "/"
+        else:
+            raise ValueError("No data directory provided")
 
     def _generate_panel(self,
                         panel_definition: str or None,
@@ -693,3 +692,8 @@ class Experiment(mongoengine.Document):
         feedback(f'Successfully created {sample_id} and associated to {self.experiment_id}')
         self.save()
         return filegrp.id.__str__()
+
+    def delete(self, delete_panel: bool = True, *args, **kwargs):
+        if delete_panel:
+            self.panel.delete()
+        super().delete(*args, **kwargs)
