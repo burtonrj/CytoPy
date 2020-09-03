@@ -170,7 +170,7 @@ class Panel(mongoengine.Document):
     mappings: EmbeddedDocListField
         list of channel/marker mappings; see ChannelMap
     initiation_date: DateTime
-        date of creation
+        date of creationfiles['controls']
 
     """
     panel_name = mongoengine.StringField(required=True, unique=True)
@@ -296,7 +296,7 @@ class Panel(mongoengine.Document):
                     channel = _query(channel, self.channels)
             # Normalise marker
             if marker:
-                marker, err = _query(marker, self.markers)
+                marker = _query(marker, self.markers)
             else:
                 # If marker is None, default to that assigned by panel
                 default = [x for x in self.mappings if x.channel == channel]
