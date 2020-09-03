@@ -1,5 +1,5 @@
 from .experiments import Experiment
-from .subjects import Subject
+from .subject import Subject
 from typing import Generator
 import mongoengine
 import datetime
