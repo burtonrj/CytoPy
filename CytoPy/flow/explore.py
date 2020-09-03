@@ -1,4 +1,4 @@
-from ..data.subjects import Subject, bugs, hmbpp_ribo, gram_status, biology
+from ..data.subject import Subject, bugs, hmbpp_ribo, gram_status, biology
 from ..feedback import vprint, progress_bar
 from .dim_reduction import dimensionality_reduction
 from mongoengine.base.datastructures import EmbeddedDocumentList
