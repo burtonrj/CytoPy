@@ -63,6 +63,7 @@ class Project(mongoengine.Document):
 
     def add_experiment(self,
                        experiment_id: str,
+                       data_directory: str,
                        panel_name: str or None = None,
                        panel_definition: str or None = None) -> Experiment:
         """
@@ -89,7 +90,8 @@ class Project(mongoengine.Document):
         assert experiment_id not in list(self.list_experiments()), err
         exp = Experiment(experiment_id=experiment_id,
                          panel_definition=panel_definition,
-                         panel_name=panel_name)
+                         panel_name=panel_name,
+                         data_directory=data_directory)
         exp.save()
         self.experiments.append(exp)
         self.save()
