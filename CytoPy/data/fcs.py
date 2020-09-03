@@ -92,20 +92,22 @@ class FileGroup(mongoengine.Document):
                  channel_mappings: List[dict],
                  control: bool = False,
                  ctrl_id: str or None = None):
-        with h5py.File(self.h5path, "w") as f:
-            if self.channel_mappings:
-                self._valid_mappings(channel_mappings)
-            else:
-                self.channel_mappings = [ChannelMap(channel=x["channel"], marker=x["marker"])
-                                         for x in channel_mappings]
-            if control:
-                assert ctrl_id, "No ctrl_id given"
+
+        if self.channel_mappings:
+            self._valid_mappings(channel_mappings)
+        else:
+            self.channel_mappings = [ChannelMap(channel=x["channel"], marker=x["marker"])
+                                     for x in channel_mappings]
+        if control:
+            assert ctrl_id, "No ctrl_id given"
+            with h5py.File(self.h5path, "r") as f:
                 assert ctrl_id not in f.keys(), f"Control file with ID {ctrl_id} already exists"
-                pd.DataFrame(data).to_hdf(self.h5path, key=ctrl_id)
-                self.controls.append(ctrl_id)
-            else:
+            pd.DataFrame(data).to_hdf(self.h5path, key=ctrl_id)
+            self.controls.append(ctrl_id)
+        else:
+            with h5py.File(self.h5path, "r") as f:
                 assert "primary" not in f.keys(), "There can only be one primary file associated to each file group"
-                pd.DataFrame(data).to_hdf(self.h5path, key="primary")
+            pd.DataFrame(data).to_hdf(self.h5path, key="primary")
 
     def _valid_mappings(self, channel_mappings: List[dict]):
         for cm in channel_mappings:
