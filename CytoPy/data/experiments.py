@@ -397,21 +397,27 @@ class Experiment(mongoengine.Document):
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
     gating_templates = mongoengine.ListField(mongoengine.ReferenceField(GatingStrategy, reverse_delete_rule=4))
+    meta = {
+        'db_alias': 'core',
+        'collection': 'experiments'
+    }
 
     def __init__(self, *args, **kwargs):
+        panel_definition = kwargs.pop("panel_definition", None)
+        panel_name = kwargs.pop("panel_name", None)
         super().__init__(*args, **kwargs)
-        panel_definition = None
-        panel_name = None
         if not self.panel:
-            if kwargs.get("panel_definition") is not None:
-                panel_definition = kwargs.pop("panel_definition")
+            if panel_definition is None and panel_name is None:
+                raise ValueError("Must provide either path to panel definition or name of an existing panel")
+            if panel_definition is not None:
                 assert os.path.isfile(panel_definition), f"{panel_definition} does not exist"
                 err = "Panel definition is not a valid Excel document"
                 assert os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"], err
-            if kwargs.get("panel_name") is not None:
-                panel_name = kwargs.pop("panel_name")
+            else:
+                assert len(Panel.objects(panel_name=panel_name)) > 0, "Invalid panel name, panel does not exist"
             self.panel = self._generate_panel(panel_definition=panel_definition,
                                               panel_name=panel_name)
+        self.save()
 
     def _generate_panel(self,
                         panel_definition: str or None,
