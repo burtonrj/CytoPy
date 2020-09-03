@@ -417,7 +417,7 @@ class Experiment(mongoengine.Document):
                 assert len(Panel.objects(panel_name=panel_name)) > 0, "Invalid panel name, panel does not exist"
             self.panel = self._generate_panel(panel_definition=panel_definition,
                                               panel_name=panel_name)
-        self.save()
+            self.panel.save()
 
     def _generate_panel(self,
                         panel_definition: str or None,
@@ -431,7 +431,8 @@ class Experiment(mongoengine.Document):
         if panel_name is None:
             panel_name = f"{self.experiment_id}_panel"
         new_panel = Panel(panel_name=panel_name)
-        return new_panel.create_from_excel(path=panel_definition)
+        new_panel.create_from_excel(path=panel_definition)
+        return new_panel
 
     def update_data_directory(self, new_path: str):
         assert os.path.isdir(new_path), "Invalid directory given for new_path"
