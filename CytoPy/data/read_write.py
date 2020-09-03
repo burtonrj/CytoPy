@@ -40,6 +40,47 @@ def filter_fcs_files(fcs_dir: str,
     return fcs_files
 
 
+def get_fcs_file_paths(fcs_dir: str,
+                       control_names: list,
+                       ctrl_id: str,
+                       ignore_comp: bool = True) -> dict:
+    """
+    Generate a standard dictionary object of fcs files in given directory
+    Parameters
+    -----------
+    fcs_dir: str
+        target directory for search
+    control_names: list
+        names of expected control files (names must appear in filenames)
+    ctrl_id: str
+        global identifier for control file e.g. 'FMO' (must appear in filenames)
+    ignore_comp: bool, (default=True)
+        If True, files with 'compensation' in their name will be ignored (default = True)
+    Returns
+    --------
+    dict
+        standard dictionary of fcs files contained in target directory
+    """
+    file_tree = dict(primary=[], controls=[])
+    fcs_files = filter_fcs_files(fcs_dir, exclude_comps=ignore_comp)
+    ctrl_files = [f for f in fcs_files if f.find(ctrl_id) != -1]
+    primary = [f for f in fcs_files if f.find(ctrl_id) == -1]
+    for c_name in control_names:
+        matched_controls = list(filter(lambda x: x.find(c_name) != -1, ctrl_files))
+        if not matched_controls:
+            print(f'Warning: no file found for {c_name} control')
+            continue
+        if len(matched_controls) > 1:
+            print(f'Warning: multiple files found for {c_name} control')
+            file_tree['controls'].append(dict(control_id=c_name, path=matched_controls))
+            continue
+        file_tree['controls'].append(dict(control_id=c_name, path=matched_controls[0]))
+    if len(primary) > 1:
+        print('Warning! Multiple non-control (primary) files found in directory. Check before proceeding.')
+    file_tree['primary'] = primary
+    return file_tree
+
+
 def chunks(df_list: list,
            n: int) -> pd.DataFrame:
     """

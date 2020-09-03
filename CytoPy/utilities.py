@@ -1,5 +1,3 @@
-from scipy.spatial.distance import euclidean
-from scipy.linalg import norm
 import mongoengine
 import numpy as np
 import os
