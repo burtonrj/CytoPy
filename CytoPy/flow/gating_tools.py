@@ -254,7 +254,6 @@ class Gating:
         node = self.populations[population]
         return [x.name for x in findall(root, filter_=lambda n: node in n.path) if x.name != population]
 
-
     def list_child_populations(self,
                                population: str):
         assert population in self.populations.keys(), f'population {population} does not exist; ' \
