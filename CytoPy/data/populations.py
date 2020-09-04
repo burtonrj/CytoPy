@@ -89,27 +89,6 @@ class Population(mongoengine.EmbeddedDocument):
     clusters: EmbeddedDocListField
         list of associated Cluster documents
     """
-
-    def __init__(self, *args, **kwargs):
-        # If the Population existed previously, fetched the index
-        self._index = None
-        self._ctrl_index = dict()
-        self.h5path = os.path.join(self._instance.data_directory, f"{self._instance.id.__str__()}.hdf5")
-        with h5py.File(self.h5path, "r") as f:
-            # Load the population index (if population exists)
-            if f'/index/{self.population_name}' in f.keys():
-                self._index = f[f'/index/{self.population_name}'][:]
-            # Load the control index (if population exists)
-            for ctrl in self._instance.controls:
-                if f'/index/{self.population_name}/{ctrl}' in f.keys():
-                    self._ctrl_index[ctrl] = f[f'/index/{self.population_name}/{ctrl}'][:]
-        # If this is a new instance of Population and index has been given in kwargs, set self._index
-        if self._index is None and "index" in kwargs.keys():
-            self._index = kwargs.pop("index")
-        if not self._ctrl_index and "ctrl_index" in kwargs.keys():
-            self._ctrl_index = kwargs.pop("ctrl_index")
-        super().__init__(*args, **kwargs)
-
     population_name = mongoengine.StringField()
     n = mongoengine.IntField()
     parent = mongoengine.StringField(required=True, default='root')
@@ -118,6 +97,24 @@ class Population(mongoengine.EmbeddedDocument):
     warnings = mongoengine.ListField()
     geom = mongoengine.EmbeddedDocumentField(PopulationGeometry)
     definition = mongoengine.StringField()
+    _h5path = mongoengine.StringField()
+
+    def __init__(self, *args, **kwargs):
+        # If the Population existed previously, fetched the index
+        self._index = kwargs.pop("index", None)
+        self._ctrl_index = kwargs.pop("ctrl_index", dict())
+        super().__init__(*args, **kwargs)
+        if self._h5path:
+            # Existing file, so populate index
+            with h5py.File(self._h5path, "r") as f:
+                # Load the population index (if population exists)
+                if f'/index/{self.population_name}' in f.keys():
+                    self._index = f[f'/index/{self.population_name}'][:]
+                # Load the control index (if population exists)
+                for ctrl in self._instance.controls:
+                    if f'/index/{self.population_name}/{ctrl}' in f.keys():
+                        self._ctrl_index[ctrl] = f[f'/index/{self.population_name}/{ctrl}'][:]
+        # self.h5path = os.path.join(self._instance.data_directory, f"{self._instance.id.__str__()}.hdf5")
 
     @property
     def index(self):

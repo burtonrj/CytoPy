@@ -248,6 +248,9 @@ class FileGroup(mongoengine.Document):
     def save(self, *args, **kwargs):
         # Calculate meta and save indexes to disk
         if self.populations:
+            # Populate h5path for populations
+            for p in self.populations:
+                p._h5path = self.h5path
             root_n = [p for p in self.populations if p.population_name == "root"][0].n
             with h5py.File(self.h5path, "r") as f:
                 for p in self.populations:
