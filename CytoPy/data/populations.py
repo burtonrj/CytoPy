@@ -133,7 +133,7 @@ class Population(mongoengine.EmbeddedDocument):
     def ctrl_index(self, ctrl_idx: tuple):
         assert len(ctrl_idx) == 2, "ctrl_idx should be a tuple of length 2"
         assert isinstance(ctrl_idx[0], str), "first item in ctrl_idx should be type str"
-        assert isinstance(ctrl_idx[1], np.adrray), "second item in ctrl_idx should be type numpy.array"
+        assert isinstance(ctrl_idx[1], np.ndarray), "second item in ctrl_idx should be type numpy.array"
         self._ctrl_index[ctrl_idx[0]] = ctrl_idx[1]
 
 
