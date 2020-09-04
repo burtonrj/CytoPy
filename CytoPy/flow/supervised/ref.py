@@ -1,11 +1,9 @@
 from ...data.experiments import Experiment
 from ...data.fcs import FileGroup
-from ...data.populations import Population
 from ...feedback import progress_bar, vprint
 from ..gating_tools import Gating
 from warnings import warn
 import pandas as pd
-import numpy as np
 
 
 def _sample(df: pd.DataFrame,
