@@ -690,6 +690,7 @@ class Experiment(mongoengine.Document):
             except mongoengine.errors.DoesNotExist:
                 warn(f'Error: no such patient {subject_id}, continuing without association.')
         feedback(f'Successfully created {sample_id} and associated to {self.experiment_id}')
+        self.fcs_files.append(filegrp)
         self.save()
         return filegrp.id.__str__()
 

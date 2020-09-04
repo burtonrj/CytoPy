@@ -32,7 +32,9 @@ class ChannelMap(mongoengine.EmbeddedDocument):
         bool
             True if equal, else False
         """
-        if self.channel == channel and self.marker == marker:
+        expected_marker = self.marker or ""
+        expected_channel = self.channel or ""
+        if expected_channel == channel and expected_marker == marker:
             return True
         return False
 
