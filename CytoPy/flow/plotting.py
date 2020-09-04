@@ -244,11 +244,11 @@ class CreatePlot:
         if type(self.bins) == int:
             return self.bins
         if self.bins == "scotts":
-            return int(3.49 * x.std()) / np.cbrt(x.geom[0])
+            return int(3.49 * x.std()) / np.cbrt(x.shape[0])
         if self.bins == "sturges":
-            return int(np.log2(x.geom[0])) + 1
+            return int(np.log2(x.shape[0])) + 1
         if self.bins == "rice":
-            return int(2 * np.cbrt(x.geom[0]))
+            return int(2 * np.cbrt(x.shape[0]))
         if self.bins == "sqrt":
             return int(np.sqrt(x))
         raise ValueError("""bins should be an integer or one of : "scotts", "sturges", "rice", or "sqrt""")
