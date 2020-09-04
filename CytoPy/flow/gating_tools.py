@@ -335,14 +335,14 @@ class Gating:
                     warn("DBSCAN and HDBSCAN do not scale well and it is recommended that downsampling is performed")
         gate = Gate(gate_name=gate_name,
                     parent=parent,
-                    geom_type=shape,
+                    shape=shape,
                     x=x,
                     y=y,
                     binary=binary,
                     method=method,
                     method_kwargs=[(k, v) for k, v in method_kwargs.items()],
-                    preprocessing_kwargs=PreProcess(**preprocessing_kwargs),
-                    postprocessing_kwargs=PostProcess(**postprocessing_kwargs))
+                    preprocessing=PreProcess(**preprocessing_kwargs),
+                    postprocessing=PostProcess(**postprocessing_kwargs))
         return gate
 
     def plot_gate(self,

@@ -71,7 +71,7 @@ class CreatePlot:
                  bw: str or float = "scott"):
         self.tranforms = {'x': transform_x, 'y': transform_y}
         self.labels = {'x': xlabel, 'y': ylabel}
-        self.lims = {'x': xlim, 'y': ylim}
+        self.lims = {'x': xlim or [None, None], 'y': ylim or [None, None]}
         self.title = title
         self.bw = bw
         if type(bins) == str:
