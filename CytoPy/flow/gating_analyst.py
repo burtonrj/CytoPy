@@ -4,6 +4,8 @@ from shapely.geometry import Point, Polygon
 from shapely.affinity import scale
 from scipy import linalg, stats
 from scipy.signal import find_peaks, savgol_filter
+from sklearn.mixture import *
+from sklearn.cluster import *
 from typing import List
 from warnings import warn
 import pandas as pd
@@ -197,14 +199,13 @@ class Analyst:
         self.parent = parent
         self.conf = conf
         self.binary = binary
-        self.model = None
+        self.model = model
         if self.model is not None:
             if self.model == "HDBSCAN":
                 from hdbscan import HDBSCAN
                 self.model = HDBSCAN(**kwargs)
             else:
-                assert model in globals().keys(), f"Module {model} not found, have you imported it into the working " \
-                                                  f"environment?"
+                assert model in globals().keys(), f"Module {model} not supported. See docs for supported methods. "
                 self.model = globals()[model](**kwargs)
 
     def _threshold_2d(self,
