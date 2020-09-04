@@ -107,7 +107,6 @@ class CreatePlot:
         -------
         None
         """
-        data = self._transform_axis(data=data, x=x, y=None)
         sns.kdeplot(data=data[x], bw=self.bw, ax=self._ax, **kwargs)
 
     def _hist2d(self,
@@ -137,7 +136,6 @@ class CreatePlot:
             xbin, ybin = self._estimate_bins(x=data[x].values), self._estimate_bins(x=data[y].values)
         else:
             xbin, ybin = self.bins, self.bins
-        data = self._transform_axis(data=data, x=x, y=y)
         self._ax.hist2d(data[x], data[y], bins=[xbin, ybin], norm=LogNorm(), cmap=self.cmap, **kwargs)
 
     def _set_axis_limits(self,
@@ -223,7 +221,7 @@ class CreatePlot:
                 continue
             if self.tranforms.get(axis) != "linear":
                 data = apply_transform(data,
-                                       features_to_transform=channel,
+                                       features_to_transform=[channel],
                                        transform_method=self.tranforms.get(axis))
         return data
 
@@ -278,6 +276,7 @@ class CreatePlot:
         Matplotlib.pyplot.axes
             Axis object
         """
+        data = self._transform_axis(data=data, x=x, y=y)
         if y is None:
             self._hist1d(data=data, x=x, **kwargs)
         else:
@@ -371,13 +370,11 @@ class CreatePlot:
         for child in gate.children:
             err = f"{child.population_name} missing from given geometries"
             assert child.population_name in [c.population_name for c in children], err
-        if plot_kwargs is None:
-            plot_kwargs = {}
-        if legend_kwargs is None:
-            legend_kwargs = {}
+        plot_kwargs = plot_kwargs or {}
+        legend_kwargs = legend_kwargs or dict()
         # Plot the parent population
-        self.tranforms = {"x": gate.preprocessing.transform_x,
-                          "y": gate.preprocessing.transform_y}
+        self.tranforms = {"x": gate.preprocessing.transform_x or "linear",
+                          "y": gate.preprocessing.transform_y or "linear"}
         self._ax = self.plot(data=parent,
                              x=gate.x,
                              y=gate.y,
@@ -393,24 +390,24 @@ class CreatePlot:
             return self._ax
         # Otherwise, we assume some other shape
         count = 0
-        for child_name in gate.children:
+        for child in children:
             count += 1
             colour = next(gate_colours)
-            child_shape = [c for c in children if c.population_name == child_name][0].geom
             if gate.shape == "polygon":
-                self._add_polygon(x_values=child_shape.x_values,
-                                  y_values=child_shape.y_values,
+                self._add_polygon(x_values=child.geom.x_values,
+                                  y_values=child.geom.y_values,
                                   colour=colour,
-                                  label=child_name,
+                                  label=child.population_name,
                                   lw=lw)
             elif gate.shape == "ellipse":
-                self._add_ellipse(center=child_shape.center,
-                                  width=child_shape.width,
-                                  height=child_shape.height,
-                                  angle=child_shape.angle,
+                self._add_ellipse(center=child.geom.center,
+                                  width=child.geom.width,
+                                  height=child.geom.height,
+                                  angle=child.geom.angle,
                                   colour=colour,
                                   lw=lw,
-                                  label=child_name)
+                                  label=child.population_name)
+            else:
                 raise ValueError(f"Gate shape not recognised: {gate.shape}")
             if len(gate.children) == 2 and gate.binary:
                 # Gate produces exactly two populations: within gate and outside of gate
@@ -666,13 +663,14 @@ class CreatePlot:
     def _set_legend(self,
                     shape_n: int,
                     **kwargs):
-        anchor = kwargs.get("bbox_to_anchor", (0.5, 1.05))
-        loc = kwargs.get("loc", "upper center")
+        anchor = kwargs.get("bbox_to_anchor", (1.1, 0.95))
+        loc = kwargs.get("loc", 2)
         ncol = kwargs.get("ncol", 3)
         fancy = kwargs.get("fancybox", True)
         shadow = kwargs.get("shadow", False)
         if shape_n == 1:
-            self._ax.get_legend().remove()
+            if self._ax.get_legend() is not None:
+                self._ax.get_legend().remove()
         else:
             self._ax.legend(loc=loc,
                             bbox_to_anchor=anchor,

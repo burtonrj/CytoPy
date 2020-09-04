@@ -296,11 +296,15 @@ class Gating:
                     postprocessing_kwargs: dict or None = None):
         preprocessing_kwargs = preprocessing_kwargs or dict()
         postprocessing_kwargs = postprocessing_kwargs or dict()
+        method_kwargs = method_kwargs or dict()
         assert gate_name not in self.gates.keys(), f"{gate_name} already exists!"
         err = """Gate should have one of the following shapes: ["threshold", "polygon", "ellipse"]"""
         assert shape in ["threshold", "polygon", "ellipse"], err
         assert parent in self.populations.keys(), "Invalid parent (does not exist)"
-        if any(c not in self.data.get("primary").columns for c in [x, y]):
+        features_to_check = [x]
+        if y is not None:
+            features_to_check.append(y)
+        if any(c not in self.data.get("primary").columns for c in features_to_check):
             if not preprocessing_kwargs.get("dim_reduction"):
                 err = f"x or y are invalid values are invalid; valid column names as: {self.data.get('primary').columns}"
                 raise ValueError(err)
@@ -364,7 +368,7 @@ class Gating:
                               transform_y=gate.preprocessing.transform_y,
                               xlabel=gate.x,
                               ylabel=gate.y,
-                              title=f"Preview: {gate.gate_name}",
+                              title=gate.gate_name,
                               **create_plot_kwargs)
         return plotting.plot_gate(gate=gate,
                                   parent=data,
@@ -377,10 +381,8 @@ class Gating:
                         y: str or None = None,
                         create_plot_kwargs: dict or None = None,
                         matplotlib_hist2d_kwargs: dict or None = None):
-        if create_plot_kwargs is None:
-            create_plot_kwargs = {}
-        if matplotlib_hist2d_kwargs is None:
-            matplotlib_hist2d_kwargs = {}
+        create_plot_kwargs = create_plot_kwargs or {}
+        matplotlib_hist2d_kwargs = matplotlib_hist2d_kwargs or {}
         data = self.get_population_df(population_name=population, transform=None)
         plotting = CreatePlot(**create_plot_kwargs)
         return plotting.plot(data=data,
@@ -466,9 +468,9 @@ class Gating:
                                   plot_outcome=plot_outcome,
                                   verbose=verbose)
         if plot_outcome:
-            return self.plot_gate(gate=gate,
-                                  create_plot_kwargs=create_plot_kwargs,
-                                  gate_plot_kwargs=plot_gate_kwargs)
+            self.plot_gate(gate=gate,
+                           create_plot_kwargs=create_plot_kwargs,
+                           gate_plot_kwargs=plot_gate_kwargs)
         self.gates[gate.gate_name] = gate
 
     def apply_all(self,
@@ -788,5 +790,5 @@ def check_population_tree(gating: Gating,
     for i, pop in enumerate(populations):
         if i == len(populations) - 1:
             continue
-        assert not any([x in gating.list_dependencies(population=pop) for x in populations[i+1:]]), \
+        assert not any([x in gating.list_dependencies(population=pop) for x in populations[i + 1:]]), \
             "Population list is not ordered; one or more populations follows a population to which it is dependent"

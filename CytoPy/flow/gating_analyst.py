@@ -136,7 +136,7 @@ def check_peak(peaks: np.array,
         Sorted peaks
     """
     assert len(peaks) > 0, '"peak" array is empty'
-    if peaks.geom[0] == 1:
+    if len(peaks) == 1:
         return peaks
     sorted_peaks = np.sort(probs[peaks])[::-1]
     real_peaks = list()
@@ -212,10 +212,10 @@ class Analyst:
                       data: pd.DataFrame,
                       x: float,
                       y: float):
-        bottom_left = data[(data[self.x] <= x) & (data[self.x] <= y)].index.values
-        top_left = data[(data[self.x] <= x) & (data[self.x] > y)].index.values
-        bottom_right = data[(data[self.x] > x) & (data[self.x] <= y)].index.values
-        top_right = data[(data[self.x] > x) & (data[self.x] > y)].index.values
+        bottom_left = data[(data[self.x] <= x) & (data[self.y] <= y)].index.values
+        top_left = data[(data[self.x] <= x) & (data[self.y] > y)].index.values
+        bottom_right = data[(data[self.x] > x) & (data[self.y] <= y)].index.values
+        top_right = data[(data[self.x] > x) & (data[self.y] > y)].index.values
         populations = list()
         for definition, idx in zip(["--", "-+", "++", "+-"], [bottom_left, top_left, top_right, bottom_right]):
             geom = PopulationGeometry(x=self.x, y=self.y, x_threshold=x, y_threshold=y)
@@ -528,7 +528,7 @@ class DensityGate(Analyst):
                         peaks = self._find_peaks(probs)
                         bw = bw + increment
                     if len(peaks) == 1:
-                        if len(peaks) == 0 and self.cutoff_point == "quantile":
+                        if self.cutoff_point == "quantile":
                             thresholds.append(data[d].quantile(self.q))
                         else:
                             thresholds.append(_find_inflection_point(xx=xx, probs=probs, peaks=peaks))
