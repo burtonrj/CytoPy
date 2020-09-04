@@ -21,7 +21,7 @@ import numpy as np
 import math
 
 
-def covar_euclidean_norm(data: Dict[str: pd.DataFrame],
+def covar_euclidean_norm(data: Dict[str, pd.DataFrame],
                          verbose: bool = True):
     """
 
@@ -74,7 +74,7 @@ def _check_ref_n(embeddings: Dict[str, dict],
             warn(f"Reference sample is missing sample N {n} so comparisons will not be missing in some cases.")
 
 
-def _jsd_n_comparison(pdfs: Dict[str: dict],
+def _jsd_n_comparison(pdfs: Dict[str, dict],
                       reference: str):
 
     jsd_comparisons = defaultdict(dict)
@@ -100,7 +100,7 @@ def _jsd_n_comparison(pdfs: Dict[str: dict],
     return ax
 
 
-def _visual_n_comparison(embeddings: Dict[str: dict]):
+def _visual_n_comparison(embeddings: Dict[str, dict]):
     # Wrangle dictionary to have sample ID as primary key
     sample_embeddings = defaultdict(dict)
     for n in embeddings.keys():
@@ -166,7 +166,7 @@ class EvaluateBatchEffects:
         return {x[0]: x[1] for x in data}
 
     @staticmethod
-    def scale_data(data: Dict[str: pd.DataFrame],
+    def scale_data(data: Dict[str, pd.DataFrame],
                    scale: str or None = "standard",
                    **kwargs):
         return {k: pd.DataFrame(scaler(data=v.values,
