@@ -275,6 +275,10 @@ class FCSFile:
         """
         assert self.spill is not None, f'Unable to locate spillover matrix, please provide a compensation matrix'
         channel_idx = [i for i, x in enumerate(self.channel_mappings) if x['marker'] != '']
+        if len(channel_idx) == 0:
+            # No markers defined in file
+            channel_idx = [i for i, x in enumerate(self.channel_mappings) if all([z not in x['channel'].lower()
+                                                                                  for z in ['fsc', 'ssc', 'time']])]
         comp_data = self.event_data[:, channel_idx]
         comp_data = np.linalg.solve(self.spill.values.T, comp_data.T).T
         self.event_data[:, channel_idx] = comp_data

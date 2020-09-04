@@ -153,7 +153,7 @@ class Subject(mongoengine.DynamicDocument):
         'collection': 'subjects'
     }
 
-    def delete(self, signal_kwargs=None, **write_concern):
+    def delete(self, *args, **kwargs):
         """
         Delete the Subject. The subject will automatically be pulled from associated Projects (reference field in
         Project model has reverse_delete_rile=4; see mongoengine API for info).
@@ -175,7 +175,7 @@ class Subject(mongoengine.DynamicDocument):
         """
         for f in self.files:
             f.delete()
-        super().delete(self, signal_kwargs=signal_kwargs, **write_concern)
+        super().delete(*args, **kwargs)
 
 
 def gram_status(subject: Subject) -> str:

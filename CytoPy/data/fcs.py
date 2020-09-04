@@ -87,6 +87,9 @@ class FileGroup(mongoengine.Document):
                                     for file_id, x in data["controls"].items()}
         return data
 
+    def _hdf5_exists(self):
+        return os.path.isfile(self.h5path)
+
     def add_file(self,
                  data: np.array,
                  channel_mappings: List[dict],
@@ -100,18 +103,21 @@ class FileGroup(mongoengine.Document):
                                      for x in channel_mappings]
         if control:
             assert ctrl_id, "No ctrl_id given"
-            with h5py.File(self.h5path, "r") as f:
-                assert ctrl_id not in f.keys(), f"Control file with ID {ctrl_id} already exists"
+            if self._hdf5_exists():
+                with h5py.File(self.h5path, "r") as f:
+                    assert ctrl_id not in f.keys(), f"Control file with ID {ctrl_id} already exists"
             pd.DataFrame(data).to_hdf(self.h5path, key=ctrl_id)
             self.controls.append(ctrl_id)
         else:
-            with h5py.File(self.h5path, "r") as f:
-                assert "primary" not in f.keys(), "There can only be one primary file associated to each file group"
+            if self._hdf5_exists():
+                with h5py.File(self.h5path, "r") as f:
+                    assert "primary" not in f.keys(), "There can only be one primary file associated to each file group"
             pd.DataFrame(data).to_hdf(self.h5path, key="primary")
+        self.save()
 
     def _valid_mappings(self, channel_mappings: List[dict]):
         for cm in channel_mappings:
-            err = f"{cm} doesn't match the expected channel mappings for this file group"
+            err = f"{cm} does not match the expected channel mappings for this file group"
             assert sum([x.check_matched_pair(cm["channel"], cm["marker"])
                         for x in self.channel_mappings]) == 1, err
 
@@ -253,3 +259,10 @@ class FileGroup(mongoengine.Document):
                         f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
         super().save(*args, **kwargs)
 
+    def delete(self,
+               delete_hdf5_file: bool = True,
+               *args,
+               **kwargs):
+        if delete_hdf5_file:
+            os.remove(self.h5path)
+        super().delete(*args, **kwargs)
