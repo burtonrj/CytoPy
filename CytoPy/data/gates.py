@@ -139,31 +139,47 @@ class Gate(mongoengine.Document):
                  **values):
         super().__init__(*args, **values)
         self.defined = True
+        self.labelled = True
         if not self.children:
             self.defined = False
+            self.labelled = False
 
     def clear_children(self):
         self.defined = False
+        self.labelled = False
         self.children = []
 
     def label_children(self,
-                       labels: dict):
-        assert not self.defined, "Children already defined. To clear children and relabel call 'clear_children'"
-        if self.binary and self.shape != "threshold":
-            assert len(labels) == 1, "Non-threshold binary gate's should only have a single population"
-        elif self.binary and self.shape == "threshold":
-            assert {"+", "-"} == set(labels.keys()), "Binary threshold gate has the following populations: '+' or '-'"
-        elif self.shape == "threshold":
-            assert {"++", "--", "-+", "+-"} == set(labels.keys()), \
-                "Binary threshold gate has the following populations: '++', '--', '+-', or '-+'"
+                       labels: dict,
+                       definitions: dict or None = None):
+        assert not self.labelled, "Children already labelled. To clear children and relabel call 'clear_children'"
         drop = [c.population_name for c in self.children if c.population_name not in labels.keys()]
         assert len(drop) != len(self.children), "No keys in label match existing child populations"
         if drop:
             warn(f"The following populations are not in labels and will be dropped: {drop}")
         self.children = [c for c in self.children if c.population_name not in drop]
+
+        if self.binary and self.shape != "threshold":
+            assert len(labels) == 1, "Non-threshold binary gate's should only have a single population"
+        elif self.binary and self.shape == "threshold":
+            assert definitions is not None, "For a binary threshold gate, definitions should be provided with the " \
+                                            "keys: '+' and '-'"
+            assert set(definitions.keys()) == {'+', '-'}, "For a binary threshold gate, definitions should be provided " \
+                                                          "with the keys: '+' and '-'"
+            assert len(labels) == 2, "For a binary threshold gate exactly two labels should be provided"
+        elif self.shape == "threshold":
+            assert definitions is not None, "For a non-binary threshold gate, definitions should be provided with the " \
+                                            "keys: '++', '-+', '+-' and '--'"
+            assert set(definitions.keys()) == {'++', '--',
+                                               '-+', '+-'}, "For a non-binary threshold gate, definitions should be " \
+                                                            "provided with the keys: '++', '-+', '+-' and '--'"
+            assert len(labels) == 4, "For a non-binary threshold gate exactly four labels should be provided"
+
         for child in self.children:
-            child.population_name = labels.get(child)
-        self.defined = True
+            child.population_name = labels.get(child.population_name)
+            if definitions is not None:
+                child.definition = definitions.get(child.population_name)
+        self.labelled = True
 
     def _scale(self,
                data: pd.DataFrame):
@@ -219,15 +235,16 @@ class Gate(mongoengine.Document):
             data = self._dim_reduction(data)
         else:
             # Transform the x and y dimensions
-            if self.preprocessing.transform_x:
+            if self.preprocessing.transform_x and self.x is not None:
                 data = apply_transform(data=data,
                                        transform_method=self.preprocessing.transform_x,
                                        features_to_transform=[self.x])
-            if self.preprocessing.transform_y:
+            if self.preprocessing.transform_y and self.y is not None:
                 data = apply_transform(data=data,
                                        transform_method=self.preprocessing.transform_y,
                                        features_to_transform=[self.y])
-            data = data[[self.x, self.y]]
+            features = [x for x in [self.x, self.y] if x is not None]
+            data = data[features]
         # Perform additional scaling if requested
         if self.preprocessing.scale:
             data = self._scale(data)
@@ -291,8 +308,10 @@ class Gate(mongoengine.Document):
             self.children = []
             for pop in populations:
                 self._add_child(pop)
+            self.defined = True
             return populations
         else:
+            assert self.labelled, "Gate children are unlabelled, call `label_children prior to calling `apply``"
             feedback("Matching detected populations to expected children...")
             return self._match_to_children(populations)
 
@@ -335,7 +354,7 @@ class Gate(mongoengine.Document):
             name = population.definition
         new_child = ChildDefinition(population_name=name,
                                     definition=population.definition,
-                                    template_geom=population.geom)
+                                    template_geometry=population.geom)
         self.children.append(new_child)
 
     def _label_binary_threshold(self,
@@ -386,14 +405,11 @@ class Gate(mongoengine.Document):
 
     def _label_binary_other(self,
                             new_children: List[Population]):
-        pos = [c for c in self.children if c.definition == "+"][0]
-        neg = [c for c in self.children if c.definition == "-"][0]
-        ranking = [pos.geom.overlap(comparison_poly=c.geom.shape) for c in new_children]
-        new_children[int(np.argmax(ranking))].population_name = self.children[0]
-        negative_new = [c for i, c in enumerate(new_children) if i != int(np.argmax(ranking))]
-        for child in negative_new:
-            child.population_name = neg.population_name
-        return new_children
+        # Binary gates that are not thresholds only have one child
+        pos = self.children[0]
+        ranking = [pos.template_geometry.overlap(comparison_poly=c.geom.shape) for c in new_children]
+        new_children[int(np.argmax(ranking))].population_name = pos.population_name
+        return [new_children[int(np.argmax(ranking))]]
 
     def _match_to_children(self,
                            new_children: List[Population],
