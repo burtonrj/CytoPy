@@ -474,7 +474,7 @@ def _find_inflection_point(xx: np.array,
 class DensityGate(Analyst):
 
     def __init__(self, x: str or None, y: str or None, shape: str, parent: str, binary: bool, **kwargs):
-        super().__init__(x=x, y=y, shape=shape, parent=parent, binary=binary, model=None)
+        super().__init__(x=x, y=y, shape="threshold", parent=parent, binary=binary, model=None)
         self.peak_threshold = kwargs.get("peak_threshold", 0.05)
         self.threshold_method = kwargs.get("threshold_method", "density")
         self.q = kwargs.get("q", 0.95)
@@ -497,6 +497,7 @@ class DensityGate(Analyst):
     def fit_predict(self,
                     data: pd.DataFrame,
                     return_thresholds: bool = False):
+        complete_data = data.copy()
         if data.shape[0] > self.downsampling_threshold:
             sample_n = int((data.shape[0] - self.downsampling_threshold) * self.downsampling_frac)
             data = data.sample(n=sample_n)
@@ -537,9 +538,9 @@ class DensityGate(Analyst):
         if return_thresholds:
             return thresholds
         if len(thresholds) == 1:
-            return self._threshold_1d(data=data, x=thresholds[0])
+            return self._threshold_1d(data=complete_data, x=thresholds[0])
         else:
-            return self._threshold_2d(data=data, x=thresholds[0], y=thresholds[1])
+            return self._threshold_2d(data=complete_data, x=thresholds[0], y=thresholds[1])
 
     def _find_peaks(self,
                     probs: np.array) -> np.array:
