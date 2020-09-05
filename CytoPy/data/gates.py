@@ -150,8 +150,7 @@ class Gate(mongoengine.Document):
         self.children = []
 
     def label_children(self,
-                       labels: dict,
-                       definitions: dict or None = None):
+                       labels: dict):
         assert not self.labelled, "Children already labelled. To clear children and relabel call 'clear_children'"
         drop = [c.population_name for c in self.children if c.population_name not in labels.keys()]
         assert len(drop) != len(self.children), "No keys in label match existing child populations"
@@ -162,23 +161,14 @@ class Gate(mongoengine.Document):
         if self.binary and self.shape != "threshold":
             assert len(labels) == 1, "Non-threshold binary gate's should only have a single population"
         elif self.binary and self.shape == "threshold":
-            assert definitions is not None, "For a binary threshold gate, definitions should be provided with the " \
-                                            "keys: '+' and '-'"
-            assert set(definitions.keys()) == {'+', '-'}, "For a binary threshold gate, definitions should be provided " \
-                                                          "with the keys: '+' and '-'"
-            assert len(labels) == 2, "For a binary threshold gate exactly two labels should be provided"
+            assert set(labels.keys()) == {'+', '-'}, "For a binary threshold gate, labels should be provided " \
+                                                     "with the keys: '+' and '-'"
         elif self.shape == "threshold":
-            assert definitions is not None, "For a non-binary threshold gate, definitions should be provided with the " \
-                                            "keys: '++', '-+', '+-' and '--'"
-            assert set(definitions.keys()) == {'++', '--',
-                                               '-+', '+-'}, "For a non-binary threshold gate, definitions should be " \
-                                                            "provided with the keys: '++', '-+', '+-' and '--'"
-            assert len(labels) == 4, "For a non-binary threshold gate exactly four labels should be provided"
-
+            assert set(labels.keys()) == {'++', '--',
+                                          '-+', '+-'}, "For a non-binary threshold gate, labels should be " \
+                                                        "provided with the keys: '++', '-+', '+-' and '--'"
         for child in self.children:
             child.population_name = labels.get(child.population_name)
-            if definitions is not None:
-                child.definition = definitions.get(child.population_name)
         self.labelled = True
 
     def _scale(self,
@@ -380,9 +370,9 @@ class Gate(mongoengine.Document):
         neg = [child for child in self.children if child.definition == "-"][0]
         for new_child in new_children:
             if new_child.definition == "+":
-                new_child.definition = pos.population_name
+                new_child.population_name = pos.population_name
             else:
-                new_child.definition = neg.population_name
+                new_child.population_name = neg.population_name
         return new_children
 
     def _label_threshold(self,

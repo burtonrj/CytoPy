@@ -64,7 +64,7 @@ class CreatePlot:
                  title: str or None = None,
                  ax: matplotlib.pyplot.axes or None = None,
                  figsize: (int, int) = (5, 5),
-                 bins: int or str = "scotts",
+                 bins: int or str = "auto",
                  cmap: str = "jet",
                  style: str or None = "white",
                  font_scale: float or None = 1.2,
@@ -75,8 +75,8 @@ class CreatePlot:
         self.title = title
         self.bw = bw
         if type(bins) == str:
-            assert bins in ["scotts", "sturges", "rice", "sqrt"], """bins should be an integer or one of : 
-            "scotts", "sturges", "rice", or "sqrt"""
+            valid_bin_str = ["scott", "sturges", "rice", "sqrt", "stone", "doane", "fd", "auto"]
+            assert bins in valid_bin_str, f"bins should be an integer or one of {valid_bin_str}"
         self.bins = bins
         self.fig, self._ax = None, ax
         if self._ax is None:
@@ -132,11 +132,8 @@ class CreatePlot:
         -------
         None
         """
-        if type(self.bins) == str:
-            xbin, ybin = self._estimate_bins(x=data[x].values), self._estimate_bins(x=data[y].values)
-        else:
-            xbin, ybin = self.bins, self.bins
-        self._ax.hist2d(data[x], data[y], bins=[xbin, ybin], norm=LogNorm(), cmap=self.cmap, **kwargs)
+        bins = [np.histogram_bin_edges(x, bins=self.bins), np.histogram_bin_edges(x, bins=self.bins)]
+        self._ax.hist2d(data[x], data[y], bins=bins, norm=LogNorm(), cmap=self.cmap, **kwargs)
 
     def _set_axis_limits(self,
                          data: pd.DataFrame,
@@ -224,32 +221,6 @@ class CreatePlot:
                                        features_to_transform=[channel],
                                        transform_method=self.tranforms.get(axis))
         return data
-
-    def _estimate_bins(self, x: np.array):
-        """
-        Estimate the bin size for given axis using the method defined in the objects bins attribute
-
-        Parameters
-        ----------
-        x: Array
-            Data being plotted for a given axis
-
-        Returns
-        -------
-        int
-            Bin size
-        """
-        if type(self.bins) == int:
-            return self.bins
-        if self.bins == "scotts":
-            return int(3.49 * x.std()) / np.cbrt(x.shape[0])
-        if self.bins == "sturges":
-            return int(np.log2(x.shape[0])) + 1
-        if self.bins == "rice":
-            return int(2 * np.cbrt(x.shape[0]))
-        if self.bins == "sqrt":
-            return int(np.sqrt(x))
-        raise ValueError("""bins should be an integer or one of : "scotts", "sturges", "rice", or "sqrt""")
 
     def plot(self,
              data: pd.DataFrame,
@@ -510,9 +481,9 @@ class CreatePlot:
         """
         x_range = self._ax.get_xlim()
         y_range = self._ax.get_ylim()
-        self._ax.axhline(x, lw=lw, c="#c92c2c")
+        self._ax.axvline(x, lw=lw, c="#c92c2c")
         if y is not None:
-            self._ax.axvline(y, lw=lw, c="#c92c2c")
+            self._ax.axhline(y, lw=lw, c="#c92c2c")
             # Label regions for two axis
             if labels is not None:
                 xy = [(x + ((x_range[1] - x_range[0]) * .1),
@@ -529,22 +500,22 @@ class CreatePlot:
                                       xy=xy_,
                                       fontsize="small",
                                       c="black",
-                                      backgroudcolor="white")
+                                      backgroundcolor="white")
         else:
             # Label regions for one axis
             if labels is not None:
                 self._ax.annotate(text=labels.get("+"),
-                                  xy=(x + ((x_range[1] - x_range[0]) * .1),
+                                  xy=(x + ((x_range[1] - x_range[0]) * .2),
                                       y_range[1] * .75),
-                                  fontsize="small",
+                                  fontsize="medium",
                                   c="black",
-                                  backgroudcolor="white")
+                                  backgroundcolor="white")
                 self._ax.annotate(text=labels.get("-"),
-                                  xy=(x - ((x_range[1] - x_range[0]) * .1),
+                                  xy=(x - ((x_range[1] - x_range[0]) * .2),
                                       y_range[1] * .75),
-                                  fontsize="small",
+                                  fontsize="medium",
                                   c="black",
-                                  backgroudcolor="white")
+                                  backgroundcolor="white")
 
     def backgate(self,
                  parent: pd.DataFrame,
