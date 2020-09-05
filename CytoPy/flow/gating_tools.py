@@ -85,7 +85,8 @@ class Gating:
             # No population currently exist for this FileGroup. Init with root population
             self.populations = {"root": Population(population_name="root",
                                                    index=self.data.get("primary").index.values,
-                                                   parent="root")}
+                                                   parent="root",
+                                                   n=len(self.data.get("primary").index.values))}
             if "controls" in self.data.keys():
                 for ctrl_id, ctrl_data in self.data.get("controls").items():
                     self.populations["root"].ctrl_index = (ctrl_id, ctrl_data.index.values)
@@ -121,7 +122,7 @@ class Gating:
         if self.filegroup.populations:
             assert overwrite, f"{self.id} has previously been gated and has existing populations. To overwrite " \
                               f"this data set 'overwrite' to True"
-        self.filegroup.populations = self.populations
+        self.filegroup.populations = list(self.populations.values())
         self.filegroup.gating_strategy = self.template
         self.filegroup.save()
 

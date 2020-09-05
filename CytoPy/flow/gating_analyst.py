@@ -3,7 +3,8 @@ from ..data.populations import PopulationGeometry, Population
 from shapely.geometry import Point, Polygon
 from shapely.affinity import scale
 from scipy import linalg, stats
-from scipy.signal import find_peaks, savgol_filter
+from scipy.signal import savgol_filter
+from detecta import detect_peaks
 from sklearn.mixture import *
 from sklearn.cluster import *
 from typing import List
@@ -142,7 +143,7 @@ def check_peak(peaks: np.array,
     real_peaks = list()
     real_peaks.append(np.where(probs == sorted_peaks[0])[0][0])
     for p in sorted_peaks[1:]:
-        if p >= t*sorted_peaks[0]:
+        if p >= t * sorted_peaks[0]:
             real_peaks.append(np.where(probs == p)[0][0])
     return np.sort(np.array(real_peaks))
 
@@ -223,7 +224,8 @@ class Analyst:
                                           index=idx,
                                           parent=self.parent,
                                           geom=geom,
-                                          definition=definition))
+                                          definition=definition,
+                                          n=len(idx)))
         return populations
 
     def _threshold_1d(self,
@@ -238,7 +240,8 @@ class Analyst:
                                           index=idx,
                                           parent=self.parent,
                                           geom=geom,
-                                          definition=definition))
+                                          definition=definition,
+                                          n=len(idx)))
         return populations
 
     def _circle(self,
@@ -278,14 +281,16 @@ class Analyst:
                                       width=width,
                                       height=width,
                                       angle=0)
+            idx = data[inside_ellipse(data=data.values,
+                                      center=circle.centroid,
+                                      width=width,
+                                      height=width,
+                                      angle=0)].index.values
             populations.append(Population(population_name=names[i],
                                           parent=self.parent,
                                           geom=geom,
-                                          index=data[inside_ellipse(data=data.values,
-                                                                    center=circle.centroid,
-                                                                    width=width,
-                                                                    height=width,
-                                                                    angle=0)].index.values))
+                                          index=idx,
+                                          n=len(idx)))
 
         return populations
 
@@ -310,14 +315,16 @@ class Analyst:
                                       width=width,
                                       height=height,
                                       angle=angle)
+            idx = data[inside_ellipse(data=data.values,
+                                      center=centers[i],
+                                      width=width,
+                                      height=height,
+                                      angle=angle)].index.values
             populations.append(Population(population_name=names[i],
                                           parent=self.parent,
                                           geom=geom,
-                                          index=data[inside_ellipse(data=data.values,
-                                                                    center=centers[i],
-                                                                    width=width,
-                                                                    height=height,
-                                                                    angle=angle)].index.values))
+                                          index=idx,
+                                          n=len(idx)))
         return populations
 
     def _polygon(self,
@@ -330,6 +337,7 @@ class Analyst:
         names = list(string.ascii_uppercase)
         for i, label in enumerate(np.unique(labels)):
             label_df = data[data.labels == label]
+            idx = label_df.index.values
             geom = PopulationGeometry(x=self.x,
                                       y=self.y,
                                       x_values=label_df[self.x].values,
@@ -337,7 +345,8 @@ class Analyst:
             populations.append(Population(population_name=names[i],
                                           parent=self.parent,
                                           geom=geom,
-                                          index=label_df.index.values))
+                                          index=idx,
+                                          n=len(idx)))
         return populations
 
     def fit_predict(self,
@@ -461,7 +470,7 @@ def _find_inflection_point(xx: np.array,
                            peaks: np.array,
                            probs: np.array):
     # Find inflection point
-    window_size = int(len(probs)*.1)
+    window_size = int(len(probs) * .1)
     if window_size % 2 == 0:
         # Window size must be odd
         window_size += 1
@@ -470,7 +479,7 @@ def _find_inflection_point(xx: np.array,
     # Take the second derivative of this slope
     ddy = np.diff(np.diff(smooth[peaks[0]:]))
     # Return the point where the second derivative peaks
-    return xx[peaks[0]+np.argmax(ddy)]
+    return xx[peaks[0] + np.argmax(ddy)]
 
 
 class DensityGate(Analyst):
@@ -499,10 +508,6 @@ class DensityGate(Analyst):
     def fit_predict(self,
                     data: pd.DataFrame,
                     return_thresholds: bool = False):
-        complete_data = data.copy()
-        if data.shape[0] > self.downsampling_threshold:
-            sample_n = int((data.shape[0] - self.downsampling_threshold) * self.downsampling_frac)
-            data = data.sample(n=sample_n)
         thresholds = list()
         for d in [self.x, self.y]:
             if d is None:
@@ -525,7 +530,7 @@ class DensityGate(Analyst):
                     bw = silvermans(data[d].values)
                     probs, xx = kde(data, d, kde_bw=bw)
                     peaks = self._find_peaks(probs)
-                    increment = bw * 0.05
+                    increment = bw * 0.1
                     while len(peaks) > 2:
                         probs, xx = kde(data, d, kde_bw=bw)
                         peaks = self._find_peaks(probs)
@@ -540,9 +545,9 @@ class DensityGate(Analyst):
         if return_thresholds:
             return thresholds
         if len(thresholds) == 1:
-            return self._threshold_1d(data=complete_data, x=thresholds[0])
+            return self._threshold_1d(data=data, x=thresholds[0])
         else:
-            return self._threshold_2d(data=complete_data, x=thresholds[0], y=thresholds[1])
+            return self._threshold_2d(data=data, x=thresholds[0], y=thresholds[1])
 
     def _find_peaks(self,
                     probs: np.array) -> np.array:
