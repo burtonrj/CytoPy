@@ -68,9 +68,11 @@ class CreatePlot:
                  cmap: str = "jet",
                  style: str or None = "white",
                  font_scale: float or None = 1.2,
-                 bw: str or float = "scott"):
+                 bw: str or float = "scott",
+                 autoscale: bool = True):
         self.tranforms = {'x': transform_x, 'y': transform_y}
         self.labels = {'x': xlabel, 'y': ylabel}
+        self.autoscale = autoscale
         self.lims = {'x': xlim or [None, None], 'y': ylim or [None, None]}
         self.title = title
         self.bw = bw
@@ -132,7 +134,8 @@ class CreatePlot:
         -------
         None
         """
-        bins = [np.histogram_bin_edges(x, bins=self.bins), np.histogram_bin_edges(x, bins=self.bins)]
+        bins = [np.histogram_bin_edges(data[x].values, bins=self.bins),
+                np.histogram_bin_edges(data[y].values, bins=self.bins)]
         self._ax.hist2d(data[x], data[y], bins=bins, norm=LogNorm(), cmap=self.cmap, **kwargs)
 
     def _set_axis_limits(self,
@@ -155,13 +158,16 @@ class CreatePlot:
         -------
         None
         """
-        x_min = self.lims.get("x")[0] or data[x].quantile(q=0.001)
-        x_max = self.lims.get("x")[1] or data[x].quantile(q=0.999)
-        self._ax.set_xlim((x_min, x_max))
-        if y is not None:
-            y_min = self.lims.get("y")[0] or data[y].quantile(q=0.001)
-            y_max = self.lims.get("y")[1] or data[y].quantile(q=0.999)
-            self._ax.set_xlim((y_min, y_max))
+        if self.autoscale:
+            self._ax.autoscale(enable=True)
+        else:
+            x_min = self.lims.get("x")[0] or data[x].quantile(q=0.001)
+            x_max = self.lims.get("x")[1] or data[x].quantile(q=0.999)
+            self._ax.set_xlim((x_min, x_max))
+            if y is not None:
+                y_min = self.lims.get("y")[0] or data[y].quantile(q=0.001)
+                y_max = self.lims.get("y")[1] or data[y].quantile(q=0.999)
+                self._ax.set_ylim((y_min, y_max))
 
     def _set_aesthetics(self,
                         x: str,
@@ -500,7 +506,8 @@ class CreatePlot:
                                       xy=xy_,
                                       fontsize="small",
                                       c="black",
-                                      backgroundcolor="white")
+                                      backgroundcolor="white",
+                                      bbox=dict(facecolor='none', edgecolor='black', boxstyle='round,pad=1'))
         else:
             # Label regions for one axis
             if labels is not None:
@@ -509,13 +516,15 @@ class CreatePlot:
                                       y_range[1] * .75),
                                   fontsize="medium",
                                   c="black",
-                                  backgroundcolor="white")
+                                  backgroundcolor="white",
+                                  bbox=dict(facecolor='white', edgecolor='black', pad=5.0))
                 self._ax.annotate(text=labels.get("-"),
                                   xy=(x - ((x_range[1] - x_range[0]) * .2),
                                       y_range[1] * .75),
                                   fontsize="medium",
                                   c="black",
-                                  backgroundcolor="white")
+                                  backgroundcolor="white",
+                                  bbox=dict(facecolor='white', edgecolor='black', pad=5.0))
 
     def backgate(self,
                  parent: pd.DataFrame,

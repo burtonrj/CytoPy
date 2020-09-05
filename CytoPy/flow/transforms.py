@@ -61,14 +61,15 @@ def apply_transform(data: pd.DataFrame,
 
     feature_i = [list(data.columns).index(i) for i in features_to_transform]
     if transform_method == 'logicle':
-        return pd.DataFrame(logicle(data=data.values, channels=feature_i), columns=data.columns)
+        return pd.DataFrame(logicle(data=data.values, channels=feature_i), columns=data.columns, index=data.index)
     if transform_method == 'hyperlog':
-        return pd.DataFrame(hyperlog(data=data.values, channels=feature_i), columns=data.columns)
+        return pd.DataFrame(hyperlog(data=data.values, channels=feature_i), columns=data.columns, index=data.index)
     if transform_method == 'log_transform':
-        return pd.DataFrame(log_transform(npy=data.values, channels=feature_i), columns=data.columns)
+        return pd.DataFrame(log_transform(npy=data.values, channels=feature_i), columns=data.columns, index=data.index)
     if transform_method == 'asinh':
         pre_scale = kwargs.get("pre_scale", 1)
-        return pd.DataFrame(asinh(data=data.values, columns=feature_i, pre_scale=pre_scale), columns=data.columns)
+        return pd.DataFrame(asinh(data=data.values, columns=feature_i, pre_scale=pre_scale),
+                            columns=data.columns, index=data.index)
     if transform_method == 'percentile rank':
         return percentile_rank_transform(data, features_to_transform)
     if transform_method == 'Yeo-Johnson':
