@@ -219,7 +219,8 @@ class Analyst:
         populations = list()
         for definition, idx in zip(["--", "-+", "++", "+-"], [bottom_left, top_left, top_right, bottom_right]):
             geom = PopulationGeometry(x=self.x, y=self.y, x_threshold=x, y_threshold=y)
-            populations.append(Population(index=idx,
+            populations.append(Population(population_name=definition,
+                                          index=idx,
                                           parent=self.parent,
                                           geom=geom,
                                           definition=definition))
@@ -233,7 +234,8 @@ class Analyst:
         populations = list()
         for definition, idx in zip(["-", "+"], [left, right]):
             geom = PopulationGeometry(x=self.x, x_threshold=x)
-            populations.append(Population(index=idx,
+            populations.append(Population(population_name=definition,
+                                          index=idx,
                                           parent=self.parent,
                                           geom=geom,
                                           definition=definition))
