@@ -245,21 +245,42 @@ class FileGroup(mongoengine.Document):
             if p.parent == parent:
                 yield p
 
+    def _write_populations(self):
+        root_n = [p for p in self.populations if p.population_name == "root"][0].n
+        with h5py.File(self.h5path, "a") as f:
+            for p in self.populations:
+                parent_n = [p for p in self.populations if p.population_name == p.parent][0].n
+                p.prop_of_parent = p.n / parent_n
+                p.prop_of_total = p.n / root_n
+                f.create_dataset(f'/index/{p.population_name}/primary', data=p.index)
+                for ctrl, idx in p.ctrl_index.items():
+                    f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
+
+    def _hdf_prepare_population_grps(self):
+        with h5py.File(self.h5path, "a") as f:
+            if "index" not in f.keys():
+                f.create_group("index")
+                for p in self.populations:
+                    f.create_group(f"index/{p.population_name}")
+                return
+            for p in self.populations:
+                if p.population_name not in f["index"].keys():
+                    f.create_group(f"index/{p.population_name}")
+                else:
+                    if "primary" in f["index"].get(p.population_name).keys():
+                        del f[f"index/{p.population_name}/primary"]
+                    for ctrl_id in p.ctrl_index.keys():
+                        if ctrl_id in f["index"].get(p.population_name).keys():
+                            del f[f"index/{p.population_name}/{ctrl_id}"]
+
     def save(self, *args, **kwargs):
         # Calculate meta and save indexes to disk
         if self.populations:
             # Populate h5path for populations
             for p in self.populations:
                 p._h5path = self.h5path
-            root_n = [p for p in self.populations if p.population_name == "root"][0].n
-            with h5py.File(self.h5path, "r") as f:
-                for p in self.populations:
-                    parent_n = [p for p in self.populations if p.population_name == p.parent][0].n
-                    p.prop_of_parent = p.n/parent_n
-                    p.prop_of_total = p.n/root_n
-                    f.create_dataset(f'/index/{p.population_name}', data=p.index)
-                    for ctrl, idx in p.ctrl_index.items():
-                        f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
+            self._hdf_prepare_population_grps()
+            self._write_populations()
         super().save(*args, **kwargs)
 
     def delete(self,
