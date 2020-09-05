@@ -122,7 +122,7 @@ class Gate(mongoengine.Document):
     binary = mongoengine.BooleanField(default=True)
     shape = mongoengine.StringField(required=True, choices=["threshold", "polygon", "ellipse"])
     x = mongoengine.StringField(required=True)
-    y = mongoengine.StringField(required=True)
+    y = mongoengine.StringField(required=False)
     ctrl_id = mongoengine.StringField(required=False)
     preprocessing = mongoengine.EmbeddedDocumentField(PreProcess)
     method = mongoengine.StringField()

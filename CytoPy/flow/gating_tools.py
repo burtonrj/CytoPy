@@ -131,7 +131,7 @@ class Gating:
             assert overwrite, f"Template with name {self.template.template_name} already exists. " \
                               f"Set 'overwrite' to True to overwrite existing template"
             GatingStrategy.objects(template_name=self.template.template_name).get().delete()
-        self.template.gates = self.gates.values()
+        self.template.gates = list(self.gates.values())
         self.template.save()
 
     def clear_gates(self):
