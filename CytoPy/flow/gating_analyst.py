@@ -470,7 +470,7 @@ def _find_inflection_point(xx: np.array,
     # Take the second derivative of this slope
     ddy = np.diff(np.diff(smooth[peaks[0]:]))
     # Return the point where the second derivative peaks
-    return xx[peaks[0]+np.argmax[ddy]]
+    return xx[peaks[0]+np.argmax(ddy)]
 
 
 class DensityGate(Analyst):
