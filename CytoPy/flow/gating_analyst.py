@@ -116,38 +116,6 @@ def _circle_overlap(circles: List[Polygon]):
     return overlaps
 
 
-def check_peak(peaks: np.array,
-               probs: np.array,
-               t: float = 0.05) -> np.array:
-    """
-    Check peaks against largest peak in list, if peak < t*largest peak, then peak is removed
-
-    Parameters
-    -----------
-    peaks: Numpy.array
-        array of indices for peaks
-    probs: Numpy.array
-        array of probability values of density estimate
-    t: float, (default=0.05)
-        height threshold as a percentage of highest peak
-
-    Returns
-    --------
-    Numpy.array
-        Sorted peaks
-    """
-    assert len(peaks) > 0, '"peak" array is empty'
-    if len(peaks) == 1:
-        return peaks
-    sorted_peaks = np.sort(probs[peaks])[::-1]
-    real_peaks = list()
-    real_peaks.append(np.where(probs == sorted_peaks[0])[0][0])
-    for p in sorted_peaks[1:]:
-        if p >= t * sorted_peaks[0]:
-            real_peaks.append(np.where(probs == p)[0][0])
-    return np.sort(np.array(real_peaks))
-
-
 def find_local_minima(probs: np.array,
                       xx: np.array,
                       peaks: np.array) -> float:
@@ -486,12 +454,11 @@ class DensityGate(Analyst):
 
     def __init__(self, x: str or None, y: str or None, shape: str, parent: str, binary: bool, **kwargs):
         super().__init__(x=x, y=y, shape="threshold", parent=parent, binary=binary, model=None)
-        self.peak_threshold = kwargs.get("peak_threshold", 0.05)
+        self.min_peak_threshold = kwargs.get("min_peak_threshold", 0.05)
+        self.peak_boundary = kwargs.get("peak_boundary", 0.25)
         self.threshold_method = kwargs.get("threshold_method", "density")
         self.q = kwargs.get("q", 0.95)
         self.kde_bw = kwargs.get("kde_bw", None)
-        self.downsampling_threshold = kwargs.get("downsampling_threshold", 10000)
-        self.downsampling_frac = kwargs.get("downsample_frac", 0.01)
         self.cutoff_point = kwargs.get("cutoff_point", "inflection")
         assert self.threshold_method in ["density", "quantile"]
         assert self.cutoff_point in ["inflection", "quantile"]
@@ -565,7 +532,7 @@ class DensityGate(Analyst):
             array of indices specifying location of peaks in `probs`
         """
         # Find peaks
-        peaks = find_peaks(probs)[0]
-        if self.peak_threshold:
-            peaks = check_peak(peaks, probs, self.peak_threshold)
+        peaks = detect_peaks(probs,
+                             mph=probs[np.argmax(probs)]*self.min_peak_threshold,
+                             mpd=len(probs)*self.peak_boundary)
         return peaks
