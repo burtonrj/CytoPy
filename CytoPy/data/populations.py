@@ -109,7 +109,7 @@ class Population(mongoengine.EmbeddedDocument):
             with h5py.File(self._h5path, "r") as f:
                 # Load the population index (if population exists)
                 if f'/index/{self.population_name}' in f.keys():
-                    self._index = f[f'/index/{self.population_name}'][:]
+                    self._index = f[f'/index/{self.population_name}/primary'][:]
                 # Load the control index (if population exists)
                 for ctrl in self._instance.controls:
                     if f'/index/{self.population_name}/{ctrl}' in f.keys():
