@@ -47,3 +47,9 @@ class GatingStrategy(mongoengine.Document):
         for g in self.gates:
             g.save()
         super().save(*args, **kwargs)
+
+    def delete(self, delete_gates: bool = True, *args, **kwargs):
+        if delete_gates:
+            for g in self.gates:
+                g.delete()
+        super().delete(*args, **kwargs)
