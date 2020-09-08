@@ -551,7 +551,8 @@ class Experiment(mongoengine.Document):
             if valid_only:
                 if f.valid:
                     yield f.primary_id
-            yield f.primary_id
+            else:
+                yield f.primary_id
 
     def list_invalid(self) -> Generator:
         """
