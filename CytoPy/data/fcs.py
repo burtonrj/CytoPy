@@ -61,7 +61,9 @@ class FileGroup(mongoengine.Document):
 
     def __init__(self, *args, **values):
         super().__init__(*args, **values)
-        self.save()
+        if not self.id:
+            self.populations = []
+            self.save()
         self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
 
     def load(self,
