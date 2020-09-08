@@ -392,10 +392,11 @@ class Experiment(mongoengine.Document):
     experiment_id = mongoengine.StringField(required=True, unique=True)
     data_directory = mongoengine.StringField(required=True)
     panel = mongoengine.ReferenceField(Panel, reverse_delete_rule=4)
-    fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4))
+    fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.PULL))
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
-    gating_templates = mongoengine.ListField(mongoengine.ReferenceField(GatingStrategy, reverse_delete_rule=4))
+    gating_templates = mongoengine.ListField(mongoengine.ReferenceField(GatingStrategy,
+                                                                        reverse_delete_rule=mongoengine.PULL))
     meta = {
         'db_alias': 'core',
         'collection': 'experiments'

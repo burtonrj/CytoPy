@@ -111,9 +111,9 @@ class Population(mongoengine.EmbeddedDocument):
                 if f'/index/{self.population_name}' in f.keys():
                     self._index = f[f'/index/{self.population_name}/primary'][:]
                 # Load the control index (if population exists)
-                for ctrl in self._instance.controls:
-                    if f'/index/{self.population_name}/{ctrl}' in f.keys():
-                        self._ctrl_index[ctrl] = f[f'/index/{self.population_name}/{ctrl}'][:]
+                ctrls = [x for x in f[f"/index/{self.population_name}"].keys() if x != "primary"]
+                for ctrl in ctrls:
+                    self._ctrl_index[ctrl] = f[f'/index/{self.population_name}/{ctrl}'][:]
         # self.h5path = os.path.join(self._instance.data_directory, f"{self._instance.id.__str__()}.hdf5")
 
     @property

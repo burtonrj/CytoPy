@@ -55,7 +55,8 @@ class Gating:
                  gating_strategy: str or None = None,
                  include_controls=True,
                  verbose: bool = True,
-                 gate_ctrls_adhoc: bool = True):
+                 gate_ctrls_adhoc: bool = True,
+                 ctrl_gate_cv: int = 10):
         self.data = experiment.get_data(sample_id=sample_id, sample_size=None, include_controls=include_controls)
         self.id = sample_id
         self.mongo_id = experiment.get_sample_mid(sample_id)
@@ -66,6 +67,7 @@ class Gating:
         self.verbose = verbose
         self.vprint = vprint(verbose)
         self.crtl_gate_ad_hoc = gate_ctrls_adhoc
+        self.ctrl_gate_cv = ctrl_gate_cv
 
         if gating_strategy is None:
             assert self.filegroup.gating_strategy, f"{sample_id} has not been previously 'gated', please provide the name to " \
@@ -91,7 +93,9 @@ class Gating:
                 for ctrl_id, ctrl_data in self.data.get("controls").items():
                     self.populations["root"].ctrl_index = (ctrl_id, ctrl_data.index.values)
             return {"root": Node(name="root", parent=None)}
-        self.populations["root"] = self.filegroup.get_population("root")
+        assert "root" in [p.population_name for p in self.filegroup.populations], \
+            "Invalid FileGroup, must contain 'root' population"
+        self.populations = {p.population_name: p for p in self.filegroup.populations}
         tree = {"root": Node(name="root", parent=None)}
         database_populations = [p for p in self.filegroup.populations if p.population_name != 'root']
         i = 0
@@ -114,7 +118,7 @@ class Gating:
         if new_population.parent not in tree.keys():
             return None
         tree[new_population.population_name] = Node(name=new_population.population_name,
-                                                    parent=new_population.parent)
+                                                    parent=tree[new_population.parent])
         return tree
 
     def save_sample(self,
@@ -351,10 +355,13 @@ class Gating:
         return gate
 
     def plot_gate(self,
-                  gate: Gate,
+                  gate: Gate or str,
                   create_plot_kwargs: dict or None = None,
                   gate_plot_kwargs: dict or None = None,
                   populations: list or None = None):
+        if isinstance(gate, str):
+            assert gate in self.gates.keys(), f"Invalid gate, {gate} does not exist. Must be one of: {self.gates.keys()}"
+            gate = self.gates[gate]
         if create_plot_kwargs is None:
             create_plot_kwargs = {}
         if gate_plot_kwargs is None:
@@ -528,10 +535,13 @@ class Gating:
             return plots
 
     def control_gate(self,
-                     population: Population,
+                     population: Population or str,
                      ctrl_id: str,
                      plot_outcome: bool = False,
                      verbose: bool = False):
+        if isinstance(population, str):
+            assert population in self.populations.keys(), f"No such population {population}"
+            population = self.populations[population]
         if ctrl_id == "all":
             for ctrl in self.data.get("controls").keys():
                 self.control_gate(population=population,
@@ -562,16 +572,16 @@ class Gating:
                       int(training_data.shape[0] * 0.05),
                       int(training_data.shape[0] * 0.01) / 2, dtype=np.int)
         knn = KNeighborsClassifier()
-        grid_cv = GridSearchCV(knn, {"n": n}, scoring="balanced_accuracy", n_jobs=-1, cv=10)
+        grid_cv = GridSearchCV(knn, {"n_neighbors": n}, scoring="balanced_accuracy", n_jobs=-1, cv=10)
         grid_cv.fit(training_data[features].values, training_data["label"].values)
-        n = grid_cv.best_params_.get("n")
+        n = grid_cv.best_params_.get("n_neighbors")
         feedback(f"Continuing with n={n}; chosen with balanced accuracy of {round(grid_cv.best_score_, 3)}...")
         feedback("Training on population data...")
         X_train, X_test, y_train, y_test = train_test_split(training_data[features].values,
                                                             training_data["label"].values,
                                                             test_size=0.2,
                                                             random_state=42)
-        knn = KNeighborsClassifier(n=n)
+        knn = KNeighborsClassifier(n_neighbors=n)
         knn.fit(X_train, y_train)
         train_acc = balanced_accuracy_score(y_pred=knn.predict(X_train), y_true=y_train)
         val_acc = balanced_accuracy_score(y_pred=knn.predict(X_test), y_true=y_test)
