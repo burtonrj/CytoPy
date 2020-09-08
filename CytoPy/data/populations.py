@@ -3,6 +3,7 @@ from shapely.geometry import Polygon, Point
 from shapely.ops import unary_union
 from _warnings import warn
 import numpy as np
+import pandas as pd
 import mongoengine
 import h5py
 import os
@@ -97,6 +98,7 @@ class Population(mongoengine.EmbeddedDocument):
     warnings = mongoengine.ListField()
     geom = mongoengine.EmbeddedDocumentField(PopulationGeometry)
     definition = mongoengine.StringField()
+    signature = mongoengine.ListField()
     _h5path = mongoengine.StringField()
 
     def __init__(self, *args, **kwargs):
@@ -165,6 +167,9 @@ def merge_populations(left: Population,
         warn("Associated control indexes are now void. Repeat control gating on new population")
     new_shape = unary_union([p.geom.shape for p in [left, right]])
     x, y = new_shape.exterior.coords.xy
+    left_sig = {k: v for k, v in left.signature}
+    right_sig = {k: v for k, v in right.signature}
+    new_signature = pd.DataFrame([left_sig, right_sig]).mean().to_dict()
     new_geom = PopulationGeometry(x=left.geom.x,
                                   y=left.geom.y,
                                   transform_x=left.geom.transform_x,
@@ -177,5 +182,6 @@ def merge_populations(left: Population,
                                 warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
                                 index=np.unique(np.concatenate(left.index, right.index)),
                                 geom=new_geom,
-                                definition=new_definition)
+                                definition=new_definition,
+                                signature=[(k, v) for k, v in new_signature.items()])
     return new_population

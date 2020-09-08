@@ -4,12 +4,28 @@ from ..flow.sampling import density_dependent_downsampling, faithful_downsamplin
 from ..flow.gating_analyst import ManualGate, DensityGate, Analyst
 from ..feedback import vprint
 from .populations import PopulationGeometry, Population, merge_populations
+from scipy.spatial.distance import euclidean
 from functools import reduce
 from typing import List
 from warnings import warn
 import pandas as pd
 import numpy as np
 import mongoengine
+
+
+def create_signature(data: pd.DataFrame,
+                     idx: np.array,
+                     summary_method: callable or None = None):
+    data = data.copy()
+    # ToDo this should be more robust
+    if "Time" in data.columns:
+        data = data.drop("Time", 1)
+    if "time" in data.columns:
+        data = data.drop("time", 1)
+    summary_method = summary_method or np.median
+    signature = data.loc[idx].apply(summary_method)
+    signature = [(x[0], x[1]) for x in zip(signature.index, signature.values)]
+    return signature
 
 
 def _merge(new_children: List[Population],
@@ -30,6 +46,28 @@ def _merge(new_children: List[Population],
         new_child.population_name = assignment
         merged_children.append(new_child)
     return merged_children
+
+
+def population_likeness(new_population: list,
+                        template_population: list):
+    """
+    Given two population signatures (their vector means) return the euclidean distance
+    between them
+    Parameters
+    ----------
+    new_population: list
+    template_population: list
+
+    Returns
+    -------
+    float
+        Euclidean distance between the average vector of the two populations
+    """
+    new_population = {k: v for k, v in new_population}
+    template_population = {k: v for k, v in template_population}
+    vector_avgs = np.array([[new_population[i], template_population[i]]
+                            for i in set(new_population.keys()).intersection(template_population.keys())]).T
+    return euclidean(vector_avgs[0, :], vector_avgs[1, :])
 
 
 class ChildDefinition(mongoengine.EmbeddedDocument):
@@ -65,6 +103,7 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
     population_name = mongoengine.StringField()
     definition = mongoengine.StringField(required=False)
     template_geometry = mongoengine.EmbeddedDocumentField(PopulationGeometry)
+    signature = mongoengine.ListField()
 
     def match_definition(self, query: str):
         return query in self.definition.split("_")
@@ -110,6 +149,8 @@ class PostProcess(mongoengine.EmbeddedDocument):
     upsample_method = mongoengine.StringField(required=False,
                                               choices=["knn", "svm"])
     upsample_kwargs = mongoengine.ListField()
+    signature_transform = mongoengine.StringField(default="logicle")
+    signature_method = mongoengine.StringField(default="median", choices=["median", "mean"])
 
 
 class Gate(mongoengine.Document):
@@ -335,6 +376,15 @@ class Gate(mongoengine.Document):
         if self.preprocessing.transform_y:
             for p in new_populations:
                 p.geom.transform_y = self.preprocessing.transform_y
+        # Add population signatures
+        sig_data = apply_transform(data=original_data,
+                                   features_to_transform="all",
+                                   transform_method=self.postprocessing.signature_transform)
+        summary_method = np.median
+        if self.postprocessing.signature_method == "mean":
+            summary_method = np.mean
+        for p in new_populations:
+            p.signature = create_signature(data=sig_data, idx=p.index, summary_method=summary_method)
         return new_populations
 
     def _add_child(self,
@@ -344,7 +394,8 @@ class Gate(mongoengine.Document):
             name = population.definition
         new_child = ChildDefinition(population_name=name,
                                     definition=population.definition,
-                                    template_geometry=population.geom)
+                                    template_geometry=population.geom,
+                                    signature=population.signature)
         self.children.append(new_child)
 
     def _label_binary_threshold(self,
@@ -397,15 +448,14 @@ class Gate(mongoengine.Document):
                             new_children: List[Population]):
         # Binary gates that are not thresholds only have one child
         pos = self.children[0]
-        ranking = [pos.template_geometry.overlap(comparison_poly=c.geom.shape) for c in new_children]
+        ranking = [population_likeness(c.signature, pos.signature) for c in new_children]
         new_children[int(np.argmax(ranking))].population_name = pos.population_name
         return [new_children[int(np.argmax(ranking))]]
 
     def _match_to_children(self,
                            new_children: List[Population],
                            errors: str = "warn",
-                           overlaps: str = "merge",
-                           overlap_threshold: float = .1):
+                           overlaps: str = "merge"):
         # Binary threshold gate?
         if self.binary and self.shape == "threshold":
             return self._label_binary_threshold(new_children=new_children)
@@ -424,8 +474,7 @@ class Gate(mongoengine.Document):
             else:
                 raise ValueError(err)
         # Assign new populations to children based on overlapping geometries
-        assignments = self._compare_geometries(new_children=new_children,
-                                               overlap_threshold=overlap_threshold)
+        assignments = self._compare_populations(new_children=new_children)
         # Are any of the expected populations missing from assignments?
         for expected_population in [c.population_name for c in self.children]:
             if expected_population not in assignments:
@@ -446,19 +495,14 @@ class Gate(mongoengine.Document):
                 child.population_name = assignments[i]
         return new_children
 
-    def _compare_geometries(self,
-                            new_children: List[Population],
-                            overlap_threshold: float):
+    def _compare_populations(self,
+                             new_children: List[Population]):
+        # Compare the signatures of each of the new children to the template signatures
         assignments = list()
         for child in new_children:
-            ranking = [child.geom.overlap(comparison_poly=template.template_geometry.shape,
-                                          threshold=overlap_threshold) for template in self.children]
-            if all(x == 0. for x in ranking):
-                ranking = [child.geom.shape.centroid.distance(template.template_geometry.shape.centroid)
-                           for template in self.children]
-                assignments.append(self.children[int(np.argmin(ranking))].population_name)
-            else:
-                assignments.append(self.children[int(np.argmax(ranking))].population_name)
+            ranking = [population_likeness(new_population=child.signature,
+                                           template_population=template.signature) for template in self.children]
+            assignments.append(self.children[int(np.argmax(ranking))].population_name)
         return assignments
 
     def save(self, *args, **kwargs):
