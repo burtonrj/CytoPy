@@ -236,8 +236,8 @@ class Gating:
         """
         assert population in self.populations.keys(), f'population {population} does not exist; ' \
                                                       f'valid population names include: {self.populations.keys()}'
-        root = self.populations['root']
-        node = self.populations[population]
+        root = self.tree['root']
+        node = self.tree[population]
         dependencies = [x.name for x in findall(root, filter_=lambda n: node in n.path)]
         return [p for p in dependencies if p != population]
 
@@ -450,17 +450,14 @@ class Gating:
                               gate_plot_kwargs=plot_gate_kwargs)
 
     def apply(self,
-              gate: Gate or None = None,
-              gate_name: str or None = None,
+              gate: Gate or str,
               verbose: bool = True,
               plot_outcome: bool = True,
               create_plot_kwargs: dict or None = None,
               plot_gate_kwargs: dict or None = None):
-        if gate is None and gate_name is None:
-            raise ValueError("Must provide Gate object or name of an existing gate in the loaded template")
-        if gate is None:
-            assert gate_name in self.gates.keys(), f"Invalid gate, must be one of: {self.gates.keys()}"
-            gate = self.gates.get(gate_name)
+        if isinstance(gate, str):
+            assert gate in self.gates.keys(), f"Gate {gate} not found in current gating strategy"
+            gate = self.gates[gate]
         assert gate.defined, "Gate children have not been labelled, call the 'label_children' " \
                              "method on the chosen Gate object"
         data = self.get_population_df(population_name=gate.parent, transform=None)
@@ -724,6 +721,8 @@ class Gating:
         for p in dependecies:
             self.populations.pop(p.population_name)
             self.tree.pop(p.population_name)
+        self.populations.pop(population)
+        self.tree.pop(population)
 
     def remove_gate(self,
                     gate_name: str):
