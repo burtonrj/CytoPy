@@ -4,6 +4,7 @@ from ..flow.sampling import density_dependent_downsampling, faithful_downsamplin
 from ..flow.gating_analyst import ManualGate, DensityGate, Analyst
 from ..feedback import vprint
 from .populations import PopulationGeometry, Population, merge_populations
+from sklearn.preprocessing import MinMaxScaler
 from scipy.spatial.distance import euclidean
 from functools import reduce
 from typing import List
@@ -23,6 +24,7 @@ def create_signature(data: pd.DataFrame,
     if "time" in data.columns:
         data = data.drop("time", 1)
     summary_method = summary_method or np.median
+    data = pd.DataFrame(MinMaxScaler().fit_transform(data.loc[idx]), columns=data.columns)
     signature = data.loc[idx].apply(summary_method)
     signature = [(x[0], x[1]) for x in zip(signature.index, signature.values)]
     return signature
@@ -309,6 +311,7 @@ class Gate(mongoengine.Document):
               data: pd.DataFrame,
               ctrl: pd.DataFrame or None = None,
               verbose: bool = True):
+        original_data = data.copy()
         feedback = vprint(verbose)
         feedback("---- Applying gate ----")
         method = self._init_method()
@@ -324,12 +327,12 @@ class Gate(mongoengine.Document):
             if sample is not None:
                 feedback("Downsampling applied prior to fit...")
                 populations = self._apply_postprocessing(method.fit_predict(sample),
-                                                         original_data=data,
+                                                         original_data=original_data,
                                                          sample=sample,
                                                          verbose=verbose)
             else:
                 populations = self._apply_postprocessing(method.fit_predict(data),
-                                                         original_data=data,
+                                                         original_data=original_data,
                                                          verbose=verbose)
         if not self.defined:
             feedback("This gate has not been previously defined. Gate will be applied to example data "
@@ -449,8 +452,8 @@ class Gate(mongoengine.Document):
         # Binary gates that are not thresholds only have one child
         pos = self.children[0]
         ranking = [population_likeness(c.signature, pos.signature) for c in new_children]
-        new_children[int(np.argmax(ranking))].population_name = pos.population_name
-        return [new_children[int(np.argmax(ranking))]]
+        new_children[int(np.argmin(ranking))].population_name = pos.population_name
+        return [new_children[int(np.argmin(ranking))]]
 
     def _match_to_children(self,
                            new_children: List[Population],
@@ -502,7 +505,7 @@ class Gate(mongoengine.Document):
         for child in new_children:
             ranking = [population_likeness(new_population=child.signature,
                                            template_population=template.signature) for template in self.children]
-            assignments.append(self.children[int(np.argmax(ranking))].population_name)
+            assignments.append(self.children[int(np.argmin(ranking))].population_name)
         return assignments
 
     def save(self, *args, **kwargs):
