@@ -1,6 +1,7 @@
 from .mappings import ChannelMap
 from .populations import Population
 from .gating_strategy import GatingStrategy
+from warnings import warn
 from typing import List, Generator
 import pandas as pd
 import numpy as np
@@ -290,5 +291,8 @@ class FileGroup(mongoengine.Document):
                *args,
                **kwargs):
         if delete_hdf5_file:
-            os.remove(self.h5path)
+            if os.path.isfile(self.h5path):
+                os.remove(self.h5path)
+            else:
+                warn(f"Could not locate hdf5 file {self.h5path}")
         super().delete(*args, **kwargs)
