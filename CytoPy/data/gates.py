@@ -155,6 +155,24 @@ class PreProcess(mongoengine.EmbeddedDocument):
                                                      "PHATE"])
     dim_reduction_kwargs = mongoengine.ListField()
 
+    def __init__(self, *args, **kwargs):
+        downsample_kwargs = self._preprocess_kwargs(kwargs.get("downsample_kwargs"))
+        scale_kwargs = self._preprocess_kwargs(kwargs.get("scale_kwargs"))
+        dim_reduction_kwargs = self._preprocess_kwargs(kwargs.get("dim_reduction_kwargs"))
+        if downsample_kwargs is not None:
+            kwargs["downsample_kwargs"] = downsample_kwargs
+        if scale_kwargs is not None:
+            kwargs["scale_kwargs"] = scale_kwargs
+        if dim_reduction_kwargs is not None:
+            kwargs["dim_reduction_kwargs"] = dim_reduction_kwargs
+        super().__init__(*args, **kwargs)
+
+    @staticmethod
+    def _preprocess_kwargs(kwargs: dict or None):
+        if kwargs is not None:
+            return [(k, v) for k, v in kwargs.items()]
+        return None
+
 
 class PostProcess(mongoengine.EmbeddedDocument):
     upsample_method = mongoengine.StringField(required=False,
@@ -365,7 +383,7 @@ class Gate(mongoengine.Document):
                               verbose: bool = True):
         # Upsample if necessary
         if sample is not None:
-            upsample_method = self.preprocessing.upsample_method
+            upsample_method = self.postprocessing.upsample_method
             if not upsample_method:
                 warn("Downsampling was performed yet not upsampling method has been defined, defaulting to KNN")
                 upsample_method = 'knn'

@@ -143,16 +143,16 @@ def upsample_knn(sample: pd.DataFrame,
                       int(sample.shape[0]*0.05),
                       int(sample.shape[0]*0.01)/2, dtype=np.int)
         knn = KNeighborsClassifier(**kwargs)
-        grid_cv = GridSearchCV(knn, {"n": n}, scoring="balanced_accuracy", n_jobs=-1, cv=10)
+        grid_cv = GridSearchCV(knn, {"n_neighbors": n}, scoring="balanced_accuracy", n_jobs=-1, cv=10)
         grid_cv.fit(sample[features].values, sample["label"].values)
-        n = grid_cv.best_params_.get("n")
+        n = grid_cv.best_params_.get("n_neighbors")
         feedback(f"Continuing with n={n}; chosen with balanced accuracy of {round(grid_cv.best_score_, 3)}...")
     feedback("Training...")
     X_train, X_test, y_train, y_test = train_test_split(sample[features].values,
                                                         sample["label"].values,
                                                         test_size=0.2,
                                                         random_state=42)
-    knn = KNeighborsClassifier(n=n, **kwargs)
+    knn = KNeighborsClassifier(n_neighbors=n, **kwargs)
     knn.fit(X_train, y_train)
     train_acc = balanced_accuracy_score(y_pred=knn.predict(X_train), y_true=y_train)
     val_acc = balanced_accuracy_score(y_pred=knn.predict(X_test), y_true=y_test)
