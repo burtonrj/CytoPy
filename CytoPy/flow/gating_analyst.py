@@ -408,14 +408,15 @@ class ManualGate(Analyst):
                                   width=width,
                                   height=height,
                                   angle=angle)
+        idx = data[inside_ellipse(data=data.values,
+                                  center=center,
+                                  width=width,
+                                  height=height,
+                                  angle=angle)].index.values
         populations.append(Population(population_name="manual_ellipse",
                                       parent=self.parent,
                                       geom=geom,
-                                      index=data[inside_ellipse(data=data.values,
-                                                                center=center,
-                                                                width=width,
-                                                                height=height,
-                                                                angle=angle)].index.values))
+                                      index=idx))
         return populations
 
     def _manual_polygon(self,
@@ -427,10 +428,11 @@ class ManualGate(Analyst):
                                   y=self.y,
                                   x_values=x_values,
                                   y_values=y_values)
+        idx = inside_polygon(df=data, x=self.x, y=self.y, poly=geom.shape)
         populations.append(Population(population_name="manual_polygon",
                                       parent=self.parent,
                                       geom=geom,
-                                      index=inside_polygon(df=data, x=self.x, y=self.y, poly=geom.shape)))
+                                      index=idx))
         return populations
 
 
@@ -533,6 +535,6 @@ class DensityGate(Analyst):
         """
         # Find peaks
         peaks = detect_peaks(probs,
-                             mph=probs[np.argmax(probs)]*self.min_peak_threshold,
-                             mpd=len(probs)*self.peak_boundary)
+                             mph=probs[np.argmax(probs)] * self.min_peak_threshold,
+                             mpd=len(probs) * self.peak_boundary)
         return peaks
