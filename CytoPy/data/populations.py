@@ -110,13 +110,16 @@ class Population(mongoengine.EmbeddedDocument):
             if os.path.isfile(self._h5path):
                 # Existing file, so populate index
                 with h5py.File(self._h5path, "r") as f:
-                    # Load the population index (if population exists)
-                    if f'/index/{self.population_name}' in f.keys():
-                        self._index = f[f'/index/{self.population_name}/primary'][:]
-                    # Load the control index (if population exists)
-                    ctrls = [x for x in f[f"/index/{self.population_name}"].keys() if x != "primary"]
-                    for ctrl in ctrls:
-                        self._ctrl_index[ctrl] = f[f'/index/{self.population_name}/{ctrl}'][:]
+                    try:
+                        # Load the population index (if population exists)
+                        if f'/index/{self.population_name}' in f.keys():
+                            self._index = f[f'/index/{self.population_name}/primary'][:]
+                        # Load the control index (if population exists)
+                        ctrls = [x for x in f[f"/index/{self.population_name}"].keys() if x != "primary"]
+                        for ctrl in ctrls:
+                            self._ctrl_index[ctrl] = f[f'/index/{self.population_name}/{ctrl}'][:]
+                    except KeyError as e:
+                        warn(f"One or more populations failed to load with error: {e}")
             else:
                 warn(f"WARNING: could not locate HDF5 file {self._h5path}")
         # self.h5path = os.path.join(self._instance.data_directory, f"{self._instance.id.__str__()}.hdf5")

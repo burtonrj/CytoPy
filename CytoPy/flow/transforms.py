@@ -73,10 +73,10 @@ def apply_transform(data: pd.DataFrame,
     if transform_method == 'percentile rank':
         return percentile_rank_transform(data, features_to_transform)
     if transform_method == 'Yeo-Johnson':
-        data, _ = scaler(data, features_to_transform, scale_method='power', method='yeo-johnson')
+        data, _ = scaler(data, scale_method='power', method='yeo-johnson')
         return data
     if transform_method == 'RobustScale':
-        data, _ = scaler(data, features_to_transform, scale_method='robust')
+        data, _ = scaler(data, scale_method='robust')
         return data
     raise ValueError("Error: invalid transform_method, must be one of: 'logicle', 'hyperlog', 'log_transform',"
                      " 'asinh', 'percentile rank', 'Yeo-Johnson', 'RobustScale'")

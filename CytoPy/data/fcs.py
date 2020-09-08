@@ -184,7 +184,7 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
-        if populations == all:
+        if populations == "all":
             self.populations = []
         else:
             self.populations = [p for p in self.populations if p.population_name not in populations]
@@ -249,10 +249,10 @@ class FileGroup(mongoengine.Document):
                 yield p
 
     def _write_populations(self):
-        root_n = [p for p in self.populations if p.population_name == "root"][0].n
+        root_n = [x for x in self.populations if x.population_name == "root"][0].n
         with h5py.File(self.h5path, "a") as f:
             for p in self.populations:
-                parent_n = [p for p in self.populations if p.population_name == p.parent][0].n
+                parent_n = [x for x in self.populations if x.population_name == p.parent][0].n
                 p.prop_of_parent = p.n / parent_n
                 p.prop_of_total = p.n / root_n
                 f.create_dataset(f'/index/{p.population_name}/primary', data=p.index)

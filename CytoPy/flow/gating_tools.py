@@ -135,7 +135,9 @@ class Gating:
         if len(GatingStrategy.objects(template_name=self.template.template_name)) > 0:
             assert overwrite, f"Template with name {self.template.template_name} already exists. " \
                               f"Set 'overwrite' to True to overwrite existing template"
-            GatingStrategy.objects(template_name=self.template.template_name).get().delete()
+            template_name = self.template.template_name
+            self.template.delete()
+            self.template = GatingStrategy(template_name=template_name)
         self.template.gates = list(self.gates.values())
         self.template.save()
 
@@ -368,7 +370,7 @@ class Gating:
             gate_plot_kwargs = {}
         data = self.get_population_df(population_name=gate.parent, transform=None)
         if populations is None:
-            children = self.list_child_populations(gate.parent)
+            children = [c.population_name for c in gate.children]
             assert children, \
                 f"{gate.parent} children do not exist in current population tree. Has this gate been applied?"
             populations = [self.populations.get(x) for x in children]
@@ -503,19 +505,20 @@ class Gating:
         downstream_gates = [g for g in self.gates.values() if g.parent != "root"]
         actions = list(self.actions.keys())
         i = 0
+        iteration_limit = len(downstream_gates) * 100
         while len(downstream_gates) > 0:
             if i >= len(downstream_gates):
                 i = 0
-            if return_plots:
-                gate = downstream_gates[i]
-                if gate.parent in self.populations.keys():
-                    feedback(f"-------------- {gate.gate_name} --------------")
-                    plots.append(self.apply(gate=downstream_gates[i],
-                                            verbose=verbose,
-                                            plot_outcome=return_plots,
-                                            create_plot_kwargs=create_plot_kwargs,
-                                            plot_gate_kwargs=plot_gate_kwargs))
-                    feedback(f"----------------------------------------------")
+            gate = downstream_gates[i]
+            if gate.parent in self.populations.keys():
+                feedback(f"-------------- {gate.gate_name} --------------")
+                plots.append(self.apply(gate=downstream_gates[i],
+                                        verbose=verbose,
+                                        plot_outcome=return_plots,
+                                        create_plot_kwargs=create_plot_kwargs,
+                                        plot_gate_kwargs=plot_gate_kwargs))
+                feedback(f"----------------------------------------------")
+                downstream_gates = [x for x in downstream_gates if x.gate_name != gate.gate_name]
             applied_actions = list()
             for a in actions:
                 if all([p in self.populations.keys() for p in [self.actions.get(a).left,
@@ -531,6 +534,9 @@ class Gating:
                                       new_population_name=self.actions.get(a).new_population_name)
             actions = [a for a in actions if a not in applied_actions]
             i += 1
+            iteration_limit -= 1
+            assert iteration_limit > 0, "Maximum number of iterations reached. This means that one or more parent " \
+                                        "populations are not being identified."
         if return_plots:
             return plots
 
@@ -715,12 +721,12 @@ class Gating:
         if population not in self.populations.keys():
             warn(f"{population} does not exist")
             return None
-        dependecies = self.list_downstream_populations(population)
-        if dependecies:
-            warn(f"The following populations are downstream from {population} and will also be removed: {dependecies}")
-        for p in dependecies:
-            self.populations.pop(p.population_name)
-            self.tree.pop(p.population_name)
+        dependencies = self.list_downstream_populations(population)
+        if dependencies:
+            warn(f"The following populations are downstream from {population} and will also be removed: {dependencies}")
+        for p in dependencies:
+            self.populations.pop(p)
+            self.tree.pop(p)
         self.populations.pop(population)
         self.tree.pop(population)
 

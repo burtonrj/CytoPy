@@ -2,6 +2,7 @@ from .density_estimation import silvermans, kde
 from ..data.populations import PopulationGeometry, Population
 from shapely.geometry import Point, Polygon
 from shapely.affinity import scale
+from scipy.spatial import ConvexHull
 from scipy import linalg, stats
 from scipy.signal import savgol_filter
 from detecta import detect_peaks
@@ -12,6 +13,13 @@ from warnings import warn
 import pandas as pd
 import numpy as np
 import string
+
+
+def create_convex_hull(x_values: np.array,
+                       y_values: np.array):
+    xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
+    hull = ConvexHull(xy)
+    return xy[hull.vertices, 0], xy[hull.vertices, 1]
 
 
 def _probablistic_ellipse(covariances: np.array,
@@ -356,7 +364,8 @@ class ManualGate(Analyst):
                  height: float or None = None,
                  angle: float or None = None,
                  x_values: list or None = None,
-                 y_values: list or None = None):
+                 y_values: list or None = None,
+                 rect: dict or None = None):
         super().__init__(x=x, y=y, shape=shape, binary=True, parent=parent, model=None)
         self.x_threshold = x_threshold
         self.y_threshold = y_threshold
@@ -366,6 +375,15 @@ class ManualGate(Analyst):
         self.angle = angle
         self.x_values = x_values
         self.y_values = y_values
+        if rect is not None:
+            assert all(i in rect.keys() for i in ["x_range", "y_range"]), "If specifying a manual rectangular gate, " \
+                                                                          "then must provide x_range and y_range"
+            min_x = rect.get("x_range")[0]
+            max_x = rect.get("x_range")[1]
+            min_y = rect.get("y_range")[0]
+            max_y = rect.get("y_range")[1]
+            self.x_values = [min_x, max_x, max_x, min_x, min_x]
+            self.y_values = [min_y, min_y, max_y, max_y, min_y]
 
     def fit_predict(self,
                     data: pd.DataFrame):
@@ -416,7 +434,8 @@ class ManualGate(Analyst):
         populations.append(Population(population_name="manual_ellipse",
                                       parent=self.parent,
                                       geom=geom,
-                                      index=idx))
+                                      index=idx,
+                                      n=len(idx)))
         return populations
 
     def _manual_polygon(self,
@@ -428,11 +447,12 @@ class ManualGate(Analyst):
                                   y=self.y,
                                   x_values=x_values,
                                   y_values=y_values)
-        idx = inside_polygon(df=data, x=self.x, y=self.y, poly=geom.shape)
+        idx = inside_polygon(df=data, x=self.x, y=self.y, poly=geom.shape).index
         populations.append(Population(population_name="manual_polygon",
                                       parent=self.parent,
                                       geom=geom,
-                                      index=idx))
+                                      index=idx,
+                                      n=len(idx)))
         return populations
 
 
@@ -460,6 +480,7 @@ class DensityGate(Analyst):
         self.peak_boundary = kwargs.get("peak_boundary", 0.25)
         self.threshold_method = kwargs.get("threshold_method", "density")
         self.q = kwargs.get("q", 0.95)
+        self.low_memory = kwargs.get("low_memory", True)
         self.kde_bw = kwargs.get("kde_bw", None)
         self.cutoff_point = kwargs.get("cutoff_point", "inflection")
         assert self.threshold_method in ["density", "quantile"]
@@ -497,11 +518,14 @@ class DensityGate(Analyst):
                     # and the number of peaks is equal to two (in other words, increase the variance
                     # at expense of bias)
                     bw = silvermans(data[d].values)
-                    probs, xx = kde(data, d, kde_bw=bw)
+                    df = data.copy()
+                    if data.shape[0] > 5000 and self.low_memory:
+                        df = df.sample(n=5000)
+                    probs, xx = kde(df, d, kde_bw=bw)
                     peaks = self._find_peaks(probs)
                     increment = bw * 0.1
                     while len(peaks) > 2:
-                        probs, xx = kde(data, d, kde_bw=bw)
+                        probs, xx = kde(df, d, kde_bw=bw)
                         peaks = self._find_peaks(probs)
                         bw = bw + increment
                     if len(peaks) == 1:
