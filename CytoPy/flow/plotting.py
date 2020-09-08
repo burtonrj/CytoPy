@@ -69,7 +69,8 @@ class CreatePlot:
                  style: str or None = "white",
                  font_scale: float or None = 1.2,
                  bw: str or float = "scott",
-                 autoscale: bool = True):
+                 autoscale: bool = True,
+                 axis_ticks: bool = True):
         self.tranforms = {'x': transform_x, 'y': transform_y}
         self.labels = {'x': xlabel, 'y': ylabel}
         self.autoscale = autoscale
@@ -84,10 +85,13 @@ class CreatePlot:
         if self._ax is None:
             self.fig, self._ax = plt.subplots(figsize=figsize)
         self.cmap = plt.get_cmap(cmap)
+        if axis_ticks:
+            sns.set_style("ticks", {"xtick.major.size": 8, "ytick.major.size": 8})
         if style is not None:
             sns.set_style(style)
         if font_scale is not None:
             sns.set_context(font_scale=font_scale)
+        plt.xticks(rotation=90)
 
     def _hist1d(self,
                 data: pd.DataFrame,
