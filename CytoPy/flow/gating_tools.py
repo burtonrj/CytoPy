@@ -422,11 +422,14 @@ class Gating:
                                  **backgate_kwargs)
 
     def preview(self,
-                gate: Gate,
+                gate: Gate or str,
                 verbose: bool = True,
                 stats: bool = True,
                 create_plot_kwargs: dict or None = None,
                 plot_gate_kwargs: dict or None = None):
+        if isinstance(gate, str):
+            assert gate in self.gates.keys(), f"Gate {gate} not found in current gating strategy"
+            gate = self.gates[gate]
         data = self.get_population_df(population_name=gate.parent, transform=None)
         ctrl = None
         if gate.ctrl_id:
