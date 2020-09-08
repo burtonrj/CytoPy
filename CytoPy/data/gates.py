@@ -24,7 +24,6 @@ def create_signature(data: pd.DataFrame,
     if "time" in data.columns:
         data = data.drop("time", 1)
     summary_method = summary_method or np.median
-    data = pd.DataFrame(MinMaxScaler().fit_transform(data.loc[idx]), columns=data.columns)
     signature = data.loc[idx].apply(summary_method)
     signature = [(x[0], x[1]) for x in zip(signature.index, signature.values)]
     return signature
@@ -48,28 +47,6 @@ def _merge(new_children: List[Population],
         new_child.population_name = assignment
         merged_children.append(new_child)
     return merged_children
-
-
-def population_likeness(new_population: list,
-                        template_population: list):
-    """
-    Given two population signatures (their vector means) return the euclidean distance
-    between them
-    Parameters
-    ----------
-    new_population: list
-    template_population: list
-
-    Returns
-    -------
-    float
-        Euclidean distance between the average vector of the two populations
-    """
-    new_population = {k: v for k, v in new_population}
-    template_population = {k: v for k, v in template_population}
-    vector_avgs = np.array([[new_population[i], template_population[i]]
-                            for i in set(new_population.keys()).intersection(template_population.keys())]).T
-    return euclidean(vector_avgs[0, :], vector_avgs[1, :])
 
 
 class ChildDefinition(mongoengine.EmbeddedDocument):
@@ -109,6 +86,38 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
 
     def match_definition(self, query: str):
         return query in self.definition.split("_")
+
+
+def population_likeness(new_population: Population,
+                        template_population: ChildDefinition):
+    """
+    Given two Populations, generate a score of their likeness, where a smaller value indicates greater
+    likeness. This is a composite score of the euclidean distance between their signatures (their vector means),
+    the euclidean distance between their centroids, and the absolute difference between their areas.
+    between them
+    Parameters
+    ----------
+    new_population: list
+    template_population: list
+
+    Returns
+    -------
+    float
+        composite score
+    """
+    # Signature score
+    new_pop_sig = {k: v for k, v in new_population.signature}
+    template_sig = {k: v for k, v in template_population.signature}
+    vector_avgs = np.array([[new_pop_sig[i], template_sig[i]]
+                            for i in set(new_pop_sig.keys()).intersection(template_sig.keys())]).T
+    sig_score = abs(euclidean(vector_avgs[0, :], vector_avgs[1, :]))
+    # Centroid score
+    new_pop_poly = new_population.geom.shape
+    template_poly = template_population.template_geometry.shape
+    centroid_score = abs(euclidean(new_pop_poly.centroid.coords, template_poly.centroid.coords))
+    # Area score
+    area_score = abs(new_pop_poly.area - template_poly.area)
+    return sum([sig_score, centroid_score, area_score])
 
 
 class PreProcess(mongoengine.EmbeddedDocument):
@@ -451,7 +460,7 @@ class Gate(mongoengine.Document):
                             new_children: List[Population]):
         # Binary gates that are not thresholds only have one child
         pos = self.children[0]
-        ranking = [population_likeness(c.signature, pos.signature) for c in new_children]
+        ranking = [population_likeness(c, pos) for c in new_children]
         new_children[int(np.argmin(ranking))].population_name = pos.population_name
         return [new_children[int(np.argmin(ranking))]]
 
@@ -503,8 +512,8 @@ class Gate(mongoengine.Document):
         # Compare the signatures of each of the new children to the template signatures
         assignments = list()
         for child in new_children:
-            ranking = [population_likeness(new_population=child.signature,
-                                           template_population=template.signature) for template in self.children]
+            ranking = [population_likeness(new_population=child,
+                                           template_population=template) for template in self.children]
             assignments.append(self.children[int(np.argmin(ranking))].population_name)
         return assignments
 
