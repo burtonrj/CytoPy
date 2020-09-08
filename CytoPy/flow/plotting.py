@@ -92,6 +92,8 @@ class CreatePlot:
         if font_scale is not None:
             sns.set_context(font_scale=font_scale)
         plt.xticks(rotation=90)
+        self._ax.xaxis.labelpad = 20
+        self._ax.yaxis.labelpad = 20
 
     def _hist1d(self,
                 data: pd.DataFrame,
