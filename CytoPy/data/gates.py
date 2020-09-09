@@ -122,6 +122,7 @@ def population_likeness(new_population: Population,
 
 
 class PreProcess(mongoengine.EmbeddedDocument):
+
     downsample_method = mongoengine.StringField(required=False, choices=["uniform",
                                                                          "faithful",
                                                                          "density"])
@@ -171,7 +172,9 @@ class PreProcess(mongoengine.EmbeddedDocument):
     @staticmethod
     def _preprocess_kwargs(kwargs: dict or None):
         if kwargs is not None:
-            return [(k, v) for k, v in kwargs.items()]
+            if isinstance(kwargs, dict):
+                return [(k, v) for k, v in kwargs.items()]
+            return kwargs
         return None
 
 
