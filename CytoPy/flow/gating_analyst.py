@@ -1,13 +1,14 @@
 from .density_estimation import silvermans, kde
+from ..utilities import inside_polygon
 from ..data.populations import PopulationGeometry, Population
 from shapely.geometry import Point, Polygon
 from shapely.affinity import scale
 from scipy.spatial import ConvexHull
 from scipy import linalg, stats
 from scipy.signal import savgol_filter
-from detecta import detect_peaks
-from sklearn.mixture import *
 from sklearn.cluster import *
+from sklearn.mixture import *
+from detecta import detect_peaks
 from typing import List
 from warnings import warn
 import pandas as pd
@@ -30,34 +31,6 @@ def _probablistic_ellipse(covariances: np.array,
     u = eigen_vec[0] / linalg.norm(eigen_vec[0])
     angle = 180. * np.arctan(u[1] / u[0]) / np.pi
     return eigen_val[0], eigen_val[1], (180. + angle)
-
-
-def inside_polygon(df: pd.DataFrame,
-                   x: str,
-                   y: str,
-                   poly: Polygon):
-    """
-    Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
-
-    Parameters
-    ----------
-    df: Pandas.DataFrame
-        Data to query
-    x: str
-        name of x-axis plane
-    y: str
-        name of y-axis plane
-    poly: shapely.geometry.Polygon
-        Polygon object to search
-
-    Returns
-    --------
-    Pandas.DataFrame
-        Masked DataFrame containing only those rows that fall within the Polygon
-    """
-    xy = df[[x, y]].values
-    pos_idx = list(map(lambda i: poly.contains(Point(i)), xy))
-    return df.iloc[pos_idx]
 
 
 def inside_ellipse(data: np.array,
@@ -314,10 +287,11 @@ class Analyst:
         for i, label in enumerate(np.unique(labels)):
             label_df = data[data.labels == label]
             idx = label_df.index.values
+            x_values, y_values = create_convex_hull(label_df[self.x].values, label_df[self.y].values)
             geom = PopulationGeometry(x=self.x,
                                       y=self.y,
-                                      x_values=label_df[self.x].values,
-                                      y_values=label_df[self.y].values)
+                                      x_values=x_values,
+                                      y_values=y_values)
             populations.append(Population(population_name=names[i],
                                           parent=self.parent,
                                           geom=geom,
@@ -443,6 +417,7 @@ class ManualGate(Analyst):
                         x_values: list,
                         y_values: list):
         populations = list()
+        x_values, y_values = create_convex_hull(x_values, y_values)
         geom = PopulationGeometry(x=self.x,
                                   y=self.y,
                                   x_values=x_values,

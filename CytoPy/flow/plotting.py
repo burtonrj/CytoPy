@@ -377,8 +377,9 @@ class CreatePlot:
             count += 1
             colour = next(gate_colours)
             if gate.shape == "polygon":
-                self._add_polygon(x_values=child.geom.x_values,
-                                  y_values=child.geom.y_values,
+                x_values, y_values = child.geom.shape.exterior.xy
+                self._add_polygon(x_values=x_values,
+                                  y_values=y_values,
                                   colour=colour,
                                   label=child.population_name,
                                   lw=lw)
