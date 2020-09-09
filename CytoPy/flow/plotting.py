@@ -499,17 +499,17 @@ class CreatePlot:
             self._ax.axhline(y, lw=lw, c="#c92c2c")
             # Label regions for two axis
             if labels is not None:
-                xy = [(x + ((x_range[1] - x_range[0]) * .1),
-                       y + ((y_range[1] - y_range[0]) * .1)),
-                      (x - ((x_range[1] - x_range[0]) * .1),
-                       y - ((y_range[1] - y_range[0]) * .1)),
-                      (x + ((x_range[1] - x_range[0]) * .1),
-                       y - ((y_range[1] - y_range[0]) * .1)),
-                      (x - ((x_range[1] - x_range[0]) * .1),
-                       y + ((y_range[1] - y_range[0]) * .1))]
+                xy = [(x + ((x_range[1] - x_range[0]) * .2),
+                       y + ((y_range[1] - y_range[0]) * .2)),
+                      (x - ((x_range[1] - x_range[0]) * .2),
+                       y - ((y_range[1] - y_range[0]) * .2)),
+                      (x + ((x_range[1] - x_range[0]) * .2),
+                       y - ((y_range[1] - y_range[0]) * .2)),
+                      (x - ((x_range[1] - x_range[0]) * .2),
+                       y + ((y_range[1] - y_range[0]) * .2))]
                 for d, xy_ in zip(["++", "--", "+-", "-+"], xy):
                     label = [v for l, v in labels.items() if d in l][0]
-                    self._ax.annotate(text=label,
+                    self._ax.annotate(text=f"{label[0]} {label[1]}",
                                       xy=xy_,
                                       fontsize="small",
                                       c="black",
