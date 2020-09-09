@@ -1,6 +1,6 @@
 from ..data.experiments import Experiment
 from ..data.populations import PopulationGeometry, Population, merge_populations
-from ..data.gates import Gate, PreProcess, PostProcess
+from ..data.gates import Gate, PreProcess, PostProcess, inside_polygon
 from ..data.gating_strategy import GatingStrategy, Action
 from .transforms import apply_transform
 from ..feedback import vprint
@@ -318,13 +318,10 @@ class Gating:
             else:
                 assert x == "embedding1", "If using dim_reduction, x should have a value 'embedding1'"
                 assert y == "embedding2", "If using dim_reduction, y should have a value 'embedding2'"
-
-        if method == "ManualGate":
-            assert binary, "ManualGate is for use with binary gates only"
-        elif shape == "threshold":
-            if method != "DensityGate":
+        if shape == "threshold":
+            if method not in ["DensityGate", "ManualGate"]:
                 warn("Shape set to 'threshold', defaulting to DensityGate")
-            method = "DensityGate"
+                method = "DensityGate"
         elif shape == "ellipse":
             if method is None:
                 warn("Method not given, defaulting to BayesianGaussianMixture")
@@ -690,10 +687,8 @@ class Gating:
                   plot_outcome: bool = True,
                   create_plot_kwargs: dict or None = None,
                   plot_population_geom_kwargs: dict or None = None):
-        if create_plot_kwargs is None:
-            create_plot_kwargs = {}
-        if plot_population_geom_kwargs is None:
-            plot_population_geom_kwargs = {}
+        create_plot_kwargs = create_plot_kwargs or {}
+        plot_population_geom_kwargs = plot_population_geom_kwargs or {}
         assert population in self.populations.keys(), "Given population does not exist"
         dependecies = self.list_downstream_populations(population)
         ax = None

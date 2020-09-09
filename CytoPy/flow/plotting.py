@@ -276,8 +276,8 @@ class CreatePlot:
                              population_name: str or None = None,
                              plot_kwargs: dict or None = None,
                              legend_kwargs: dict or None = None):
-        if population_name is None:
-            population_name = ""
+        plot_kwargs = plot_kwargs or {}
+        population_name = population_name or ""
         self.tranforms = {"x": geom.transform_x,
                           "y": geom.transform_y}
         self._ax = self.plot(data=parent,
