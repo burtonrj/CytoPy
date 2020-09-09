@@ -20,7 +20,9 @@ def create_convex_hull(x_values: np.array,
                        y_values: np.array):
     xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
     hull = ConvexHull(xy)
-    return xy[hull.vertices, 0], xy[hull.vertices, 1]
+    x = [int(i) for i in xy[hull.vertices, 0]]
+    y = [int(i) for i in xy[hull.vertices, 1]]
+    return x, y
 
 
 def _probablistic_ellipse(covariances: np.array,
@@ -128,7 +130,7 @@ def find_local_minima(probs: np.array,
     else:
         between_peaks = probs[p2_idx:p1_idx]
     local_min = min(between_peaks)
-    return xx[np.where(probs == local_min)[0][0]]
+    return float(xx[np.where(probs == local_min)[0][0]])
 
 
 class Analyst:
@@ -352,10 +354,10 @@ class ManualGate(Analyst):
         if rect is not None:
             assert all(i in rect.keys() for i in ["x_range", "y_range"]), "If specifying a manual rectangular gate, " \
                                                                           "then must provide x_range and y_range"
-            min_x = rect.get("x_range")[0]
-            max_x = rect.get("x_range")[1]
-            min_y = rect.get("y_range")[0]
-            max_y = rect.get("y_range")[1]
+            min_x = int(rect.get("x_range")[0])
+            max_x = int(rect.get("x_range")[1])
+            min_y = int(rect.get("y_range")[0])
+            max_y = int(rect.get("y_range")[1])
             self.x_values = [min_x, max_x, max_x, min_x, min_x]
             self.y_values = [min_y, min_y, max_y, max_y, min_y]
 
@@ -449,17 +451,16 @@ def _find_inflection_point(xx: np.array,
         ddy = np.diff(np.diff(smooth[peaks[0]:]))
     # Return the point where the second derivative peaks
     if incline:
-        return xx[np.argmax(ddy)]
-    return xx[peaks[0] + np.argmax(ddy)]
-
+        return float(xx[np.argmax(ddy)])
+    return float(xx[peaks[0] + np.argmax(ddy)])
 
 
 class DensityGate(Analyst):
 
     def __init__(self, x: str or None, y: str or None, shape: str, parent: str, binary: bool, **kwargs):
         super().__init__(x=x, y=y, shape="threshold", parent=parent, binary=binary, model=None)
-        self.min_peak_threshold = kwargs.get("min_peak_threshold", 0.05)
-        self.peak_boundary = kwargs.get("peak_boundary", 0.25)
+        self.min_peak_threshold = kwargs.get("min_peak_threshold", 0.01)
+        self.peak_boundary = kwargs.get("peak_boundary", 0.1)
         self.threshold_method = kwargs.get("threshold_method", "density")
         self.q = kwargs.get("q", 0.95)
         self.low_memory = kwargs.get("low_memory", True)
@@ -507,7 +508,7 @@ class DensityGate(Analyst):
                         df = df.sample(n=5000)
                     probs, xx = kde(df, d, kde_bw=bw)
                     peaks = self._find_peaks(probs)
-                    increment = bw * 0.1
+                    increment = bw * 0.05
                     while len(peaks) > 2:
                         probs, xx = kde(df, d, kde_bw=bw)
                         peaks = self._find_peaks(probs)

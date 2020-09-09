@@ -509,6 +509,10 @@ class Gating:
             gate = downstream_gates[i]
             if gate.parent in self.populations.keys():
                 feedback(f"-------------- {gate.gate_name} --------------")
+                parent_n = self.get_population_df(population_name=gate.parent).shape[0]
+                if parent_n < 10:
+                    warn(f"{gate.gate_name} parent population {gate.parent} contains less than 10 events, "
+                         f"signifying an error upstream of this gate")
                 plots.append(self.apply(gate=downstream_gates[i],
                                         verbose=verbose,
                                         plot_outcome=return_plots,
