@@ -509,7 +509,9 @@ class CreatePlot:
                        y + ((y_range[1] - y_range[0]) * .2))]
                 for d, xy_ in zip(["++", "--", "+-", "-+"], xy):
                     label = [v for l, v in labels.items() if d in l][0]
-                    self._ax.annotate(text=f"{label[0]} {label[1]}",
+                    if label in ["++", "--", "+-", "-+"]:
+                        label = f"{label[0]} {label[1]}"
+                    self._ax.annotate(text=label,
                                       xy=xy_,
                                       fontsize="small",
                                       c="black",
