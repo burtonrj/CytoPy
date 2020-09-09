@@ -1,4 +1,3 @@
-from ..utilities import valid_directory
 from ..feedback import vprint
 from .fcs import FileGroup
 from .subject import Subject
