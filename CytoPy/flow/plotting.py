@@ -64,7 +64,7 @@ class CreatePlot:
                  title: str or None = None,
                  ax: matplotlib.pyplot.axes or None = None,
                  figsize: (int, int) = (5, 5),
-                 bins: int or str = "auto",
+                 bins: int or str = "sqrt",
                  cmap: str = "jet",
                  style: str or None = "white",
                  font_scale: float or None = 1.2,
@@ -514,7 +514,7 @@ class CreatePlot:
                                       fontsize="small",
                                       c="black",
                                       backgroundcolor="white",
-                                      bbox=dict(facecolor='none', edgecolor='black', boxstyle='round,pad=1'))
+                                      bbox=dict(facecolor='white', edgecolor='black', pad=5.0))
         else:
             # Label regions for one axis
             if labels is not None:
