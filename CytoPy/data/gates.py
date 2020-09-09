@@ -2,6 +2,7 @@ from ..flow.dim_reduction import dimensionality_reduction
 from ..flow.transforms import apply_transform, scaler
 from ..flow.sampling import density_dependent_downsampling, faithful_downsampling, upsample_knn, upsample_svm
 from ..flow.gating_analyst import ManualGate, DensityGate, Analyst
+from ..utilities import inside_polygon
 from ..feedback import vprint
 from .populations import PopulationGeometry, Population, merge_populations
 from sklearn.preprocessing import MinMaxScaler
@@ -236,7 +237,7 @@ class Gate(mongoengine.Document):
         elif self.shape == "threshold":
             assert set(labels.keys()) == {'++', '--',
                                           '-+', '+-'}, "For a non-binary threshold gate, labels should be " \
-                                                        "provided with the keys: '++', '-+', '+-' and '--'"
+                                                       "provided with the keys: '++', '-+', '+-' and '--'"
         for child in self.children:
             child.population_name = labels.get(child.population_name)
         self.labelled = True
@@ -348,7 +349,7 @@ class Gate(mongoengine.Document):
             data, _ = self._apply_preprocessing(data=data)
             ctrl, _ = self._apply_preprocessing(data=ctrl)
             populations = self._apply_postprocessing(method.ctrl_gate(data=data, ctrl=ctrl),
-                                                     original_data=data)
+                                                     original_data=data, data=data)
         else:
             data, sample = self._apply_preprocessing(data=data)
             if sample is not None:
@@ -356,11 +357,13 @@ class Gate(mongoengine.Document):
                 populations = self._apply_postprocessing(method.fit_predict(sample),
                                                          original_data=original_data,
                                                          sample=sample,
-                                                         verbose=verbose)
+                                                         verbose=verbose,
+                                                         data=data)
             else:
                 populations = self._apply_postprocessing(method.fit_predict(data),
                                                          original_data=original_data,
-                                                         verbose=verbose)
+                                                         verbose=verbose,
+                                                         data=data)
         if not self.defined:
             feedback("This gate has not been previously defined. Gate will be applied to example data "
                      "and child population definitions populated. Labels will need to be provided for "
@@ -378,6 +381,7 @@ class Gate(mongoengine.Document):
 
     def _apply_postprocessing(self,
                               new_populations: List[Population],
+                              data: pd.DataFrame,
                               original_data: pd.DataFrame,
                               sample: pd.DataFrame or None = None,
                               verbose: bool = True):
@@ -385,18 +389,26 @@ class Gate(mongoengine.Document):
         if sample is not None:
             upsample_method = self.postprocessing.upsample_method
             if not upsample_method:
-                warn("Downsampling was performed yet not upsampling method has been defined, defaulting to KNN")
-                upsample_method = 'knn'
-            if upsample_method == "knn":
+                warn("Downsampling was performed yet not upsampling method has been defined, "
+                     "defaulting to infer_from_gate")
+                upsample_method = 'infer_from_gate'
+            if upsample_method == "infer_from_gate":
+                for p in new_populations:
+                    p.index = inside_polygon(data,
+                                             p.geom.x,
+                                             p.geom.y,
+                                             p.geom.shape).index
+                    p.n = len(p.index)
+            elif upsample_method == "knn":
                 new_populations = upsample_knn(populations=new_populations,
                                                features=[self.x, self.y],
-                                               original=original_data,
+                                               original=data,
                                                sample=sample,
                                                verbose=verbose)
             else:
                 new_populations = upsample_svm(populations=new_populations,
                                                features=[self.x, self.y],
-                                               original=original_data,
+                                               original=data,
                                                sample=sample,
                                                verbose=verbose)
         # Add transformation information to Populations
@@ -539,4 +551,3 @@ class Gate(mongoengine.Document):
         assert self.defined, f"Gate {self.gate_name} is newly created and has not been defined. " \
                              f"Call 'label_children' to complete gating definition"
         super().save(*args, **kwargs)
-
