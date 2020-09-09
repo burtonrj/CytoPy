@@ -48,6 +48,7 @@ def create_reference_sample(experiment: Experiment,
     None
     """
     vprint_ = vprint(verbose)
+    samples = samples or list(experiment.list_samples())
     assert all([s in experiment.list_samples() for s in samples]), \
         'One or more samples specified do not belong to experiment'
 
@@ -65,7 +66,7 @@ def create_reference_sample(experiment: Experiment,
         data.append(df)
     all_columns = list(df.columns.tolist() for df in data)
     features = list()
-    for c in set(all_columns):
+    for c in set([x for sl in all_columns for x in sl]):
         if all([c in x for x in all_columns]):
             features.append(c)
     data = pd.concat([df[features] for df in data])
@@ -74,7 +75,8 @@ def create_reference_sample(experiment: Experiment,
 
     vprint_('Creating new file entry...')
     mappings = [dict(channel=f, marker=f) for f in features]
-    new_filegroup = FileGroup(primary_id=new_file_name)
+    new_filegroup = FileGroup(primary_id=new_file_name,
+                              data_directory=experiment.data_directory)
     new_filegroup.notes = 'sampled data'
     new_filegroup.add_file(data=data[features],
                            channel_mappings=mappings)
