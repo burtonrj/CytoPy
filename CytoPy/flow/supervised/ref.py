@@ -18,7 +18,6 @@ def create_reference_sample(experiment: Experiment,
                             root_population='root',
                             samples: list or None = None,
                             new_file_name: str or None = None,
-                            include_population_labels: bool = False,
                             verbose: bool = True) -> None:
     """
     Given some experiment and a root population that is common to all fcs file groups within this experiment, take

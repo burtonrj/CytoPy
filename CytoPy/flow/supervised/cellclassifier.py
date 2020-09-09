@@ -73,7 +73,8 @@ class CellClassifier:
                  experiment: Experiment,
                  ref_sample: str,
                  population_labels: list or None = None,
-                 verbose: bool = True):
+                 verbose: bool = True,
+                 population_prefix: str = "sml"):
         if type(classifier) == SklearnClassifier:
             self.model = _build_sklearn_model(classifier=classifier)
             self.model_type = "sklearn"
@@ -87,6 +88,7 @@ class CellClassifier:
         self.verbose = verbose
         self.print = vprint(verbose)
         self.class_weights = None
+        self.population_prefix = population_prefix
         self.print("----- Building CellClassifier -----")
         assert ref_sample in experiment.list_samples(), "Invalid reference sample, could not be found in given " \
                                                         "experiment"
@@ -286,23 +288,25 @@ class CellClassifier:
         y_pred, y_proba, y_score = self._predict(X, threshold=threshold)
         if not self.classifier.multi_label:
             idx = np.where(y_pred == 0)[0]
-            g.populations["Unclassified"] = Population(population_name="Unclassified",
+            g.populations["Unclassified"] = Population(population_name=f"{self.population_prefix}_Unclassified",
                                                        index=idx,
                                                        n=len(idx),
                                                        parent=self.population_labels[0],
                                                        warnings=["supervised_classification"])
-            g.tree["Unclassified"] = Node(name="Unclassified", parent=g.tree[self.population_labels[0]])
+            g.tree["Unclassified"] = Node(name=f"{self.population_prefix}_Unclassified",
+                                          parent=g.tree[self.population_labels[0]])
         for i, pop in enumerate(self.population_labels[1:]):
             if self.classifier.multi_label:
                 idx = np.where(y_pred[:, i] == 1)[0]
             else:
                 idx = np.where(y_pred == i)[0]
-            g.populations[pop] = Population(population_name=pop,
+            g.populations[pop] = Population(population_name=f"{self.population_prefix}_{pop}",
                                             index=idx,
                                             n=len(idx),
                                             parent=self.population_labels[0],
                                             warnings=["supervised_classification"])
-            g.tree[pop] = Node(name=pop, parent=g.tree[self.population_labels[0]])
+            g.tree[pop] = Node(name=f"{self.population_prefix}_{pop}",
+                               parent=g.tree[self.population_labels[0]])
         if return_predictions:
             return g, {"y_pred": y_pred, "y_proba": y_proba, "y_score": y_score}
         return g
