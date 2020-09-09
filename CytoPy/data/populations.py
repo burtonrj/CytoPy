@@ -168,13 +168,21 @@ def merge_populations(left: Population,
     warn("Associated clusters are now void. Repeat clustering on new population")
     if len(left.ctrl_index) > 0 or len(right.ctrl_index) > 0:
         warn("Associated control indexes are now void. Repeat control gating on new population")
-    new_shape = unary_union([p.geom.shape for p in [left, right]])
-    x, y = new_shape.exterior.coords.xy
+    shapes = [p.geom.shape for p in [left, right] if p.geom.shape is not None]
+    assert len(shapes) != 1, "Incompatible shapes; trying to merge a threshold with an ellipse or polygon " \
+                             "is not supported"
+    if len(shapes) == 2:
+        new_shape = unary_union([p.geom.shape for p in [left, right]])
+        x, y = new_shape.exterior.coords.xy
+    else:
+        x, y = None, None
     left_sig = {k: v for k, v in left.signature}
     right_sig = {k: v for k, v in right.signature}
     new_signature = pd.DataFrame([left_sig, right_sig]).mean().to_dict()
     new_geom = PopulationGeometry(x=left.geom.x,
                                   y=left.geom.y,
+                                  x_threshold=left.geom.x_threshold,
+                                  y_threshold=left.geom.y_threshold,
                                   transform_x=left.geom.transform_x,
                                   transform_y=left.geom.transform_y,
                                   x_values=x,
@@ -183,7 +191,7 @@ def merge_populations(left: Population,
                                 n=len(left.index) + len(right.index),
                                 parent=left.parent,
                                 warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
-                                index=np.unique(np.concatenate(left.index, right.index)),
+                                index=np.unique(np.concatenate([left.index, right.index], axis=0), axis=0),
                                 geom=new_geom,
                                 definition=new_definition,
                                 signature=[(k, v) for k, v in new_signature.items()])

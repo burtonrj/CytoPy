@@ -36,7 +36,7 @@ def _merge(new_children: List[Population],
     groups = {name: [] for name in assignments}
     merged_children = list()
     for assignment, child in zip(assignments, new_children):
-        groups[assignments].append(child)
+        groups[assignment].append(child)
     for assignment, children in groups.items():
         # If only one child, ignore
         if len(children) == 1:

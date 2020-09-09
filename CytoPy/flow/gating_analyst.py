@@ -433,7 +433,8 @@ class ManualGate(Analyst):
 
 def _find_inflection_point(xx: np.array,
                            peaks: np.array,
-                           probs: np.array):
+                           probs: np.array,
+                           incline: bool = False):
     # Find inflection point
     window_size = int(len(probs) * .1)
     if window_size % 2 == 0:
@@ -442,9 +443,15 @@ def _find_inflection_point(xx: np.array,
     # Fit a 3rd polynomial kernel
     smooth = savgol_filter(probs, window_size, 3)
     # Take the second derivative of this slope
-    ddy = np.diff(np.diff(smooth[peaks[0]:]))
+    if incline:
+        ddy = np.diff(np.diff(smooth[:peaks[0]]))
+    else:
+        ddy = np.diff(np.diff(smooth[peaks[0]:]))
     # Return the point where the second derivative peaks
+    if incline:
+        return xx[np.argmax(ddy)]
     return xx[peaks[0] + np.argmax(ddy)]
+
 
 
 class DensityGate(Analyst):
@@ -458,6 +465,7 @@ class DensityGate(Analyst):
         self.low_memory = kwargs.get("low_memory", True)
         self.kde_bw = kwargs.get("kde_bw", None)
         self.cutoff_point = kwargs.get("cutoff_point", "inflection")
+        self.biased_positive = kwargs.get("biased_positive", False)
         assert self.threshold_method in ["density", "quantile"]
         assert self.cutoff_point in ["inflection", "quantile"]
 
@@ -485,7 +493,8 @@ class DensityGate(Analyst):
                 if len(peaks) == 0 and self.cutoff_point == "quantile":
                     thresholds.append(data[d].quantile(self.q))
                 elif len(peaks) == 1:
-                    thresholds.append(_find_inflection_point(xx=xx, probs=probs, peaks=peaks))
+                    thresholds.append(_find_inflection_point(xx=xx, probs=probs, peaks=peaks,
+                                                             incline=self.biased_positive))
                 elif len(peaks) == 2:
                     thresholds.append(find_local_minima(probs=probs, xx=xx, peaks=peaks))
                 else:
@@ -504,7 +513,10 @@ class DensityGate(Analyst):
                         peaks = self._find_peaks(probs)
                         bw = bw + increment
                     if len(peaks) == 1:
-                        if self.cutoff_point == "quantile":
+                        if self.biased_positive:
+                            thresholds.append(_find_inflection_point(xx=xx, probs=probs, peaks=peaks,
+                                                                     incline=self.biased_positive))
+                        elif self.cutoff_point == "quantile":
                             thresholds.append(data[d].quantile(self.q))
                         else:
                             thresholds.append(_find_inflection_point(xx=xx, probs=probs, peaks=peaks))
