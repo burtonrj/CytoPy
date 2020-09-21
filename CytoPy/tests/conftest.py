@@ -10,7 +10,10 @@ def mongo_setup():
     global_init(database_name="test", alias="core")
     yield
     db = _get_db(alias="core")
-    db.drop_database("test")
+    try:
+        db.drop_database()
+    except TypeError:
+        pass
     disconnect(alias="core")
 
 
