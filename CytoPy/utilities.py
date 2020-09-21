@@ -1,7 +1,5 @@
 from shapely.geometry import Polygon, Point
 import pandas as pd
-import mongoengine
-import os
 
 
 def inside_polygon(df: pd.DataFrame,
