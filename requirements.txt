@@ -5,6 +5,7 @@ graphviz==0.14
 h5py==2.10.0
 hdbscan==0.8.26
 imbalanced-learn==0.7.0
+ipython==7.18.1
 keras==2.4.3
 keras-applications==1.0.8
 keras-preprocessing==1.1.0
