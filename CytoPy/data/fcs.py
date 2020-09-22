@@ -297,6 +297,8 @@ class FileGroup(mongoengine.Document):
                             del f[f"index/{p.population_name}/{ctrl_id}"]
 
     def save(self, *args, **kwargs):
+        # TODO Populate indexes of each population and nested clusters
+        # TODO remove indexes of deleted populations and clusters
         # Calculate meta and save indexes to disk
         if self.populations:
             # Populate h5path for populations

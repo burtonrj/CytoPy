@@ -1,6 +1,5 @@
-from matplotlib.patches import Ellipse
 from shapely import affinity
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon as Poly, Point
 from shapely.ops import unary_union
 from _warnings import warn
 import numpy as np
@@ -54,18 +53,16 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
     y = mongoengine.StringField()
     transform_x = mongoengine.StringField()
     transform_y = mongoengine.StringField()
-    x_values = mongoengine.ListField()
-    y_values = mongoengine.ListField()
-    width = mongoengine.FloatField()
-    height = mongoengine.FloatField()
-    center = mongoengine.ListField()
-    angle = mongoengine.FloatField()
+
+
+class Threshold(PopulationGeometry):
     x_threshold = mongoengine.FloatField()
     y_threshold = mongoengine.FloatField()
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._shape = None
+
+class Polygon(PopulationGeometry):
+    x_values = mongoengine.ListField()
+    y_values = mongoengine.ListField()
 
     @property
     def shape(self):
@@ -76,24 +73,66 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
         -------
         Shapely.geometry.Polygon
         """
-        if self.x_values and self.y_values:
-            return Polygon([(x, y) for x, y in zip(self.x_values, self.y_values)])
-        elif all(x is not None for x in [self.width,
-                                         self.height,
-                                         self.center,
-                                         self.angle]):
-            circle = Point(self.center).buffer(1)
-            ellipse = affinity.rotate(affinity.scale(circle, self.width, self.height),
-                                      self.angle)
-            return ellipse
-        return None
+        return Polygon([(x, y) for x, y in zip(self.x_values, self.y_values)])
 
     def overlap(self,
-                comparison_poly: Polygon,
+                comparison_poly: Poly,
                 threshold: float = 0.):
-        if self.shape is None:
-            warn("PopulationGeometry properties are incomplete. Cannot determine shape.")
-            return None
+        """
+        For a given polygon, give the fraction overlap with this PopulationGeometry shape.
+        If fraction overlap does not exceed given threshold, returns 0.0
+
+        Parameters
+        ----------
+        comparison_poly: shapely.geometry.Polygon
+        threshold: float (default = 0.0)
+
+        Returns
+        -------
+        float
+        """
+        if self.shape.intersects(comparison_poly):
+            overlap = float(self.shape.intersection(comparison_poly).area / self.shape.area)
+            if overlap >= threshold:
+                return overlap
+        return 0.
+
+
+class Ellipse(PopulationGeometry):
+
+    width = mongoengine.FloatField()
+    height = mongoengine.FloatField()
+    center = mongoengine.ListField()
+    angle = mongoengine.FloatField()
+
+    @property
+    def shape(self):
+        """
+        Generates a Shapely Polygon object.
+
+        Returns
+        -------
+        Shapely.geometry.Polygon
+        """
+        circle = Point(self.center).buffer(1)
+        return affinity.rotate(affinity.scale(circle, self.width, self.height), self.angle)
+
+    def overlap(self,
+                comparison_poly: Poly,
+                threshold: float = 0.):
+        """
+        For a given polygon, give the fraction overlap with this PopulationGeometry shape.
+        If fraction overlap does not exceed given threshold, returns 0.0
+
+        Parameters
+        ----------
+        comparison_poly: shapely.geometry.Polygon
+        threshold: float (default = 0.0)
+
+        Returns
+        -------
+        float
+        """
         if self.shape.intersects(comparison_poly):
             overlap = float(self.shape.intersection(comparison_poly).area / self.shape.area)
             if overlap >= threshold:
@@ -157,40 +196,37 @@ class Population(mongoengine.EmbeddedDocument):
     def ctrl_index(self):
         return self._ctrl_index
 
-    @ctrl_index.setter
-    def ctrl_index(self, ctrl_idx: tuple):
-        assert len(ctrl_idx) == 2, "ctrl_idx should be a tuple of length 2"
-        assert isinstance(ctrl_idx[0], str), "first item in ctrl_idx should be type str"
-        assert isinstance(ctrl_idx[1], np.ndarray), "second item in ctrl_idx should be type numpy.array"
-        self._ctrl_index[ctrl_idx[0]] = ctrl_idx[1]
+    def set_ctrl_index(self, **kwargs):
+        for k, v in kwargs.items():
+            assert isinstance(v, np.ndarray), "ctrl_idx should be type numpy.array"
+            self._ctrl_index[k] = v
+
+
+def _check_overlap(left: PopulationGeometry,
+                   right: PopulationGeometry):
+    has_shape = [p.shape is not None for p in [left, right]]
+    assert sum(has_shape) != 1, "To merge populations, both gates must be elliptical or polygon gates or both " \
+                                "must be threshold gates. Cannot merge one type with the other."
+    if all(has_shape):
+        assert left.shape.intersects(right.shape), "Invalid: cannot merge non-overlapping populations"
 
 
 def merge_populations(left: Population,
                       right: Population,
                       new_population_name: str or None = None):
     assert left.parent == right.parent, "Parent populations do not match"
-    # check that geometries overlap
-    has_shape = [p.geom.shape is not None for p in [left, right]]
-    new_definition = None
-    if new_population_name is None:
-        new_population_name = f"merge_{left.population_name}_{right.population_name}"
-    assert sum(has_shape) != 1, "To merge populations, both gates must be elliptical or polygon gates or both " \
-                                "must be threshold gates. Cannot merge one type with the other."
-    assert left.geom.transform_x == left.geom.transform_x, "X dimension transform differs between left and right" \
-                                                           "populations"
-    assert left.geom.transform_y == left.geom.transform_y, "Y dimension transform differs between left and right" \
-                                                           "populations"
-    if all(has_shape):
-        assert left.geom.shape.intersects(right.geom.shape), "Invalid: cannot merge non-overlapping populations"
-    else:
+    new_population_name = new_population_name or f"merge_{left.population_name}_{right.population_name}"
+    _check_overlap(left.geom, right.geom)
+    assert left.geom.transform_x == left.geom.transform_x, "X dimension transform differs between left and right populations"
+    assert left.geom.transform_y == left.geom.transform_y, "Y dimension transform differs between left and right populations"
+    if left.definition and right.definition:
         new_definition = ",".join([left.definition, right.definition])
-    # TODO lookup all clusters applied to this population and delete
     warn("Associated clusters are now void. Repeat clustering on new population")
+    left.clusters = []
+    right.clusters = []
     if len(left.ctrl_index) > 0 or len(right.ctrl_index) > 0:
         warn("Associated control indexes are now void. Repeat control gating on new population")
-    shapes = [p.geom.shape for p in [left, right] if p.geom.shape is not None]
-    assert len(shapes) != 1, "Incompatible shapes; trying to merge a threshold with an ellipse or polygon " \
-                             "is not supported"
+
     if len(shapes) == 2:
         new_shape = unary_union([p.geom.shape for p in [left, right]])
         x, y = new_shape.exterior.coords.xy
