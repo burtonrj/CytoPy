@@ -1,11 +1,13 @@
 anytree==2.8.0
 cython==0.29.21
+detecta==0.0.5
 future==0.18.2
 graphviz==0.14
 h5py==2.10.0
 hdbscan==0.8.26
 imbalanced-learn==0.7.0
 ipython==7.18.1
+KDEpy==1.0.5
 keras==2.4.3
 keras-applications==1.0.8
 keras-preprocessing==1.1.0
