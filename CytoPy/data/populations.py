@@ -35,11 +35,11 @@ class Cluster(mongoengine.EmbeddedDocument):
     _h5path = mongoengine.StringField(required=True)
 
     def __init__(self, *args, **kwargs):
-        h5path = kwargs.get("h5path", None)
+        h5path = kwargs.pop("h5path", None)
         super().__init__(*args, **kwargs)
         if not self._h5path:
             assert h5path is not None, "Cluster has not been previously defined, therefore you must provide a h5path"
-            assert os.path.isfile(f"Invalid path, {h5path} does not exist")
+            assert os.path.isfile(h5path), f"Invalid path, {h5path} does not exist"
             self._h5path = h5path
         else:
             with h5py.File(self._h5path, "r") as f:
