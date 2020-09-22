@@ -6,8 +6,6 @@ from _warnings import warn
 import numpy as np
 import pandas as pd
 import mongoengine
-import h5py
-import os
 
 
 class Cluster(mongoengine.EmbeddedDocument):
@@ -31,23 +29,21 @@ class Cluster(mongoengine.EmbeddedDocument):
     """
     cluster_id = mongoengine.StringField(required=True, unique=True)
     meta_label = mongoengine.StringField(required=False)
-    n_events = mongoengine.IntField(required=True)
+    n = mongoengine.IntField(required=True)
     prop_of_root = mongoengine.FloatField(required=True)
-    _h5path = mongoengine.StringField(required=True)
 
     def __init__(self, *args, **kwargs):
-        h5path = kwargs.pop("h5path", None)
-        idx = kwargs.pop("index", None)
+        self._index = kwargs.pop("index", None)
         super().__init__(*args, **kwargs)
-        self.index = idx
-        if not self._h5path:
-            assert h5path is not None, "Cluster has not been previously defined, therefore you must provide a h5path"
-            assert os.path.isfile(h5path), f"Invalid path, {h5path} does not exist"
-            self._h5path = h5path
-        else:
-            with h5py.File(self._h5path, "r") as f:
-                if self.cluster_id in f.keys():
-                    self.index = f[self.cluster_id][:]
+
+    @property
+    def index(self):
+        return self._index
+
+    @index.setter
+    def index(self, idx: np.array or list):
+        self.n = len(idx)
+        self._index = np.array(idx)
 
 
 class PopulationGeometry(mongoengine.EmbeddedDocument):
@@ -141,30 +137,12 @@ class Population(mongoengine.EmbeddedDocument):
     clusters = mongoengine.EmbeddedDocumentListField(Cluster)
     definition = mongoengine.StringField()
     signature = mongoengine.ListField()
-    _h5path = mongoengine.StringField()
 
     def __init__(self, *args, **kwargs):
         # If the Population existed previously, fetched the index
         self._index = kwargs.pop("index", None)
         self._ctrl_index = kwargs.pop("ctrl_index", dict())
         super().__init__(*args, **kwargs)
-        if self._h5path:
-            if os.path.isfile(self._h5path):
-                # Existing file, so populate index
-                with h5py.File(self._h5path, "r") as f:
-                    try:
-                        # Load the population index (if population exists)
-                        if f'/index/{self.population_name}' in f.keys():
-                            self._index = f[f'/index/{self.population_name}/primary'][:]
-                        # Load the control index (if population exists)
-                        ctrls = [x for x in f[f"/index/{self.population_name}"].keys() if x != "primary"]
-                        for ctrl in ctrls:
-                            self._ctrl_index[ctrl] = f[f'/index/{self.population_name}/{ctrl}'][:]
-                    except KeyError as e:
-                        warn(f"One or more populations failed to load with error: {e}")
-            else:
-                warn(f"WARNING: could not locate HDF5 file {self._h5path}")
-        # self.h5path = os.path.join(self._instance.data_directory, f"{self._instance.id.__str__()}.hdf5")
 
     @property
     def index(self):
