@@ -1,6 +1,7 @@
-from ..data.populations import Cluster
+from ..data.populations import Cluster, PopulationGeometry
+from shapely.geometry import Polygon
+import numpy as np
 import pytest
-import h5py
 
 
 @pytest.mark.parametrize("h5path,err_msg", [(None, "Cluster has not been previously defined, therefore you must provide a h5path"),
@@ -34,4 +35,18 @@ def test_init_cluster():
     assert x.index is None
 
 
-
+def test_population_geometry_shape():
+    poly = PopulationGeometry(x_values=[0, 0, 5, 5, 0],
+                              y_values=[0, 5, 5, 0, 0])
+    assert isinstance(poly.shape, Polygon)
+    assert np.array_equal(poly.shape.exterior.xy[0], np.array([0, 0, 5, 5, 0]))
+    assert np.array_equal(poly.shape.exterior.xy[1], np.array([0, 5, 5, 0, 0]))
+    circle = PopulationGeometry(width=5,
+                                height=5,
+                                center=(10, 10),
+                                angle=0)
+    assert isinstance(circle.shape, Polygon)
+    assert circle.shape.area == pytest.approx(np.pi * (circle.width**2), 1.)
+    threshold = PopulationGeometry(x_threshold=2.5,
+                                   y_threshold=2.5)
+    assert threshold.shape is None
