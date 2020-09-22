@@ -1,4 +1,4 @@
-from ...data.clustering import ClusteringExperiment
+from ...data.clustering import ClusteringDefinition
 from ...feedback import vprint, progress_bar
 from ..explore import Explorer
 from ..gating_tools import Gating, load_population
@@ -143,7 +143,7 @@ def flowsom(data: pd.DataFrame,
 
 class Cluster:
     def __init__(self,
-                 clustering_experiment: ClusteringExperiment,
+                 clustering_experiment: ClusteringDefinition,
                  verbose: bool = True,
                  njobs: int = -1):
         self.ce = clustering_experiment
