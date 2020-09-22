@@ -49,4 +49,24 @@ def test_population_geometry_overlap():
 
 
 def test_population_init():
-    x = Population
+    x = Population(population_name="test",
+                   parent="test_parent")
+    x.index = [0, 1, 2, 3, 4, 5]
+    assert np.array_equal(np.array([0, 1, 2, 3, 4, 5]), x.index)
+    assert x.n == 6
+    x.set_ctrl_index(x=np.array([0, 1, 2, 3, 4, 5]),
+                     y=np.array([4, 5, 6, 7, 8, 9]))
+    assert np.array_equal(x.ctrl_index["x"], np.array([0, 1, 2, 3, 4, 5]))
+
+
+@pytest.mark.parametrize("ctrl_idx,err", [(("x", "x"), "ctrl_idx should be type numpy.array"),
+                                          (("x", [0, 1, 2, 3, 4]), "ctrl_idx should be type numpy.array")])
+def test_population_ctrl_idx_error(ctrl_idx, err):
+    x = Population(population_name="test",
+                   parent="test_parent")
+    with pytest.raises(AssertionError) as exp:
+        x.set_ctrl_index(**{ctrl_idx[0]: ctrl_idx[1]})
+    assert str(exp.value) == err
+
+
+
