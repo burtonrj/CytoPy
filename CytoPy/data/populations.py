@@ -36,7 +36,9 @@ class Cluster(mongoengine.EmbeddedDocument):
 
     def __init__(self, *args, **kwargs):
         h5path = kwargs.pop("h5path", None)
+        idx = kwargs.pop("index", None)
         super().__init__(*args, **kwargs)
+        self.index = idx
         if not self._h5path:
             assert h5path is not None, "Cluster has not been previously defined, therefore you must provide a h5path"
             assert os.path.isfile(h5path), f"Invalid path, {h5path} does not exist"
@@ -45,8 +47,8 @@ class Cluster(mongoengine.EmbeddedDocument):
             with h5py.File(self._h5path, "r") as f:
                 if self.cluster_id in f.keys():
                     self.index = f[self.cluster_id][:]
-                else:
-                    self.index = kwargs.get("index", None)
+
+
 
 
 class PopulationGeometry(mongoengine.EmbeddedDocument):
