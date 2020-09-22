@@ -1,4 +1,4 @@
-from ..data.populations import Cluster, Population, Threshold, Ellipse, Polygon
+from ..data.populations import Cluster, Population, Polygon
 from shapely.geometry import Polygon as Poly
 import numpy as np
 import pytest
@@ -22,14 +22,6 @@ def test_polygon_shape():
     assert np.array_equal(poly.shape.exterior.xy[0], np.array([0, 0, 5, 5, 0]))
     assert np.array_equal(poly.shape.exterior.xy[1], np.array([0, 5, 5, 0, 0]))
 
-
-def test_ellipse_shape():
-    circle = Ellipse(width=5,
-                     height=5,
-                     center=(10, 10),
-                     angle=0)
-    assert isinstance(circle.shape, Poly)
-    assert circle.shape.area == pytest.approx(np.pi * (circle.width ** 2), 1.)
 
 
 def test_overlap():

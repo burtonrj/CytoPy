@@ -99,48 +99,6 @@ class Polygon(PopulationGeometry):
         return 0.
 
 
-class Ellipse(PopulationGeometry):
-
-    width = mongoengine.FloatField()
-    height = mongoengine.FloatField()
-    center = mongoengine.ListField()
-    angle = mongoengine.FloatField()
-
-    @property
-    def shape(self):
-        """
-        Generates a Shapely Polygon object.
-
-        Returns
-        -------
-        Shapely.geometry.Polygon
-        """
-        circle = Point(self.center).buffer(1)
-        return affinity.rotate(affinity.scale(circle, self.width, self.height), self.angle)
-
-    def overlap(self,
-                comparison_poly: Poly,
-                threshold: float = 0.):
-        """
-        For a given polygon, give the fraction overlap with this PopulationGeometry shape.
-        If fraction overlap does not exceed given threshold, returns 0.0
-
-        Parameters
-        ----------
-        comparison_poly: shapely.geometry.Polygon
-        threshold: float (default = 0.0)
-
-        Returns
-        -------
-        float
-        """
-        if self.shape.intersects(comparison_poly):
-            overlap = float(self.shape.intersection(comparison_poly).area / self.shape.area)
-            if overlap >= threshold:
-                return overlap
-        return 0.
-
-
 class Population(mongoengine.EmbeddedDocument):
     """
     Cached populations; stores the index of events associated to a population for quick loading.
@@ -176,7 +134,7 @@ class Population(mongoengine.EmbeddedDocument):
     geom = mongoengine.EmbeddedDocumentField(PopulationGeometry)
     clusters = mongoengine.EmbeddedDocumentListField(Cluster)
     definition = mongoengine.StringField()
-    signature = mongoengine.ListField()
+    signature = mongoengine.DictField()
 
     def __init__(self, *args, **kwargs):
         # If the Population existed previously, fetched the index
@@ -203,8 +161,8 @@ class Population(mongoengine.EmbeddedDocument):
             self._ctrl_index[k] = v
 
 
-def _check_overlap(left: PopulationGeometry,
-                   right: PopulationGeometry):
+def _check_overlap(left: Polygon,
+                   right: Polygon):
     has_shape = [p.shape is not None for p in [left, right]]
     assert sum(has_shape) != 1, "To merge populations, both gates must be elliptical or polygon gates or both " \
                                 "must be threshold gates. Cannot merge one type with the other."
@@ -212,44 +170,84 @@ def _check_overlap(left: PopulationGeometry,
         assert left.shape.intersects(right.shape), "Invalid: cannot merge non-overlapping populations"
 
 
-def merge_populations(left: Population,
+def _check_transforms_dimensions(left: Population,
+                                 right: Population):
+    assert left.geom.transform_x == right.geom.transform_x, "X dimension transform differs between left and right populations"
+    assert left.geom.transform_y == right.geom.transform_y, "Y dimension transform differs between left and right populations"
+    assert left.geom.x == right.geom.x, "X dimension differs between left and right populations"
+    assert left.geom.y == right.geom.y, "Y dimension differs between left and right populations"
+
+
+def _merge_index(left: Population,
+                 right: Population):
+    return np.unique(np.concatenate([left.index, right.index], axis=0), axis=0)
+
+
+def _merge_signatures(left: Population,
+                      right: Population):
+    return pd.DataFrame([left.signature, right.signature]).mean().to_dict()
+
+
+def _merge_thresholds(left: Population,
                       right: Population,
-                      new_population_name: str or None = None):
-    assert left.parent == right.parent, "Parent populations do not match"
-    new_population_name = new_population_name or f"merge_{left.population_name}_{right.population_name}"
-    _check_overlap(left.geom, right.geom)
-    assert left.geom.transform_x == left.geom.transform_x, "X dimension transform differs between left and right populations"
-    assert left.geom.transform_y == left.geom.transform_y, "Y dimension transform differs between left and right populations"
-    if left.definition and right.definition:
-        new_definition = ",".join([left.definition, right.definition])
-    warn("Associated clusters are now void. Repeat clustering on new population")
-    left.clusters = []
-    right.clusters = []
+                      new_population_name: str):
+    assert left.geom.x_threshold == right.geom.x_threshold, "Threshold merge assumes that the populations are derived from the same gate; X threshold should match between " \
+                                                            "populations"
+    assert left.geom.y_threshold == right.geom.y_threshold, "Threshold merge assumes that the populations are derived from the same gate; Y threshold should match between " \
+                                                            "populations"
+    if left.clusters or right.clusters:
+        warn("Associated clusters are now void. Repeat clustering on new population")
+        left.clusters, right_clusters = [], []
     if len(left.ctrl_index) > 0 or len(right.ctrl_index) > 0:
         warn("Associated control indexes are now void. Repeat control gating on new population")
+    new_geom = Threshold(x=left.geom.x,
+                         y=left.geom.y,
+                         transform_x=left.geom.transform_x,
+                         transform_y=left.geom.transform_y,
+                         x_threshold=left.geom.x_threshold,
+                         y_threshold=left.geom.y_threshold)
 
-    if len(shapes) == 2:
-        new_shape = unary_union([p.geom.shape for p in [left, right]])
-        x, y = new_shape.exterior.coords.xy
-    else:
-        x, y = None, None
-    left_sig = {k: v for k, v in left.signature}
-    right_sig = {k: v for k, v in right.signature}
-    new_signature = pd.DataFrame([left_sig, right_sig]).mean().to_dict()
-    new_geom = PopulationGeometry(x=left.geom.x,
-                                  y=left.geom.y,
-                                  x_threshold=left.geom.x_threshold,
-                                  y_threshold=left.geom.y_threshold,
-                                  transform_x=left.geom.transform_x,
-                                  transform_y=left.geom.transform_y,
-                                  x_values=x,
-                                  y_values=y)
     new_population = Population(population_name=new_population_name,
                                 n=len(left.index) + len(right.index),
                                 parent=left.parent,
                                 warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
-                                index=np.unique(np.concatenate([left.index, right.index], axis=0), axis=0),
+                                index=_merge_index(left, right),
                                 geom=new_geom,
-                                definition=new_definition,
-                                signature=[(k, v) for k, v in new_signature.items()])
+                                definition=",".join([left.definition, right.definition]),
+                                signature=_merge_signatures(left, right))
     return new_population
+
+
+def _merge_polygons(left: Population,
+                    right: Population,
+                    new_population_name: str):
+    _check_overlap(left.geom, right.geom)
+    new_shape = unary_union([p.geom.shape for p in [left, right]])
+    x, y = new_shape.exterior.coords.xy
+    new_geom = Polygon(x=left.geom.x,
+                       y=left.geom.y,
+                       transform_x=left.geom.transform_x,
+                       transform_y=left.geom.transform_y,
+                       x_values=x,
+                       y_values=y)
+    new_population = Population(population_name=new_population_name,
+                                n=len(left.index) + len(right.index),
+                                parent=left.parent,
+                                warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
+                                index=_merge_index(left, right),
+                                geom=new_geom,
+                                signature=_merge_signatures(left, right))
+    return new_population
+
+
+def merge_populations(left: Population,
+                      right: Population,
+                      new_population_name: str or None = None):
+    _check_transforms_dimensions(left, right)
+    new_population_name = new_population_name or f"merge_{left.population_name}_{right.population_name}"
+    assert left.parent == right.parent, "Parent populations do not match"
+    assert isinstance(left.geom, type(right.geom)), f"Geometries must be of the same type; left={type(left.geom)}, right={type(right.geom)}"
+    if isinstance(left.geom, Threshold):
+        return _merge_thresholds(left, right, new_population_name)
+    return _merge_polygons(left, right, new_population_name)
+
