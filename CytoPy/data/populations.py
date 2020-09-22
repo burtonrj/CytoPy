@@ -53,6 +53,7 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
     y = mongoengine.StringField()
     transform_x = mongoengine.StringField()
     transform_y = mongoengine.StringField()
+    meta = {'allow_inheritance': True}
 
 
 class Threshold(PopulationGeometry):
@@ -73,7 +74,7 @@ class Polygon(PopulationGeometry):
         -------
         Shapely.geometry.Polygon
         """
-        return Polygon([(x, y) for x, y in zip(self.x_values, self.y_values)])
+        return Poly([(x, y) for x, y in zip(self.x_values, self.y_values)])
 
     def overlap(self,
                 comparison_poly: Poly,
