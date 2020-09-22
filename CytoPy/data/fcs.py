@@ -67,6 +67,26 @@ class FileGroup(mongoengine.Document):
             self.save()
         self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
 
+    def _init_populations(self):
+        if self.populations:
+            assert os.path.isfile(self.h5path), f"Could not locate FileGroup HDF5 record {self.h5path}"
+            with h5py.File(self.h5path, "r") as f:
+                for pop in self.populations:
+                    k = f"/index/{pop.population_name}"
+                    if k + "/primary" not in f.keys():
+                        warn(f"Population index missing for {pop.population_name}!")
+                    else:
+                        pop.index = f[k + "/primary"][:]
+                        ctrls = [x for x in f[k].keys() if x != "primary"]
+                        for c in ctrls:
+                            pop.ctrl_index = (c, f[k + f"/{c}"][:])
+                    k = f"/clusters/{pop.population_name}"
+                    for c in pop.clusters:
+                        if c not in f[k].keys():
+                            warn(f"Cluster index missing for {c.cluster_id} in population {pop.population_name}!")
+                        else:
+                            c.index = f[k + f"/{c.cluster_id}"][:]
+
     def load(self,
              sample_size: int or float or None = None,
              include_controls: bool = True,
