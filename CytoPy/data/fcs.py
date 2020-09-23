@@ -81,31 +81,52 @@ class FileGroup(mongoengine.Document):
             self.populations = []
             self.save()
         self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
-
-    def _init_populations(self):
         if self.populations:
-            assert os.path.isfile(self.h5path), f"Could not locate FileGroup HDF5 record {self.h5path}"
-            with h5py.File(self.h5path, "r") as f:
-                for pop in self.populations:
-                    k = f"/index/{pop.population_name}"
-                    if k + "/primary" not in f.keys():
-                        warn(f"Population index missing for {pop.population_name}!")
+            self._load_populations()
+
+    def _load_populations(self):
+        """
+        Load indexes for existing populations from HDF5 file. This includes indexes for controls and clusters.
+
+        Returns
+        -------
+        None
+        """
+        assert self._hdf5_exists(), f"Could not locate FileGroup HDF5 record {self.h5path}"
+        with h5py.File(self.h5path, "r") as f:
+            for pop in self.populations:
+                k = f"/index/{pop.population_name}"
+                if k + "/primary" not in f.keys():
+                    warn(f"Population index missing for {pop.population_name}!")
+                else:
+                    pop.index = f[k + "/primary"][:]
+                    ctrls = [x for x in f[k].keys() if x != "primary"]
+                    for c in ctrls:
+                        pop.ctrl_index = (c, f[k + f"/{c}"][:])
+                k = f"/clusters/{pop.population_name}"
+                for c in pop.clusters:
+                    if c not in f[k].keys():
+                        warn(f"Cluster index missing for {c.cluster_id} in population {pop.population_name}!")
                     else:
-                        pop.index = f[k + "/primary"][:]
-                        ctrls = [x for x in f[k].keys() if x != "primary"]
-                        for c in ctrls:
-                            pop.ctrl_index = (c, f[k + f"/{c}"][:])
-                    k = f"/clusters/{pop.population_name}"
-                    for c in pop.clusters:
-                        if c not in f[k].keys():
-                            warn(f"Cluster index missing for {c.cluster_id} in population {pop.population_name}!")
-                        else:
-                            c.index = f[k + f"/{c.cluster_id}"][:]
+                        c.index = f[k + f"/{c.cluster_id}"][:]
 
     def load(self,
              sample_size: int or float or None = None,
              include_controls: bool = True,
              columns: str = "marker"):
+        """
+        Load events data and return as a Pandas DataFrame.
+
+        Parameters
+        ----------
+        sample_size: int or float or None (optional)
+        include_controls: bool (default=True)
+        columns: str (default="marker")
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         data = {"primary": _column_names(df=pd.read_hdf(self.h5path, "primary"),
                                          mappings=self.channel_mappings,
                                          preference=columns)}
@@ -126,6 +147,13 @@ class FileGroup(mongoengine.Document):
         return data
 
     def _hdf5_exists(self):
+        """
+        Tests if associated HDF5 file exists.
+
+        Returns
+        -------
+        bool
+        """
         return os.path.isfile(self.h5path)
 
     def add_file(self,
@@ -133,6 +161,24 @@ class FileGroup(mongoengine.Document):
                  channel_mappings: List[dict],
                  control: bool = False,
                  ctrl_id: str or None = None):
+        """
+        Add new file to the FileGroup. Calls `save` upon completion.
+
+        Parameters
+        ----------
+        data: Numpy.array
+            Matrix of events data
+        channel_mappings: List[dict]
+            List of dictionary objects e.g {"channel": "PE-Cy7", "marker": "CD3"}
+        control: bool (default=False)
+            Indicates if file represents a control e.g. an FMO or isotype control
+        ctrl_id: str or None
+            Required if control=True
+
+        Returns
+        -------
+        None
+        """
 
         if self.channel_mappings:
             self._valid_mappings(channel_mappings)
@@ -154,6 +200,19 @@ class FileGroup(mongoengine.Document):
         self.save()
 
     def _valid_mappings(self, channel_mappings: List[dict]):
+        """
+        Given a list of dictionaries representing channel mappings, check that they match
+        the channel mappings associated to this instance of FileGroup. Raises Assertion error in
+        the event that the channel mappings do not match.
+
+        Parameters
+        ----------
+        channel_mappings: List[dict]
+
+        Returns
+        -------
+        None
+        """
         for cm in channel_mappings:
             err = f"{cm} does not match the expected channel mappings for this file group"
             assert sum([x.check_matched_pair(cm["channel"], cm["marker"])
@@ -185,7 +244,8 @@ class FileGroup(mongoengine.Document):
 
     def delete_clusters(self,
                         clustering_uid: str or None = None,
-                        drop_all: bool = False):
+                        drop_all: bool = False,
+                        meta: bool = False):
         """
         Delete all cluster attaining to a given clustering UID
 
@@ -196,14 +256,18 @@ class FileGroup(mongoengine.Document):
         drop_all: bool
             If True, all clusters for every population are dropped from database regardless of the
             clustering experiment they are associated too
+        meta: bool
+            If True, delete is applied to meta clusters
         Returns
         -------
         None
         """
-        if not drop_all:
-            assert clustering_uid, 'Must provide a valid clustering experiment UID'
-        for p in self.populations:
-            p.delete_clusters(clustering_uid, drop_all)
+        if meta:
+            for p in self.populations:
+                p.delete_meta_clusters(clustering_uid, drop_all)
+        else:
+            for p in self.populations:
+                p.delete_clusters(clustering_uid, drop_all)
         self.save()
 
     def delete_populations(self, populations: list or str) -> None:
@@ -284,6 +348,13 @@ class FileGroup(mongoengine.Document):
                 yield p
 
     def _write_populations(self):
+        """
+        Write population data to disk.
+
+        Returns
+        -------
+        None
+        """
         root_n = [x for x in self.populations if x.population_name == "root"][0].n
         with h5py.File(self.h5path, "a") as f:
             for p in self.populations:
@@ -293,33 +364,55 @@ class FileGroup(mongoengine.Document):
                 f.create_dataset(f'/index/{p.population_name}/primary', data=p.index)
                 for ctrl, idx in p.ctrl_index.items():
                     f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
+                for cluster in p.clusters:
+                    cluster.prop_of_events = cluster.n/p.n
+                    f.create_dataset(f'/clusters/{p.population_name}/{cluster.cluster_id}')
 
-    def _hdf_prepare_population_grps(self):
+    def _hdf_create_population_grps(self):
+        """
+        Check if index group exists in HDF5 file, if not, create it. Then check that a group
+        exists for each population and if absent create a group.
+
+        Returns
+        -------
+        None
+        """
         with h5py.File(self.h5path, "a") as f:
             if "index" not in f.keys():
                 f.create_group("index")
-                for p in self.populations:
-                    f.create_group(f"index/{p.population_name}")
-                return
+            if "clusters" not in f.keys():
+                f.create_group("clusters")
             for p in self.populations:
                 if p.population_name not in f["index"].keys():
                     f.create_group(f"index/{p.population_name}")
-                else:
-                    if "primary" in f["index"].get(p.population_name).keys():
-                        del f[f"index/{p.population_name}/primary"]
-                    for ctrl_id in p.ctrl_index.keys():
-                        if ctrl_id in f["index"].get(p.population_name).keys():
-                            del f[f"index/{p.population_name}/{ctrl_id}"]
+                if p.population_name not in f["clusters"].keys():
+                    f.create_group(f"clusters/{p.population_name}")
+
+    def _hdf_reset_population_data(self):
+        """
+        For each population clear existing data ready for overwriting with
+        current data.
+
+        Returns
+        -------
+        None
+        """
+        with h5py.File(self.h5path, "a") as f:
+            for p in self.populations:
+                if "primary" in f[f"index/{p.population_name}"].keys():
+                    del f[f"index/{p.population_name}/primary"]
+                if p.population_name in f["clusters"].keys():
+                    del f[f"clusters/{p.population_name}"]
+                for ctrl_id in p.ctrl_index.keys():
+                    if ctrl_id in f[f"index/{p.population_name}"].keys():
+                        del f[f"index/{p.population_name}/{ctrl_id}"]
 
     def save(self, *args, **kwargs):
-        # TODO Populate indexes of each population and nested clusters
-        # TODO remove indexes of deleted populations and clusters
         # Calculate meta and save indexes to disk
         if self.populations:
+            self._hdf_create_population_grps()
             # Populate h5path for populations
-            for p in self.populations:
-                p._h5path = self.h5path
-            self._hdf_prepare_population_grps()
+            self._hdf_reset_population_data()
             self._write_populations()
         super().save(*args, **kwargs)
 
