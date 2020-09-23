@@ -28,8 +28,9 @@ class Cluster(mongoengine.EmbeddedDocument):
     cluster_id = mongoengine.StringField(required=True, unique=True)
     meta_label = mongoengine.StringField(required=False)
     n = mongoengine.IntField(required=True)
-    prop_of_root = mongoengine.FloatField(required=True)
+    prop_of_events = mongoengine.FloatField(required=True)
     clustering_definition = mongoengine.StringField(required=True)
+    meta_clustering_definition = mongoengine.StringField(required=False)
 
     def __init__(self, *args, **kwargs):
         self._index = kwargs.pop("index", None)
@@ -191,6 +192,49 @@ class Population(mongoengine.EmbeddedDocument):
         for k, v in kwargs.items():
             assert isinstance(v, np.ndarray), "ctrl_idx should be type numpy.array"
             self._ctrl_index[k] = v
+
+    def delete_clusters(self, clustering_definition: str or None, drop_all: bool = False):
+        """
+        Delete clusters with the given clustering definition ID or drop all clusters
+
+        Parameters
+        ----------
+        clustering_definition: str
+        drop_all: bool (default=False)
+
+        Returns
+        -------
+        None
+        """
+        if drop_all:
+            self.clusters = []
+        else:
+            assert clustering_definition is not None, 'Must provide a valid clustering definition ID'
+            self.clusters = [x for x in self.clusters if x.clustering_definition != clustering_definition]
+
+    def delete_meta_clusters(self, meta_clustering_definition: str or None, drop_all: bool = False):
+        """
+        Delete clusters with the given meta clustering definition ID or drop all clusters
+
+        Parameters
+        ----------
+        meta_clustering_definition: str
+        drop_all: bool (default=False)
+
+        Returns
+        -------
+        None
+        """
+        if drop_all:
+            for x in self.clusters:
+                x.meta_label = None
+                x.meta_clustering_definition = None
+        else:
+            assert meta_clustering_definition is not None, 'Must provide a valid meta clustering definition ID'
+            for x in self.clusters:
+                if x.meta_clustering_definition == meta_clustering_definition:
+                    x.meta_label = None
+                    x.meta_clustering_definition = None
 
 
 def _check_overlap(left: Population,
