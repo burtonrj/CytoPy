@@ -1,5 +1,4 @@
-from shapely import affinity
-from shapely.geometry import Polygon as Poly, Point
+from shapely.geometry import Polygon as Poly
 from shapely.ops import unary_union
 from _warnings import warn
 import numpy as np
@@ -30,6 +29,7 @@ class Cluster(mongoengine.EmbeddedDocument):
     meta_label = mongoengine.StringField(required=False)
     n = mongoengine.IntField(required=True)
     prop_of_root = mongoengine.FloatField(required=True)
+    clustering_definition = mongoengine.StringField(required=True)
 
     def __init__(self, *args, **kwargs):
         self._index = kwargs.pop("index", None)

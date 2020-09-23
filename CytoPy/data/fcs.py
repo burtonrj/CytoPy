@@ -13,6 +13,21 @@ import os
 def _column_names(df: pd.DataFrame,
                   mappings: list,
                   preference: str = "marker"):
+    """
+    Given a dataframe of fcs events and a list of ChannelMapping objects, return the dataframe
+    with column name updated according to the preference
+
+    Parameters
+    ----------
+    df: pd.DataFrame
+    mappings: list
+    preference: str
+        Valid values are: 'marker' or 'channel'
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
     assert preference in ["marker", "channel"], "preference should be either 'marker' or 'channel'"
     other = [x for x in ["marker", "channel"] if x != preference][0]
     col_names = list(map(lambda x: x[preference] if x[preference] else x[other], mappings))
