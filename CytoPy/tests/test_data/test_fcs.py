@@ -1,6 +1,6 @@
-from ..data.fcs import  _column_names, FileGroup
-from ..data.populations import Cluster, Population
-from ..data.mappings import ChannelMap
+from CytoPy.data.fcs import _column_names, FileGroup
+from CytoPy.data.populations import Cluster, Population
+from CytoPy.data.mappings import ChannelMap
 import pandas as pd
 import numpy as np
 import pytest
