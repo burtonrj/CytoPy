@@ -110,6 +110,32 @@ class FileGroup(mongoengine.Document):
                     else:
                         c.index = f[k + f"/{c.cluster_id}"][:]
 
+    @staticmethod
+    def _sample_data(data: dict,
+                     sample_size: int or float):
+        """
+        Given a dictionary of dataframes like that produced from FileGroup.load() method, sample
+        using given sample size.
+
+        Parameters
+        ----------
+        data: dict
+        sample_size: int or float
+
+        Returns
+        -------
+        dict
+        """
+        data = data.copy()
+        kwargs = dict(n=sample_size)
+        if type(sample_size) == float:
+            kwargs = dict(frac=sample_size)
+        data["primary"] = data["primary"].sample(**kwargs)
+        if "controls" in data.keys():
+            data["controls"] = {file_id: x.sample(**kwargs)
+                                for file_id, x in data["controls"].items()}
+        return data
+
     def load(self,
              sample_size: int or float or None = None,
              include_controls: bool = True,
@@ -136,14 +162,7 @@ class FileGroup(mongoengine.Document):
                                                        preference=columns)
                                 for ctrl_id in self.controls}
         if sample_size is not None:
-            if type(sample_size) == int:
-                data["primary"] = data["primary"].sample(n=sample_size)
-                data["controls"] = {file_id: x.sample(n=sample_size)
-                                    for file_id, x in data["controls"].items()}
-            else:
-                data["primary"] = data["primary"].sample(frac=sample_size)
-                data["controls"] = {file_id: x.sample(frac=sample_size)
-                                    for file_id, x in data["controls"].items()}
+            data = self._sample_data(data=data, sample_size=sample_size)
         return data
 
     def _hdf5_exists(self):
