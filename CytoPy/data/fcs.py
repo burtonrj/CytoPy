@@ -303,8 +303,10 @@ class FileGroup(mongoengine.Document):
         None
         """
         if populations == "all":
-            self.populations = []
+            self.populations = [p for p in self.populations if p.population_name != "root"]
         else:
+            assert isinstance(populations, list), "Provide a list of population names for removal"
+            assert "root" not in populations, "Cannot delete root population"
             self.populations = [p for p in self.populations if p.population_name not in populations]
         self.save()
 
@@ -325,6 +327,7 @@ class FileGroup(mongoengine.Document):
         --------
         None
         """
+        assert population_name in list(self.list_populations()), f"Invalid population {population_name} does not exist"
         self.populations = [p for p in self.populations if p.population_name != population_name]
         self.populations.append(new_population)
         self.save()
@@ -429,7 +432,7 @@ class FileGroup(mongoengine.Document):
     def save(self, *args, **kwargs):
         # Calculate meta and save indexes to disk
         if self.populations:
-            self._hdf_create_population_grps()
+            # self._hdf_create_population_grps()
             # Populate h5path for populations
             self._hdf_reset_population_data()
             self._write_populations()
