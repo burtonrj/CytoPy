@@ -21,9 +21,27 @@ def create_example_data(file_id: str):
         pd.DataFrame(np.random.rand(100, 5)).to_hdf(f"{os.getcwd()}/test_data/{file_id}.hdf5", key=x)
 
 
-def create_example_filegroup():
-    x = FileGroup(primary_id="test", data_directory=f"{os.getcwd()}/test_data", controls=["ctrl1", "ctrl2"])
-    x.channel_mappings = [ChannelMap(marker=f"Marker{i+1}", channel=f"Channel{i+1}") for i in range(5)]
+def create_example_filegroup(include_controls: bool = True,
+                             include_mappings: bool = True):
+    x = FileGroup(primary_id="test", data_directory=f"{os.getcwd()}/test_data")
+    if include_mappings:
+        x.channel_mappings = [ChannelMap(marker=f"Marker{i+1}", channel=f"Channel{i+1}") for i in range(5)]
+    if include_controls:
+        x.controls = ["ctrl1", "ctrl2"]
+    return x
+
+
+def create_example_populations(x: FileGroup):
+    x.populations = [Population(population_name="root", n=10000, index=np.random.rand(10000)),
+                     Population(population_name="p2", n=500,
+                                index=np.random.rand(500), parent="root",
+                                ctrl_index={"ctrl1": np.random.rand(500)}),
+                     Population(population_name="p3", n=500,
+                                index=np.random.rand(500), parent="root",
+                                ctrl_index={"ctrl1": np.random.rand(500)}),
+                     Population(population_name="p4", n=500, index=np.random.rand(500), parent="root"),
+                     Population(population_name="p5", n=500, index=np.random.rand(500), parent="root",
+                                clusters=[Cluster(cluster_id="c1", index=np.random.rand(500), n=500)])]
     return x
 
 
@@ -94,42 +112,100 @@ def test_filegroup_load(sample_size, include_ctrls, columns, keys):
     delete_example_data(x.id)
 
 
+@pytest.mark.parametrize("ctrl_id,err", [(None, "There can only be one primary file associated to each file group"),
+                                         ("ctrl1", "Control file with ID ctrl1 already exists"),
+                                         ("ctrl2", "Control file with ID ctrl2 already exists")])
+def test_add_file_err_duplicate(ctrl_id, err):
+    x = create_example_filegroup()
+    create_example_data(x.id)
+    control = ctrl_id is not None
+    with pytest.raises(AssertionError) as exp:
+        x.add_file(data=np.random.rand(1000, 5),
+                   channel_mappings=[dict(channel=f"Channel{i + 1}", marker=f"Marker{i + 1}") for i in range(5)],
+                   control=control,
+                   ctrl_id=ctrl_id)
+    assert str(exp.value) == err
+
+
 def test_add_file():
-    pass
+    x = create_example_filegroup(include_controls=False)
+    x.add_file(data=np.random.rand(1000, 5),
+               channel_mappings=[dict(channel=f"Channel{i + 1}", marker=f"Marker{i + 1}") for i in range(5)],
+               control=False)
+    with h5py.File(x.h5path, "r") as f:
+        assert "primary" in f.keys()
+        assert f["primary"]["axis0"].shape[0] == 5
+        assert f["primary"]["axis1"].shape[0] == 1000
+    x.add_file(data=np.random.rand(1000, 5),
+               channel_mappings=[dict(channel=f"Channel{i + 1}", marker=f"Marker{i + 1}") for i in range(5)],
+               control=True,
+               ctrl_id="ctrl1")
+    with h5py.File(x.h5path, "r") as f:
+        assert "ctrl1" in f.keys()
+        assert f["ctrl1"]["axis0"].shape[0] == 5
+        assert f["ctrl1"]["axis1"].shape[0] == 1000
 
 
-def test_valid_mappings():
-    pass
+@pytest.mark.parametrize("pop,err", [("cat", "Provide a list of population names for removal"),
+                                     (["root"], "Cannot delete root population")])
+def test_delete_pop_err(pop, err):
+    x = create_example_filegroup()
+    with pytest.raises(AssertionError) as exp:
+        x.delete_populations(pop)
+    assert str(exp.value) == err
 
 
 def test_delete_pop():
-    pass
+    x = create_example_filegroup()
+    x = create_example_populations(x)
+    x.delete_populations(["p3"])
+    assert "p3" not in list(x.list_populations())
+    x.delete_populations(["p2", "p5"])
+    assert {"root", "p4"} == set([p.population_name for p in x.populations])
 
 
 def test_update_pop():
-    pass
-
-
-def test_get_pop():
-    pass
+    x = create_example_filegroup()
+    x = create_example_populations(x)
+    x.update_population(population_name="p3", new_population=Population(population_name="new",
+                                                                        index=np.random.rand(1000),
+                                                                        n=1000))
+    assert "p3" not in list(x.list_populations())
+    assert "new" in list(x.list_populations())
 
 
 def test_get_pop_by_parent():
-    pass
+    x = create_example_filegroup()
+    x = create_example_populations(x)
+    assert len(list(x.get_population_by_parent("root"))) == 5
 
 
 def test_write_pop():
-    pass
-
-
-def test_create_pop_grps():
-    pass
+    x = create_example_filegroup()
+    x = create_example_populations(x)
+    x._write_populations()
+    p = x.get_population("p3")
+    assert p.n == 500
+    assert p.prop_of_parent == 500/10000
+    assert p.prop_of_total == 500 / 10000
+    with h5py.File(x.h5path, "r") as f:
+        assert all(x in f["index"].keys() for x in ["root", "p2", "p3", "p4", "p5"])
+        assert "ctrl1" in f["index/p2"].keys()
+        assert "ctrl1" in f["index/p3"].keys()
+        assert f["index/p5/primary"][:].shape[0] == 500
+        assert f["clusters/p5/c1"][:].shape[0] == 500
+        assert f["index/p2/ctrl1"][:].shape[0] == 500
 
 
 def test_reset_pop_data():
-    pass
+    x = create_example_filegroup()
+    create_example_data(x.id)
+    x.populations.append(Population(population_name="test_pop",
+                                    ctrl_index=dict(ctrl1=np.random.rand(5))))
+    x._hdf_reset_population_data()
+    with h5py.File(x.h5path, "r") as f:
+        assert "primary" not in f["index/test_pop"].keys()
+        assert "ctrl1" not in f["index/test_pop"].keys()
+        assert "test_pop" not in f["clusters"].keys()
 
-
-def test_delete():
-    pass
 
