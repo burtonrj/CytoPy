@@ -139,7 +139,8 @@ def test_label_children_err_threhsold_nonbinary():
 
 def test_dim_reduction():
     gate = create_gate(preprocessing=PreProcess(transform_x="logicle",
-                                                transform_y="logicle"))
+                                                transform_y="logicle",
+                                                dim_reduction="UMAP"))
     data = pd.DataFrame({i: np.random.rand(1000) for i in ["x", "y", "z", "w"]})
     data = gate._dim_reduction(data)
     assert data.columns.tolist() == ["embedding1", "embedding2"]
