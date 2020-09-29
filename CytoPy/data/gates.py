@@ -110,7 +110,7 @@ def population_likeness(new_population: Population,
     """
     Given two Populations, generate a score of their likeness, where a smaller value indicates greater
     likeness. This is a composite score of the euclidean distance between their signatures (their vector means),
-    the euclidean distance between their centroids, and the absolute difference between their areas.
+    the euclidean distance between their centroids, and the overlap of their areas.
     between them
     Parameters
     ----------
@@ -130,9 +130,14 @@ def population_likeness(new_population: Population,
         # Centroid score
         new_pop_poly = new_population.geom.shape
         template_poly = template_population.geom.shape
-        centroid_score = abs(euclidean(new_pop_poly.centroid.coords, template_poly.centroid.coords))
+        x = [new_pop_poly.centroid.coords[0][0], template_poly.centroid.coords[0][0]]
+        y = [new_pop_poly.centroid.coords[0][1], template_poly.centroid.coords[0][1]]
+        norm = scaler(data=np.array([x, y]),
+                      scale_method="norm",
+                      return_scaler=False)
+        centroid_score = abs(euclidean(norm[0, :], norm[1, :]))
         # Area score
-        area_score = abs(new_pop_poly.area - template_poly.area)/new_pop_poly.area
+        area_score = 1. - template_population.geom.overlap(comparison_poly=new_population.geom.shape)
         return sum([sig_score, centroid_score, area_score])
     return sig_score
 

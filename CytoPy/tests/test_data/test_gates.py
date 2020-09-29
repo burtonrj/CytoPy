@@ -12,7 +12,7 @@ def create_population(name: str,
                       signature: dict or None = None,
                       **kwargs):
     idx = idx or np.arange(0, 100, 1)
-    signature = signature or {"x": 50, "y": 25, "z": 10}
+    signature = signature or {"x": 0.8, "y": 0.2, "z": 0.1}
     return Population(population_name=name,
                       geom=geom,
                       index=idx,
@@ -24,7 +24,7 @@ def create_child_definition(name: str,
                             geom: Threshold or Polygon,
                             definition: str = "+",
                             signature: dict or None = None):
-    signature = signature or {"x": 50, "y": 25, "z": 10}
+    signature = signature or {"x": 0.8, "y": 0.2, "z": 0.1}
     return ChildDefinition(population_name=name, geom=geom, definition=definition, signature=signature)
 
 
@@ -55,9 +55,9 @@ def test_pop_likeness():
     pop = create_population(name="test", geom=Threshold())
     score = population_likeness(pop, template)
     assert score == 0.
-    template = create_child_definition(name="template", geom=Threshold(), signature={"x": 10, "y": 10, "z": 10})
+    template = create_child_definition(name="template", geom=Threshold(), signature={"x": 0.15, "y": 0.5, "z": 0.2})
     score = population_likeness(pop, template)
-    assert pytest.approx(42.72, 0.01) == score
+    assert pytest.approx(0.7228, 0.001) == score
     poly1, poly2, poly3 = generate_polygons()
     template = create_child_definition(name="template", geom=poly1)
     p1 = create_population(name="p1", geom=poly2)
