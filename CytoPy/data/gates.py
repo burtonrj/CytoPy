@@ -260,6 +260,7 @@ class Gate(mongoengine.Document):
         if self.preprocessing.scale:
             data = self._scale(data)
         data = pd.DataFrame(dimensionality_reduction(data=data,
+                                                     features=data.columns,
                                                      method=self.preprocessing.dim_reduction,
                                                      n_components=2,
                                                      return_reducer=False,

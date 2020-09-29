@@ -1,5 +1,5 @@
 from ...data.populations import Population, Threshold, Polygon
-from ...data.gates import create_signature, _merge, ChildDefinition, population_likeness, Gate
+from ...data.gates import create_signature, _merge, ChildDefinition, population_likeness, Gate, PreProcess, PostProcess
 from .test_population import generate_polygons
 import pandas as pd
 import numpy as np
@@ -29,7 +29,7 @@ def create_child_definition(name: str,
 
 
 def norm(x):
-    return list(map(lambda i: (i - min(x))/(max(x) - min(x)), x))
+    return list(map(lambda i: (i - min(x)) / (max(x) - min(x)), x))
 
 
 def test_create_signature():
@@ -67,24 +67,82 @@ def test_pop_likeness():
     assert p2_score > p1_score
 
 
+def create_gate(**kwargs):
+    shape = kwargs.pop("shape", "polygon")
+    return Gate(gate_name="test",
+                parent="root",
+                shape=shape,
+                x="x",
+                y="y",
+                **kwargs)
+
+
 def test_gate_init():
-    pass
+    gate = create_gate()
+    assert not gate.defined
+    assert not gate.labelled
 
 
 def test_clear_children():
-    pass
+    gate = create_gate()
+    gate.children.append(create_child_definition(name="test", geom=Threshold()))
+    assert len(gate.children) == 1
+    gate.clear_children()
+    assert len(gate.children) == 0
+    assert not gate.defined
+    assert not gate.labelled
 
 
-def test_label_children():
-    pass
+def test_label_children_err():
+    gate = create_gate()
+    gate.labelled = True
+    with pytest.raises(AssertionError) as exp:
+        gate.label_children(labels={})
+    assert str(exp.value) == "Children already labelled. To clear children and relabel call 'clear_children'"
 
 
-def test_scale():
-    pass
+def test_label_children_drop_msg():
+    gate = create_gate()
+    gate.children.append(create_child_definition(name="test1", geom=Threshold()))
+    gate.children.append(create_child_definition(name="test2", geom=Threshold()))
+    with pytest.warns(UserWarning) as warn:
+        gate.label_children({"test1": None})
+    assert str(warn.list[0].message) == "The following populations are not in labels and will be dropped: ['test2']"
+
+
+def test_label_children_err_binary():
+    gate = create_gate(binary=True, shape="polygon")
+    gate.children.append(create_child_definition(name="test1", geom=Polygon()))
+    gate.children.append(create_child_definition(name="test2", geom=Polygon()))
+    with pytest.raises(AssertionError) as exp:
+        gate.label_children(labels={"test1": None, "test2": None})
+    assert str(exp.value) == "Non-threshold binary gate's should only have a single population"
+
+
+def test_label_children_err_threhsold_binary():
+    gate = create_gate(binary=True, shape="threshold")
+    gate.children.append(create_child_definition(name="test1", geom=Threshold()))
+    gate.children.append(create_child_definition(name="test2", geom=Threshold()))
+    with pytest.raises(AssertionError) as exp:
+        gate.label_children(labels={"test1": None, "test2": None})
+    assert str(exp.value) == "For a binary threshold gate, labels should be provided with the keys: '+' and '-'"
+
+
+def test_label_children_err_threhsold_nonbinary():
+    gate = create_gate(binary=False, shape="threshold")
+    gate.children.append(create_child_definition(name="test1", geom=Threshold()))
+    gate.children.append(create_child_definition(name="test2", geom=Threshold()))
+    with pytest.raises(AssertionError) as exp:
+        gate.label_children(labels={"test1": None, "test2": None})
+    assert str(exp.value) == "For a non-binary threshold gate, labels should be provided with the keys: '++', '-+', '+-' and '--'"
 
 
 def test_dim_reduction():
-    pass
+    gate = create_gate(preprocessing=PreProcess(transform_x="logicle",
+                                                transform_y="logicle"))
+    data = pd.DataFrame({i: np.random.rand(1000) for i in ["x", "y", "z", "w"]})
+    data = gate._dim_reduction(data)
+    assert data.columns.tolist() == ["embedding1", "embedding2"]
 
 
 def test_init_method():
@@ -129,6 +187,3 @@ def test_compare_populations():
 
 def test_save():
     pass
-
-
-
