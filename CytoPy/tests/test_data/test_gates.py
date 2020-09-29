@@ -163,33 +163,77 @@ def test_downsample_err():
     assert str(exp.value) == "Invalid Gate: downsampling_method must be one of: uniform, density, or faithful"
 
 
-def test_upsample():
-    pass
+@pytest.mark.parametrize("method,kwargs", [("uniform", {"sample_n": 100}),
+                                           ("uniform", {"sample_n": 0.2}),
+                                           ("density", {})])
+def test_downsample(method, kwargs):
+    gate = create_gate(preprocessing=PreProcess(downsample_method=method, downsample_kwargs=kwargs))
+    data = pd.DataFrame({i: np.random.rand(10000) for i in ["x", "y", "z", "w"]})
+    data, sample = gate._downsample(data=data)
+    assert isinstance(data, pd.DataFrame)
+    assert isinstance(sample, pd.DataFrame)
+    assert data.shape[0] > sample.shape[0]
 
 
 def test_add_child():
-    pass
+    gate = create_gate(shape="threshold")
+    gate._add_child(population=create_population(name="test", geom=Threshold(), definition="+"))
+    assert len(gate.children) == 1
+    assert gate.children[0].population_name == "+"
+    gate = create_gate(shape="polygon")
+    gate._add_child(population=create_population(name="test", geom=Threshold(), definition="+"))
+    assert len(gate.children) == 1
+    assert gate.children[0].population_name == "test"
 
 
 def test_label_binary_threshold():
-    pass
+    gate = create_gate(shape="threshold")
+    gate.children.append(create_child_definition(name="pos", definition="+", geom=Threshold()))
+    gate.children.append(create_child_definition(name="neg", definition="-", geom=Threshold()))
+    pos = create_population(name="+", geom=Threshold(), definition="+")
+    neg = create_population(name="-", geom=Threshold(), definition="-")
+    new_children = gate._label_binary_threshold(new_children=[pos, neg])
+    assert {p.population_name for p in new_children} == {"pos", "neg"}
 
 
 def test_label_threshold():
-    pass
+    gate = create_gate(shape="threshold", binary=False)
+    gate.children.append(create_child_definition(name="pos", definition="++", geom=Threshold()))
+    gate.children.append(create_child_definition(name="neg", definition="-+,--,+-", geom=Threshold()))
+    pos = create_population(name="++", geom=Threshold(), definition="++")
+    neg1 = create_population(name="--", geom=Threshold(), definition="--")
+    neg2 = create_population(name="-+", geom=Threshold(), definition="-+")
+    neg3 = create_population(name="+-", geom=Threshold(), definition="+-")
+    new_children = gate._label_threshold(new_children=[pos, neg1, neg2, neg3])
+    assert {p.population_name for p in new_children} == {"pos", "neg"}
 
 
 def test_label_binary_other():
-    pass
-
-
-def test_match_to_children():
-    pass
+    poly1, poly2, poly3 = generate_polygons()
+    gate = create_gate(shape="polygon", binary=True)
+    gate.children.append(create_child_definition(name="pos", definition="+", geom=poly1))
+    new_populations = gate._label_binary_other(new_children=[create_population(name="poly2",
+                                                                               geom=poly2),
+                                                             create_population(name="poly3",
+                                                                               geom=poly3)])
+    assert isinstance(new_populations, list)
+    assert len(new_populations) == 1
+    assert new_populations[0].population_name == "pos"
 
 
 def test_compare_populations():
-    pass
+    poly1, poly2, poly3 = generate_polygons()
+    gate = create_gate(shape="polygon", binary=True)
+    for name, geom in zip(["c1", "c2", "c3"], [poly1, poly2, poly3]):
+        gate.children.append(create_child_definition(name=name, geom=geom))
+    pops = [create_population(name=name, geom=geom) for name, geom in zip(["p1", "p2", "p3"], [poly1, poly2, poly3])]
+    assignments = gate._compare_populations(new_children=pops)
+    assert assignments == ["c1", "c2", "c3"]
 
 
-def test_save():
-    pass
+def test_save_err():
+    gate = create_gate(shape="polygon", binary=True)
+    with pytest.raises(AssertionError) as exp:
+        gate.save()
+    assert str(exp.value) == "Gate test is newly created and has not been defined. " \
+                             "Call 'label_children' to complete gating definition"
