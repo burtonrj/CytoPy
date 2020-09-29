@@ -394,7 +394,7 @@ class Gate(mongoengine.Document):
                   sample: pd.DataFrame,
                   verbose: bool = True):
         if not self.postprocessing.upsample_method:
-            warn("Downsampling was performed yet not upsampling method has been defined, "
+            warn("Downsampling was performed yet no upsampling method has been defined, "
                  "defaulting to infer_from_gate")
             self.postprocessing.upsample_method = 'infer_from_gate'
         if self.postprocessing.upsample_method == "infer_from_gate":
@@ -453,7 +453,7 @@ class Gate(mongoengine.Document):
             name = population.definition
         new_child = ChildDefinition(population_name=name,
                                     definition=population.definition,
-                                    template_geometry=population.geom,
+                                    geom=population.geom,
                                     signature=population.signature)
         self.children.append(new_child)
 
@@ -556,7 +556,6 @@ class Gate(mongoengine.Document):
 
     def _compare_populations(self,
                              new_children: List[Population]):
-        # Compare the signatures of each of the new children to the template signatures
         assignments = list()
         for child in new_children:
             ranking = [population_likeness(new_population=child,

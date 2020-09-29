@@ -30,7 +30,7 @@ def faithful_downsampling(data: np.array,
         Down-sampled array
     """
     communities = None
-    registered = np.zeros(data.geom[0])
+    registered = np.zeros(data.shape[0])
     tree = BallTree(data)
     while not all([x == 1 for x in registered]):
         i_ = np.random.choice(np.where(registered == 0)[0])
