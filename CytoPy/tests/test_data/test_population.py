@@ -130,7 +130,7 @@ def test_merge_signatures():
     assert sig.get("z") == 12.5
 
 
-def test_merge_thresholds():
+def create_threshold_pops():
     left = Population(population_name="left",
                       parent="test",
                       geom=Threshold(x_threshold=0.5,
@@ -145,6 +145,11 @@ def test_merge_thresholds():
                        index=np.array([0, 1, 2, 3, 8, 11]),
                        definition="+-",
                        signature=dict(x=15, y=15))
+    return left, right
+
+
+def test_merge_thresholds():
+    left, right = create_threshold_pops()
     merged = _merge_thresholds(left, right, "merged")
     assert merged.population_name == "merged"
     assert isinstance(merged.geom, Threshold)
@@ -157,7 +162,7 @@ def test_merge_thresholds():
     assert merged.parent == "test"
 
 
-def test_merge_polygons():
+def create_poly_pops():
     poly1, poly2, _ = generate_polygons()
     left = Population(population_name="left",
                       parent="test",
@@ -171,6 +176,11 @@ def test_merge_polygons():
                        index=np.array([0, 1, 2, 3, 8, 11]),
                        definition="+-",
                        signature=dict(x=15, y=15))
+    return left, right
+
+
+def test_merge_polygons():
+    left, right = create_poly_pops()
     merged = _merge_polygons(left, right, "merged")
     assert merged.population_name == "merged"
     assert isinstance(merged.geom, Polygon)
