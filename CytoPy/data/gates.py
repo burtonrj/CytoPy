@@ -5,7 +5,6 @@ from ..flow.gating_analyst import ManualGate, DensityGate, Analyst
 from ..utilities import inside_polygon
 from ..feedback import vprint
 from .populations import PopulationGeometry, Population, merge_populations
-from sklearn.preprocessing import MinMaxScaler
 from scipy.spatial.distance import euclidean
 from functools import reduce
 from typing import List
@@ -34,7 +33,9 @@ def create_signature(data: pd.DataFrame,
     dict
         Dictionary representation of signature; {column name: summary statistic}
     """
-    data = data.copy()
+    data = pd.DataFrame(scaler(data=data.values, scale_method="norm", return_scaler=False),
+                        columns=data.columns,
+                        index=data.index)
     idx = idx or data.index.values
     # ToDo this should be more robust
     for x in ["Time", "time"]:
@@ -97,11 +98,11 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
     """
     population_name = mongoengine.StringField()
     definition = mongoengine.StringField(required=False)
-    template_geometry = mongoengine.EmbeddedDocumentField(PopulationGeometry)
+    geom = mongoengine.EmbeddedDocumentField(PopulationGeometry)
     signature = mongoengine.DictField()
 
     def match_definition(self, query: str):
-        return query in self.definition.split("_")
+        return query in self.definition.split(",")
 
 
 def population_likeness(new_population: Population,
@@ -122,26 +123,25 @@ def population_likeness(new_population: Population,
         composite score
     """
     # Signature score
-    new_pop_sig = {k: v for k, v in new_population.signature}
-    template_sig = {k: v for k, v in template_population.signature}
-    vector_avgs = np.array([[new_pop_sig[i], template_sig[i]]
-                            for i in set(new_pop_sig.keys()).intersection(template_sig.keys())]).T
+    vector_avgs = np.array([[new_population.signature[i], template_population.signature[i]]
+                            for i in set(new_population.signature.keys()).intersection(template_population.signature.keys())]).T
     sig_score = abs(euclidean(vector_avgs[0, :], vector_avgs[1, :]))
-    # Centroid score
-    new_pop_poly = new_population.geom.shape
-    template_poly = template_population.template_geometry.shape
-    centroid_score = abs(euclidean(new_pop_poly.centroid.coords, template_poly.centroid.coords))
-    # Area score
-    area_score = abs(new_pop_poly.area - template_poly.area)
-    return sum([sig_score, centroid_score, area_score])
+    if hasattr(new_population.geom, "shape") and hasattr(template_population.geom, "shape"):
+        # Centroid score
+        new_pop_poly = new_population.geom.shape
+        template_poly = template_population.geom.shape
+        centroid_score = abs(euclidean(new_pop_poly.centroid.coords, template_poly.centroid.coords))
+        # Area score
+        area_score = abs(new_pop_poly.area - template_poly.area)/new_pop_poly.area
+        return sum([sig_score, centroid_score, area_score])
+    return sig_score
 
 
 class PreProcess(mongoengine.EmbeddedDocument):
-
     downsample_method = mongoengine.StringField(required=False, choices=["uniform",
                                                                          "faithful",
                                                                          "density"])
-    downsample_kwargs = mongoengine.ListField()
+    downsample_kwargs = mongoengine.DictField()
     transform_x = mongoengine.StringField(required=False,
                                           choices=["logicle",
                                                    "log_transform",
@@ -163,40 +163,20 @@ class PreProcess(mongoengine.EmbeddedDocument):
                                              "norm",
                                              "power",
                                              "robust"])
-    scale_kwargs = mongoengine.ListField()
+    scale_kwargs = mongoengine.DictField()
     dim_reduction = mongoengine.StringField(required=False,
                                             choices=["UMAP",
                                                      "tSNE",
                                                      "PCA",
                                                      "KernelPCA",
                                                      "PHATE"])
-    dim_reduction_kwargs = mongoengine.ListField()
-
-    def __init__(self, *args, **kwargs):
-        downsample_kwargs = self._preprocess_kwargs(kwargs.get("downsample_kwargs"))
-        scale_kwargs = self._preprocess_kwargs(kwargs.get("scale_kwargs"))
-        dim_reduction_kwargs = self._preprocess_kwargs(kwargs.get("dim_reduction_kwargs"))
-        if downsample_kwargs is not None:
-            kwargs["downsample_kwargs"] = downsample_kwargs
-        if scale_kwargs is not None:
-            kwargs["scale_kwargs"] = scale_kwargs
-        if dim_reduction_kwargs is not None:
-            kwargs["dim_reduction_kwargs"] = dim_reduction_kwargs
-        super().__init__(*args, **kwargs)
-
-    @staticmethod
-    def _preprocess_kwargs(kwargs: dict or None):
-        if kwargs is not None:
-            if isinstance(kwargs, dict):
-                return [(k, v) for k, v in kwargs.items()]
-            return kwargs
-        return None
+    dim_reduction_kwargs = mongoengine.DictField()
 
 
 class PostProcess(mongoengine.EmbeddedDocument):
     upsample_method = mongoengine.StringField(required=False,
                                               choices=["knn", "svm"])
-    upsample_kwargs = mongoengine.ListField()
+    upsample_kwargs = mongoengine.DictField()
     signature_transform = mongoengine.StringField(default="logicle")
     signature_method = mongoengine.StringField(default="median", choices=["median", "mean"])
 
@@ -215,7 +195,7 @@ class Gate(mongoengine.Document):
     ctrl_id = mongoengine.StringField(required=False)
     preprocessing = mongoengine.EmbeddedDocumentField(PreProcess)
     method = mongoengine.StringField()
-    method_kwargs = mongoengine.ListField()
+    method_kwargs = mongoengine.DictField()
     postprocessing = mongoengine.EmbeddedDocumentField(PostProcess)
 
     meta = {
@@ -262,8 +242,8 @@ class Gate(mongoengine.Document):
 
     def _scale(self,
                data: pd.DataFrame):
-        kwargs = {k: v for k, v in self.preprocessing.scale_kwargs}
-        return pd.DataFrame(scaler(data.values, self.preprocessing.scale, **kwargs), columns=data.columns)
+        return pd.DataFrame(scaler(data.values, self.preprocessing.scale, **self.preprocessing.scale_kwargs),
+                            columns=data.columns)
 
     def _dim_reduction(self,
                        data: pd.DataFrame):
@@ -274,13 +254,12 @@ class Gate(mongoengine.Document):
                                features_to_transform=data.columns)
         if self.preprocessing.scale:
             data = self._scale(data)
-        kwargs = {k: v for k, v in self.preprocessing.dim_reduction_kwargs}
         data = pd.DataFrame(dimensionality_reduction(data=data,
                                                      method=self.preprocessing.dim_reduction,
                                                      n_components=2,
                                                      return_reducer=False,
                                                      return_embeddings_only=True,
-                                                     **kwargs),
+                                                     **self.preprocessing.dim_reduction_kwargs),
                             columns=["embedding1", "embedding2"])
         return data
 
@@ -307,6 +286,40 @@ class Gate(mongoengine.Document):
                        model=self.method,
                        **kwargs)
 
+    def _transform(self,
+                   data: pd.DataFrame):
+        if self.preprocessing.transform_x and self.x is not None:
+            data = apply_transform(data=data,
+                                   transform_method=self.preprocessing.transform_x,
+                                   features_to_transform=[self.x])
+        if self.preprocessing.transform_y and self.y is not None:
+            data = apply_transform(data=data,
+                                   transform_method=self.preprocessing.transform_y,
+                                   features_to_transform=[self.y])
+        return data
+
+    def _downsample(self,
+                    data: pd.DataFrame):
+        if self.method == "DensityGate":
+            warn("DensityGate handles downsampling internally. Downsampling params ignored. To control "
+                 "downsampling methodology alter the method_kwargs as per documentation")
+            return data, None
+        if self.preprocessing.downsample_method == "uniform":
+            n = self.preprocessing.downsample_kwargs.get("sample_n", None)
+            assert n, "Invalid Gate: for uniform downsampling expect 'sample_n' in downsample_kwargs"
+            if type(n) == int:
+                return data, data.sample(n=n)
+            return data, data.sample(frac=float(n))
+        if self.preprocessing.downsample_method == "density":
+            return data, density_dependent_downsampling(data=data,
+                                                        features=data.columns,
+                                                        **self.preprocessing.downsample_kwargs)
+        if self.preprocessing.downsample_method == "faithful":
+            h = self.preprocessing.downsample_kwargs.get("h", None)
+            assert "h", "Invalid Gate: for faithful downsampling, 'h' expected in downsampling_kwargs"
+            return data, pd.DataFrame(faithful_downsampling(data=data, h=h), columns=data.columns)
+        raise ValueError("Invalid Gate: downsampling_method must be one of: uniform, density, or faithful")
+
     def _apply_preprocessing(self,
                              data: pd.DataFrame):
         data = data.copy()
@@ -314,14 +327,7 @@ class Gate(mongoengine.Document):
             data = self._dim_reduction(data)
         else:
             # Transform the x and y dimensions
-            if self.preprocessing.transform_x and self.x is not None:
-                data = apply_transform(data=data,
-                                       transform_method=self.preprocessing.transform_x,
-                                       features_to_transform=[self.x])
-            if self.preprocessing.transform_y and self.y is not None:
-                data = apply_transform(data=data,
-                                       transform_method=self.preprocessing.transform_y,
-                                       features_to_transform=[self.y])
+            data = self._transform(data=data)
             features = [x for x in [self.x, self.y] if x is not None]
             data = data[features]
         # Perform additional scaling if requested
@@ -329,28 +335,7 @@ class Gate(mongoengine.Document):
             data = self._scale(data)
         # Perform downsampling if requested
         if self.preprocessing.downsample_method:
-            if self.method == "DensityGate":
-                warn("DensityGate handles downsampling internally. Downsampling params ignored. To control "
-                     "downsampling methodology alter the method_kwargs as per documentation")
-                return data, None
-            kwargs = {k: v for k, v in self.preprocessing.downsample_kwargs}
-            if self.preprocessing.downsample_method == "uniform":
-                assert "sample_n" in kwargs.keys(), "Invalid Gate: for uniform downsampling expect 'sample_n' in " \
-                                                    "downsample_kwargs"
-                n = kwargs.get("sample_n")
-                if type(n) == int:
-                    return data, data.sample(n=n)
-                return data, data.sample(frac=float(n))
-            elif self.preprocessing.downsample_method == "density":
-                return data, density_dependent_downsampling(data=data,
-                                                            features=data.columns,
-                                                            **kwargs)
-            elif self.preprocessing.downsample_method == "faithful":
-                assert "h" in kwargs.keys(), "Invalid Gate: for faithful downsampling, 'h' expected in " \
-                                             "downsampling_kwargs"
-                return data, pd.DataFrame(faithful_downsampling(data=data, h=kwargs.get("h")),
-                                          columns=data.columns)
-            raise ValueError("Invalid Gate: downsampling_method must be one of: uniform, density, or faithful")
+            return self._downsample(data)
         return data, None
 
     def apply(self,
@@ -397,6 +382,37 @@ class Gate(mongoengine.Document):
             feedback("Matching detected populations to expected children...")
             return self._match_to_children(populations)
 
+    def _upsample(self,
+                  new_populations: List[Population],
+                  data: pd.DataFrame,
+                  sample: pd.DataFrame,
+                  verbose: bool = True):
+        if not self.postprocessing.upsample_method:
+            warn("Downsampling was performed yet not upsampling method has been defined, "
+                 "defaulting to infer_from_gate")
+            self.postprocessing.upsample_method = 'infer_from_gate'
+        if self.postprocessing.upsample_method == "infer_from_gate":
+            for p in new_populations:
+                p.index = inside_polygon(data,
+                                         p.geom.x,
+                                         p.geom.y,
+                                         p.geom.shape).index
+                p.n = len(p.index)
+            return new_populations
+        if self.postprocessing.upsample_method == "knn":
+            return upsample_knn(populations=new_populations,
+                                features=[self.x, self.y],
+                                original=data,
+                                sample=sample,
+                                verbose=verbose)
+        if self.postprocessing.upsample_method == "svm":
+            return upsample_svm(populations=new_populations,
+                                features=[self.x, self.y],
+                                original=data,
+                                sample=sample,
+                                verbose=verbose)
+        raise ValueError("Upsample method should be one of: 'infer_from_gate', 'knn' or 'svm'")
+
     def _apply_postprocessing(self,
                               new_populations: List[Population],
                               data: pd.DataFrame,
@@ -405,30 +421,7 @@ class Gate(mongoengine.Document):
                               verbose: bool = True):
         # Upsample if necessary
         if sample is not None:
-            upsample_method = self.postprocessing.upsample_method
-            if not upsample_method:
-                warn("Downsampling was performed yet not upsampling method has been defined, "
-                     "defaulting to infer_from_gate")
-                upsample_method = 'infer_from_gate'
-            if upsample_method == "infer_from_gate":
-                for p in new_populations:
-                    p.index = inside_polygon(data,
-                                             p.geom.x,
-                                             p.geom.y,
-                                             p.geom.shape).index
-                    p.n = len(p.index)
-            elif upsample_method == "knn":
-                new_populations = upsample_knn(populations=new_populations,
-                                               features=[self.x, self.y],
-                                               original=data,
-                                               sample=sample,
-                                               verbose=verbose)
-            else:
-                new_populations = upsample_svm(populations=new_populations,
-                                               features=[self.x, self.y],
-                                               original=data,
-                                               sample=sample,
-                                               verbose=verbose)
+            new_populations = self._upsample(new_populations=new_populations, data=data, sample=sample, verbose=verbose)
         # Add transformation information to Populations
         if self.preprocessing.transform_x:
             for p in new_populations:
