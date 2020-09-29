@@ -44,12 +44,13 @@ def apply_transform(data: pd.DataFrame,
     prescale: if using asinh transformaion this value is passed as the scalling argument
     transformed pandas dataframe
     """
-    if features_to_transform == 'all':
-        features_to_transform = list(data.columns)
-    elif features_to_transform == 'fluorochromes':
-        features_to_transform = [x for x in data.columns if all([y not in x.lower()
-                                                                 for y in ['fsc', 'ssc', 'time', 'label']])]
-    elif type(features_to_transform) != list:
+    if isinstance(features_to_transform, str):
+        if features_to_transform == 'all':
+            features_to_transform = list(data.columns)
+        elif features_to_transform == 'fluorochromes':
+            features_to_transform = [x for x in data.columns if all([y not in x.lower()
+                                                                     for y in ['fsc', 'ssc', 'time', 'label']])]
+    elif not isinstance(features_to_transform, list):
         warn('Invalid argument provided for `features_to_transform`, expected one of: `all`, `fluorochromes`,'
              ' or list of valid column names, proceeding with transformation of entire dataframe as precaution.')
         features_to_transform = data.columns
