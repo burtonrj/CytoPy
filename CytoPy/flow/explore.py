@@ -298,7 +298,6 @@ class Explorer:
                 mask: pd.DataFrame or None = None,
                 normalise: bool = True,
                 summary_func: callable = np.mean,
-                ax: plt.Axes.axes or None = None,
                 figsize: tuple or None = (10, 10),
                 title: str or None = None,
                 col_cluster: bool = False,
@@ -339,7 +338,7 @@ class Explorer:
         if clustermap:
             ax = sns.clustermap(d, col_cluster=col_cluster, cmap='viridis', figsize=figsize, **kwargs)
             return ax
-        fig, ax = plt.subplots(figsize=(16, 10))
+        fig, ax = plt.subplots(figsize=figsize)
         ax = sns.heatmap(d, linewidth=0.5, ax=ax, cmap='viridis', **kwargs)
         if title is not None:
             ax.set_title(title)

@@ -16,18 +16,33 @@ import mongoengine
 
 
 def create_signature(data: pd.DataFrame,
-                     idx: np.array,
-                     summary_method: callable or None = None):
+                     idx: np.array or None = None,
+                     summary_method: callable or None = None) -> dict:
+    """
+    Given a dataframe of FCS events, generate a signature of those events; that is, a summary of the
+    dataframes columns using the given summary method.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    idx: Numpy.array (optional)
+        Array of indexes to be included in this operation, if None, the whole dataframe is used
+    summary_method: callable (optional)
+        Function to use to summarise columns, defaults is Numpy.median
+    Returns
+    -------
+    dict
+        Dictionary representation of signature; {column name: summary statistic}
+    """
     data = data.copy()
+    idx = idx or data.index.values
     # ToDo this should be more robust
-    if "Time" in data.columns:
-        data = data.drop("Time", 1)
-    if "time" in data.columns:
-        data = data.drop("time", 1)
+    for x in ["Time", "time"]:
+        if x in data.columns:
+            data.drop(x, 1, inplace=True)
     summary_method = summary_method or np.median
     signature = data.loc[idx].apply(summary_method)
-    signature = [(x[0], x[1]) for x in zip(signature.index, signature.values)]
-    return signature
+    return {x[0]: x[1] for x in zip(signature.index, signature.values)}
 
 
 def _merge(new_children: List[Population],
@@ -83,7 +98,7 @@ class ChildDefinition(mongoengine.EmbeddedDocument):
     population_name = mongoengine.StringField()
     definition = mongoengine.StringField(required=False)
     template_geometry = mongoengine.EmbeddedDocumentField(PopulationGeometry)
-    signature = mongoengine.ListField()
+    signature = mongoengine.DictField()
 
     def match_definition(self, query: str):
         return query in self.definition.split("_")
