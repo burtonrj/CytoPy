@@ -10,9 +10,31 @@ from collections import Counter
 from warnings import warn
 import pandas as pd
 import mongoengine
+import shutil
 import xlrd
 import os
 import re
+
+
+def _check_sheet_names(path: str):
+    # Check sheet names
+    xls = xlrd.open_workbook(path, on_demand=True)
+    err = f"Template must contain two sheets: nomenclature and mappings"
+    assert all([x in ['nomenclature', 'mappings'] for x in xls.sheet_names()]), err
+    nomenclature = pd.read_excel(path, sheet_name='nomenclature')
+    mappings = pd.read_excel(path, sheet_name='mappings')
+    return mappings, nomenclature
+
+
+def _check_nomenclature_headings(nomenclature):
+    err = "Nomenclature sheet of excel template must contain the following column headers: " \
+          "'name','regex','case','permutations'"
+    assert all([x in ['name', 'regex', 'permutations', 'case'] for x in nomenclature.columns]), err
+
+
+def _check_mappings_headings(mappings):
+    err = "Mappings sheet of excel template must contain the following column headers: 'channel', 'marker'"
+    assert all([x in ['channel', 'marker'] for x in mappings.columns]), err
 
 
 def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
@@ -29,26 +51,12 @@ def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
     (Pandas.DataFrame, Pandas.DataFrame) or None
         tuple of pandas dataframes (nomenclature, mappings) or None
     """
-    # Check sheet names
-    xls = xlrd.open_workbook(path, on_demand=True)
-    err = f"Template must contain two sheets: nomenclature and mappings"
-    assert all([x in ['nomenclature', 'mappings'] for x in xls.sheet_names()]), err
-    nomenclature = pd.read_excel(path, sheet_name='nomenclature')
-    mappings = pd.read_excel(path, sheet_name='mappings')
-
-    # Check nomenclature column headers
-    err = "Nomenclature sheet of excel template must contain the following column headers: " \
-          "'name','regex','case','permutations'"
-    assert all([x in ['name', 'regex', 'permutations', 'case'] for x in nomenclature.columns]), err
-
-    # Check mappings column headers
-    err = "Mappings sheet of excel template must contain the following column headers: 'channel', 'marker'"
-    assert all([x in ['channel', 'marker'] for x in mappings.columns]), err
-
+    mappings, nomenclature = _check_sheet_names(path)
+    _check_nomenclature_headings(nomenclature)
+    _check_mappings_headings(mappings)
     # Check for duplicate entries
     err = 'Duplicate entries in nomenclature, please remove duplicates before continuing'
     assert sum(nomenclature['name'].duplicated()) == 0, err
-
     # Check that all mappings have a corresponding entry in nomenclature
     for x in ['channel', 'marker']:
         for name in mappings[x]:
@@ -367,6 +375,17 @@ class Panel(mongoengine.Document):
             yield cm.marker
 
 
+def _data_dir_append_leading_char(path: str):
+    leading_char = path[len(path) - 1]
+    if leading_char not in ["\\", "/"]:
+        if len(path.split("\\")) > 1:
+            # Assuming a windows OS
+            return path + "\\"
+        else:
+            # Assuming unix OS
+            return path + "/"
+
+
 class Experiment(mongoengine.Document):
     """
     Document representation of Flow Cytometry experiment
@@ -385,8 +404,6 @@ class Experiment(mongoengine.Document):
         Additional free text comments
     gating_templates: ListField
         Reference to gating templates associated to this experiment
-    meta_cluster_ids: ListField
-        List of IDs for meta clusters belonging to this experiment
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
     data_directory = mongoengine.StringField(required=True)
@@ -406,38 +423,62 @@ class Experiment(mongoengine.Document):
         panel_name = kwargs.pop("panel_name", None)
         super().__init__(*args, **kwargs)
         if not self.panel:
-            if panel_definition is None and panel_name is None:
-                raise ValueError("Must provide either path to panel definition or name of an existing panel")
-            if panel_definition is not None:
-                assert os.path.isfile(panel_definition), f"{panel_definition} does not exist"
-                err = "Panel definition is not a valid Excel document"
-                assert os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"], err
-            else:
-                assert len(Panel.objects(panel_name=panel_name)) > 0, "Invalid panel name, panel does not exist"
             self.panel = self._generate_panel(panel_definition=panel_definition,
                                               panel_name=panel_name)
             self.panel.save()
         if self.data_directory:
             assert os.path.isdir(self.data_directory), f"data directory {self.data_directory} does not exist"
-            leading_char = self.data_directory[len(self.data_directory) - 1]
-            if leading_char not in ["\\", "/"]:
-                if len(self.data_directory.split("\\")) > 1:
-                    # Assuming a windows OS
-                    self.data_directory = self.data_directory + "\\"
-                else:
-                    # Assuming unix OS
-                    self.data_directory = self.data_directory + "/"
+            self.data_directory = _data_dir_append_leading_char(self.data_directory)
         else:
             raise ValueError("No data directory provided")
+
+    @staticmethod
+    def _check_panel(panel_name: str or None,
+                     panel_definition: str or None):
+        """
+        Check that parameters provided for defining a panel are valid.
+
+        Parameters
+        ----------
+        panel_name: str or None
+            Name of an existing panel
+        panel_definition: str or None
+            Path to a panel definition
+
+        Returns
+        -------
+        None
+            Raises AssertionError in the condition that the given parameters are invalid
+        """
+        if panel_definition is None and panel_name is None:
+            raise ValueError("Must provide either path to panel definition or name of an existing panel")
+        if panel_definition is not None:
+            assert os.path.isfile(panel_definition), f"{panel_definition} does not exist"
+            err = "Panel definition is not a valid Excel document"
+            assert os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"], err
+        else:
+            assert len(Panel.objects(panel_name=panel_name)) > 0, "Invalid panel name, panel does not exist"
 
     def _generate_panel(self,
                         panel_definition: str or None,
                         panel_name: str or None):
-        if panel_definition is None and panel_name is None:
-            raise ValueError("If no panel_definition is given, must provide name to existing Panel")
+        """
+        Associate a panel to this Experiment, either by fetching an existing panel using the
+        given panel name or by generating a new panel using the panel definition provided (path to a valid template).
+
+        Parameters
+        ----------
+        panel_name: str or None
+            Name of an existing panel
+        panel_definition: str or None
+            Path to a panel definition
+
+        Returns
+        -------
+        Panel
+        """
+        self._check_panel(panel_name=panel_name, panel_definition=panel_definition)
         if panel_definition is None:
-            assert panel_name in [p.panel_name for p in Panel.objects()], \
-                f"Invalid panel name; {panel_name} doe not exist"
             return Panel.objects(panel_name=panel_name).get()
         if panel_name is None:
             panel_name = f"{self.experiment_id}_panel"
@@ -446,10 +487,26 @@ class Experiment(mongoengine.Document):
         return new_panel
 
     def update_data_directory(self, new_path: str):
+        """
+        Update the data directory associated to this experiment. This will propagate to all
+        associated FileGroup's. WARNING: this function will move the existing data directory
+        and all of it's contents to the new given path.
+
+        Parameters
+        ----------
+        new_path: str
+
+        Returns
+        -------
+        None
+        """
         assert os.path.isdir(new_path), "Invalid directory given for new_path"
+        shutil.move(self.data_directory, new_path)
         for file in self.fcs_files:
             file.data_directory = new_path
             file.save()
+        self.data_directory = new_path
+        self.save()
 
     def delete_all_populations(self,
                                sample_id: str) -> None:
