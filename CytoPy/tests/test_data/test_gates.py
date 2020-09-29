@@ -1,5 +1,6 @@
 from ...data.populations import Population, Threshold, Polygon
-from ...data.gates import create_signature, _merge, ChildDefinition, population_likeness, Gate, PreProcess, PostProcess
+from ...data.gates import create_signature, ChildDefinition, population_likeness, Gate, PreProcess, PostProcess, DensityGate, \
+    ManualGate, Analyst
 from .test_population import generate_polygons
 import pandas as pd
 import numpy as np
@@ -146,16 +147,20 @@ def test_dim_reduction():
     assert data.columns.tolist() == ["embedding1", "embedding2"]
 
 
-def test_init_method():
-    pass
+@pytest.mark.parametrize("method, klass", [("DensityGate", DensityGate),
+                                           ("ManualGate", ManualGate),
+                                           ("HDBSCAN", Analyst)])
+def test_init_method(method, klass):
+    gate = create_gate(method=method)
+    assert isinstance(gate._init_method(), klass)
 
 
-def test_transform():
-    pass
-
-
-def test_downsample():
-    pass
+def test_downsample_err():
+    gate = create_gate(preprocessing=PreProcess(downsample_method="Unknown"))
+    data = pd.DataFrame({i: np.random.rand(1000) for i in ["x", "y", "z", "w"]})
+    with pytest.raises(ValueError) as exp:
+        gate._downsample(data=data)
+    assert str(exp.value) == "Invalid Gate: downsampling_method must be one of: uniform, density, or faithful"
 
 
 def test_upsample():
