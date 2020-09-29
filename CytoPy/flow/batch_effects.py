@@ -1,6 +1,5 @@
 from ..data.experiments import Experiment
 from ..feedback import progress_bar, vprint
-from ..utilities import indexed_parallel_func, hellinger_dist
 from .density_estimation import multivariate_kde
 from .dim_reduction import dimensionality_reduction
 from .transforms import scaler

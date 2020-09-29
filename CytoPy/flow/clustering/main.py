@@ -31,6 +31,7 @@ def phenograph_clustering(data: pd.DataFrame,
         data.loc[sample_data.index, ["cluster_id"]] = sample_data.cluster_id
     return data, graphs, q
 
+
 def _asign_metalabels(data: pd.DataFrame,
                       metadata: pd.DataFrame,
                       verbose: bool):
@@ -41,6 +42,7 @@ def _asign_metalabels(data: pd.DataFrame,
                                       ["meta_label"]]
             data[sample_df[sample_df.cluster_id == cluster_id].index, ["meta_label"]] = meta_label
     return data
+
 
 def phenograph_metaclustering(data: pd.DataFrame,
                               features: list,
@@ -56,6 +58,7 @@ def phenograph_metaclustering(data: pd.DataFrame,
     vprint_("Assigning clusters...")
     data = _asign_metalabels(data, metadata, verbose)
     return data, graph, q
+
 
 def consensus_metacluster(data: pd.DataFrame,
                           features: list,
@@ -79,6 +82,7 @@ def consensus_metacluster(data: pd.DataFrame,
     metadata["meta_label"] = consensus_clust.predict_data(metadata[features])
     data = _asign_metalabels(data, metadata, verbose)
     return data, None, None
+
 
 def flowsom(data: pd.DataFrame,
             features: list,
@@ -141,7 +145,7 @@ def flowsom(data: pd.DataFrame,
     return data, None, None
 
 
-class Cluster:
+class Clusterer:
     def __init__(self,
                  clustering_experiment: ClusteringDefinition,
                  verbose: bool = True,
