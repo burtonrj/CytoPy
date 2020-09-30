@@ -61,61 +61,6 @@ def covar_euclidean_norm(data: Dict[str, pd.DataFrame],
     return sample_ids[int(ref_ind)]
 
 
-def _check_ref_n(embeddings: Dict[str, dict],
-                 reference: str):
-    for n in embeddings.keys():
-        if reference not in embeddings.get(n).keys():
-            warn(f"Reference sample is missing sample N {n} so comparisons will be missing in some cases.")
-
-
-def _jsd_n_comparison(pdfs: Dict[str, dict],
-                      reference: str):
-
-    jsd_comparisons = defaultdict(dict)
-    _check_ref_n(embeddings=pdfs, reference=reference)
-    # For each sample N, compare each PDF to the equivalent PDF of the reference sample
-    for n in pdfs.keys():
-        q = pdfs.get(n).get(reference)
-        for _id, p in pdfs.get(n).items():
-            if _id == reference:
-                continue
-            jsd_comparisons[_id][n] = [jsd(p, q)]
-    # Wrangle into a dataframe
-    df = pd.DataFrame()
-    for sample_id in jsd_comparisons.keys():
-        df_ = pd.DataFrame(jsd_comparisons.get(sample_id)).melt(var_name="n", value_name="JSD(p, q)")
-        df_["Sample ID"] = sample_id
-        df = pd.concat([df, df_])
-    # Plot results
-    fig, ax = plt.subplots(figsize=(10, 10))
-    sns.lineplot(x="n", y="JSD(p, q)", hue="Sample ID", ci=None, ax=ax, alpha=.75)
-    sns.scatterplot(x="n", y="JSD(p, q)", s=10, alpha=.5, c="black", ax=ax)
-    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-    return ax
-
-
-def _visual_n_comparison(embeddings: Dict[str, dict]):
-    # Wrangle dictionary to have sample ID as primary key
-    sample_embeddings = defaultdict(dict)
-    for n in embeddings.keys():
-        for _id in embeddings.get(n).keys():
-            sample_embeddings[_id][n] = embeddings.get(n).get(_id)
-    plots = dict()
-    for sample_id in sample_embeddings.keys():
-        total_n = len(sample_embeddings.get(sample_id).keys())
-        fig, axes = plt.subplots(1, total_n, figsize=(10, 5))
-        fig.suptitle(sample_id)
-        for i, n in enumerate(sample_embeddings.get(sample_id).keys()):
-            axes[0, i].scatter(x=sample_embeddings.get(sample_id).get(n)[:, 0],
-                               y=sample_embeddings.get(sample_id).get(n)[:, 1],
-                               c="#5982d4",
-                               s=3.5,
-                               alpha=0.5)
-            axes[0, i].set_title(f"Sample n={n}")
-        plots[sample_id] = (fig, axes)
-    return plots
-
-
 class EvaluateBatchEffects:
     """
     Class for assessing the degree of variation observed in a single experiment. This can be
