@@ -163,6 +163,19 @@ class Gating:
 
     def save_sample(self,
                     overwrite: bool = False):
+        """
+        Save the actions applied using this Gating object to the
+        sample.
+
+        Parameters
+        ----------
+        overwrite: bool (default=False)
+            Overwrite existing populations?
+
+        Returns
+        -------
+        None
+        """
         if self.filegroup.populations:
             assert overwrite, f"{self.id} has previously been gated and has existing populations. To overwrite " \
                               f"this data set 'overwrite' to True"
