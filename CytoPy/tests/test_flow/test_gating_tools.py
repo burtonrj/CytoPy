@@ -34,3 +34,28 @@ def create_example():
 def test_gating_init():
     pass
 
+
+def test_pop_size():
+    pass
+
+
+def test_gating_save():
+    pass
+
+
+def test_get_pop_df():
+    pass
+
+
+def test_get_labelled_pop_df():
+    pass
+
+
+def test_list_downstream_pops():
+    pass
+
+
+def test_list_dep():
+    pass
+
+
