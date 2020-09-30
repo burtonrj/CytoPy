@@ -1,6 +1,5 @@
 from ..data.experiments import Experiment
 from ..feedback import progress_bar, vprint
-from .density_estimation import multivariate_kde
 from .dim_reduction import dimensionality_reduction
 from .transforms import scaler
 from .gating_tools import load_population
@@ -10,6 +9,7 @@ from scipy.cluster import hierarchy
 from scipy.spatial import distance
 from multiprocessing import Pool, cpu_count
 from collections import defaultdict
+from KDEpy import FFTKDE
 from functools import partial
 from typing import Dict
 from warnings import warn
@@ -238,85 +238,6 @@ class EvaluateBatchEffects:
         self.print("--- Calculating Reference Sample ---")
         return covar_euclidean_norm(data=self.load_and_sample(sample_n=sample_n),
                                     verbose=self.verbose)
-
-    def select_optimal_sample_n(self,
-                                method: str = "jsd",
-                                sample_range: list or None = None,
-                                scale: str or None = "standard",
-                                dimensionality_reduction_method: str = "UMAP",
-                                scaler_kwargs: dict or None = None,
-                                dim_reduction_kwargs: dict or None = None,
-                                kde_kwargs: dict or None = None):
-        scaler_kwargs = scaler_kwargs or dict()
-        dim_reduction_kwargs = dim_reduction_kwargs or dict()
-        kde_kwargs = kde_kwargs or dict()
-        assert method in ["jsd", "visual"], "Method should be either 'jsd' or 'visual'"
-        sample_range = sample_range or np.arange(1000, 11000, 1000)
-        self.print("=============================================")
-        self.print("Finding optimal sample N")
-        self.print("---------------------------------------------")
-        self.print("Warning: this process is computationally intensive. Although CytoPy will leverage "
-                   "all available cores to reduce the time cost, this might take some time to complete.")
-        largest_sample = sample_range[-1:]
-        sample_range = sample_range[:-1]
-
-        self.print(f"Fitting chosen reducer {dimensionality_reduction_method} using largest chosen sample size: "
-                   f"{largest_sample}...")
-        self.print("...collecting data...")
-        data = self.load_and_sample(sample_n=largest_sample)
-        if scale:
-            self.print("...scaling data...")
-            data = self.scale_data(data=data, method=scale, **scaler_kwargs)
-
-        _dim_reduction = partial(dimensionality_reduction,
-                                 features=list(data.values())[0].columns.values,
-                                 method=dimensionality_reduction_method,
-                                 n_components=2,
-                                 return_embeddings_only=True,
-                                 return_reducer=True,
-                                 **dim_reduction_kwargs)
-        self.print("...fitting data...")
-        with Pool(self.njobs) as pool:
-            indexed_embeddings = list(progress_bar(pool.imap(_dim_reduction, data.values()),
-                                                   verbose=self.verbose,
-                                                   total=len(list(data.values()))))
-        reducers = {k: x[2] for k, x in zip(data.keys(), indexed_embeddings)}
-        embeddings = dict()
-        embeddings[largest_sample] = {k: x[1] for k, x in zip(data.keys(), indexed_embeddings)}
-        self.print("---------------------------------------------")
-        self.print("Applying transform to remaining sample n's...")
-        for n in sample_range:
-            self.print(f"Sample n = {n}...")
-            self.print("...collecting data...")
-            self.load_and_sample(sample_n=largest_sample)
-            if scale:
-                self.print("...scaling data...")
-                self.scale_data(method=scale, **scaler_kwargs)
-            self.print("...transforming data...")
-            _apply_transform = partial(_transform,
-                                       reducers=reducers)
-            with Pool(self.njobs) as pool:
-                indexed_data = [(k, v) for k, v in data.items()]
-                indexed_embeddings = list(progress_bar(pool.imap(_apply_transform, indexed_data),
-                                                       verbose=self.verbose,
-                                                       total=len(indexed_data)))
-            embeddings[n] = {x[0]: x[1] for x in indexed_embeddings}
-        if method == "jsd":
-            self.print("...estimating PDF for embeddings...")
-            kde_func = partial(indexed_parallel_func,
-                               func=multivariate_kde,
-                               **kde_kwargs)
-            pdfs = dict()
-            for n in progress_bar(embeddings.keys(), verbose=self.verbose):
-                indexed_data = [(_id, data) for _id, data in embeddings.get(n).items()]
-                with Pool(self.njobs) as pool:
-                    indexed_pdfs = list(progress_bar(pool.imap(kde_func, indexed_data),
-                                                     verbose=self.verbose,
-                                                     total=len(indexed_data)))
-                pdfs[n] = {x[0]: x[1] for x in indexed_pdfs}
-            return _jsd_n_comparison(pdfs=pdfs,
-                                     reference=self.reference_id)
-        return _visual_n_comparison(embeddings=embeddings)
 
     def marker_variance(self,
                         comparison_samples: list,
