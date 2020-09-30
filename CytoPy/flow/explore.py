@@ -13,6 +13,18 @@ import scprep
 
 
 class Explorer:
+    """
+    Visualisation class for exploring the results of Gating, cell classification, and clustering.
+
+    Parameters
+    -----------
+    data: Pandas.DataFrame (optional)
+        A DataFrame for visualisation. If not provided, then a path to an existing dataframe should be provided.
+    path: str (optional)
+        Path to dataframe to load and visualise
+    verbose: bool (default=True)
+        Whether to provide feedback
+    """
     def __init__(self,
                  data: pd.DataFrame or None = None,
                  path: str or None = None,
@@ -235,6 +247,8 @@ class Explorer:
         scale_factor : int, (default=100)
             Scale factor defines the size of datapoints;
             size = meta_scale_factor * proportion of events in cluster relative to root population
+        figsize: tuple (default=(12,8)
+            Figure size
         dim_reduction_kwargs : dict, optional
             additional keyword arguments to pass to dimensionality reduction algorithm
         matplotlib_kwargs : dict, optional
@@ -317,6 +331,8 @@ class Explorer:
             a valid Pandas DataFrame mask to subset data prior to plotting (optional)
         normalise : bool, (default=True)
             if True, data is normalised prior to plotting (normalised using Sklean's MinMaxScaler function)
+        summary_func: callable (default=Numpy.mean)
+            function used to values for display in heatmap
         figsize : tuple, (default=(10,5))
             tuple defining figure size passed to matplotlib call
         title: str, optional
@@ -433,6 +449,8 @@ class Explorer:
             limit the x-axis to a given range (optional)
         ylim : tuple, optional
             limit the y-axis to a given range (optional)
+        ax: Matplotlib.Axes (optional)
+
         Returns
         -------
         matplotlib.axes
