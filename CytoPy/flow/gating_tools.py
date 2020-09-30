@@ -21,6 +21,18 @@ import inspect
 
 
 def valid_sklearn(klass: str):
+    """
+    Given the name of a Scikit-Learn class, checks validity. If invalid, raises Assertion error,
+    otherwise returns the class name.
+
+    Parameters
+    ----------
+    klass: str
+
+    Returns
+    -------
+    str
+    """
     valid_clusters = [x[0] for x in inspect.getmembers(cluster, inspect.isclass)
                       if 'sklearn.cluster' in x[1].__module__]
     valid_mixtures = [x[0] for x in inspect.getmembers(mixture, inspect.isclass)
@@ -43,10 +55,19 @@ class Gating:
         experiment you're currently working on
     sample_id: str
         name of the sample to analyse (must belong to experiment)
-    sample_n: int, optional
-        number of events to sample from FCS file(s) (optional)
+    gating_strategy: str (optional)
+        Name of the gating strategy to load along with associated gates. If not provided, will attempt to
+        locate gating strategy currently associated to the chosen sample. If there is no gating strategy associated
+        to the current sample and you wish to create a new gating strategy, provide a unique name and after creating
+        the gates, call `save_gating_strategy`
     include_controls: bool, (default=True)
-        if True and FMOs are included for specified samples, the FMO data will also be loaded into the Gating object
+        If True and FMOs are included for specified samples, the FMO data will also be loaded into the Gating object
+    verbose: bool (default=True)
+        Whether to provide feedback
+    gate_ctrls_adhoc: bool (default=True)
+        If True, index for control samples will be estimated automatically whenever a gate is applied
+    ctrl_gate_cv: int (default=10)
+        Number of folds to use in cross-validation when estimating index for control samples
     """
 
     def __init__(self,
@@ -83,6 +104,13 @@ class Gating:
         self.actions = {x.action_name: x for x in self.template.actions}
 
     def _construct_tree(self):
+        """
+        Construct the population tree; that is, a dictionary of Population objects and AnyTree nodes.
+
+        Returns
+        -------
+        dict
+        """
         if not self.filegroup.populations:
             # No population currently exist for this FileGroup. Init with root population
             self.populations = {"root": Population(population_name="root",
@@ -91,7 +119,7 @@ class Gating:
                                                    n=len(self.data.get("primary").index.values))}
             if "controls" in self.data.keys():
                 for ctrl_id, ctrl_data in self.data.get("controls").items():
-                    self.populations["root"].ctrl_index = (ctrl_id, ctrl_data.index.values)
+                    self.populations["root"].set_ctrl_index(**{ctrl_id: ctrl_data.index.values})
             return {"root": Node(name="root", parent=None)}
         assert "root" in [p.population_name for p in self.filegroup.populations], \
             "Invalid FileGroup, must contain 'root' population"
@@ -115,6 +143,18 @@ class Gating:
     @staticmethod
     def _construct_branch(tree: dict,
                           new_population: Population):
+        """
+        Construct a single branch of a population tree (see `construct_tree`)
+
+        Parameters
+        ----------
+        tree: dict
+        new_population: Population
+
+        Returns
+        -------
+        dict
+        """
         if new_population.parent not in tree.keys():
             return None
         tree[new_population.population_name] = Node(name=new_population.population_name,
