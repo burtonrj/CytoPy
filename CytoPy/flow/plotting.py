@@ -1,5 +1,5 @@
 from ..data.gates import Gate
-from ..data.populations import PopulationGeometry, Population
+from ..data.populations import Threshold, Polygon, Population
 from ..flow.transforms import apply_transform
 from warnings import warn
 from typing import List
@@ -71,7 +71,7 @@ class CreatePlot:
                  bw: str or float = "scott",
                  autoscale: bool = True,
                  axis_ticks: bool = True):
-        self.tranforms = {'x': transform_x, 'y': transform_y}
+        self.transforms = {'x': transform_x, 'y': transform_y}
         self.labels = {'x': xlabel, 'y': ylabel}
         self.autoscale = autoscale
         self.lims = {'x': xlim or [None, None], 'y': ylim or [None, None]}
@@ -225,8 +225,8 @@ class CreatePlot:
             Transformed data
         """
         data = data.copy()
-        transforms = {x: self.tranforms.get(axis) for axis in ["x", "y"]
-                      if self.tranforms.get(axis) is not None}
+        transforms = {x: self.transforms.get(axis) for axis in ["x", "y"]
+                      if self.transforms.get(axis) is not None}
         if len(transforms) > 0:
             data = apply_transform(data,
                                    features_to_transform=transforms)
@@ -268,7 +268,7 @@ class CreatePlot:
 
     def plot_population_geom(self,
                              parent: pd.DataFrame,
-                             geom: PopulationGeometry,
+                             geom: Threshold or Polygon,
                              lw: float = 2.5,
                              line_colour: str = "#c92c2c",
                              population_name: str or None = None,
@@ -276,34 +276,24 @@ class CreatePlot:
                              legend_kwargs: dict or None = None):
         plot_kwargs = plot_kwargs or {}
         population_name = population_name or ""
-        self.tranforms = {"x": geom.transform_x,
-                          "y": geom.transform_y}
+        self.transforms = {"x": geom.transform_x,
+                           "y": geom.transform_y}
         self._ax = self.plot(data=parent,
                              x=geom.x,
                              y=geom.y,
                              **plot_kwargs)
-        if geom.x_threshold:
+        if isinstance(geom, Threshold):
             x = geom.x_threshold
             y = geom.y_threshold
             self._add_threshold(x=x,
                                 y=y,
                                 lw=lw)
             return self._ax
-        if geom.x_values is not None and geom.y_values is not None:
-            self._add_polygon(x_values=geom.x_values,
-                              y_values=geom.y_values,
-                              colour=line_colour,
-                              label=population_name,
-                              lw=lw)
-        elif all(geom[x] is not None for x in ["center", "width", "height", "angle"]):
-            self._add_ellipse(center=geom.center,
-                              width=geom.width,
-                              height=geom.height,
-                              angle=geom.angle,
-                              colour=line_colour,
-                              lw=lw,
-                              label=population_name)
-            raise ValueError(f"Geom shape is invalid")
+        self._add_polygon(x_values=geom.x_values,
+                          y_values=geom.y_values,
+                          colour=line_colour,
+                          label=population_name,
+                          lw=lw)
         self._set_legend(shape_n=1, **legend_kwargs)
         return self._ax
 
@@ -354,8 +344,8 @@ class CreatePlot:
         plot_kwargs = plot_kwargs or {}
         legend_kwargs = legend_kwargs or dict()
         # Plot the parent population
-        self.tranforms = {"x": gate.preprocessing.transform_x or "linear",
-                          "y": gate.preprocessing.transform_y or "linear"}
+        self.transforms = {"x": gate.preprocessing.transform_x or "linear",
+                           "y": gate.preprocessing.transform_y or "linear"}
         self._ax = self.plot(data=parent,
                              x=gate.x,
                              y=gate.y,
@@ -374,23 +364,12 @@ class CreatePlot:
         for child in children:
             count += 1
             colour = next(gate_colours)
-            if gate.shape == "polygon":
-                x_values, y_values = child.geom.shape.exterior.xy
-                self._add_polygon(x_values=x_values,
-                                  y_values=y_values,
-                                  colour=colour,
-                                  label=child.population_name,
-                                  lw=lw)
-            elif gate.shape == "ellipse":
-                self._add_ellipse(center=child.geom.center,
-                                  width=child.geom.width,
-                                  height=child.geom.height,
-                                  angle=child.geom.angle,
-                                  colour=colour,
-                                  lw=lw,
-                                  label=child.population_name)
-            else:
-                raise ValueError(f"Gate shape not recognised: {gate.shape}")
+            x_values, y_values = child.geom.shape.exterior.xy
+            self._add_polygon(x_values=x_values,
+                              y_values=y_values,
+                              colour=colour,
+                              label=child.population_name,
+                              lw=lw)
             if len(gate.children) == 2 and gate.binary:
                 # Gate produces exactly two populations: within gate and outside of gate
                 break
