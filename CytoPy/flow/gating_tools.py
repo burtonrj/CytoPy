@@ -1,8 +1,9 @@
 from ..data.experiments import Experiment
-from ..data.populations import PopulationGeometry, Population, merge_populations
-from ..data.gates import Gate, PreProcess, PostProcess, inside_polygon
+from ..data.populations import Polygon, Threshold, Population, merge_populations
+from ..data.gates import Gate, PreProcess, PostProcess
 from ..data.gating_strategy import GatingStrategy, Action
 from .transforms import apply_transform
+from ..utilities import inside_polygon
 from ..feedback import vprint
 from .plotting import CreatePlot
 from sklearn.neighbors import KNeighborsClassifier
@@ -42,6 +43,28 @@ def valid_sklearn(klass: str):
  or from Scikit-Learn's mixture module: {valid_mixtures}; or 'HDBSCAN'"""
     assert klass in valid, err
     return klass
+
+
+def _edit_threshold_idx(parent: pd.DataFrame,
+                        definition: str,
+                        new_geom: Threshold):
+    if definition == "+":
+        return parent[parent[new_geom.x] > new_geom.x_threshold]
+    if definition == "-":
+        return parent[parent[new_geom.x] <= new_geom.x_threshold]
+    if definition == "--":
+        return parent[(parent[new_geom.x] <= new_geom.x_threshold) &
+                      (parent[new_geom.y] <= new_geom.y_threshold)].index.values
+    if definition == "++":
+        return parent[(parent[new_geom.x] > new_geom.x_threshold) &
+                      (parent[new_geom.y] > new_geom.y_threshold)].index.values
+    if definition == "+-":
+        return parent[(parent[new_geom.x] > new_geom.x_threshold) &
+                      (parent[new_geom.y] <= new_geom.y_threshold)].index.values
+    if definition == "-+":
+        return parent[(parent[new_geom.x] <= new_geom.x_threshold) &
+                      (parent[new_geom.y] > new_geom.y_threshold)].index.values
+    raise ValueError("Invalid definition, cannot edit gate")
 
 
 class Gating:
@@ -220,7 +243,7 @@ class Gating:
     def get_population_df(self,
                           population_name: str,
                           transform: str or None = 'logicle',
-                          transform_features: list or str = 'all',
+                          transform_features: list or str or dict = 'all',
                           ctrl_id: str or None = None) -> pd.DataFrame or None:
         """
         Retrieve a population as a pandas dataframe
@@ -401,7 +424,7 @@ class Gating:
                     y=y,
                     binary=binary,
                     method=method,
-                    method_kwargs=[(k, v) for k, v in method_kwargs.items()],
+                    method_kwargs=method_kwargs,
                     preprocessing=PreProcess(**preprocessing_kwargs),
                     postprocessing=PostProcess(**postprocessing_kwargs))
         return gate
@@ -473,28 +496,32 @@ class Gating:
                                  y=y,
                                  **backgate_kwargs)
 
-    def preview(self,
-                gate: Gate or str,
-                verbose: bool = True,
-                stats: bool = True,
-                create_plot_kwargs: dict or None = None,
-                plot_gate_kwargs: dict or None = None):
-        if isinstance(gate, str):
-            assert gate in self.gates.keys(), f"Gate {gate} not found in current gating strategy"
-            gate = self.gates[gate]
+    def _apply(self,
+               gate: Gate):
         data = self.get_population_df(population_name=gate.parent, transform=None)
         ctrl = None
         if gate.ctrl_id:
             ctrl = self.get_population_df(population_name=gate.parent, transform=None, ctrl_id=gate.ctrl_id)
         populations = gate.apply(data=data,
                                  ctrl=ctrl,
-                                 verbose=verbose)
+                                 verbose=self.verbose)
+        return populations
+
+    def preview(self,
+                gate: Gate or str,
+                stats: bool = True,
+                create_plot_kwargs: dict or None = None,
+                plot_gate_kwargs: dict or None = None):
+        if isinstance(gate, str):
+            assert gate in self.gates.keys(), f"Gate {gate} not found in current gating strategy"
+            gate = self.gates[gate]
+        populations = self._apply(gate)
         if stats:
+            data = self.get_population_df(population_name=gate.parent, transform=None)
             print(f"---- {gate.gate_name} outputs ----")
             print(f"Generated {len(populations)} populations:")
             for p in populations:
-                print(
-                    f"{p.population_name}: n={len(p.index)}; {round(len(p.index) / data.shape[0] * 100, 3)}% of parent")
+                print(f"{p.population_name}: n={len(p.index)}; {round(len(p.index) / data.shape[0] * 100, 3)}% of parent")
             print("----------------------------------")
         return self.plot_gate(gate=gate,
                               populations=populations,
@@ -503,7 +530,6 @@ class Gating:
 
     def apply(self,
               gate: Gate or str,
-              verbose: bool = True,
               plot_outcome: bool = True,
               create_plot_kwargs: dict or None = None,
               plot_gate_kwargs: dict or None = None):
@@ -512,13 +538,7 @@ class Gating:
             gate = self.gates[gate]
         assert gate.defined, "Gate children have not been labelled, call the 'label_children' " \
                              "method on the chosen Gate object"
-        data = self.get_population_df(population_name=gate.parent, transform=None)
-        ctrl = None
-        if gate.ctrl_id:
-            ctrl = self.get_population_df(population_name=gate.parent, transform=None, ctrl_id=gate.ctrl_id)
-        populations = gate.apply(data=data,
-                                 ctrl=ctrl,
-                                 verbose=verbose)
+        populations = self._apply(gate)
         for p in populations:
             self.populations[p.population_name] = p
             self.tree[p.population_name] = Node(name=p.population_name, parent=self.tree[gate.parent])
@@ -526,31 +546,43 @@ class Gating:
                 self.control_gate(population=p,
                                   ctrl_id="all",
                                   plot_outcome=plot_outcome,
-                                  verbose=verbose)
+                                  verbose=self.verbose)
         if plot_outcome:
             self.plot_gate(gate=gate,
                            create_plot_kwargs=create_plot_kwargs,
                            gate_plot_kwargs=plot_gate_kwargs)
         self.gates[gate.gate_name] = gate
 
-    def apply_all(self,
-                  verbose: bool = True,
-                  return_plots: bool = True,
-                  create_plot_kwargs: dict or None = None,
-                  plot_gate_kwargs: dict or None = None):
-        assert len(self.gates) > 0, "No gates to apply"
-        plots = list()
-        feedback = vprint(verbose)
-        # First apply all gates that act on root
+    def _apply_root_gates(self):
         root_gates = [g for g in self.gates.values() if g.parent == "root"]
         for gate in root_gates:
-            feedback(f"-------------- {gate.gate_name} --------------")
-            plots.append(self.apply(gate=gate,
-                                    verbose=verbose,
-                                    plot_outcome=return_plots,
-                                    create_plot_kwargs=create_plot_kwargs,
-                                    plot_gate_kwargs=plot_gate_kwargs))
-            feedback(f"----------------------------------------------")
+            self.vprint(f"-------------- {gate.gate_name} --------------")
+            self.apply(gate=gate)
+            self.vprint(f"----------------------------------------------")
+
+    def _apply_action(self,
+                      action: str,
+                      error: bool = False):
+        if all([p in self.populations.keys() for p in [self.actions.get(action).left,
+                                                       self.actions.get(action).right]]):
+            if self.actions.get(action).method == "merge":
+                self.merge(left=self.actions.get(action).left,
+                           right=self.actions.get(action).right,
+                           new_population_name=self.actions.get(action).new_population_name)
+            else:
+                self.subtract(parent=self.actions.get(action).left,
+                              targets=self.actions.get(action).right.split(","),
+                              new_population_name=self.actions.get(action).new_population_name)
+            return True
+        if error:
+            raise ValueError(f"Missing populations for the action {action}; "
+                             f"[{self.actions.get(action).left}, {self.actions.get(action).right}]")
+        return False
+
+    def apply_all(self):
+        assert len(self.gates) > 0, "No gates to apply"
+        # First apply all gates that act on root
+        self._apply_root_gates()
         # Then loop through all gates applying where parent exists
         downstream_gates = [g for g in self.gates.values() if g.parent != "root"]
         actions = list(self.actions.keys())
@@ -561,38 +593,45 @@ class Gating:
                 i = 0
             gate = downstream_gates[i]
             if gate.parent in self.populations.keys():
-                feedback(f"-------------- {gate.gate_name} --------------")
+                self.vprint(f"-------------- {gate.gate_name} --------------")
                 parent_n = self.get_population_df(population_name=gate.parent).shape[0]
                 if parent_n < 10:
                     warn(f"{gate.gate_name} parent population {gate.parent} contains less than 10 events, "
                          f"signifying an error upstream of this gate")
-                plots.append(self.apply(gate=downstream_gates[i],
-                                        verbose=verbose,
-                                        plot_outcome=return_plots,
-                                        create_plot_kwargs=create_plot_kwargs,
-                                        plot_gate_kwargs=plot_gate_kwargs))
-                feedback(f"----------------------------------------------")
+                self.apply(gate=downstream_gates[i])
+                self.vprint(f"----------------------------------------------")
                 downstream_gates = [x for x in downstream_gates if x.gate_name != gate.gate_name]
             applied_actions = list()
             for a in actions:
-                if all([p in self.populations.keys() for p in [self.actions.get(a).left,
-                                                               self.actions.get(a).right]]):
+                action_applied = self._apply_action(a, error=False)
+                if action_applied:
                     applied_actions.append(a)
-                    if self.actions.get("a").method == "merge":
-                        self.merge(left=self.actions.get(a).left,
-                                   right=self.actions.get(a).right,
-                                   new_population_name=self.actions.get(a).new_population_name)
-                    else:
-                        self.subtract(parent=self.actions.get(a).left,
-                                      targets=self.actions.get(a).right.split(","),
-                                      new_population_name=self.actions.get(a).new_population_name)
             actions = [a for a in actions if a not in applied_actions]
             i += 1
             iteration_limit -= 1
             assert iteration_limit > 0, "Maximum number of iterations reached. This means that one or more parent " \
                                         "populations are not being identified."
-        if return_plots:
-            return plots
+
+    def _ctrl_training_data(self,
+                            population: Population):
+        training_data = self.get_population_df(population_name=population.parent,
+                                               transform="logicle",
+                                               transform_features="all")
+        training_data["label"] = 0
+        training_data.loc[population.index, "label"] = 1
+        return training_data
+
+    def _ctrl_optimal_n(self,
+                        training_data: pd.DataFrame,
+                        features: list):
+        n = np.arange(int(training_data.shape[0] * 0.01),
+                      int(training_data.shape[0] * 0.05),
+                      int(training_data.shape[0] * 0.01) / 2, dtype=np.int)
+        knn = KNeighborsClassifier()
+        grid_cv = GridSearchCV(knn, {"n_neighbors": n}, scoring="balanced_accuracy", n_jobs=-1, cv=10)
+        grid_cv.fit(training_data[features].values, training_data["label"].values)
+        self.vprint(f"Continuing with n={n}; chosen with balanced accuracy of {round(grid_cv.best_score_, 3)}...")
+        return grid_cv.best_params_.get("n_neighbors")
 
     def control_gate(self,
                      population: Population or str,
@@ -608,35 +647,23 @@ class Gating:
                                   ctrl_id=ctrl,
                                   plot_outcome=plot_outcome,
                                   verbose=verbose)
-        feedback = vprint(verbose)
-        feedback(f"---- Estimating {population.population_name} for {ctrl_id} ----")
+        self.vprint(f"---- Estimating {population.population_name} for {ctrl_id} ----")
         if self.populations.get(population.parent).ctrl_index.get(ctrl_id) is None:
-            feedback(f"Missing data for parent {population.parent}....")
+            self.vprint(f"Missing data for parent {population.parent}....")
             self.control_gate(population=population.parent,
                               ctrl_id=ctrl_id,
                               plot_outcome=plot_outcome,
                               verbose=verbose)
-        training_data = self.get_population_df(population_name=population.parent,
-                                               transform="logicle",
-                                               transform_features="all")
-        training_data["label"] = 0
-        training_data.loc[population.index, "label"] = 1
+        training_data = self._ctrl_training_data(population=population)
         ctrl_data = self.get_population_df(population_name=population.parent,
                                            transform="logicle",
                                            transform_features="all",
                                            ctrl_id=ctrl_id)
         x, y = population.geom.x, population.geom.y
         features = [x, y] if y is not None else [x]
-        feedback("Calculating optimal n by cross-validation...")
-        n = np.arange(int(training_data.shape[0] * 0.01),
-                      int(training_data.shape[0] * 0.05),
-                      int(training_data.shape[0] * 0.01) / 2, dtype=np.int)
-        knn = KNeighborsClassifier()
-        grid_cv = GridSearchCV(knn, {"n_neighbors": n}, scoring="balanced_accuracy", n_jobs=-1, cv=10)
-        grid_cv.fit(training_data[features].values, training_data["label"].values)
-        n = grid_cv.best_params_.get("n_neighbors")
-        feedback(f"Continuing with n={n}; chosen with balanced accuracy of {round(grid_cv.best_score_, 3)}...")
-        feedback("Training on population data...")
+        self.vprint("Calculating optimal n by cross-validation...")
+        n = self._ctrl_optimal_n(training_data, features)
+        self.vprint("Training on population data...")
         X_train, X_test, y_train, y_test = train_test_split(training_data[features].values,
                                                             training_data["label"].values,
                                                             test_size=0.2,
@@ -645,26 +672,34 @@ class Gating:
         knn.fit(X_train, y_train)
         train_acc = balanced_accuracy_score(y_pred=knn.predict(X_train), y_true=y_train)
         val_acc = balanced_accuracy_score(y_pred=knn.predict(X_test), y_true=y_test)
-        feedback(f"...training balanced accuracy score: {train_acc}")
-        feedback(f"...validation balanced accuracy score: {val_acc}")
-        feedback(f"Predicting {population.population_name} in {ctrl_id} control...")
+        self.vprint(f"...training balanced accuracy score: {train_acc}")
+        self.vprint(f"...validation balanced accuracy score: {val_acc}")
+        self.vprint(f"Predicting {population.population_name} in {ctrl_id} control...")
         ctrl_data["label"] = knn.predict(ctrl_data[features].values)
         population.ctrl_index = (ctrl_id, ctrl_data[ctrl_data["label"] == 1].index.values)
         self.populations[population.population_name] = population
-        feedback("-------------- Complete --------------")
+        self.vprint("-------------- Complete --------------")
+
+    def _merge_checks(self,
+                      left: str,
+                      right: str,
+                      save_to_actions: bool):
+        assert left in self.populations.keys(), f"{left} does not exist"
+        assert right in self.populations.keys(), f"{right} does not exist"
+        action_name = f"merge_{left}_{right}"
+        if save_to_actions:
+            assert action_name not in self.actions.keys(), "Merge action already exists in gating strategy"
+        assert self.populations.get(left).parent == self.populations.get(right).parent, \
+            "Populations must have the same parent in order to merge"
 
     def merge(self,
               left: str,
               right: str,
               new_population_name: str,
               save_to_actions: bool = True):
-        assert left in self.populations.keys(), f"{left} does not exist"
-        assert right in self.populations.keys(), f"{right} does not exist"
+        self._merge_checks(left, right, save_to_actions)
         action_name = f"merge_{left}_{right}"
-        if save_to_actions:
-            assert action_name not in self.actions.keys(), "Merge action already exists in gating strategy"
         left, right = self.populations.get(left), self.populations.get(right)
-        assert left.parent == right.parent, "Populations must have the same parent in order to merge"
         new_population = merge_populations(left=left,
                                            right=right,
                                            new_population_name=new_population_name)
@@ -678,13 +713,10 @@ class Gating:
                                                right=right.population_name,
                                                new_population_name=new_population_name)
 
-    def subtract(self,
-                 parent: str,
-                 targets: List[str],
-                 new_population_name: str,
-                 save_to_actions: bool = True):
-        # Check the populations are valid
-        targets = sorted(targets)
+    def _subtract_checks(self,
+                         parent: str,
+                         targets: List[str],
+                         save_to_actions: bool):
         for x in [parent] + targets:
             assert x in self.populations.keys(), "One or more given populations does not exist"
         parent = self.populations.get(parent)
@@ -698,16 +730,27 @@ class Gating:
         assert all([x.geom.y is not None for x in [parent] + targets]), \
             "Subtractions can only be performed on 2 dimensional gates"
         # Check that this is a unique action (if save_to_actions is True)
-        action_name = f"subtract_{parent}_{','.join(targets)}"
+        action_name = f"subtract_{parent}_{','.join([t.population_name for t in targets])}"
         if save_to_actions:
             assert action_name not in self.actions.keys(), "Subtract action already exists in gating strategy"
         # Provide appropriate warnings
         if any([len(t.ctrl_index) > 0 for t in targets]):
             warn("Associated control indexes are not copied to new population. "
                  "Repeat control gating on new population")
-        # TODO lookup all clusters applied to this population and delete
-        warn("Associated clusters are not copied to new population. "
-             "Repeat control gating on new population")
+        if any([len(t.clusters) > 0 for t in targets]):
+            warn("Associated clusters are not copied to new population. "
+                 "Repeat control gating on new population")
+
+    def subtract(self,
+                 parent: str,
+                 targets: List[str],
+                 new_population_name: str,
+                 save_to_actions: bool = True):
+        # Check the populations are valid
+        targets = sorted(targets)
+        parent = self.populations.get(parent)
+        targets = [self.populations.get(t) for t in targets]
+        self._subtract_checks(parent, targets, save_to_actions)
         # Estimate new index
         target_idx = np.unique(np.concatenate([t.index for t in targets], axis=0))
         new_population_idx = np.setdiff1d(parent.index, target_idx)
@@ -715,12 +758,12 @@ class Gating:
         parent_data = self.get_population_df(parent.population_name)[[parent.geom.x, parent.geom.y]]
         parent_data = parent_data[parent_data.index.isin(new_population_idx)]
         x_values, y_values = parent_data[parent.geom.x].values, parent_data[parent.geom.y].values
-        new_population_geom = PopulationGeometry(x=parent.geom.x,
-                                                 y=parent.geom.y,
-                                                 transform_x=parent.geom.transform_x,
-                                                 transform_y=parent.geom.transform_y,
-                                                 x_values=x_values,
-                                                 y_values=y_values)
+        new_population_geom = Polygon(x=parent.geom.x,
+                                      y=parent.geom.y,
+                                      transform_x=parent.geom.transform_x,
+                                      transform_y=parent.geom.transform_y,
+                                      x_values=x_values,
+                                      y_values=y_values)
         new_population = Population(population_name=new_population_name,
                                     n=len(parent.index) - len(new_population_idx),
                                     parent=parent.population_name,
@@ -732,6 +775,7 @@ class Gating:
                                               parent=self.tree[parent.population_name])
         if save_to_actions:
             if save_to_actions:
+                action_name = f"subtract_{parent}_{','.join([t.population_name for t in targets])}"
                 self.actions[action_name] = Action(action_name=action_name,
                                                    method="subtract",
                                                    left=parent.population_name,
@@ -740,7 +784,7 @@ class Gating:
 
     def edit_gate(self,
                   population: str,
-                  new_geom: PopulationGeometry or None = None,
+                  new_geom: Polygon or Threshold,
                   plot_outcome: bool = True,
                   create_plot_kwargs: dict or None = None,
                   plot_population_geom_kwargs: dict or None = None):
@@ -760,11 +804,19 @@ class Gating:
             self.populations.pop(p)
             self.tree.pop(p)
         self.populations[population].geom = new_geom
+        if isinstance(new_geom, Threshold):
+            self.populations[population].index = _edit_threshold_idx(parent, population, new_geom)
+        else:
+            parent = self.get_population_df(self.populations[population].parent,
+                                            transform=new_geom.transform_x)
+            self.populations[population].index = inside_polygon(df=data, x=self.x, y=self.y, poly=geom.shape).index
         if not self.crtl_gate_ad_hoc:
             self.control_gate(self.populations[population], ctrl_id="all", plot_outcome=plot_outcome)
         else:
             warn(f"{population} in control files will need to be estimated again, if required")
-        # TODO remove clusters
+        if len(self.populations[population].clusters) > 0:
+            warn(f"{population} associated clusters will be removed")
+            self.populations[population].clusters = []
         if plot_outcome:
             return ax
 

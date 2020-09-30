@@ -29,8 +29,53 @@ def percentile_rank_transform(data: pd.DataFrame,
     return data
 
 
+def _features(data: pd.DataFrame,
+              features_to_transform):
+    if features_to_transform == 'all':
+        return list(data.columns)
+    elif features_to_transform == 'fluorochromes':
+        return [x for x in data.columns if all([y not in x.lower() for y in ['fsc', 'ssc', 'time', 'label']])]
+    raise ValueError(f"Expected one of: 'all' or 'fluorochromes', but got {features_to_transform}")
+
+
+def _transform(data: pd.DataFrame,
+               features: list,
+               method: str,
+               **kwargs):
+    pre_scale = kwargs.get("pre_scale", 1)
+    feature_i = [list(data.columns).index(i) for i in features]
+    if method == 'logicle':
+        return pd.DataFrame(logicle(data=data.values, channels=feature_i), columns=data.columns, index=data.index)
+    if method == 'hyperlog':
+        return pd.DataFrame(hyperlog(data=data.values, channels=feature_i), columns=data.columns, index=data.index)
+    if method == 'log_transform':
+        return pd.DataFrame(log_transform(npy=data.values, channels=feature_i), columns=data.columns, index=data.index)
+    if method == 'asinh':
+        return pd.DataFrame(asinh(data=data.values, columns=feature_i, pre_scale=pre_scale),
+                            columns=data.columns, index=data.index)
+    if method == 'percentile rank':
+        return percentile_rank_transform(data, features)
+    if method == 'Yeo-Johnson':
+        data, _ = scaler(data, scale_method='power', method='yeo-johnson')
+        return data
+    if method == 'RobustScale':
+        data, _ = scaler(data, scale_method='robust')
+        return data
+    raise ValueError("Error: invalid transform_method, must be one of: 'logicle', 'hyperlog', 'log_transform',"
+                     " 'asinh', 'percentile rank', 'Yeo-Johnson', 'RobustScale'")
+
+
+def individual_transforms(data: pd.DataFrame,
+                          transforms: dict,
+                          **kwargs):
+    for feature, method in transforms.items():
+        assert feature in data.columns, f"{feature} column not found for given DataFrame"
+        data[feature] = _transform(data, [feature], method, **kwargs)[feature]
+    return data
+
+
 def apply_transform(data: pd.DataFrame,
-                    features_to_transform: list or str = 'all',
+                    features_to_transform: list or str or dict = 'all',
                     transform_method: str = 'logicle',
                     **kwargs) -> pd.DataFrame:
     """
@@ -44,43 +89,14 @@ def apply_transform(data: pd.DataFrame,
     prescale: if using asinh transformaion this value is passed as the scalling argument
     transformed pandas dataframe
     """
+    data = data.copy()
+    if isinstance(features_to_transform, dict):
+        return individual_transforms(data, features_to_transform, **kwargs)
     if isinstance(features_to_transform, str):
-        if features_to_transform == 'all':
-            features_to_transform = list(data.columns)
-        elif features_to_transform == 'fluorochromes':
-            features_to_transform = [x for x in data.columns if all([y not in x.lower()
-                                                                     for y in ['fsc', 'ssc', 'time', 'label']])]
-    elif not isinstance(features_to_transform, list):
-        warn('Invalid argument provided for `features_to_transform`, expected one of: `all`, `fluorochromes`,'
-             ' or list of valid column names, proceeding with transformation of entire dataframe as precaution.')
-        features_to_transform = data.columns
-    elif not all([x in data.columns for x in features_to_transform]):
-        warn('Invalid argument provided for `features_to_transform`, list must contain column names that '
-             f'correspond to the provided dataframe. Valid input would be one or several of: {data.columns} '
-             'proceeding with transformation of entire dataframe as precaution.')
-        features_to_transform = data.columns
-
-    feature_i = [list(data.columns).index(i) for i in features_to_transform]
-    if transform_method == 'logicle':
-        return pd.DataFrame(logicle(data=data.values, channels=feature_i), columns=data.columns, index=data.index)
-    if transform_method == 'hyperlog':
-        return pd.DataFrame(hyperlog(data=data.values, channels=feature_i), columns=data.columns, index=data.index)
-    if transform_method == 'log_transform':
-        return pd.DataFrame(log_transform(npy=data.values, channels=feature_i), columns=data.columns, index=data.index)
-    if transform_method == 'asinh':
-        pre_scale = kwargs.get("pre_scale", 1)
-        return pd.DataFrame(asinh(data=data.values, columns=feature_i, pre_scale=pre_scale),
-                            columns=data.columns, index=data.index)
-    if transform_method == 'percentile rank':
-        return percentile_rank_transform(data, features_to_transform)
-    if transform_method == 'Yeo-Johnson':
-        data, _ = scaler(data, scale_method='power', method='yeo-johnson')
-        return data
-    if transform_method == 'RobustScale':
-        data, _ = scaler(data, scale_method='robust')
-        return data
-    raise ValueError("Error: invalid transform_method, must be one of: 'logicle', 'hyperlog', 'log_transform',"
-                     " 'asinh', 'percentile rank', 'Yeo-Johnson', 'RobustScale'")
+        features_to_transform = _features(data, features_to_transform)
+    elif isinstance(features_to_transform, list):
+        assert all([x in data.columns for x in features_to_transform]), "One or more provided features does not exist for the given dataframe"
+    return _transform(data=data, features=features_to_transform, method=transform_method, **kwargs)
 
 
 def scaler(data: np.array,
