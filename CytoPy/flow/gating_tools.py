@@ -804,12 +804,15 @@ class Gating:
             self.populations.pop(p)
             self.tree.pop(p)
         self.populations[population].geom = new_geom
+        transforms = {new_geom.x: new_geom.transform_x}
+        if new_geom.y:
+            transforms[new_geom.y] = new_geom.transform_y
+        parent = self.get_population_df(self.populations[population].parent,
+                                        transform=transforms)
         if isinstance(new_geom, Threshold):
             self.populations[population].index = _edit_threshold_idx(parent, population, new_geom)
         else:
-            parent = self.get_population_df(self.populations[population].parent,
-                                            transform=new_geom.transform_x)
-            self.populations[population].index = inside_polygon(df=data, x=self.x, y=self.y, poly=geom.shape).index
+            self.populations[population].index = inside_polygon(df=parent, x=new_geom.x, y=new_geom.y, poly=new_geom.shape).index
         if not self.crtl_gate_ad_hoc:
             self.control_gate(self.populations[population], ctrl_id="all", plot_outcome=plot_outcome)
         else:
@@ -865,7 +868,7 @@ def load_population(sample_id: str,
                     sample_n: int or None = None,
                     ctrl_id: str or None = None,
                     transform: str or None = None,
-                    transform_features: list or str = "all",
+                    transform_features: list or str or dict = "all",
                     indexed: bool = False,
                     indexed_in_dataframe: bool = False):
     include_ctrls = ctrl_id is not None
