@@ -118,7 +118,7 @@ def inside_ellipse(data: np.array,
     return in_ellipse
 
 
-def _polygon_overlap(polys: List[Polygon]):
+def _polygon_overlap(polys: List[SPoly]):
     """
     Given a list of Polygon objects, iterate over them and generate a dictionary that
     provides the fraction of area overlap for each polygon compared to all other polygons
@@ -478,6 +478,7 @@ class ManualGate(Analyst):
     """
     Class for manually generated (static) gates. Inherist from Analyst.
     """
+
     def __init__(self,
                  x: str or None,
                  y: str or None,
@@ -546,12 +547,11 @@ class ManualGate(Analyst):
                         height: float,
                         angle: float):
         populations = list()
-        geom = PopulationGeometry(x=self.x,
-                                  y=self.y,
-                                  center=center,
-                                  width=width,
-                                  height=height,
-                                  angle=angle)
+        vertices = Ellipse(center, width, height, angle).get_verts()
+        geom = Polygon(x=self.x,
+                       y=self.y,
+                       x_values=vertices[:, 0],
+                       y_values=vertices[:, 1])
         idx = data[inside_ellipse(data=data.values,
                                   center=center,
                                   width=width,
@@ -570,10 +570,10 @@ class ManualGate(Analyst):
                         y_values: list):
         populations = list()
         x_values, y_values = create_convex_hull(x_values, y_values)
-        geom = PopulationGeometry(x=self.x,
-                                  y=self.y,
-                                  x_values=x_values,
-                                  y_values=y_values)
+        geom = Polygon(x=self.x,
+                       y=self.y,
+                       x_values=x_values,
+                       y_values=y_values)
         idx = inside_polygon(df=data, x=self.x, y=self.y, poly=geom.shape).index
         populations.append(Population(population_name="manual_polygon",
                                       parent=self.parent,
@@ -605,6 +605,10 @@ def _find_inflection_point(xx: np.array,
     return float(xx[peaks[0] + np.argmax(ddy)])
 
 
+def silvermans(data: np.array):
+    return float(0.9*min([np.std(data), stats.iqr(data)/1.34])*(len(data)**(-(1/5))))
+
+
 class DensityGate(Analyst):
 
     def __init__(self, x: str or None, y: str or None, shape: str, parent: str, binary: bool, **kwargs):
@@ -614,7 +618,8 @@ class DensityGate(Analyst):
         self.threshold_method = kwargs.get("threshold_method", "density")
         self.q = kwargs.get("q", 0.95)
         self.low_memory = kwargs.get("low_memory", True)
-        self.kde_bw = kwargs.get("kde_bw", None)
+        self.kde_bw = kwargs.get("kde_bw", "ISJ")
+        self.kde_kernel = kwargs.get("kde_kernel", "gaussian")
         self.cutoff_point = kwargs.get("cutoff_point", "inflection")
         self.biased_positive = kwargs.get("biased_positive", False)
         assert self.threshold_method in ["density", "quantile"]
@@ -639,7 +644,7 @@ class DensityGate(Analyst):
             if self.threshold_method == "quantile":
                 thresholds.append(data[d].quantile(self.q))
             else:
-                probs, xx = kde(data, d, self.kde_bw)
+                xx, probs = FFTKDE(kernel=self.kde_kernel, bw=self.kde_bw).fit(data[d].values)()
                 peaks = self._find_peaks(probs)
                 if len(peaks) == 0 and self.cutoff_point == "quantile":
                     thresholds.append(data[d].quantile(self.q))
@@ -653,14 +658,11 @@ class DensityGate(Analyst):
                     # and the number of peaks is equal to two (in other words, increase the variance
                     # at expense of bias)
                     bw = silvermans(data[d].values)
-                    df = data.copy()
-                    if data.shape[0] > 5000 and self.low_memory:
-                        df = df.sample(n=5000)
-                    probs, xx = kde(df, d, kde_bw=bw)
+                    xx, probs = FFTKDE(kernel=self.kde_kernel, bw=bw).fit(data[d].values)()
                     peaks = self._find_peaks(probs)
                     increment = bw * 0.05
                     while len(peaks) > 2:
-                        probs, xx = kde(df, d, kde_bw=bw)
+                        xx, probs = FFTKDE(kernel=self.kde_kernel, bw=bw).fit(data[d].values)()
                         peaks = self._find_peaks(probs)
                         bw = bw + increment
                     if len(peaks) == 1:
