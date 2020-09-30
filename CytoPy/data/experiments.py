@@ -69,14 +69,15 @@ def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
 def _query(x: str or None,
            ref: list) -> str:
     """
-    Internal static method for querying a channel/marker against a reference list
+    Internal static method for querying a channel/marker against a reference list of
+    NormalisedName's
 
     Parameters
     ----------
     x: str or None
         channel/marker to query
     ref: list
-        list of ChannelMap objects for reference search
+        list of NormalisedName objects for reference search
 
     Returns
     --------
@@ -93,7 +94,7 @@ def _query(x: str or None,
 
 def _check_duplication(x: list) -> bool:
     """
-    Internal method. Given a list check for duplicates. Duplicates are printed.
+    Internal method. Given a list check for duplicates. Warning generated for duplicates.
 
     Parameters
     ----------
@@ -107,7 +108,7 @@ def _check_duplication(x: list) -> bool:
     x = [i if i else None for i in x]
     duplicates = [item for item, count in Counter(x).items() if count > 1 and item is not None]
     if duplicates:
-        print(f'Duplicate channel/markers identified: {duplicates}')
+        warn(f'Duplicate channel/markers identified: {duplicates}')
         return True
     return False
 
@@ -280,13 +281,13 @@ class Panel(mongoengine.Document):
 
     def standardise_names(self, column_mappings: list) -> list:
         """
-        Given a dictionary of column mappings, apply standardisation defined by this panel object and return
+        Given a list of column mappings, apply standardisation defined by this panel object and return
         standardised column mappings.
 
         Parameters
         ----------
         column_mappings: list
-            List of dictionaries, where each dictionary corresponds to channel/marker mappings (channel, marker)
+            List of mappings (channel, marker)
 
         Returns
         --------
@@ -384,6 +385,7 @@ def _data_dir_append_leading_char(path: str):
         else:
             # Assuming unix OS
             return path + "/"
+    return path
 
 
 class Experiment(mongoengine.Document):
@@ -724,7 +726,7 @@ class Experiment(mongoengine.Document):
                              channel_mappings=channel_mappings,
                              control=control,
                              ctrl_id=_id)
-
+        controls_path = controls_path or {}
         feedback = vprint(verbose)
         assert not self.sample_exists(sample_id), f'A file group with id {sample_id} already exists'
         filegrp = FileGroup(primary_id=sample_id,
