@@ -55,8 +55,8 @@ class CreatePlot:
     """
 
     def __init__(self,
-                 transform_x: str = "logicle",
-                 transform_y: str = "logicle",
+                 transform_x: str or None = "logicle",
+                 transform_y: str or None = "logicle",
                  xlabel: str or None = None,
                  ylabel: str or None = None,
                  xlim: (float, float) or None = None,
@@ -225,13 +225,11 @@ class CreatePlot:
             Transformed data
         """
         data = data.copy()
-        for channel, axis in zip([x, y], ["x", "y"]):
-            if channel is None:
-                continue
-            if self.tranforms.get(axis) != "linear":
-                data = apply_transform(data,
-                                       features_to_transform=[channel],
-                                       transform_method=self.tranforms.get(axis))
+        transforms = {x: self.tranforms.get(axis) for axis in ["x", "y"]
+                      if self.tranforms.get(axis) is not None}
+        if len(transforms) > 0:
+            data = apply_transform(data,
+                                   features_to_transform=transforms)
         return data
 
     def plot(self,
