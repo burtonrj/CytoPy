@@ -86,6 +86,12 @@ def scale_data(data: Dict[str, pd.DataFrame],
                             columns=v.columns) for k, v in data.items()}
 
 
+def kde_wrapper(data: pd.DataFrame,
+                kernel: str,
+                bw: float or str):
+    return FFTKDE(kernel=kernel, bw=bw).fit(data.values)()[1]
+
+
 class EvaluateBatchEffects:
     """
     Class for assessing the degree of variation observed in a single experiment. This can be
@@ -105,7 +111,15 @@ class EvaluateBatchEffects:
         Whether to provide feedback
     njobs: int (default=-1)
         Number of parallel jobs to run
+    kde_kernel: str (default="gaussian")
+        Kernel to use for KDE, for options see KDEpy.FFTKDE
+    kde_bw: str or float (default="ISJ"
+        Bandwidth/bandwidth estimation method to use for KDE. See KDEpy for options.
+        Defaults too mproved Sheather Jones (ISJ) algorithm, which does not assume normality
+        and is robust to multimodal distributions. If you need to speed up results, change this to
+        'silvermans' which is less accurate but less computaitonally intensive.
     """
+
     def __init__(self,
                  experiment: Experiment,
                  root_population: str,
@@ -113,7 +127,9 @@ class EvaluateBatchEffects:
                  reference_sample: str or None = None,
                  transform: str = 'logicle',
                  verbose: bool = True,
-                 njobs: int = -1):
+                 njobs: int = -1,
+                 kde_kernel: str = "gaussian",
+                 kde_bw: str or float = "ISJ"):
         self.experiment = experiment
         self.transform = transform
         self.root_population = root_population
@@ -121,6 +137,8 @@ class EvaluateBatchEffects:
         self.print = vprint(verbose)
         self.kde_cache = dict()
         self.njobs = njobs
+        self.kde_kernel = kde_kernel
+        self.kde_bw = kde_bw
         if self.njobs < 0:
             self.njobs = cpu_count()
         if samples is None:
@@ -276,7 +294,7 @@ class EvaluateBatchEffects:
         nrows = math.ceil(len(self.sample_ids) / 3)
         data = self.load_and_sample(sample_n=sample_n)
         if scale:
-            data =self.scale_data(data=data, **scale_kwargs)
+            data = scale_data(data=data, **scale_kwargs)
         self.print('Plotting...')
         reference = data.pop(self.reference_id)
         reference['label'] = 'Target'
@@ -313,63 +331,121 @@ class EvaluateBatchEffects:
         fig.tight_layout()
         fig.show()
 
+    def _estimate_pdf(self,
+                      target_id: str,
+                      target: pd.DataFrame,
+                      features: list,
+                      reduce_first: bool = False,
+                      dim_reduction_method: str = "UMAP",
+                      dim_reduction_kwargs: dict or None = None):
+        """
+        Given a sample ID and its events dataframe, estimate the PDF by KDE with the option
+        to perform dimensionality reduction first. Resulting PDF is saved to kde_cache.
+
+        Parameters
+        ----------
+        target_id: str
+        target: Pandas.DataFrame
+        features: list
+        reduce_first: bool (default=False)
+        dim_reduction_method: str (default="UMAP")
+        dim_reduction_kwargs: dict (optional)
+
+        Returns
+        -------
+        None
+        """
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        target = target[features].copy().select_dtypes(include=['number'])
+        reduced_features = None
+        if reduce_first:
+            self.print("...performing dimensionality reduction on target")
+            target = dimensionality_reduction(target,
+                                              features=features,
+                                              method=dim_reduction_method,
+                                              return_reducer=False,
+                                              return_embeddings_only=False,
+                                              **dim_reduction_kwargs)
+            reduced_features = [f"{dim_reduction_method}_{i}"
+                                for i in range(dim_reduction_kwargs.get("n_components"))]
+        self.print("...estimating PDF for target")
+        if reduced_features is not None:
+            target = target[reduced_features]
+        self.kde_cache[target_id] = FFTKDE(kernel=self.kde_kernel, bw=self.kde_bw).fit(target.values)()[1]
+
     def calc_divergence(self,
                         target_id: str,
-                        comparisons: list,
                         features: list,
-                        sample_n: int,
+                        sample_n: int = 5000,
+                        data: dict or None = None,
                         distance_metric: str or callable = 'jsd',
-                        reduce_first: bool = True,
+                        reduce_first: bool = False,
                         dim_reduction_method: str = "UMAP",
                         dim_reduction_kwargs: dict or None = None,
                         scale: bool = False,
-                        scale_kwargs: dict or None = None,
-                        kde_kwargs: dict or None = None) -> np.array:
+                        scale_kwargs: dict or None = None) -> np.array:
+        """
+        Given some target sample ID, estimate the PDF (with the option to perform dimensionality reduction first) and
+        calculate the statistical distance between the target and the PDF of all other samples in the associated experiment.
+
+        Parameters
+        ----------
+        target_id: str
+            Should be a valid sample ID for the associated experiment
+        features: list
+            Markers to be included in multidimensional KDE
+        sample_n: int (default=5000)
+            Number of events to sample for calculation
+        data: dict (optional)
+            If provided, data will be sourced from this dictionary rather than making a call to `load_and_sample`. If given
+            then value given for sample is ignored.
+        distance_metric: callable or str (default='jsd')
+            Either a callable function to calculate the statistical distance or a string value; options are:
+                * jsd: Jensson-shannon distance
+                * kl:Kullback-Leibler divergence (entropy)
+        reduce_first: bool (default=False)
+            If True, dimensionality reduction performed first using the method specified by dim_reduction_method
+        dim_reduction_method: str (default="UMAP")
+            Dimension reduction method, see CytoPy.flow.dim_reduction
+        dim_reduction_kwargs: dict
+            Keyword arguments for dimension reduction method, see CytoPy.flow.dim_reduction
+        scale: bool (default=False)
+            Whether to scale data prior to calculation
+        scale_kwargs
+            Keyword arguments for CytoPy.flow.transform.scaler
+
+        Returns
+        -------
+        list
+            List of statistical distances, with results given as a list of nested tuples of type: (sample ID, distance).
+        """
         # Set defaults
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
         if "n_components" not in dim_reduction_kwargs:
             dim_reduction_kwargs["n_components"] = 2
         scale_kwargs = scale_kwargs or {}
-        kde_kwargs = kde_kwargs or {}
         # Assign distance metric func
         metrics = {"kl": kl,
-                   "jsd": jsd,
-                   "hellinger": hellinger_dist}
-        if type(distance_metric) == str:
-            assert distance_metric in ['jsd', 'kl', 'hellinger'], 'Invalid divergence metric must be one of ' \
-                                                                  '[jsd, kl, hellinger]'
+                   "jsd": jsd}
+        if isinstance(distance_metric, str):
+            assert distance_metric in ['jsd', 'kl'], 'Invalid divergence metric must be one of either jsd, kl, or a callable function]'
             distance_metric = metrics.get(distance_metric)
         # Load data and scale if necessary
-        data = self.load_and_sample(sample_n=sample_n)
+        data = data or self.load_and_sample(sample_n=sample_n)
         if scale:
-            data = self.scale_data(data=data, **scale_kwargs)
+            data = scale_data(data=data, **scale_kwargs)
         # Calculate PDF of target, cache result
         self.print("Calculating PDF for target...")
         if target_id not in self.kde_cache.keys():
-            target = data.get(target_id)[features]
-            target = target.select_dtypes(include=['number']).values
-            reduced_features = None
-            if reduce_first:
-                self.print("...performing dimensionality reduction on target")
-                target = dimensionality_reduction(target,
-                                                  features=features,
-                                                  method=dim_reduction_method,
-                                                  return_reducer=False,
-                                                  return_embeddings_only=False,
-                                                  **dim_reduction_kwargs)
-                reduced_features = [f"{dim_reduction_method}_{i}"
-                                    for i in range(dim_reduction_kwargs.get("n_components"))]
-            self.print("...estimating PDF for target")
-            self.kde_cache[target_id] = multivariate_kde(data=target,
-                                                         features=reduced_features or features,
-                                                         **kde_kwargs)
+            self._estimate_pdf(target_id=target_id,
+                               target=data.get(target_id),
+                               features=features,
+                               reduce_first=reduce_first,
+                               dim_reduction_method=dim_reduction_method,
+                               dim_reduction_kwargs=dim_reduction_kwargs)
         self.print("Calculate PDF for all other samples and calculate distance from target...")
-        # Fetch data of comparison samples if not in cache
-        samples_df = [(name, df.select_dtypes(include='number').values) for name, df in data.items()
-                      if name in comparisons and name not in self.kde_cache.keys()]
         # Perform dim reduction is requested
         if reduce_first:
-            reduction_f = partial(indexed_parallel_func,
+            reduction_f = partial(dimensionality_reduction,
                                   features=features,
                                   method=dim_reduction_method,
                                   return_reducer=False,
@@ -377,22 +453,23 @@ class EvaluateBatchEffects:
                                   **dim_reduction_kwargs)
             with Pool(self.njobs) as pool:
                 self.print("...performing dimensionality reduction on comparisons")
-                samples_df = list(progress_bar(pool.imap(reduction_f, samples_df),
+                samples_df = list(progress_bar(pool.imap(reduction_f, data.values()),
                                                verbose=self.verbose,
-                                               total=len(samples_df)))
+                                               total=len(list(data.values()))))
         self.print("...estimating PDF for comparisons")
-        kde_f = partial(indexed_parallel_func, func=multivariate_kde, **kde_kwargs)
+        kde_f = partial(kde_wrapper,
+                        kernel=self.kde_kernel,
+                        bw=self.kde_bw)
         with Pool(self.njobs) as pool:
             q_ = list(progress_bar(pool.imap(kde_f, samples_df),
                                    verbose=self.verbose,
                                    total=len(samples_df)))
-        for name, q in q_:
+        for name, q in zip(data.keys(), q_):
             self.kde_cache[name] = q
         return [(name, distance_metric(self.kde_cache.get(target_id), q)) for name, q in self.kde_cache.items()]
 
     def similarity_matrix(self,
                           sample_n: int,
-                          exclude: list or None = None,
                           figsize: tuple = (12, 12),
                           distance_metric: str or callable = 'jsd',
                           clustering_method: str = 'average',
@@ -402,14 +479,45 @@ class EvaluateBatchEffects:
                           scale: bool = False,
                           dim_reduction_kwargs: dict or None = None,
                           scale_kwargs: dict or None = None,
-                          kde_kwargs: dict or None = None,
                           cluster_plot_kwargs: dict or None = None):
+        """
+        Generate a heatmap of pairwise statistical distances with the axis clustered using agglomerative clustering.
+
+        Parameters
+        ----------
+        sample_n: int
+            Number of events to sample for analysis
+        figsize: tuple (default=(12,12))
+            Figure size
+        distance_metric: callable or str (default='jsd')
+            Either a callable function to calculate the statistical distance or a string value; options are:
+                * jsd: Jensson-shannon distance
+                * kl:Kullback-Leibler divergence (entropy)
+        clustering_method: str
+            Method passed to call to scipy.cluster.heirachy
+        features: list (optional)
+            List of markers to use in analysis. If not given, will use all available markers.
+        reduce_first: bool (default=False)
+            If True, dimensionality reduction performed first using the method specified by dim_reduction_method
+        dim_reduction_method: str (default="UMAP")
+            Dimension reduction method, see CytoPy.flow.dim_reduction
+        dim_reduction_kwargs: dict
+            Keyword arguments for dimension reduction method, see CytoPy.flow.dim_reduction
+        scale: bool (default=False)
+            Whether to scale data prior to calculation
+        scale_kwargs
+            Keyword arguments for CytoPy.flow.transform.scaler
+        cluster_plot_kwargs: dict
+            Additional keyword arguments passed to Seaborn.clustermap call
+
+        Returns
+        -------
+        Array, Array, ClusterGrid
+            Linkage array, ordered array of sample IDs and seaborn ClusterGrid object
+        """
         # Set defaults
-        exclude = exclude or []
-        samples = [s for s in self.sample_ids if s not in exclude]
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         scale_kwargs = scale_kwargs or {}
-        kde_kwargs = kde_kwargs or {}
         cluster_plot_kwargs = cluster_plot_kwargs or {}
         if distance_metric == "kl":
             warn("Kullback-Leiber Divergence chosen as statistical distance metric, KL divergence "
@@ -418,23 +526,21 @@ class EvaluateBatchEffects:
         # Fetch data and scale if necessary
         data = self.load_and_sample(sample_n=sample_n)
         if scale:
-            data = self.scale_data(data=data, **scale_kwargs)
+            data = scale_data(data=data, **scale_kwargs)
         features = features or data.get(list(data.keys())[0]).columns.tolist()
         distance_df = pd.DataFrame()
 
         # Generate distance matrix
-        for s in progress_bar(samples, verbose=self.verbose):
+        for s in progress_bar(data.keys(), verbose=self.verbose):
             distances = self.calc_divergence(target_id=s,
-                                             comparisons=samples,
                                              features=features,
-                                             sample_n=sample_n,
+                                             data=data,
                                              distance_metric=distance_metric,
                                              reduce_first=reduce_first,
                                              dim_reduction_method=dim_reduction_method,
                                              dim_reduction_kwargs=dim_reduction_kwargs,
                                              scale=scale,
-                                             scale_kwargs=scale_kwargs,
-                                             kde_kwargs=kde_kwargs)
+                                             scale_kwargs=scale_kwargs)
             name_distances = defaultdict(list)
             for n, d in distances:
                 name_distances[n].append(d)
