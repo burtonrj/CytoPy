@@ -1,7 +1,7 @@
-from .density_estimation import silvermans, kde
 from ..utilities import inside_polygon
-from ..data.populations import PopulationGeometry, Population
-from shapely.geometry import Point, Polygon
+from ..data.populations import Polygon, Threshold, Population
+from matplotlib.patches import Ellipse
+from shapely.geometry import Point, Polygon as SPoly
 from shapely.affinity import scale
 from scipy.spatial import ConvexHull
 from scipy import linalg, stats
@@ -9,6 +9,7 @@ from scipy.signal import savgol_filter
 from sklearn.cluster import *
 from sklearn.mixture import *
 from detecta import detect_peaks
+from KDEpy import FFTKDE
 from typing import List
 from warnings import warn
 import pandas as pd
@@ -18,6 +19,19 @@ import string
 
 def create_convex_hull(x_values: np.array,
                        y_values: np.array):
+    """
+    Given the x and y coordinates of a cloud of data points, generate a convex hull,
+    returning the x and y coordinates of its vertices.
+
+    Parameters
+    ----------
+    x_values: Numpy.array
+    y_values: Numpy.array
+
+    Returns
+    -------
+    Numpy.array, Numpy.array
+    """
     xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
     hull = ConvexHull(xy)
     x = [int(i) for i in xy[hull.vertices, 0]]
@@ -27,6 +41,22 @@ def create_convex_hull(x_values: np.array,
 
 def _probablistic_ellipse(covariances: np.array,
                           conf: float):
+    """
+    Given the covariance matrix of a mixture component, calculate a elliptical shape that
+    represents a probabilistic confidence interval.
+
+    Parameters
+    ----------
+    covariances: np.array
+        Covariance matrix
+    conf: float
+        The confidence interval (e.g. 0.95 would give the region of 95% confidence)
+
+    Returns
+    -------
+    float, float, float
+        Width, Height and Angle of ellipse
+    """
     eigen_val, eigen_vec = linalg.eigh(covariances)
     chi2 = stats.chi2.ppf(conf, 2)
     eigen_val = 2. * np.sqrt(eigen_val) * np.sqrt(chi2)
@@ -88,10 +118,23 @@ def inside_ellipse(data: np.array,
     return in_ellipse
 
 
-def _circle_overlap(circles: List[Polygon]):
-    overlaps = {i: [] for i, _ in enumerate(circles)}
-    for i, c in enumerate(circles):
-        for x in circles:
+def _polygon_overlap(polys: List[Polygon]):
+    """
+    Given a list of Polygon objects, iterate over them and generate a dictionary that
+    provides the fraction of area overlap for each polygon compared to all other polygons
+    in the list
+
+    Parameters
+    ----------
+    polys: list
+
+    Returns
+    -------
+    dict
+    """
+    overlaps = {i: [] for i, _ in enumerate(polys)}
+    for i, c in enumerate(polys):
+        for x in polys:
             if c.intersects(x):
                 overlaps[i].append(c.intersection(x).area / c.area)
             else:
@@ -134,6 +177,28 @@ def find_local_minima(probs: np.array,
 
 
 class Analyst:
+    """
+    Base class for applying an autonomous gating method; an algorithm that generates a geometric
+    shape. Generates a new Population object(s) from the resulting algorithm.
+
+    Parameters
+    -----------
+    x: str
+        Name of the x-axis variable
+    y: str
+        Name of the y-axis variable
+    shape: str
+        The type of shape this Analyst is expected to generate. Should be one of: 'threshold', 'polygon', 'ellipse'
+    parent: str
+        Parent population of the resulting population(s) of gating
+    binary: bool
+        Whether the gate is a binary gate
+    model: str (optional)
+        Name of the method used for gating (not required for DensityGate or ManualGate)
+    conf: float (optional)
+        Confidence interval to generate elliptical gate (only required for MixtureModel methods)
+    """
+
     def __init__(self,
                  x: str or None,
                  y: str or None,
@@ -164,13 +229,27 @@ class Analyst:
                       data: pd.DataFrame,
                       x: float,
                       y: float):
+        """
+        Generate populations resulting for a two-dimensional threshold gate
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        x: str
+        y: str
+
+        Returns
+        -------
+        list
+            List of Populations
+        """
         bottom_left = data[(data[self.x] <= x) & (data[self.y] <= y)].index.values
         top_left = data[(data[self.x] <= x) & (data[self.y] > y)].index.values
         bottom_right = data[(data[self.x] > x) & (data[self.y] <= y)].index.values
         top_right = data[(data[self.x] > x) & (data[self.y] > y)].index.values
         populations = list()
         for definition, idx in zip(["--", "-+", "++", "+-"], [bottom_left, top_left, top_right, bottom_right]):
-            geom = PopulationGeometry(x=self.x, y=self.y, x_threshold=x, y_threshold=y)
+            geom = Threshold(x=self.x, y=self.y, x_threshold=x, y_threshold=y)
             populations.append(Population(population_name=definition,
                                           index=idx,
                                           parent=self.parent,
@@ -182,11 +261,24 @@ class Analyst:
     def _threshold_1d(self,
                       data: pd.DataFrame,
                       x: float):
+        """
+        Generate populations resulting for a one-dimensional threshold gate
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        x: str
+
+        Returns
+        -------
+        list
+            List of Populations
+        """
         left = data[data[self.x] < x].index.values
         right = data[data[self.x] >= x].index.values
         populations = list()
         for definition, idx in zip(["-", "+"], [left, right]):
-            geom = PopulationGeometry(x=self.x, x_threshold=x)
+            geom = Threshold(x=self.x, x_threshold=x)
             populations.append(Population(population_name=definition,
                                           index=idx,
                                           parent=self.parent,
@@ -199,6 +291,21 @@ class Analyst:
                 data: pd.DataFrame,
                 labels: list,
                 centers: list):
+        """
+        Generate populations as a result of circular gates (such as those generated from a centroid based clustering
+        algorithm such as K-means).
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        labels: list
+        centers: list
+
+        Returns
+        -------
+        list
+            List of Populations
+        """
         populations = list()
         circles = list()
         names = list(string.ascii_uppercase)
@@ -212,7 +319,7 @@ class Analyst:
             circle = Point(center).buffer(1)
             circles.append(scale(circle, xfact=furthest, yfact=furthest))
         # measure overlap of circles
-        overlaps = _circle_overlap(circles)
+        overlaps = _polygon_overlap(circles)
         # incrementally reduce circle size until no overlap occurs
         while all([sum(x) != 0 for x in overlaps.values()]):
             for i, overlap_frac in overlaps.items():
@@ -220,18 +327,17 @@ class Analyst:
                     circles[i] = scale(circles[i],
                                        xfact=-(data.x.max() - data.x.min()) * 0.01,
                                        yfact=-(data.y.max() - data.y.min()) * 0.01)
-            overlaps = _circle_overlap(circles)
+            overlaps = _polygon_overlap(circles)
         # Now create populations
         for i, circle in enumerate(circles):
             box = circle.minimum_rotated_rectangle
             x, y = box.exterior.coords.xy
             width = max(Point(x[0], y[0]).distance(Point(x[1], y[1])))
-            geom = PopulationGeometry(x=self.x,
-                                      y=self.y,
-                                      center=circle.centroid,
-                                      width=width,
-                                      height=width,
-                                      angle=0)
+            vertices = Ellipse(circle.centroid.coords[0], width, width, 0).get_verts()
+            geom = Polygon(x=self.x,
+                           y=self.y,
+                           x_values=vertices[:, 0],
+                           y_values=vertices[:, 1])
             idx = data[inside_ellipse(data=data.values,
                                       center=circle.centroid,
                                       width=width,
@@ -250,6 +356,22 @@ class Analyst:
                  labels: list,
                  centers: list,
                  covar_matrix: np.array or None = None):
+        """
+        Generate populations as a result of circular gates (such as those generated from a centroid based clustering
+        algorithm such as K-means).
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        labels: list
+        centers: list
+        covar_matrix: Numpy.array (optional)
+
+        Returns
+        -------
+        list
+            List of Populations
+        """
         # if covar matrix is none, for each center, expand a circle to the most distant assigned point
         # if circles overlap, reduce circle until silhoutte is 0
         populations = list()
@@ -260,12 +382,11 @@ class Analyst:
                 self.conf = 0.95
             width, height, angle = _probablistic_ellipse(covariances=covar_matrix[i],
                                                          conf=self.conf)
-            geom = PopulationGeometry(x=self.x,
-                                      y=self.y,
-                                      center=centers[i],
-                                      width=width,
-                                      height=height,
-                                      angle=angle)
+            vertices = Ellipse(centers[i], width, width, 0).get_verts()
+            geom = Polygon(x=self.x,
+                           y=self.y,
+                           x_values=vertices[:, 0],
+                           y_values=vertices[:, 1])
             idx = data[inside_ellipse(data=data.values,
                                       center=centers[i],
                                       width=width,
@@ -281,6 +402,19 @@ class Analyst:
     def _polygon(self,
                  data: pd.DataFrame,
                  labels: list):
+        """
+        Generate populations as a result of polygon gates
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        labels: list
+
+        Returns
+        -------
+        list
+            List of Populations
+        """
         # Return N polygons, where N is the length of set of labels
         data = data.copy()
         data["labels"] = labels
@@ -290,10 +424,10 @@ class Analyst:
             label_df = data[data.labels == label]
             idx = label_df.index.values
             x_values, y_values = create_convex_hull(label_df[self.x].values, label_df[self.y].values)
-            geom = PopulationGeometry(x=self.x,
-                                      y=self.y,
-                                      x_values=x_values,
-                                      y_values=y_values)
+            geom = Polygon(x=self.x,
+                           y=self.y,
+                           x_values=x_values,
+                           y_values=y_values)
             populations.append(Population(population_name=names[i],
                                           parent=self.parent,
                                           geom=geom,
@@ -303,6 +437,19 @@ class Analyst:
 
     def fit_predict(self,
                     data: pd.DataFrame):
+        """
+        Wrapper for calling fit_predict from the chosen gating method. Inspects the method
+        and generates the appropriate geometric shape that will create the resulting 'gate'
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+
+        Returns
+        -------
+        list
+            List of resulting Populations
+        """
         labels = self.model.fit_predict(data[[self.x, self.y]])
         if self.shape == "polygon":
             return self._polygon(data=data, labels=labels)
@@ -328,6 +475,9 @@ class Analyst:
 
 
 class ManualGate(Analyst):
+    """
+    Class for manually generated (static) gates. Inherist from Analyst.
+    """
     def __init__(self,
                  x: str or None,
                  y: str or None,
