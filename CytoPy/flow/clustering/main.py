@@ -1,7 +1,9 @@
-from ...data.clustering import ClusteringDefinition
+from ...data.experiments import Experiment
+from ...data.populations import Cluster
 from ...feedback import vprint, progress_bar
 from ..explore import Explorer
 from ..gating_tools import Gating, load_population
+from ..transforms import scaler
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from multiprocessing import Pool, cpu_count
@@ -48,8 +50,12 @@ def phenograph_metaclustering(data: pd.DataFrame,
                               features: list,
                               verbose: bool = True,
                               summary_method: callable = np.median,
+                              norm_method: str or None = "norm",
                               **kwargs):
     vprint_ = vprint(verbose)
+    if norm_method is not None:
+        norm_method = partial(scaler, scale_method=norm_method, return_scaled=False)
+        data = data.groupby(["sample_id", "cluster_id"])[features].apply(norm_method).reset_index()
     metadata = data.groupby(["sample_id", "cluster_id"])[features].apply(summary_method).reset_index()
     metadata["meta_label"] = None
     vprint_("----- Phenograph meta-clustering ------")
@@ -65,11 +71,15 @@ def consensus_metacluster(data: pd.DataFrame,
                           cluster_class: callable,
                           verbose: bool = True,
                           summary_method: callable = np.median,
+                          norm_method: str or None = "norm",
                           smallest_cluster_n: int = 5,
                           largest_cluster_n: int = 50,
                           n_resamples: int = 10,
                           resample_proportion: float = 0.5):
     vprint_ = vprint(verbose)
+    if norm_method is not None:
+        norm_method = partial(scaler, scale_method=norm_method, return_scaled=False)
+        data = data.groupby(["sample_id", "cluster_id"])[features].apply(norm_method).reset_index()
     metadata = data.groupby(["sample_id", "cluster_id"])[features].apply(summary_method).reset_index()
     metadata["meta_label"] = None
     vprint_("----- Consensus meta-clustering ------")
@@ -145,20 +155,29 @@ def flowsom(data: pd.DataFrame,
     return data, None, None
 
 
-class Clusterer:
+class Clustering:
     def __init__(self,
-                 clustering_experiment: ClusteringDefinition,
+                 experiment: Experiment,
+                 tag: str,
+                 features: list,
+                 root_population: str,
+                 transform: str = "logicle",
                  verbose: bool = True,
                  njobs: int = -1):
-        self.ce = clustering_experiment
+        self.experiment = experiment
         self.verbose = verbose
         self.print = vprint(verbose)
+        self.tag = tag
+        self.features = features
+        self.transform = transform
+        self.root_population = root_population
         self.graph = None
         self.metrics = None
         self.njobs = njobs
         if njobs < 0:
             self.njobs = cpu_count()
         self.data = self._load_data()
+        self._load_clusters()
 
     def _check_null(self) -> list:
         """
@@ -169,28 +188,37 @@ class Clusterer:
         List
             List of valid columns
         """
-        null_cols = (self.data[self.ce.features]
+        null_cols = (self.data[self.features]
                      .isnull()
                      .sum()
-                     [self.data[self.ce.features].isnull().sum() > 0]
+                     [self.data[self.features].isnull().sum() > 0]
                      .index
                      .values)
         if null_cols.size != 0:
             warn(f'The following columns contain null values and will be excluded from '
                  f'clustering analysis: {null_cols}')
-        return [x for x in self.ce.features if x not in null_cols]
+        return [x for x in self.features if x not in null_cols]
+
+    def _load_clusters(self):
+        for sample_id in progress_bar(self.experiment.list_samples(), verbose=self.verbose):
+            sample = self.experiment.get_sample(sample_id)
+            pop = sample.get_population(self.root_population)
+            for cluster in pop.clusters:
+                idx = self.data[(self.data.sample_id == sample_id) & (self.data.original_index.isin(cluster.index))]
+                self.data.loc[idx, ["cluster_id"]] = cluster.cluster_id
+                self.data.loc[idx, ["meta_labek"]] = cluster.meta_label
 
     def _load_data(self):
         self.print("Loading data...")
         _load = partial(load_population,
-                        experiment=self.ce.experiment,
-                        population=self.ce.root_population,
-                        transform=self.ce.transform_method,
+                        experiment=self.experiment,
+                        population=self.root_population,
+                        transform=self.transform,
                         indexed=True,
                         indexed_in_dataframe=True)
         with Pool(self.njobs) as pool:
-            n = len(list(self.ce.experiment.list_samples()))
-            data = list(progress_bar(pool.imap(_load, self.ce.experiment.list_samples()),
+            n = len(list(self.experiment.list_samples()))
+            data = list(progress_bar(pool.imap(_load, self.experiment.list_samples()),
                                      verbose=self.verbose,
                                      total=n))
         data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1) for df in data])
@@ -198,10 +226,6 @@ class Clusterer:
         # Load existing clusters
         data["cluster_id"] = None
         data["meta_label"] = None
-        for cluster in self.ce.clusters:
-            idx = data[(data.sample_id == cluster.file.primary_id) & (data.original_index.isin(cluster.index))]
-            data.loc[idx, ["cluster_id"]] = cluster.label
-            data.loc[idx, ["meta_label"]] = cluster.meta_label
         self.print("Data loaded successfully!")
         return data
 
@@ -210,7 +234,7 @@ class Clusterer:
                 samples: list or None = None,
                 **kwargs):
         features = self._check_null()
-        samples = samples or list(self.ce.experiment.list_samples())
+        samples = samples or list(self.experiment.list_samples())
         self.data, self.graph, self.metrics = func(data=self.data,
                                                    samples=samples,
                                                    features=features,
@@ -219,12 +243,16 @@ class Clusterer:
 
     def meta_cluster(self,
                      func: callable,
+                     summary_method: callable = np.median,
+                     normalise: str or None = "norm",
                      **kwargs):
         features = self._check_null()
         self.data, self.graph, self.metrics = func(data=self.data,
-                                                   samples=list(self.ce.experiment.list_samples()),
+                                                   samples=list(self.experiment.list_samples()),
                                                    features=features,
                                                    verbose=self.verbose,
+                                                   summary_method=summary_method,
+                                                   norm_method=normalise,
                                                    **kwargs)
 
     def explore(self,
@@ -234,8 +262,8 @@ class Clusterer:
             self.print("Populating with population labels...")
             labeled_data = pd.DataFrame()
             for _id in progress_bar(data.sample_id, verbose=self.verbose):
-                g = Gating(experiment=self.ce.experiment, sample_id=_id, include_controls=False)
-                labeled_cells = (g.get_labelled_population_df(population_name=self.ce.root_population,
+                g = Gating(experiment=self.experiment, sample_id=_id, include_controls=False)
+                labeled_cells = (g.get_labelled_population_df(population_name=self.root_population,
                                                               transform=None)
                                  .reset_index()
                                  .rename({"index": "original_index",
@@ -249,16 +277,18 @@ class Clusterer:
     def save(self):
         for sample_id in self.data.sample_id:
             sample_df = self.data[self.data.sample_id == sample_id]
-            fg = self.ce.experiment.get_sample(sample_id)
+            fg = self.experiment.get_sample(sample_id)
+            root = [p for p in fg.populations if p.population_name == self.root_population][0]
             for cluster_id in sample_df.cluster_id:
-                if self.ce.prefix:
-                    cluster_id = "_".join([self.ce.prefix, cluster_id])
-                self.ce.add_cluster(cluster_id=cluster_id,
-                                    file=fg,
-                                    meta_label=sample_df[sample_df.cluster_id == cluster_id].meta_label.values[0],
-                                    cluster_idx=sample_df[sample_df.cluster_id == cluster_id].original_index.values,
-                                    root_n=sample_df.shape[0])
-        self.ce.save()
+                idx = sample_df[sample_df.cluster_id == cluster_id].original_index.values
+                root.clusters.append(Cluster(cluster_id=cluster_id,
+                                             meta_label=sample_df[sample_df.cluster_id == cluster_id].meta_label.values[0],
+                                             n=len(idx),
+                                             index=idx,
+                                             prop_of_events=len(idx)/sample_df.shape[0],
+                                             tag=self.tag)
+            fg.save()
+
 
 
 
