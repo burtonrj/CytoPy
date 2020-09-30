@@ -76,6 +76,8 @@ class Project(mongoengine.Document):
         -----------
         experiment_id: str
             experiment name
+        data_directory: str
+            Path where experiment events data files will be stored
         panel_name: str (optional)
             Name of panel to associate to experiment
         panel_definition: str (optional)
