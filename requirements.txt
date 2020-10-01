@@ -11,7 +11,7 @@ KDEpy==1.0.5
 keras==2.4.3
 keras-applications==1.0.8
 keras-preprocessing==1.1.0
-matplotlib==3.3.2
+matplotlib==3.3.1
 mongoengine==0.20.0
 mongomock==3.20.0
 nbconvert==6.0.4
