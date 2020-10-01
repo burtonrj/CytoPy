@@ -110,9 +110,9 @@ class FlowSOM:
 
     def meta_cluster(self,
                      cluster_class: callable,
-                     min_n: int,
-                     max_n: int,
-                     iter_n: int,
+                     min_n: int = 5,
+                     max_n: int = 50,
+                     iter_n: int = 10,
                      resample_proportion: float = 0.5):
         """Perform meta-clustering. Implementation of Consensus clustering, following the paper
         https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf
