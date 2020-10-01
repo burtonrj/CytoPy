@@ -46,6 +46,18 @@ def _asign_metalabels(data: pd.DataFrame,
     return data
 
 
+def _meta_preprocess(data: pd.DataFrame,
+                     features: list,
+                     summary_method: callable,
+                     norm_method: str or None):
+    if norm_method is not None:
+        norm_method = partial(scaler, scale_method=norm_method, return_scaled=False)
+        data = data.groupby(["sample_id", "cluster_id"])[features].apply(norm_method).reset_index()
+    metadata = data.groupby(["sample_id", "cluster_id"])[features].apply(summary_method).reset_index()
+    metadata["meta_label"] = None
+    return metadata
+
+
 def phenograph_metaclustering(data: pd.DataFrame,
                               features: list,
                               verbose: bool = True,
@@ -53,11 +65,7 @@ def phenograph_metaclustering(data: pd.DataFrame,
                               norm_method: str or None = "norm",
                               **kwargs):
     vprint_ = vprint(verbose)
-    if norm_method is not None:
-        norm_method = partial(scaler, scale_method=norm_method, return_scaled=False)
-        data = data.groupby(["sample_id", "cluster_id"])[features].apply(norm_method).reset_index()
-    metadata = data.groupby(["sample_id", "cluster_id"])[features].apply(summary_method).reset_index()
-    metadata["meta_label"] = None
+    metadata = _meta_preprocess(data, features, summary_method, norm_method)
     vprint_("----- Phenograph meta-clustering ------")
     communities, graph, q = phenograph.cluster(data[features], **kwargs)
     metadata["meta_label"] = communities
@@ -77,11 +85,7 @@ def consensus_metacluster(data: pd.DataFrame,
                           n_resamples: int = 10,
                           resample_proportion: float = 0.5):
     vprint_ = vprint(verbose)
-    if norm_method is not None:
-        norm_method = partial(scaler, scale_method=norm_method, return_scaled=False)
-        data = data.groupby(["sample_id", "cluster_id"])[features].apply(norm_method).reset_index()
-    metadata = data.groupby(["sample_id", "cluster_id"])[features].apply(summary_method).reset_index()
-    metadata["meta_label"] = None
+    metadata = _meta_preprocess(data, features, summary_method, norm_method)
     vprint_("----- Consensus meta-clustering ------")
     consensus_clust = ConsensusCluster(cluster=cluster_class,
                                        smallest_cluster_n=smallest_cluster_n,
@@ -94,62 +98,55 @@ def consensus_metacluster(data: pd.DataFrame,
     return data, None, None
 
 
+def _flowsom_clustering(data: pd.DataFrame,
+                        features: list,
+                        verbose: bool,
+                        meta_cluster_class: callable,
+                        init_kwargs: dict or None = None,
+                        training_kwargs: dict or None = None,
+                        meta_cluster_kwargs: dict or None = None):
+    init_kwargs = init_kwargs or {}
+    training_kwargs = training_kwargs or {}
+    meta_cluster_kwargs = meta_cluster_kwargs or {}
+    cluster = FlowSOM(data=data,
+                      features=features,
+                      verbose=verbose,
+                      **init_kwargs)
+    cluster.train(**training_kwargs)
+    cluster.meta_cluster(cluster_class=meta_cluster_class,
+                         **meta_cluster_kwargs)
+    return cluster
+
+
 def flowsom(data: pd.DataFrame,
             features: list,
             verbose: bool,
             meta_cluster_class: callable,
-            neighborhood_function: str = "gaussian",
-            normalisation: bool = False,
             global_clustering: bool = False,
-            som_dim: tuple = (250, 250),
-            sigma: float = 1.0,
-            learning_rate: float = 0.5,
-            batch_size: int = 500,
-            seed: int = 42,
-            weight_init: str = 'random',
-            min_k: int = 5,
-            max_k: int = 50,
-            iter_n: int = 10,
-            resample_proportion: float = .5):
+            init_kwargs: dict or None = None,
+            training_kwargs: dict or None = None,
+            meta_cluster_kwargs: dict or None = None):
     if global_clustering:
-        cluster = FlowSOM(data=data,
-                          features=features,
-                          neighborhood_function=neighborhood_function,
-                          normalisation=normalisation,
-                          verbose=verbose)
-        cluster.train(som_dim=som_dim,
-                      sigma=sigma,
-                      learning_rate=learning_rate,
-                      batch_size=batch_size,
-                      seed=seed,
-                      weight_init=weight_init)
-        cluster.meta_cluster(cluster_class=meta_cluster_class,
-                             min_n=min_k,
-                             max_n=max_k,
-                             iter_n=iter_n,
-                             resample_proportion=resample_proportion)
+        cluster = _flowsom_clustering(data=data,
+                                      features=features,
+                                      verbose=verbose,
+                                      meta_cluster_class=meta_cluster_class,
+                                      init_kwargs=init_kwargs,
+                                      training_kwargs=training_kwargs,
+                                      meta_cluster_kwargs=meta_cluster_kwargs)
         data["cluster_id"] = cluster.predict()
         return data, None, None
     vprint_ = vprint(verbose)
     for _id in data.sample_id:
         vprint_(f"----- Clustering {_id} -----")
         sample_data = data[data.sample_id == _id]
-        cluster = FlowSOM(data=sample_data,
-                          features=features,
-                          neighborhood_function=neighborhood_function,
-                          normalisation=normalisation,
-                          verbose=verbose)
-        cluster.train(som_dim=som_dim,
-                      sigma=sigma,
-                      learning_rate=learning_rate,
-                      batch_size=batch_size,
-                      seed=seed,
-                      weight_init=weight_init)
-        cluster.meta_cluster(cluster_class=meta_cluster_class,
-                             min_n=min_k,
-                             max_n=max_k,
-                             iter_n=iter_n,
-                             resample_proportion=resample_proportion)
+        cluster = _flowsom_clustering(data=data,
+                                      features=features,
+                                      verbose=verbose,
+                                      meta_cluster_class=meta_cluster_class,
+                                      init_kwargs=init_kwargs,
+                                      training_kwargs=training_kwargs,
+                                      meta_cluster_kwargs=meta_cluster_kwargs)
         sample_data["cluster_id"] = cluster.predict()
         data.loc[sample_data.index, ["cluster_id"]] = sample_data.cluster_id
     return data, None, None
@@ -286,7 +283,7 @@ class Clustering:
                                              n=len(idx),
                                              index=idx,
                                              prop_of_events=len(idx)/sample_df.shape[0],
-                                             tag=self.tag)
+                                             tag=self.tag))
             fg.save()
 
 
