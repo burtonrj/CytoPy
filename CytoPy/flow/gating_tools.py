@@ -67,6 +67,51 @@ def _edit_threshold_idx(parent: pd.DataFrame,
     raise ValueError("Invalid definition, cannot edit gate")
 
 
+def _gate_feature_check(x: str,
+                        y: str or None,
+                        valid_columns: list,
+                        preprocessing_kwargs: dict):
+    features_to_check = [i for i in [x, y] if i is not None]
+    if any(i not in valid_columns for i in features_to_check):
+        if not preprocessing_kwargs.get("dim_reduction"):
+            err = f"x or y are invalid values are invalid; valid column names as: {valid_columns}"
+            raise ValueError(err)
+        else:
+            assert x == "embedding1", "If using dim_reduction, x should have a value 'embedding1'"
+            assert y == "embedding2", "If using dim_reduction, y should have a value 'embedding2'"
+
+
+def _gate_validate_shape(shape: str,
+                         method: str,
+                         method_kwargs: dict,
+                         preprocessing_kwargs: dict):
+    if shape == "threshold":
+        if method not in ["DensityGate", "ManualGate"]:
+            warn("Shape set to 'threshold', defaulting to DensityGate")
+            method = "DensityGate"
+    elif shape == "ellipse":
+        if method is None:
+            warn("Method not given, defaulting to BayesianGaussianMixture")
+            method = "BayesianGaussianMixture"
+            method_kwargs["n_components"] = 5
+        else:
+            err = "For an elliptical gate, expect method 'GaussianMixture', 'BayesianGaussianMixture', " \
+                  "or 'MiniBatchKMeans'"
+            valid = ["GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans"]
+            assert method in valid, err
+    elif shape == "polygon":
+        if not method:
+            warn("No method specified for Polygon Gate, defaulting to MiniBatchKMeans")
+            method = "MiniBatchKMeans"
+            method_kwargs["n"] = 5
+        elif method != "ManualGate":
+            method = valid_sklearn(method)
+            if "dbscan" in method.lower():
+                if preprocessing_kwargs.get("downsample_method") is None:
+                    warn("DBSCAN and HDBSCAN do not scale well and it is recommended that downsampling is performed")
+    return method, method_kwargs
+
+
 class Gating:
     """
     Central class for performing semi-automated gating and storing gating information on an FCS FileGroup
@@ -384,39 +429,11 @@ class Gating:
         err = """Gate should have one of the following shapes: ["threshold", "polygon", "ellipse"]"""
         assert shape in ["threshold", "polygon", "ellipse"], err
         assert parent in self.populations.keys(), "Invalid parent (does not exist)"
-        features_to_check = [x]
-        if y is not None:
-            features_to_check.append(y)
-        if any(c not in self.data.get("primary").columns for c in features_to_check):
-            if not preprocessing_kwargs.get("dim_reduction"):
-                err = f"x or y are invalid values are invalid; valid column names as: {self.data.get('primary').columns}"
-                raise ValueError(err)
-            else:
-                assert x == "embedding1", "If using dim_reduction, x should have a value 'embedding1'"
-                assert y == "embedding2", "If using dim_reduction, y should have a value 'embedding2'"
-        if shape == "threshold":
-            if method not in ["DensityGate", "ManualGate"]:
-                warn("Shape set to 'threshold', defaulting to DensityGate")
-                method = "DensityGate"
-        elif shape == "ellipse":
-            if method is None:
-                warn("Method not given, defaulting to BayesianGaussianMixture")
-                method = "BayesianGaussianMixture"
-                method_kwargs["n_components"] = 5
-            else:
-                err = "For an elliptical gate, expect method 'GaussianMixture', 'BayesianGaussianMixture', " \
-                      "or 'MiniBatchKMeans'"
-                valid = ["GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans"]
-                assert method in valid, err
-        elif shape == "polygon":
-            if not method:
-                warn("No method specified for Polygon Gate, defaulting to MiniBatchKMeans")
-                method = "MiniBatchKMeans"
-                method_kwargs["n"] = 5
-            method = valid_sklearn(method)
-            if "dbscan" in method.lower():
-                if preprocessing_kwargs.get("downsample_method") is None:
-                    warn("DBSCAN and HDBSCAN do not scale well and it is recommended that downsampling is performed")
+        _gate_feature_check(x=x, y=y, valid_columns=self.data.get("primary").columns, preprocessing_kwargs=preprocessing_kwargs)
+        method, method_kwargs = _gate_validate_shape(shape=shape,
+                                                     method=method,
+                                                     method_kwargs=method_kwargs,
+                                                     preprocessing_kwargs=preprocessing_kwargs)
         gate = Gate(gate_name=gate_name,
                     parent=parent,
                     shape=shape,
