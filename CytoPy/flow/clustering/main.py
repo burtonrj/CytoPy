@@ -262,10 +262,10 @@ class Clustering:
                 g = Gating(experiment=self.experiment, sample_id=_id, include_controls=False)
                 labeled_cells = (g.get_labelled_population_df(population_name=self.root_population,
                                                               transform=None)
-                                 .reset_index()
-                                 .rename({"index": "original_index",
-                                          "label": "population_label"}, axis=1)
-                                 ["original_index", "population_label"])
+                    .reset_index()
+                    .rename({"index": "original_index",
+                             "label": "population_label"}, axis=1)
+                ["original_index", "population_label"])
                 sample_df = data[data.sample_id == _id].merge(labeled_cells, on="original_index")
                 labeled_data = pd.concat([labeled_data, sample_df])
                 data = labeled_data
@@ -275,18 +275,13 @@ class Clustering:
         for sample_id in self.data.sample_id:
             sample_df = self.data[self.data.sample_id == sample_id]
             fg = self.experiment.get_sample(sample_id)
-            root = [p for p in fg.populations if p.population_name == self.root_population][0]
+            root = fg.get_population(self.root_population)
             for cluster_id in sample_df.cluster_id:
                 idx = sample_df[sample_df.cluster_id == cluster_id].original_index.values
-                root.clusters.append(Cluster(cluster_id=cluster_id,
-                                             meta_label=sample_df[sample_df.cluster_id == cluster_id].meta_label.values[0],
-                                             n=len(idx),
-                                             index=idx,
-                                             prop_of_events=len(idx)/sample_df.shape[0],
-                                             tag=self.tag))
+                root.add_cluster(Cluster(cluster_id=cluster_id,
+                                         meta_label=sample_df[sample_df.cluster_id == cluster_id].meta_label.values[0],
+                                         n=len(idx),
+                                         index=idx,
+                                         prop_of_events=len(idx) / sample_df.shape[0],
+                                         tag=self.tag))
             fg.save()
-
-
-
-
-
