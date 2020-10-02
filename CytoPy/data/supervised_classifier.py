@@ -17,7 +17,7 @@ class Classifier(mongoengine.Document):
 
 class SklearnClassifier(Classifier):
     klass = mongoengine.StringField(required=True)
-    params = mongoengine.ListField()
+    params = mongoengine.DictField()
 
     def save(self, *args, **kwargs):
         if self.multi_label:
@@ -34,7 +34,7 @@ class SklearnClassifier(Classifier):
 
 class Layer(mongoengine.EmbeddedDocument):
     klass = mongoengine.StringField()
-    kwargs = mongoengine.ListField()
+    kwargs = mongoengine.DictField()
 
 
 class KerasClassifier(Classifier):
@@ -45,5 +45,5 @@ class KerasClassifier(Classifier):
     loss = mongoengine.StringField()
     metrics = mongoengine.ListField()
     epochs = mongoengine.IntField()
-    compile_kwargs = mongoengine.ListField()
+    compile_kwargs = mongoengine.DictField()
 

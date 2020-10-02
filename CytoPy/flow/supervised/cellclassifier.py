@@ -8,6 +8,10 @@ from ..transforms import scaler
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import train_test_split, KFold, learning_curve
 from sklearn import metrics as skmetrics
+from sklearn.discriminant_analysis import *
+from sklearn.neighbors import *
+from sklearn.ensemble import *
+from sklearn.svm import *
 from keras.models import Sequential, load_model
 from imblearn.over_sampling import RandomOverSampler
 from anytree import Node
@@ -23,8 +27,7 @@ import pickle
 def _build_sklearn_model(classifier: SklearnClassifier):
     assert classifier.klass in globals().keys(), f"Module {classifier.klass} not found, have you imported it into " \
                                                  f"the working environment?"
-    kwargs = {k: v for k, v in classifier.params}
-    return globals()[classifier.klass](**kwargs)
+    return globals()[classifier.klass](**classifier.params)
 
 
 def _build_keras_model(classifier: KerasClassifier):
@@ -34,12 +37,12 @@ def _build_keras_model(classifier: KerasClassifier):
                                       f"the working environment?"
     model = Sequential()
     for layer in classifier.layers:
-        keras_klass = globals()[layer.klass]({k: v for k, v in layer.kwargs})
+        keras_klass = globals()[layer.klass](**layer.kwargs)
         model.add(keras_klass)
     model.compile(optimizer=classifier.optimizer,
                   loss=classifier.loss,
                   metrics=classifier.metrics,
-                  **{k: v for k, v in classifier.compile_kwargs})
+                  **classifier.compile_kwargs)
     return model
 
 
@@ -67,6 +70,101 @@ def _metrics(metrics: list,
     return results
 
 
+def _load_population_labels(ref: Gating,
+                            expected_labels: list):
+    loaded_population_labels = ref.valid_populations(populations=expected_labels)
+    assert len(loaded_population_labels) > 2, "Reference sample does not contain any gated populations"
+    if len(loaded_population_labels) != len(expected_labels):
+        warn("One or more given population labels does not tie up with the populations in the reference "
+             f"sample, defaulting to the following valid labels: {loaded_population_labels}")
+    return loaded_population_labels
+
+
+def _load_features(ref: Gating,
+                   expected_features: list):
+    features = [x for x in ref.data.get("primary").columns if x in expected_features]
+    if len(features) != len(expected_features):
+        warn(f"One or more features missing from reference sample, "
+             f"proceeding with the following features: {features}")
+    return features
+
+
+def _check_downstream_populations(ref: Gating,
+                                  population_labels: list):
+    downstream = ref.list_downstream_populations(population_labels[0])
+    assert all([x in downstream for x in population_labels[1:]]), \
+        "The first population in population_labels should be the 'root' population, with all further populations " \
+        "being downstream from this 'root'. The given population_labels has one or more populations that is not " \
+        "downstream from the given root."
+
+
+def _multilabel(ref: Gating,
+                population_labels: list,
+                transform: str,
+                features: list):
+    root = ref.get_population_df(population_name=population_labels[0],
+                                 transform=transform)
+    for pop in population_labels[1:]:
+        root[pop] = 0
+        root.loc[ref.populations.get(pop).index, pop] = 1
+    return root[features], root[population_labels[1:]]
+
+
+def _singlelabel(ref: Gating,
+                 population_labels: list,
+                 transform: str,
+                 features: list):
+    root = ref.get_population_df(population_name=population_labels[0],
+                                 transform=transform)
+    y = np.zeros(root.shape[0])
+    for i, pop in enumerate(population_labels[1:]):
+        pop_idx = ref.populations[pop].index
+        np.put(y, pop_idx, i + 1)
+    return root[features], pd.DataFrame(y, columns=population_labels[1:])
+
+
+def _class_weights(y: pd.Series,
+                   population_labels: list,
+                   classifier: SklearnClassifier or KerasClassifier):
+    if classifier.balance == "auto-weights":
+        assert not classifier.multi_label, "Class weights not supported for multi-label classifiers"
+        classes = np.arange(0, len(population_labels) - 1)
+        weights = compute_class_weight('balanced',
+                                       classes=classes,
+                                       y=y)
+        return {k: w for k, w in zip(classes, weights)}
+    elif classifier.balance_dict:
+        assert not classifier.multi_label, "Class weights not supported for multi-label classifiers"
+        class_weights = {k: w for k, w in classifier.balance_dict}
+        return {i: class_weights.get(p) for i, p in enumerate(population_labels[1:])}
+    else:
+        raise ValueError("Balance should have a value 'oversample' or 'auto-weights', alternatively, "
+                         "populate balance_dict with (label, weight) pairs")
+
+
+def _downsample(X: pd.DataFrame,
+                y: pd.Serier,
+                features: list,
+                method: str,
+                **kwargs):
+    if method == "uniform":
+        frac = kwargs.get("frac", 0.5)
+        X = X.sample(frac=frac)
+        y = y[y.index.isin(X.index)]
+        return X, y
+    elif method == "density":
+        X = density_dependent_downsampling(data=X,
+                                           features=features,
+                                           **kwargs)
+        y = y[y.index.isin(X.index)]
+        return X, y
+    elif method == "faithful":
+        X = faithful_downsampling(data=X, **kwargs)
+        y = y[y.index.isin(X.index)]
+        return X, y
+    raise ValueError("Downsample should have a value of: 'uniform', 'density', or 'faithful'")
+
+
 class CellClassifier:
     def __init__(self,
                  classifier: SklearnClassifier or KerasClassifier,
@@ -89,40 +187,28 @@ class CellClassifier:
         self.print = vprint(verbose)
         self.class_weights = None
         self.population_prefix = population_prefix
+
         self.print("----- Building CellClassifier -----")
-        assert ref_sample in experiment.list_samples(), "Invalid reference sample, could not be found in given " \
-                                                        "experiment"
+        assert ref_sample in experiment.list_samples(), "Invalid reference sample, could not be found in given experiment"
         self.print("Loading reference sample...")
-        ref = Gating(experiment=experiment,
-                     sample_id=ref_sample,
-                     include_controls=False)
-        self.population_labels = ref.valid_populations(populations=population_labels)
-        assert len(self.population_labels) > 2, "Reference sample does not contain any gated populations"
-        if len(self.population_labels) != len(population_labels):
-            warn("One or more given population labels does not tie up with the populations in the reference "
-                 f"sample, defaulting to the following valid labels: {self.population_labels}")
+        ref = Gating(experiment=experiment, sample_id=ref_sample, include_controls=False)
+        self.population_labels = _load_population_labels(ref=ref, expected_labels=population_labels)
         check_population_tree(gating=ref, populations=self.population_labels)
-        features = [x for x in ref.data.get("primary").columns if x in classifier.features]
-        if len(features) != len(classifier.features):
-            warn(f"One or more features missing from reference sample, "
-                 f"proceeding with the following features: {features}")
-        self.classifier.features = features
-        downstream = ref.list_downstream_populations(self.population_labels[0])
-        assert all([x in downstream for x in self.population_labels[1:]]), \
-            "The first population in population_labels should be the 'root' population, with all further populations " \
-            "being downstream from this 'root'. The given population_labels has one or more populations that is not " \
-            "downstream from the given root."
+        _check_downstream_populations(ref=ref, population_labels=self.population_labels)
+        self.classifier.features = _load_features(ref=ref, expected_features=classifier.features)
         self.print("Preparing training and testing data...")
         if classifier.multi_label:
-            self.X, self.y = self._multilabel(ref=ref)
+            self.X, self.y = _multilabel(ref=ref,
+                                         population_labels=self.population_labels,
+                                         features=classifier.features,
+                                         transform=classifier.transform)
         else:
-            self.X, self.y = self._singlelabel(ref=ref)
+            self.X, self.y = _singlelabel(ref=ref,
+                                          population_labels=self.population_labels,
+                                          features=classifier.features,
+                                          transform=classifier.transform)
         if classifier.scale:
             self.print("Scaling data...")
-            if classifier.scale not in ["standard", "norm", "robust", "power"]:
-                warn('Scale method must be one of: "standard", "norm", "robust", "power", defaulting to standard '
-                     'scaling (unit variance)')
-                classifier.scale = "standard"
             kwargs = classifier.scale_kwargs or {}
             self.X[self.classifier.features] = scaler(self.X,
                                                       return_scaler=False,
@@ -131,68 +217,23 @@ class CellClassifier:
         else:
             warn("For the majority of classifiers it is recommended to scale the data (exception being tree-based "
                  "algorithms)")
-        if classifier.balance:
-            self._balance()
+        if classifier.balance == "oversample":
+            self.X, self.y = RandomOverSampler(random_state=42).fit_resample(self.X, self.y)
+        elif classifier.balance:
+            self.class_weights = _class_weights(y=self.y,
+                                                classifier=classifier,
+                                                population_labels=self.population_labels)
         if classifier.downsample:
-            self._downsample()
+            kwargs = classifier.downsample_kwargs or {}
+            self.X, self.y = _downsample(X=self.X,
+                                         y=self.y,
+                                         features=classifier.features,
+                                         method=classifier.downsample,
+                                         **kwargs)
         self.print('Ready for training!')
 
-    def _multilabel(self,
-                    ref: Gating):
-        root = ref.get_population_df(population_name=self.population_labels[0],
-                                     transform=self.classifier.transform)
-        for pop in self.population_labels[1:]:
-            root[pop] = 0
-            root.loc[ref.populations.get(pop).index, pop] = 1
-        return root[self.classifier.features], root[self.population_labels[1:]]
-
-    def _singlelabel(self,
-                     ref: Gating):
-        root = ref.get_population_df(population_name=self.population_labels[0],
-                                     transform=self.classifier.transform)
-        y = np.zeros(root.shape[0])
-        for i, pop in enumerate(self.population_labels[1:]):
-            pop_idx = ref.populations[pop].index
-            np.put(y, pop_idx, i + 1)
-        return root[self.classifier.features], pd.DataFrame(y, columns=self.population_labels[1:])
-
-    def _balance(self):
-        if self.classifier.balance == "oversample":
-            ros = RandomOverSampler(random_state=42)
-            self.X, self.y = ros.fit_resample(self.X, self.y)
-        elif self.classifier.balance == "auto-weights":
-            assert not self.classifier.multi_label, "Class weights not supported for multi-label classifiers"
-            classes = np.arange(0, len(self.population_labels) - 1)
-            weights = compute_class_weight('balanced',
-                                           classes=classes,
-                                           y=self.y)
-            self.class_weights = {k: w for k, w in zip(classes, weights)}
-        elif self.classifier.balance_dict:
-            assert not self.classifier.multi_label, "Class weights not supported for multi-label classifiers"
-            class_weights = {k: w for k, w in self.classifier.balance_dict}
-            self.class_weights = {i: class_weights.get(p) for i, p in enumerate(self.population_labels[1:])}
-        else:
-            raise ValueError("Balance should have a value 'oversample' or 'auto-weights', alternatively, "
-                             "populate balance_dict with (label, weight) pairs")
-
-    def _downsample(self):
-        kwargs = {k: v for k, v in self.classifier.downsample_kwargs}
-        if self.classifier.downsample == "uniform":
-            frac = kwargs.get("frac", 0.5)
-            self.X = self.X.sample(frac=frac)
-            self.y = self.y[self.y.index.isin(self.X.index)]
-        elif self.classifier.downsample == "density":
-            self.X = density_dependent_downsampling(data=self.X,
-                                                    features=self.classifier.features,
-                                                    **kwargs)
-            self.y = self.y[self.y.index.isin(self.X.index)]
-        elif self.classifier.downsample == "faithful":
-            self.X = faithful_downsampling(data=self.X, **kwargs)
-            self.y = self.y[self.y.index.isin(self.X.index)]
-        raise ValueError("Downsample should have a value of: 'uniform', 'density', or 'faithful'")
-
     def _predict(self,
-                 X: np.array,
+                 X: pd.DataFrame,
                  threshold: float = 0.5):
         if self.model_type == "sklearn":
             predict = getattr(self.model, "predict")
@@ -320,9 +361,9 @@ class CellClassifier:
                                                                                  "the following populations: " \
                                                                                  f"{self.population_labels}"
         if self.classifier.multi_label:
-            X, y = self._multilabel(ref=g)
+            X, y = _multilabel(ref=g, population_labels=self.population_labels, transform=self.classifier.transform, features=self.classifier.features)
         else:
-            X, y = self._singlelabel(ref=g)
+            X, y = _singlelabel(ref=g, population_labels=self.population_labels, transform=self.classifier.transform, features=self.classifier.features)
         return X, y
 
     def plot_learning_curve(self,
@@ -391,4 +432,3 @@ class CellClassifier:
                                                         f"{type(self.model)}"
         else:
             self.model = load_model(filepath=path, **kwargs)
-
