@@ -21,97 +21,6 @@ import numpy as np
 import inspect
 
 
-def valid_sklearn(klass: str):
-    """
-    Given the name of a Scikit-Learn class, checks validity. If invalid, raises Assertion error,
-    otherwise returns the class name.
-
-    Parameters
-    ----------
-    klass: str
-
-    Returns
-    -------
-    str
-    """
-    valid_clusters = [x[0] for x in inspect.getmembers(cluster, inspect.isclass)
-                      if 'sklearn.cluster' in x[1].__module__]
-    valid_mixtures = [x[0] for x in inspect.getmembers(mixture, inspect.isclass)
-                      if 'sklearn.mixture' in x[1].__module__]
-    valid = valid_clusters + valid_mixtures + ["HDBSCAN"]
-    err = f"""Invalid class name. Must be one of the following from Scikit-Learn's cluster module: {valid_clusters};
- or from Scikit-Learn's mixture module: {valid_mixtures}; or 'HDBSCAN'"""
-    assert klass in valid, err
-    return klass
-
-
-def _edit_threshold_idx(parent: pd.DataFrame,
-                        definition: str,
-                        new_geom: Threshold):
-    if definition == "+":
-        return parent[parent[new_geom.x] > new_geom.x_threshold]
-    if definition == "-":
-        return parent[parent[new_geom.x] <= new_geom.x_threshold]
-    if definition == "--":
-        return parent[(parent[new_geom.x] <= new_geom.x_threshold) &
-                      (parent[new_geom.y] <= new_geom.y_threshold)].index.values
-    if definition == "++":
-        return parent[(parent[new_geom.x] > new_geom.x_threshold) &
-                      (parent[new_geom.y] > new_geom.y_threshold)].index.values
-    if definition == "+-":
-        return parent[(parent[new_geom.x] > new_geom.x_threshold) &
-                      (parent[new_geom.y] <= new_geom.y_threshold)].index.values
-    if definition == "-+":
-        return parent[(parent[new_geom.x] <= new_geom.x_threshold) &
-                      (parent[new_geom.y] > new_geom.y_threshold)].index.values
-    raise ValueError("Invalid definition, cannot edit gate")
-
-
-def _gate_feature_check(x: str,
-                        y: str or None,
-                        valid_columns: list,
-                        preprocessing_kwargs: dict):
-    features_to_check = [i for i in [x, y] if i is not None]
-    if any(i not in valid_columns for i in features_to_check):
-        if not preprocessing_kwargs.get("dim_reduction"):
-            err = f"x or y are invalid values are invalid; valid column names as: {valid_columns}"
-            raise ValueError(err)
-        else:
-            assert x == "embedding1", "If using dim_reduction, x should have a value 'embedding1'"
-            assert y == "embedding2", "If using dim_reduction, y should have a value 'embedding2'"
-
-
-def _gate_validate_shape(shape: str,
-                         method: str,
-                         method_kwargs: dict,
-                         preprocessing_kwargs: dict):
-    if shape == "threshold":
-        if method not in ["DensityGate", "ManualGate"]:
-            warn("Shape set to 'threshold', defaulting to DensityGate")
-            method = "DensityGate"
-    elif shape == "ellipse":
-        if method is None:
-            warn("Method not given, defaulting to BayesianGaussianMixture")
-            method = "BayesianGaussianMixture"
-            method_kwargs["n_components"] = 5
-        else:
-            err = "For an elliptical gate, expect method 'GaussianMixture', 'BayesianGaussianMixture', " \
-                  "or 'MiniBatchKMeans'"
-            valid = ["GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans"]
-            assert method in valid, err
-    elif shape == "polygon":
-        if not method:
-            warn("No method specified for Polygon Gate, defaulting to MiniBatchKMeans")
-            method = "MiniBatchKMeans"
-            method_kwargs["n"] = 5
-        elif method != "ManualGate":
-            method = valid_sklearn(method)
-            if "dbscan" in method.lower():
-                if preprocessing_kwargs.get("downsample_method") is None:
-                    warn("DBSCAN and HDBSCAN do not scale well and it is recommended that downsampling is performed")
-    return method, method_kwargs
-
-
 class Gating:
     """
     Central class for performing semi-automated gating and storing gating information on an FCS FileGroup
@@ -152,7 +61,7 @@ class Gating:
         self.experiment = experiment
         self.filegroup = experiment.get_sample(sample_id)
         self.populations = dict()
-        self.tree = self._construct_tree()
+        self.tree = dict()
         self.verbose = verbose
         self.vprint = vprint(verbose)
         self.crtl_gate_ad_hoc = gate_ctrls_adhoc
@@ -171,63 +80,10 @@ class Gating:
         self.gates = {g.gate_name: g for g in self.template.gates}
         self.actions = {x.action_name: x for x in self.template.actions}
 
-    def _construct_tree(self):
-        """
-        Construct the population tree; that is, a dictionary of Population objects and AnyTree nodes.
-
-        Returns
-        -------
-        dict
-        """
-        if not self.filegroup.populations:
-            # No population currently exist for this FileGroup. Init with root population
-            self.populations = {"root": Population(population_name="root",
-                                                   index=self.data.get("primary").index.values,
-                                                   parent="root",
-                                                   n=len(self.data.get("primary").index.values))}
-            if "controls" in self.data.keys():
-                for ctrl_id, ctrl_data in self.data.get("controls").items():
-                    self.populations["root"].set_ctrl_index(**{ctrl_id: ctrl_data.index.values})
-            return {"root": Node(name="root", parent=None)}
-        assert "root" in [p.population_name for p in self.filegroup.populations], \
-            "Invalid FileGroup, must contain 'root' population"
-        self.populations = {p.population_name: p for p in self.filegroup.populations}
-        tree = {"root": Node(name="root", parent=None)}
-        database_populations = [p for p in self.filegroup.populations if p.population_name != 'root']
-        i = 0
-        while len(database_populations) > 0:
-            if i >= len(database_populations):
-                # Loop back around
-                i = 0
-            branch = self._construct_branch(tree, database_populations[i])
-            if branch is not None:
-                tree = branch
-                database_populations = [p for p in database_populations
-                                        if p.population_name != database_populations[i].population_name]
-            else:
-                i = i + 1
-        return tree
-
-    @staticmethod
-    def _construct_branch(tree: dict,
-                          new_population: Population):
-        """
-        Construct a single branch of a population tree (see `construct_tree`)
-
-        Parameters
-        ----------
-        tree: dict
-        new_population: Population
-
-        Returns
-        -------
-        dict
-        """
-        if new_population.parent not in tree.keys():
-            return None
-        tree[new_population.population_name] = Node(name=new_population.population_name,
-                                                    parent=tree[new_population.parent])
-        return tree
+        if len(self.filegroup.populations) == 0:
+            self.tree, self.populations = _new_tree(self.data)
+        else:
+            self.tree, self.populations = _construct_tree(self.filegroup.populations)
 
     def save_sample(self,
                     overwrite: bool = False):
@@ -879,6 +735,27 @@ class Gating:
             print('%s%s' % (pre, node.name))
 
 
+def _construct_branch(tree: dict,
+                      new_population: Population):
+    """
+    Construct a single branch of a population tree (see `construct_tree`)
+
+    Parameters
+    ----------
+    tree: dict
+    new_population: Population
+
+    Returns
+    -------
+    dict
+    """
+    if new_population.parent not in tree.keys():
+        return None
+    tree[new_population.population_name] = Node(name=new_population.population_name,
+                                                parent=tree[new_population.parent])
+    return tree
+
+
 def load_population(sample_id: str,
                     experiment: Experiment,
                     population: str,
@@ -935,3 +812,132 @@ def check_population_tree(gating: Gating,
             continue
         assert not any([x in gating.list_dependencies(population=pop) for x in populations[i + 1:]]), \
             "Population list is not ordered; one or more populations follows a population to which it is dependent"
+
+
+def valid_sklearn(klass: str):
+    """
+    Given the name of a Scikit-Learn class, checks validity. If invalid, raises Assertion error,
+    otherwise returns the class name.
+
+    Parameters
+    ----------
+    klass: str
+
+    Returns
+    -------
+    str
+    """
+    valid_clusters = [x[0] for x in inspect.getmembers(cluster, inspect.isclass)
+                      if 'sklearn.cluster' in x[1].__module__]
+    valid_mixtures = [x[0] for x in inspect.getmembers(mixture, inspect.isclass)
+                      if 'sklearn.mixture' in x[1].__module__]
+    valid = valid_clusters + valid_mixtures + ["HDBSCAN"]
+    err = f"""Invalid class name. Must be one of the following from Scikit-Learn's cluster module: {valid_clusters};
+ or from Scikit-Learn's mixture module: {valid_mixtures}; or 'HDBSCAN'"""
+    assert klass in valid, err
+    return klass
+
+
+def _edit_threshold_idx(parent: pd.DataFrame,
+                        definition: str,
+                        new_geom: Threshold):
+    if definition == "+":
+        return parent[parent[new_geom.x] > new_geom.x_threshold]
+    if definition == "-":
+        return parent[parent[new_geom.x] <= new_geom.x_threshold]
+    if definition == "--":
+        return parent[(parent[new_geom.x] <= new_geom.x_threshold) &
+                      (parent[new_geom.y] <= new_geom.y_threshold)].index.values
+    if definition == "++":
+        return parent[(parent[new_geom.x] > new_geom.x_threshold) &
+                      (parent[new_geom.y] > new_geom.y_threshold)].index.values
+    if definition == "+-":
+        return parent[(parent[new_geom.x] > new_geom.x_threshold) &
+                      (parent[new_geom.y] <= new_geom.y_threshold)].index.values
+    if definition == "-+":
+        return parent[(parent[new_geom.x] <= new_geom.x_threshold) &
+                      (parent[new_geom.y] > new_geom.y_threshold)].index.values
+    raise ValueError("Invalid definition, cannot edit gate")
+
+
+def _gate_feature_check(x: str,
+                        y: str or None,
+                        valid_columns: list,
+                        preprocessing_kwargs: dict):
+    features_to_check = [i for i in [x, y] if i is not None]
+    if any(i not in valid_columns for i in features_to_check):
+        if not preprocessing_kwargs.get("dim_reduction"):
+            err = f"x or y are invalid values are invalid; valid column names as: {valid_columns}"
+            raise ValueError(err)
+        else:
+            assert x == "embedding1", "If using dim_reduction, x should have a value 'embedding1'"
+            assert y == "embedding2", "If using dim_reduction, y should have a value 'embedding2'"
+
+
+def _gate_validate_shape(shape: str,
+                         method: str,
+                         method_kwargs: dict,
+                         preprocessing_kwargs: dict):
+    if shape == "threshold":
+        if method not in ["DensityGate", "ManualGate"]:
+            warn("Shape set to 'threshold', defaulting to DensityGate")
+            method = "DensityGate"
+    elif shape == "ellipse":
+        if method is None:
+            warn("Method not given, defaulting to BayesianGaussianMixture")
+            method = "BayesianGaussianMixture"
+            method_kwargs["n_components"] = 5
+        else:
+            err = "For an elliptical gate, expect method 'GaussianMixture', 'BayesianGaussianMixture', " \
+                  "or 'MiniBatchKMeans'"
+            valid = ["GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans"]
+            assert method in valid, err
+    elif shape == "polygon":
+        if not method:
+            warn("No method specified for Polygon Gate, defaulting to MiniBatchKMeans")
+            method = "MiniBatchKMeans"
+            method_kwargs["n"] = 5
+        elif method != "ManualGate":
+            method = valid_sklearn(method)
+            if "dbscan" in method.lower():
+                if preprocessing_kwargs.get("downsample_method") is None:
+                    warn("DBSCAN and HDBSCAN do not scale well and it is recommended that downsampling is performed")
+    return method, method_kwargs
+
+
+def _new_tree(data: dict):
+    populations = {"root": Population(population_name="root",
+                                      index=data.get("primary").index.values,
+                                      parent="root",
+                                      n=len(data.get("primary").index.values))}
+    if "controls" in data.keys():
+        for ctrl_id, ctrl_data in data.get("controls").items():
+            populations["root"].set_ctrl_index(**{ctrl_id: ctrl_data.index.values})
+    return {"root": Node(name="root", parent=None)}, populations
+
+
+def _grow_population_tree(tree: dict,
+                          database_populations: list):
+    i = 0
+    while len(database_populations) > 0:
+        if i >= len(database_populations):
+            # Loop back around
+            i = 0
+        branch = _construct_branch(tree, database_populations[i])
+        if branch is not None:
+            tree = branch
+            database_populations = [p for p in database_populations
+                                    if p.population_name != database_populations[i].population_name]
+        else:
+            i = i + 1
+    return tree
+
+
+def _construct_tree(populations: List[Population]):
+    err = "Invalid FileGroup, must contain 'root' population"
+    assert "root" in [p.population_name for p in populations], err
+    populations_dict = {p.population_name: p for p in populations}
+    tree = {"root": Node(name="root", parent=None)}
+    database_populations = [p for p in populations if p.population_name != 'root']
+    tree = _grow_population_tree(tree=tree, database_populations=database_populations)
+    return tree, populations_dict
