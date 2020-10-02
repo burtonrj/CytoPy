@@ -3,6 +3,7 @@ from ..data.populations import Polygon, Threshold, Population
 from matplotlib.patches import Ellipse
 from shapely.geometry import Point, Polygon as SPoly
 from shapely.affinity import scale
+from scipy.interpolate import splev, splrep
 from scipy.spatial import ConvexHull
 from scipy import linalg, stats
 from scipy.signal import savgol_filter
@@ -702,3 +703,10 @@ class DensityGate(Analyst):
                              mph=probs[np.argmax(probs)] * self.min_peak_threshold,
                              mpd=len(probs) * self.peak_boundary)
         return peaks
+
+
+def _smooth_pdf(x: np.array,
+                probs: np.array):
+    spline = splrep(x, probs)
+    x2 = np.linspace(x.min(), x.max(), 1000)
+    return splev(x2, spline)
