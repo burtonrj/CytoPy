@@ -270,27 +270,26 @@ class Gate(mongoengine.Document):
         return data
 
     def _init_method(self):
-        kwargs = {x[0]: x[1] for x in self.method_kwargs}
         if self.method == "ManualGate":
             return ManualGate(x=self.x,
                               y=self.y,
                               shape=self.shape,
                               parent=self.parent,
-                              **kwargs)
+                              **self.method_kwargs)
         if self.method == "DensityGate":
             return DensityGate(x=self.x,
                                y=self.y,
                                shape=self.shape,
                                parent=self.parent,
                                binary=self.binary,
-                               **kwargs)
+                               **self.method_kwargs)
         return Analyst(x=self.x,
                        y=self.y,
                        shape=self.shape,
                        parent=self.parent,
                        binary=self.binary,
                        model=self.method,
-                       **kwargs)
+                       **self.method_kwargs)
 
     def _transform(self,
                    data: pd.DataFrame):
