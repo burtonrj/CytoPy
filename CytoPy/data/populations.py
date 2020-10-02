@@ -25,7 +25,7 @@ class Cluster(mongoengine.EmbeddedDocument):
     meta_cluster_id: str, optional
         associated meta-cluster
     """
-    cluster_id = mongoengine.StringField(required=True, unique=True)
+    cluster_id = mongoengine.StringField(required=True)
     meta_label = mongoengine.StringField(required=False)
     n = mongoengine.IntField(required=True)
     prop_of_events = mongoengine.FloatField(required=True)
@@ -192,13 +192,20 @@ class Population(mongoengine.EmbeddedDocument):
             assert isinstance(v, np.ndarray), "ctrl_idx should be type numpy.array"
             self._ctrl_index[k] = v
 
+    def add_cluster(self,
+                    cluster: Cluster):
+        _id, tag = cluster.cluster_id, cluster.tag
+        err = f"Cluster already exists with id: {_id}; tag: {tag}"
+        assert not any([x.cluster_id == _id and x.tag == tag for x in self.clusters]), err
+        self.clusters.append(cluster)
+
     def delete_clusters(self, tag: str or None, drop_all: bool = False):
         """
         Delete clusters with the given clustering definition ID or drop all clusters
 
         Parameters
         ----------
-        clustering_definition: str
+        tag: str
         drop_all: bool (default=False)
 
         Returns

@@ -16,7 +16,7 @@ class ChannelMap(mongoengine.EmbeddedDocument):
     channel = mongoengine.StringField()
     marker = mongoengine.StringField()
 
-    def check_matched_pair(self, channel: str, marker: str) -> bool:
+    def check_matched_pair(self, channel: str or None, marker: str or None) -> bool:
         """
         Check a channel/marker pair for resemblance
 
@@ -32,9 +32,9 @@ class ChannelMap(mongoengine.EmbeddedDocument):
         bool
             True if equal, else False
         """
-        expected_marker = self.marker or ""
-        expected_channel = self.channel or ""
-        if expected_channel == channel and expected_marker == marker:
+        channel = channel or ""
+        marker = marker or ""
+        if self.channel == channel and self.marker == marker:
             return True
         return False
 

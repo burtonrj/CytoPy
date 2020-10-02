@@ -161,8 +161,10 @@ def _query_normalised_list(x: str or None,
     return corrected[0]
 
 
-def _is_space(x: str):
+def _is_empty(x: str):
     if x.isspace():
+        return None
+    if x == "":
         return None
     return x
 
@@ -184,7 +186,7 @@ def _check_pairing(channel_marker: dict,
     bool
         True if pairing exists, else False
     """
-    channel, marker = _is_space(channel_marker.get("channel")), _is_space(channel_marker.get("marker"))
+    channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(channel_marker.get("marker"))
     if not any([n.check_matched_pair(channel=channel, marker=marker) for n in ref_mappings]):
         return False
     return True
@@ -206,7 +208,7 @@ def standardise_names(channel_marker: dict,
                       ref_channels: List[NormalisedName],
                       ref_markers: List[NormalisedName],
                       ref_mappings: List[ChannelMap]):
-    channel, marker = _is_space(channel_marker.get("channel")), _is_space(channel_marker.get("marker"))
+    channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(channel_marker.get("marker"))
     if channel is None and marker is None:
         raise ValueError("Cannot standardise column names because both channel and marker missing from mappings")
     channel = _standardise(channel, ref_channels, ref_mappings, marker)
