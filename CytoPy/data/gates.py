@@ -36,7 +36,8 @@ def create_signature(data: pd.DataFrame,
     data = pd.DataFrame(scaler(data=data.values, scale_method="norm", return_scaler=False),
                         columns=data.columns,
                         index=data.index)
-    idx = idx or data.index.values
+    if idx is None:
+        idx = data.index.values
     # ToDo this should be more robust
     for x in ["Time", "time"]:
         if x in data.columns:
