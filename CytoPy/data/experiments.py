@@ -2,11 +2,11 @@ from ..feedback import vprint
 from .fcs import FileGroup
 from .subject import Subject
 from .read_write import FCSFile
-from .mappings import ChannelMap
 from .gating_strategy import GatingStrategy
+from .mappings import ChannelMap
 from typing import Generator, List
-from datetime import datetime
 from collections import Counter
+from datetime import datetime
 from warnings import warn
 import pandas as pd
 import mongoengine
@@ -64,32 +64,6 @@ def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
                 continue
             assert name in nomenclature.name.values, f'{name} missing from nomenclature, please review template'
     return nomenclature, mappings
-
-
-def _query(x: str or None,
-           ref: list) -> str:
-    """
-    Internal static method for querying a channel/marker against a reference list of
-    NormalisedName's
-
-    Parameters
-    ----------
-    x: str or None
-        channel/marker to query
-    ref: list
-        list of NormalisedName objects for reference search
-
-    Returns
-    --------
-    str
-        Standardised name
-    """
-    corrected = list(filter(None.__ne__, [n.query(x) for n in ref]))
-    assert len(corrected) != 0, f'Unable to normalise {x}; no match in linked panel'
-    err = f'Unable to normalise {x}; matched multiple in linked panel, check ' \
-          f'panel for incorrect definitions. Matches found: {corrected}'
-    assert len(corrected) < 2, err
-    return corrected[0]
 
 
 def _check_duplication(x: list) -> bool:
@@ -159,6 +133,104 @@ class NormalisedName(mongoengine.EmbeddedDocument):
                 if x == p:
                     return self.standard
         return None
+
+
+def _query_normalised_list(x: str or None,
+                           ref: List[NormalisedName]) -> str:
+    """
+    Internal static method for querying a channel/marker against a reference list of
+    NormalisedName's
+
+    Parameters
+    ----------
+    x: str or None
+        channel/marker to query
+    ref: list
+        list of NormalisedName objects for reference search
+
+    Returns
+    --------
+    str
+        Standardised name
+    """
+    corrected = list(filter(None.__ne__, [n.query(x) for n in ref]))
+    assert len(corrected) != 0, f'Unable to normalise {x}; no match in linked panel'
+    err = f'Unable to normalise {x}; matched multiple in linked panel, check ' \
+          f'panel for incorrect definitions. Matches found: {corrected}'
+    assert len(corrected) < 2, err
+    return corrected[0]
+
+
+def _is_space(x: str):
+    if x.isspace():
+        return None
+    return x
+
+
+def _check_pairing(channel_marker: dict,
+                   ref_mappings: List[ChannelMap]) -> bool:
+    """
+    Internal method. Given a channel and marker check that a valid pairing exists in the list
+    of given mappings.
+
+    Parameters
+    ----------
+    channel_marker: dict
+    ref_mappings: list
+        List of ChannelMap objects
+
+    Returns
+    --------
+    bool
+        True if pairing exists, else False
+    """
+    channel, marker = _is_space(channel_marker.get("channel")), _is_space(channel_marker.get("marker"))
+    if not any([n.check_matched_pair(channel=channel, marker=marker) for n in ref_mappings]):
+        return False
+    return True
+
+
+def _standardise(x: str or None,
+                 ref: List[NormalisedName],
+                 mappings: List[ChannelMap],
+                 alt: str):
+    if x is not None:
+        return _query_normalised_list(x, ref)
+    default = [m for m in mappings if m.channel == alt or m.marker == alt][0]
+    if default.channel == alt:
+        return default.marker
+    return default.channel
+
+
+def standardise_names(channel_marker: dict,
+                      ref_channels: List[NormalisedName],
+                      ref_markers: List[NormalisedName],
+                      ref_mappings: List[ChannelMap]):
+    channel, marker = _is_space(channel_marker.get("channel")), _is_space(channel_marker.get("marker"))
+    if channel is None and marker is None:
+        raise ValueError("Cannot standardise column names because both channel and marker missing from mappings")
+    channel = _standardise(channel, ref_channels, ref_mappings, marker)
+    marker = _standardise(marker, ref_markers, ref_mappings, channel)
+    return {"channel": channel, "marker": marker}
+
+
+def _duplicate_mappings(mappings: List[dict]):
+    channels = [x.get("channel") for x in mappings]
+    assert not _check_duplication(channels), "Duplicate channels provided"
+    markers = [x.get("marker") for x in mappings]
+    assert not _check_duplication(markers), "Duplicate markers provided"
+
+
+def _missing_channels(mappings: List[dict],
+                      channels: List[NormalisedName],
+                      errors: str = "raise"):
+    existing_channels = [x.get("channel") for x in mappings]
+    for x in channels:
+        if x.standard not in existing_channels:
+            if errors == "raise":
+                raise KeyError(f"Missing channel {x.standard}")
+            elif errors == "warn":
+                warn(f"Missing channel {x.standard}")
 
 
 class Panel(mongoengine.Document):
@@ -255,104 +327,6 @@ class Panel(mongoengine.Document):
                          for k in x['channels']]
         self.mappings = [ChannelMap(channel=c, marker=m) for c, m in x['mappings']]
 
-    def _check_pairing(self,
-                       channel: str,
-                       marker: str or None) -> bool:
-        """
-        Internal method. Given a channel and marker check that a valid pairing exists for this panel.
-
-        Parameters
-        ----------
-        channel: str
-            channel for checking
-        marker: str
-            marker for checking
-
-        Returns
-        --------
-        bool
-            True if pairing exists, else False
-        """
-        if marker is None:
-            marker = ''
-        if not any([n.check_matched_pair(channel=channel, marker=marker) for n in self.mappings]):
-            return False
-        return True
-
-    def standardise_names(self, column_mappings: list) -> list:
-        """
-        Given a list of column mappings, apply standardisation defined by this panel object and return
-        standardised column mappings.
-
-        Parameters
-        ----------
-        column_mappings: list
-            List of mappings (channel, marker)
-
-        Returns
-        --------
-        list or None and bool
-            standardised column mappings
-        """
-        new_column_mappings = list()
-        for channel, marker in column_mappings:
-            # Normalise channel
-            if channel:
-                if channel.isspace():
-                    channel = None
-                else:
-                    channel = _query(channel, self.channels)
-            # Normalise marker
-            if marker:
-                marker = _query(marker, self.markers)
-            else:
-                # If marker is None, default to that assigned by panel
-                default = [x for x in self.mappings if x.channel == channel]
-                err = f'No marker name provided for channel {channel}. Was unable to establish default as ' \
-                      f'{channel} is not recognised in this panel design.'
-                assert len(default) > 0, err
-                marker = default[0].marker
-            # Check channel/marker pairing is correct
-            err = f'The channel/marker pairing {channel}/{marker} does not correspond to any defined in panel'
-            assert self._check_pairing(channel, marker), err
-            new_column_mappings.append((channel, marker))
-
-        # Check for duplicate channels/markers
-        channels = [c for c, _ in new_column_mappings]
-        assert not _check_duplication(channels), "Duplicate channels provided"
-        markers = [m for _, m in new_column_mappings]
-        assert not _check_duplication(markers), "Duplicate markers provided"
-        # Check for missing channels
-        for x in self.channels:
-            assert x.standard in channels, f'Missing channel {x.standard}'
-        return new_column_mappings
-
-    def standardise(self,
-                    mappings: List[dict]) -> pd.DataFrame or None:
-        """
-        Given a dataframe of fcs events, as generated by an FCSFile object,
-        standardise the columns according to the panel definition
-
-        data: Pandas.DataFrame
-            Pandas DataFrame of cell events
-
-        Returns
-        --------
-        standardised Pandas DataFrame with columns ordered according to the panel definition
-        """
-        # Standardise the names
-        # channel_marker -> channel_marker: [channel, marker]
-        column_mappings = [(x["channel"], x["marker"]) if not x["marker"].isspace()
-                           else (x["channel"], None) for x in mappings]
-        column_mappings = self.standardise_names(column_mappings)
-        # Insert missing marker names using matched channel in panel
-        updated_mappings = list()
-        for channel, marker in column_mappings:
-            if marker is None:
-                marker = [p.marker for p in self.mappings if p.channel == channel][0]
-            updated_mappings.append((channel, marker))
-        return [{"channel": c, "marker": m} for c, m in updated_mappings]
-
     def get_channels(self) -> iter:
         """
         Yields list of channels associated to panel
@@ -386,6 +360,33 @@ def _data_dir_append_leading_char(path: str):
             # Assuming unix OS
             return path + "/"
     return path
+
+
+def _add_file(path: str,
+              filegrp: FileGroup,
+              panel: Panel,
+              compensate: bool = True,
+              ctrl_id: str or None = None,
+              comp_matrix: str or None = None,
+              missing_error: str = "raise"):
+    control = ctrl_id is not None
+    fcs = FCSFile(filepath=path,
+                  comp_matrix=comp_matrix)
+    channel_mappings = list(map(lambda x: standardise_names(channel_marker=x,
+                                                            ref_channels=panel.channels,
+                                                            ref_markers=panel.markers,
+                                                            ref_mappings=panel.mappings), fcs.channel_mappings))
+    for cm in channel_mappings:
+        err = f'The channel/marker pairing {cm} does not correspond to any defined in panel'
+        assert _check_pairing(ref_mappings=panel.mappings, channel_marker=cm), err
+    _missing_channels(mappings=channel_mappings, channels=panel.channels, errors=missing_error)
+    _duplicate_mappings(channel_mappings)
+    if compensate:
+        fcs.compensate()
+    filegrp.add_file(data=fcs.event_data,
+                     channel_mappings=channel_mappings,
+                     control=control,
+                     ctrl_id=ctrl_id)
 
 
 class Experiment(mongoengine.Document):
@@ -681,7 +682,8 @@ class Experiment(mongoengine.Document):
                        compensate: bool = True,
                        verbose: bool = True,
                        processing_datetime: str or None = None,
-                       collection_datetime: str or None = None) -> str:
+                       collection_datetime: str or None = None,
+                       missing: str = "raise") -> str:
         """
         Add a new sample (FileGroup) to this experiment
 
@@ -713,19 +715,7 @@ class Experiment(mongoengine.Document):
         str
             MongoDB ObjectID string for new FileGroup entry
         """
-        def add_file(_id, path):
-            control = False
-            if _id is not None:
-                control = True
-            fcs = FCSFile(filepath=path,
-                          comp_matrix=comp_matrix)
-            channel_mappings = self.panel.standardise(fcs.channel_mappings)
-            if compensate:
-                fcs.compensate()
-            filegrp.add_file(data=fcs.event_data,
-                             channel_mappings=channel_mappings,
-                             control=control,
-                             ctrl_id=_id)
+
         controls_path = controls_path or {}
         feedback = vprint(verbose)
         assert not self.sample_exists(sample_id), f'A file group with id {sample_id} already exists'
@@ -738,10 +728,22 @@ class Experiment(mongoengine.Document):
             filegrp.collection_datetime = collection_datetime
         # Add the primary file
         feedback(f"...adding primary file")
-        add_file(None, primary_path)
+        _add_file(path=primary_path,
+                  panel=self.panel,
+                  filegrp=filegrp,
+                  compensate=compensate,
+                  ctrl_id=None,
+                  comp_matrix=comp_matrix,
+                  missing_error=missing)
         for ctrl, ctrl_path in controls_path.items():
             feedback(f"...adding {ctrl} file")
-            add_file(ctrl, ctrl_path)
+            _add_file(path=ctrl_path,
+                      panel=self.panel,
+                      filegrp=filegrp,
+                      compensate=compensate,
+                      ctrl_id=ctrl,
+                      comp_matrix=comp_matrix,
+                      missing_error=missing)
         if subject_id is not None:
             try:
                 p = Subject.objects(subject_id=subject_id).get()
@@ -758,3 +760,4 @@ class Experiment(mongoengine.Document):
         if delete_panel:
             self.panel.delete()
         super().delete(*args, **kwargs)
+
