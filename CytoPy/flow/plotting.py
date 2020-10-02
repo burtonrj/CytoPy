@@ -115,7 +115,7 @@ class CreatePlot:
         -------
         None
         """
-        sns.kdeplot(data=data[x], bw=self.bw, ax=self._ax, **kwargs)
+        sns.kdeplot(data=data[x], bw_method=self.bw, ax=self._ax, **kwargs)
 
     def _hist2d(self,
                 data: pd.DataFrame,
@@ -225,9 +225,9 @@ class CreatePlot:
             Transformed data
         """
         data = data.copy()
-        transforms = {x: self.transforms.get(axis) for axis in ["x", "y"]
-                      if self.transforms.get(axis) is not None}
-        if len(transforms) > 0:
+        transforms = {column: self.transforms.get(axis) for column, axis in zip([x, y], ["x", "y"])
+                      if self.transforms.get(axis) is not None and column is not None}
+        if len(list(transforms.keys())) > 0:
             data = apply_transform(data,
                                    features_to_transform=transforms)
         return data
@@ -344,8 +344,8 @@ class CreatePlot:
         plot_kwargs = plot_kwargs or {}
         legend_kwargs = legend_kwargs or dict()
         # Plot the parent population
-        self.transforms = {"x": gate.preprocessing.transform_x or "linear",
-                           "y": gate.preprocessing.transform_y or "linear"}
+        self.transforms = {"x": gate.preprocessing.transform_x,
+                           "y": gate.preprocessing.transform_y}
         self._ax = self.plot(data=parent,
                              x=gate.x,
                              y=gate.y,
