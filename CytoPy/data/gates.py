@@ -359,7 +359,7 @@ class Gate(mongoengine.Document):
             feedback("Preprocessing...")
             data, _ = self._apply_preprocessing(data=data)
             ctrl, _ = self._apply_preprocessing(data=ctrl)
-            feedback("Gating and posprocessing...")
+            feedback("Gating and post-processing...")
             populations = self._apply_postprocessing(method.ctrl_gate(data=data, ctrl=ctrl),
                                                      original_data=data, data=data)
         else:
@@ -367,14 +367,14 @@ class Gate(mongoengine.Document):
             data, sample = self._apply_preprocessing(data=data)
             if sample is not None:
                 feedback("Downsampling applied prior to fit...")
-                feedback("Gating and posprocessing...")
+                feedback("Gating and post-processing...")
                 populations = self._apply_postprocessing(method.fit_predict(sample),
                                                          original_data=original_data,
                                                          sample=sample,
                                                          verbose=verbose,
                                                          data=data)
             else:
-                feedback("Gating and posprocessing...")
+                feedback("Gating and post-processing...")
                 populations = self._apply_postprocessing(method.fit_predict(data),
                                                          original_data=original_data,
                                                          verbose=verbose,
