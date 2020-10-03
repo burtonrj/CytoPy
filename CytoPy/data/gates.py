@@ -353,22 +353,28 @@ class Gate(mongoengine.Document):
         feedback("---- Applying gate ----")
         method = self._init_method()
         if ctrl is not None:
+            feedback("Applying control gate...")
             assert "DensityGate" in str(self.method.__class__), \
                 "Control driven gates are currently only supported for DensityGate method"
+            feedback("Preprocessing...")
             data, _ = self._apply_preprocessing(data=data)
             ctrl, _ = self._apply_preprocessing(data=ctrl)
+            feedback("Gating and posprocessing...")
             populations = self._apply_postprocessing(method.ctrl_gate(data=data, ctrl=ctrl),
                                                      original_data=data, data=data)
         else:
+            feedback("Preprocessing...")
             data, sample = self._apply_preprocessing(data=data)
             if sample is not None:
                 feedback("Downsampling applied prior to fit...")
+                feedback("Gating and posprocessing...")
                 populations = self._apply_postprocessing(method.fit_predict(sample),
                                                          original_data=original_data,
                                                          sample=sample,
                                                          verbose=verbose,
                                                          data=data)
             else:
+                feedback("Gating and posprocessing...")
                 populations = self._apply_postprocessing(method.fit_predict(data),
                                                          original_data=original_data,
                                                          verbose=verbose,
@@ -382,10 +388,12 @@ class Gate(mongoengine.Document):
             for pop in populations:
                 self._add_child(pop)
             self.defined = True
+            feedback("------------------")
             return populations
         else:
             assert self.labelled, "Gate children are unlabelled, call `label_children prior to calling `apply``"
             feedback("Matching detected populations to expected children...")
+            feedback("------------------")
             return self._match_to_children(populations)
 
     def _upsample(self,

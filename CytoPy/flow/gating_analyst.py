@@ -40,8 +40,8 @@ def create_convex_hull(x_values: np.array,
     return x, y
 
 
-def _probablistic_ellipse(covariances: np.array,
-                          conf: float):
+def probablistic_ellipse(covariances: np.array,
+                         conf: float):
     """
     Given the covariance matrix of a mixture component, calculate a elliptical shape that
     represents a probabilistic confidence interval.
@@ -177,6 +177,27 @@ def find_local_minima(probs: np.array,
     return float(xx[np.where(probs == local_min)[0][0]])
 
 
+def _draw_circle(data: pd.DataFrame,
+                 center: tuple):
+    furthest = max(data.apply(lambda x: np.linalg.norm(x.values - center), axis=1))
+    return scale(Point(center).buffer(1), xfact=furthest, yfact=furthest)
+
+
+def _reduce_overlapping_circles(x: str,
+                                y: str,
+                                data: pd.DataFrame,
+                                overlaps: dict,
+                                circles: List[SPoly]):
+    while all([sum(x) != 0 for x in overlaps.values()]):
+        for i, overlap_frac in overlaps.items():
+            if any([x > 0 for x in overlap_frac]):
+                circles[i] = scale(circles[i],
+                                   xfact=-(data[x].max() - data[x].min()) * 0.01,
+                                   yfact=-(data[y].max() - data[y].min()) * 0.01)
+        overlaps = _polygon_overlap(circles)
+    return circles
+
+
 class Analyst:
     """
     Base class for applying an autonomous gating method; an algorithm that generates a geometric
@@ -209,8 +230,7 @@ class Analyst:
                  model: str or None,
                  conf: float or None = None,
                  **kwargs):
-        assert shape in ["threshold", "polygon", "ellipse"], """Invalid shape, must be one of: 
-        ["threshold", "polygon", "ellipse"]"""
+        assert shape in ["threshold", "polygon", "ellipse"], """Invalid shape, must be one of: ["threshold", "polygon", "ellipse"]"""
         self.x = x
         self.y = y
         self.shape = shape
@@ -288,70 +308,6 @@ class Analyst:
                                           n=len(idx)))
         return populations
 
-    def _circle(self,
-                data: pd.DataFrame,
-                labels: list,
-                centers: list):
-        """
-        Generate populations as a result of circular gates (such as those generated from a centroid based clustering
-        algorithm such as K-means).
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-        labels: list
-        centers: list
-
-        Returns
-        -------
-        list
-            List of Populations
-        """
-        populations = list()
-        circles = list()
-        names = list(string.ascii_uppercase)
-        data["label"] = labels
-        # For each label
-        for i, (label, center) in enumerate(zip(np.unique(labels), centers)):
-            # Find the distance to the furthest data point from the center
-            df = data[data.label == label]
-            furthest = max(df.apply(lambda x: np.linalg.norm(x - center), axis=1))
-            # draw a circle of width distance to furthest point
-            circle = Point(center).buffer(1)
-            circles.append(scale(circle, xfact=furthest, yfact=furthest))
-        # measure overlap of circles
-        overlaps = _polygon_overlap(circles)
-        # incrementally reduce circle size until no overlap occurs
-        while all([sum(x) != 0 for x in overlaps.values()]):
-            for i, overlap_frac in overlaps.items():
-                if any([x > 0 for x in overlap_frac]):
-                    circles[i] = scale(circles[i],
-                                       xfact=-(data.x.max() - data.x.min()) * 0.01,
-                                       yfact=-(data.y.max() - data.y.min()) * 0.01)
-            overlaps = _polygon_overlap(circles)
-        # Now create populations
-        for i, circle in enumerate(circles):
-            box = circle.minimum_rotated_rectangle
-            x, y = box.exterior.coords.xy
-            width = max(Point(x[0], y[0]).distance(Point(x[1], y[1])))
-            vertices = Ellipse(circle.centroid.coords[0], width, width, 0).get_verts()
-            geom = Polygon(x=self.x,
-                           y=self.y,
-                           x_values=vertices[:, 0],
-                           y_values=vertices[:, 1])
-            idx = data[inside_ellipse(data=data.values,
-                                      center=circle.centroid,
-                                      width=width,
-                                      height=width,
-                                      angle=0)].index.values
-            populations.append(Population(population_name=names[i],
-                                          parent=self.parent,
-                                          geom=geom,
-                                          index=idx,
-                                          n=len(idx)))
-
-        return populations
-
     def _ellipse(self,
                  data: pd.DataFrame,
                  labels: list,
@@ -381,8 +337,8 @@ class Analyst:
             if not self.conf:
                 warn("No confidence interval set for mixture model, defaulting to 95%")
                 self.conf = 0.95
-            width, height, angle = _probablistic_ellipse(covariances=covar_matrix[i],
-                                                         conf=self.conf)
+            width, height, angle = probablistic_ellipse(covariances=covar_matrix[i],
+                                                        conf=self.conf)
             vertices = Ellipse(centers[i], width, width, 0).get_verts()
             geom = Polygon(x=self.x,
                            y=self.y,
@@ -461,9 +417,8 @@ class Analyst:
                                      centers=self.model.means_,
                                      covar_matrix=self.model.covariances_)
             elif "cluster_centers_" in dir(self.model):
-                return self._circle(data=data,
-                                    labels=labels,
-                                    centers=self.model.means_)
+                return self._polygon(data=data,
+                                     labels=labels)
             else:
                 err = """Model does not contain attributes 'means_', 'covariances_', or 'cluster_centers_', 
                 for an elliptical gate, valid automonous methods are: GaussianMixtureModel, BayesianGaussianMixtureModel
@@ -619,7 +574,7 @@ class DensityGate(Analyst):
         self.threshold_method = kwargs.get("threshold_method", "density")
         self.q = kwargs.get("q", 0.95)
         self.low_memory = kwargs.get("low_memory", True)
-        self.kde_bw = kwargs.get("kde_bw", "ISJ")
+        self.kde_bw = kwargs.get("kde_bw", "silverman")
         self.kde_kernel = kwargs.get("kde_kernel", "gaussian")
         self.cutoff_point = kwargs.get("cutoff_point", "inflection")
         self.biased_positive = kwargs.get("biased_positive", False)
@@ -645,8 +600,8 @@ class DensityGate(Analyst):
             if self.threshold_method == "quantile":
                 thresholds.append(data[d].quantile(self.q))
             else:
-                xx, probs = FFTKDE(kernel=self.kde_kernel, bw=self.kde_bw).fit(data[d].values)()
-                peaks = self._find_peaks(probs)
+                xx, probs = FFTKDE(kernel=self.kde_kernel, bw=self.kde_bw).fit(data[d].values).evaluate()
+                peaks = find_peaks(probs=probs, min_peak_threshold=self.min_peak_threshold, peak_boundary=self.peak_boundary)
                 if len(peaks) == 0 and self.cutoff_point == "quantile":
                     thresholds.append(data[d].quantile(self.q))
                 elif len(peaks) == 1:
@@ -658,14 +613,8 @@ class DensityGate(Analyst):
                     # If peaks len > 2: incrementally increase the bw until the density estimate is smooth
                     # and the number of peaks is equal to two (in other words, increase the variance
                     # at expense of bias)
-                    bw = silvermans(data[d].values)
-                    xx, probs = FFTKDE(kernel=self.kde_kernel, bw=bw).fit(data[d].values)()
-                    peaks = self._find_peaks(probs)
-                    increment = bw * 0.05
-                    while len(peaks) > 2:
-                        xx, probs = FFTKDE(kernel=self.kde_kernel, bw=bw).fit(data[d].values)()
-                        peaks = self._find_peaks(probs)
-                        bw = bw + increment
+                    probs, peaks = multi_peak(probs, self.min_peak_threshold, self.peak_boundary)
+                    # increment = bw * 0.05
                     if len(peaks) == 1:
                         if self.biased_positive:
                             thresholds.append(_find_inflection_point(xx=xx, probs=probs, peaks=peaks,
@@ -683,26 +632,42 @@ class DensityGate(Analyst):
         else:
             return self._threshold_2d(data=data, x=thresholds[0], y=thresholds[1])
 
-    def _find_peaks(self,
-                    probs: np.array) -> np.array:
-        """
-        Internal function. Perform peak finding (see scipy.signal.find_peaks for details)
 
-        Parameters
-        -----------
-        probs: Numpy.array
-            array of probability estimates generated using flow.gating.utilities.kde
+def multi_peak(probs: np.array,
+               min_peak_threshold: float,
+               peak_boundary: float,
+               polyorder: int = 3):
+    smoothed = probs.copy()
+    window = 11
+    while len(find_peaks(smoothed, min_peak_threshold, peak_boundary)) >= 3:
+        if window >= len(smoothed)*.5:
+            raise ValueError("Stable window size exceeded")
+        smoothed = savgol_filter(smoothed, window, polyorder)
+        window += 10
+    return smoothed, find_peaks(smoothed, min_peak_threshold, peak_boundary)
 
-        Returns
-        --------
-        Numpy.array
-            array of indices specifying location of peaks in `probs`
-        """
-        # Find peaks
-        peaks = detect_peaks(probs,
-                             mph=probs[np.argmax(probs)] * self.min_peak_threshold,
-                             mpd=len(probs) * self.peak_boundary)
-        return peaks
+
+def find_peaks(probs: np.array,
+               min_peak_threshold: float,
+               peak_boundary: float):
+    """
+    Internal function. Perform peak finding (see scipy.signal.find_peaks for details)
+
+    Parameters
+    -----------
+    probs: Numpy.array
+        array of probability estimates generated using flow.gating.utilities.kde
+
+    Returns
+    --------
+    Numpy.array
+        array of indices specifying location of peaks in `probs`
+    """
+    # Find peaks
+    peaks = detect_peaks(probs,
+                         mph=probs[np.argmax(probs)] * min_peak_threshold,
+                         mpd=len(probs) * peak_boundary)
+    return peaks
 
 
 def _smooth_pdf(x: np.array,
