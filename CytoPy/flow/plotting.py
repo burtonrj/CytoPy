@@ -302,6 +302,8 @@ class CreatePlot:
                   parent: pd.DataFrame,
                   children: List[Population],
                   lw: float = 2.5,
+                  y: str or None = None,
+                  transform_y: str or None = None,
                   plot_kwargs: dict or None = None,
                   legend_kwargs: dict or None = None):
         """
@@ -345,10 +347,10 @@ class CreatePlot:
         legend_kwargs = legend_kwargs or dict()
         # Plot the parent population
         self.transforms = {"x": gate.preprocessing.transform_x,
-                           "y": gate.preprocessing.transform_y}
+                           "y": gate.preprocessing.transform_y or transform_y}
         self._ax = self.plot(data=parent,
                              x=gate.x,
-                             y=gate.y,
+                             y=gate.y or y,
                              **plot_kwargs)
         # If threshold, add threshold lines to plot and return axes
         if gate.shape == "threshold":
