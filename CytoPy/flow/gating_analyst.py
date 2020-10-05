@@ -339,7 +339,7 @@ class Analyst:
                 self.conf = 0.95
             width, height, angle = probablistic_ellipse(covariances=covar_matrix[i],
                                                         conf=self.conf)
-            vertices = Ellipse(centers[i], width, width, 0).get_verts()
+            vertices = Ellipse(centers[i], width, height, angle).get_verts()
             geom = Polygon(x=self.x,
                            y=self.y,
                            x_values=vertices[:, 0],
