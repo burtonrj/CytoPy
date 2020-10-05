@@ -41,7 +41,6 @@ class Gate(mongoengine.Document):
     """
     gate_name = mongoengine.StringField(required=True)
     parent = mongoengine.StringField(required=True)
-    binary = mongoengine.BooleanField(default=True)
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField(required=False)
     preprocessing = mongoengine.DictField()
@@ -62,12 +61,18 @@ class ThresholdGate(Gate):
     to data in the form of straight lines, parallel to the axis that fall in the area of minimum
     density.
     """
-    def __init__(self, *args, **values):
-        super().__init__(*args, **values)
-        if self.binary:
-            assert self.y is None, "Binary threshold gate should only receive value for x-axis not y"
-
     children = mongoengine.EmbeddedDocumentListField(ChildThreshold)
+
+    def add_child(self,
+                  child: ChildThreshold):
+        if self.y is not None:
+            assert child.definition in ["++", "+-", "-+", "--"], "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
+        else:
+            assert child.definition in ["+", "-"], "Invalid child definition, should be either '+' or '-'"
+        child.geom.x = self.x
+        child.geom.y = self.y
+        child.geom.transform_x, child.geom.transform_y = self.preprocessing.get("transform_x", None), self.preprocessing.get("transform_y", None)
+        self.children.append(child)
 
 
 class PolygonGate(Gate):
