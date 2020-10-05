@@ -1,5 +1,6 @@
 from ..data.experiments import Experiment
-from ..data.populations import Polygon, Threshold, Population, merge_populations
+from ..data.populations import Population, merge_populations
+from ..data.geometry import ThresholdGeom, PolygonGeom
 from ..data.gates import Gate, PreProcess, PostProcess
 from ..data.gating_strategy import GatingStrategy, Action
 from .transforms import apply_transform
@@ -631,12 +632,12 @@ class Gating:
         parent_data = self.get_population_df(parent.population_name)[[parent.geom.x, parent.geom.y]]
         parent_data = parent_data[parent_data.index.isin(new_population_idx)]
         x_values, y_values = parent_data[parent.geom.x].values, parent_data[parent.geom.y].values
-        new_population_geom = Polygon(x=parent.geom.x,
-                                      y=parent.geom.y,
-                                      transform_x=parent.geom.transform_x,
-                                      transform_y=parent.geom.transform_y,
-                                      x_values=x_values,
-                                      y_values=y_values)
+        new_population_geom = PolygonGeom(x=parent.geom.x,
+                                          y=parent.geom.y,
+                                          transform_x=parent.geom.transform_x,
+                                          transform_y=parent.geom.transform_y,
+                                          x_values=x_values,
+                                          y_values=y_values)
         new_population = Population(population_name=new_population_name,
                                     n=len(parent.index) - len(new_population_idx),
                                     parent=parent.population_name,
@@ -657,7 +658,7 @@ class Gating:
 
     def edit_gate(self,
                   population: str,
-                  new_geom: Polygon or Threshold,
+                  new_geom: PolygonGeom or ThresholdGeom,
                   plot_outcome: bool = True,
                   create_plot_kwargs: dict or None = None,
                   plot_population_geom_kwargs: dict or None = None):
@@ -682,7 +683,7 @@ class Gating:
             transforms[new_geom.y] = new_geom.transform_y
         parent = self.get_population_df(self.populations[population].parent,
                                         transform=transforms)
-        if isinstance(new_geom, Threshold):
+        if isinstance(new_geom, ThresholdGeom):
             self.populations[population].index = _edit_threshold_idx(parent, population, new_geom)
         else:
             self.populations[population].index = inside_polygon(df=parent, x=new_geom.x, y=new_geom.y, poly=new_geom.shape).index
@@ -841,7 +842,7 @@ def valid_sklearn(klass: str):
 
 def _edit_threshold_idx(parent: pd.DataFrame,
                         definition: str,
-                        new_geom: Threshold):
+                        new_geom: ThresholdGeom):
     if definition == "+":
         return parent[parent[new_geom.x] > new_geom.x_threshold]
     if definition == "-":

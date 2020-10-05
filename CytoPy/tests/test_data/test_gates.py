@@ -1,4 +1,5 @@
-from ...data.populations import Population, Threshold, Polygon
+from ...data.populations import Population
+from ...data.geometry import ThresholdGeom, PolygonGeom
 from ...data.gates import create_signature, ChildDefinition, population_likeness, Gate, PreProcess, PostProcess, DensityGate, \
     ManualGate, Analyst
 from .test_population import generate_polygons
@@ -8,7 +9,7 @@ import pytest
 
 
 def create_population(name: str,
-                      geom: Threshold or Polygon,
+                      geom: ThresholdGeom or PolygonGeom,
                       idx: np.array or None = None,
                       signature: dict or None = None,
                       **kwargs):
@@ -22,7 +23,7 @@ def create_population(name: str,
 
 
 def create_child_definition(name: str,
-                            geom: Threshold or Polygon,
+                            geom: ThresholdGeom or PolygonGeom,
                             definition: str = "+",
                             signature: dict or None = None):
     signature = signature or {"x": 0.8, "y": 0.2, "z": 0.1}
@@ -52,11 +53,11 @@ def test_create_signature():
 
 
 def test_pop_likeness():
-    template = create_child_definition(name="template", geom=Threshold())
-    pop = create_population(name="test", geom=Threshold())
+    template = create_child_definition(name="template", geom=ThresholdGeom())
+    pop = create_population(name="test", geom=ThresholdGeom())
     score = population_likeness(pop, template)
     assert score == 0.
-    template = create_child_definition(name="template", geom=Threshold(), signature={"x": 0.15, "y": 0.5, "z": 0.2})
+    template = create_child_definition(name="template", geom=ThresholdGeom(), signature={"x": 0.15, "y": 0.5, "z": 0.2})
     score = population_likeness(pop, template)
     assert pytest.approx(0.7228, 0.001) == score
     poly1, poly2, poly3 = generate_polygons()
@@ -86,7 +87,7 @@ def test_gate_init():
 
 def test_clear_children():
     gate = create_gate()
-    gate.children.append(create_child_definition(name="test", geom=Threshold()))
+    gate.children.append(create_child_definition(name="test", geom=ThresholdGeom()))
     assert len(gate.children) == 1
     gate.clear_children()
     assert len(gate.children) == 0
@@ -104,8 +105,8 @@ def test_label_children_err():
 
 def test_label_children_drop_msg():
     gate = create_gate()
-    gate.children.append(create_child_definition(name="test1", geom=Threshold()))
-    gate.children.append(create_child_definition(name="test2", geom=Threshold()))
+    gate.children.append(create_child_definition(name="test1", geom=ThresholdGeom()))
+    gate.children.append(create_child_definition(name="test2", geom=ThresholdGeom()))
     with pytest.warns(UserWarning) as warn:
         gate.label_children({"test1": None})
     assert str(warn.list[0].message) == "The following populations are not in labels and will be dropped: ['test2']"
@@ -113,8 +114,8 @@ def test_label_children_drop_msg():
 
 def test_label_children_err_binary():
     gate = create_gate(binary=True, shape="polygon")
-    gate.children.append(create_child_definition(name="test1", geom=Polygon()))
-    gate.children.append(create_child_definition(name="test2", geom=Polygon()))
+    gate.children.append(create_child_definition(name="test1", geom=PolygonGeom()))
+    gate.children.append(create_child_definition(name="test2", geom=PolygonGeom()))
     with pytest.raises(AssertionError) as exp:
         gate.label_children(labels={"test1": None, "test2": None})
     assert str(exp.value) == "Non-threshold binary gate's should only have a single population"
@@ -122,8 +123,8 @@ def test_label_children_err_binary():
 
 def test_label_children_err_threhsold_binary():
     gate = create_gate(binary=True, shape="threshold")
-    gate.children.append(create_child_definition(name="test1", geom=Threshold()))
-    gate.children.append(create_child_definition(name="test2", geom=Threshold()))
+    gate.children.append(create_child_definition(name="test1", geom=ThresholdGeom()))
+    gate.children.append(create_child_definition(name="test2", geom=ThresholdGeom()))
     with pytest.raises(AssertionError) as exp:
         gate.label_children(labels={"test1": None, "test2": None})
     assert str(exp.value) == "For a binary threshold gate, labels should be provided with the keys: '+' and '-'"
@@ -131,8 +132,8 @@ def test_label_children_err_threhsold_binary():
 
 def test_label_children_err_threhsold_nonbinary():
     gate = create_gate(binary=False, shape="threshold")
-    gate.children.append(create_child_definition(name="test1", geom=Threshold()))
-    gate.children.append(create_child_definition(name="test2", geom=Threshold()))
+    gate.children.append(create_child_definition(name="test1", geom=ThresholdGeom()))
+    gate.children.append(create_child_definition(name="test2", geom=ThresholdGeom()))
     with pytest.raises(AssertionError) as exp:
         gate.label_children(labels={"test1": None, "test2": None})
     assert str(exp.value) == "For a non-binary threshold gate, labels should be provided with the keys: '++', '-+', '+-' and '--'"
@@ -177,33 +178,33 @@ def test_downsample(method, kwargs):
 
 def test_add_child():
     gate = create_gate(shape="threshold")
-    gate._add_child(population=create_population(name="test", geom=Threshold(), definition="+"))
+    gate._add_child(population=create_population(name="test", geom=ThresholdGeom(), definition="+"))
     assert len(gate.children) == 1
     assert gate.children[0].population_name == "+"
     gate = create_gate(shape="polygon")
-    gate._add_child(population=create_population(name="test", geom=Threshold(), definition="+"))
+    gate._add_child(population=create_population(name="test", geom=ThresholdGeom(), definition="+"))
     assert len(gate.children) == 1
     assert gate.children[0].population_name == "test"
 
 
 def test_label_binary_threshold():
     gate = create_gate(shape="threshold")
-    gate.children.append(create_child_definition(name="pos", definition="+", geom=Threshold()))
-    gate.children.append(create_child_definition(name="neg", definition="-", geom=Threshold()))
-    pos = create_population(name="+", geom=Threshold(), definition="+")
-    neg = create_population(name="-", geom=Threshold(), definition="-")
+    gate.children.append(create_child_definition(name="pos", definition="+", geom=ThresholdGeom()))
+    gate.children.append(create_child_definition(name="neg", definition="-", geom=ThresholdGeom()))
+    pos = create_population(name="+", geom=ThresholdGeom(), definition="+")
+    neg = create_population(name="-", geom=ThresholdGeom(), definition="-")
     new_children = gate._label_binary_threshold(new_children=[pos, neg])
     assert {p.population_name for p in new_children} == {"pos", "neg"}
 
 
 def test_label_threshold():
     gate = create_gate(shape="threshold", binary=False)
-    gate.children.append(create_child_definition(name="pos", definition="++", geom=Threshold()))
-    gate.children.append(create_child_definition(name="neg", definition="-+,--,+-", geom=Threshold()))
-    pos = create_population(name="++", geom=Threshold(), definition="++")
-    neg1 = create_population(name="--", geom=Threshold(), definition="--")
-    neg2 = create_population(name="-+", geom=Threshold(), definition="-+")
-    neg3 = create_population(name="+-", geom=Threshold(), definition="+-")
+    gate.children.append(create_child_definition(name="pos", definition="++", geom=ThresholdGeom()))
+    gate.children.append(create_child_definition(name="neg", definition="-+,--,+-", geom=ThresholdGeom()))
+    pos = create_population(name="++", geom=ThresholdGeom(), definition="++")
+    neg1 = create_population(name="--", geom=ThresholdGeom(), definition="--")
+    neg2 = create_population(name="-+", geom=ThresholdGeom(), definition="-+")
+    neg3 = create_population(name="+-", geom=ThresholdGeom(), definition="+-")
     new_children = gate._label_threshold(new_children=[pos, neg1, neg2, neg3])
     assert {p.population_name for p in new_children} == {"pos", "neg"}
 

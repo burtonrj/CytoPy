@@ -1,4 +1,5 @@
-from ...data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate
+from ...data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ChildThreshold, ChildPolygon
+from ...data.geometry import ThresholdGeom, PolygonGeom
 import pytest
 
 
@@ -34,8 +35,12 @@ def test_gate_init_threshold_invalid():
     assert str(err.value) == "Binary threshold gate should only receive value for x-axis not y"
 
 
-def test_threshold_add_child_invalid():
+@pytest.mark.parametrize("d", ["+", "-", "++", "--", "+-", "+++", "+ -"])
+def test_threshold_add_child_invalid(d):
     threshold = ThresholdGate(gate_name="test",
                               parent="test parent",
                               binary=True,
                               x="X")
+    child = ChildThreshold(name="test child",
+                           definition=d,
+                           geom=ThresholdGeom(x="X", ))

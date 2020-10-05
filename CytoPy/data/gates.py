@@ -4,7 +4,8 @@ from ..flow.sampling import density_dependent_downsampling, faithful_downsamplin
 from ..flow.gating_analyst import ManualGate, DensityGate, Analyst
 from ..utilities import inside_polygon
 from ..feedback import vprint
-from .populations import PopulationGeometry, Population, merge_populations
+from .populations import Population, merge_populations
+from .geometry import PopulationGeometry
 from scipy.spatial.distance import euclidean
 from functools import reduce
 from typing import List

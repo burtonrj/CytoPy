@@ -1,17 +1,18 @@
-from CytoPy.data.populations import Cluster, Population, Polygon, Threshold, _check_overlap, _merge_index, \
+from CytoPy.data.populations import Cluster, Population, _check_overlap, _merge_index, \
     _merge_signatures, _merge_thresholds, _merge_polygons
+from CytoPy.data.geometry import ThresholdGeom, PolygonGeom
 from shapely.geometry import Polygon as Poly
 import numpy as np
 import pytest
 
 
 def generate_polygons():
-    poly1 = Polygon(x_values=[0, 0, 5, 5, 0],
-                    y_values=[0, 5, 5, 0, 0])
-    poly2 = Polygon(x_values=[2.5, 2.5, 5, 5, 2.5],
-                    y_values=[0, 5, 5, 0, 0])
-    poly3 = Polygon(x_values=[6, 6, 10, 10, 6],
-                    y_values=[0, 5, 5, 0, 0])
+    poly1 = PolygonGeom(x_values=[0, 0, 5, 5, 0],
+                        y_values=[0, 5, 5, 0, 0])
+    poly2 = PolygonGeom(x_values=[2.5, 2.5, 5, 5, 2.5],
+                        y_values=[0, 5, 5, 0, 0])
+    poly3 = PolygonGeom(x_values=[6, 6, 10, 10, 6],
+                        y_values=[0, 5, 5, 0, 0])
     return poly1, poly2, poly3
 
 
@@ -27,8 +28,8 @@ def test_cluster_init():
 
 
 def test_polygon_shape():
-    poly, _, _ = Polygon(x_values=[0, 0, 5, 5, 0],
-                         y_values=[0, 5, 5, 0, 0])
+    poly, _, _ = PolygonGeom(x_values=[0, 0, 5, 5, 0],
+                             y_values=[0, 5, 5, 0, 0])
     assert isinstance(poly.shape, Poly)
     assert np.array_equal(poly.shape.exterior.xy[0], np.array([0, 0, 5, 5, 0]))
     assert np.array_equal(poly.shape.exterior.xy[1], np.array([0, 5, 5, 0, 0]))
@@ -64,7 +65,7 @@ def test_population_ctrl_idx_error(ctrl_idx, err):
 
 
 def test_check_overlap_invalid_shape():
-    geom = Threshold()
+    geom = ThresholdGeom()
     x = Population(population_name="test",
                    parent="test_parent",
                    geom=geom)
@@ -133,15 +134,15 @@ def test_merge_signatures():
 def create_threshold_pops():
     left = Population(population_name="left",
                       parent="test",
-                      geom=Threshold(x_threshold=0.5,
-                                     y_threshold=1.5),
+                      geom=ThresholdGeom(x_threshold=0.5,
+                                         y_threshold=1.5),
                       index=np.array([0, 1, 2, 3, 4, 5]),
                       definition="++",
                       signature=dict(x=5, y=5))
     right = Population(population_name="right",
                        parent="test",
-                       geom=Threshold(x_threshold=0.5,
-                                      y_threshold=1.5),
+                       geom=ThresholdGeom(x_threshold=0.5,
+                                          y_threshold=1.5),
                        index=np.array([0, 1, 2, 3, 8, 11]),
                        definition="+-",
                        signature=dict(x=15, y=15))
@@ -152,7 +153,7 @@ def test_merge_thresholds():
     left, right = create_threshold_pops()
     merged = _merge_thresholds(left, right, "merged")
     assert merged.population_name == "merged"
-    assert isinstance(merged.geom, Threshold)
+    assert isinstance(merged.geom, ThresholdGeom)
     assert merged.geom.x_threshold == 0.5
     assert merged.geom.y_threshold == 1.5
     assert np.array_equal(merged.index, np.array([0, 1, 2, 3, 4, 5, 8, 11]))
@@ -183,7 +184,7 @@ def test_merge_polygons():
     left, right = create_poly_pops()
     merged = _merge_polygons(left, right, "merged")
     assert merged.population_name == "merged"
-    assert isinstance(merged.geom, Polygon)
+    assert isinstance(merged.geom, PolygonGeom)
     assert merged.geom.x_values == [0.0, 0.0, 2.5, 5.0, 5.0, 2.5, 0.0]
     assert merged.geom.y_values == [0.0, 5.0, 5.0, 5.0, 0.0, 0.0, 0.0]
     assert np.array_equal(merged.index, np.array([0, 1, 2, 3, 4, 5, 8, 11]))

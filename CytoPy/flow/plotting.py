@@ -1,5 +1,6 @@
 from ..data.gates import Gate
-from ..data.populations import Threshold, Polygon, Population
+from ..data.populations import Population
+from ..data.geometry import ThresholdGeom, PolygonGeom
 from ..flow.transforms import apply_transform
 from warnings import warn
 from typing import List
@@ -268,7 +269,7 @@ class CreatePlot:
 
     def plot_population_geom(self,
                              parent: pd.DataFrame,
-                             geom: Threshold or Polygon,
+                             geom: ThresholdGeom or PolygonGeom,
                              lw: float = 2.5,
                              line_colour: str = "#c92c2c",
                              population_name: str or None = None,
@@ -282,7 +283,7 @@ class CreatePlot:
                              x=geom.x,
                              y=geom.y,
                              **plot_kwargs)
-        if isinstance(geom, Threshold):
+        if isinstance(geom, ThresholdGeom):
             x = geom.x_threshold
             y = geom.y_threshold
             self._add_threshold(x=x,
