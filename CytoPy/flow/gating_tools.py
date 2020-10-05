@@ -714,7 +714,8 @@ class Gating:
                     gate_name: str):
         assert gate_name in self.gates.keys(), f"{gate_name} does not exist"
         gate = self.gates.get(gate_name)
-        if any([c in self.populations.keys() for c in gate.children]):
+        gate_children = [x.population_name for x in gate.children]
+        if any([c in self.populations.keys() for c in gate_children]):
             dependences = [self.list_downstream_populations(c) for c in self.gates.get(gate_name).children]
             dependences = gate.children + [x in sl for sl in dependences for x in sl]
             warn(f"The following populations are a direct result of this gate and will be removed {dependences}")
