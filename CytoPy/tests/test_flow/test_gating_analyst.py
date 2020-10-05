@@ -178,3 +178,34 @@ def test_polygon():
     assert all([90 < len(p.index) <= 100 for p in pops])
 
 
+def test_fit_predict_poly():
+    pass
+
+
+def test_fit_predict_ellipse():
+    pass
+
+
+def test_fit_predict_invalid_ellipse():
+    pass
+
+
+def test_fit_predict_invalid_threshold():
+    pass
+
+
+def test_init_manual_gate():
+    pass
+
+
+def test_init_manual_gate_rect():
+    pass
+
+
+def test_manual_ellipse():
+    pass
+
+
+def test_manual_poly():
+    pass
+
