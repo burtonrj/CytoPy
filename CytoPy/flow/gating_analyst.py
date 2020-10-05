@@ -1,5 +1,6 @@
 from ..utilities import inside_polygon
-from ..data.populations import Polygon, Threshold, Population
+from ..data.populations import Population
+from ..data.geometry import ThresholdGeom, PolygonGeom
 from matplotlib.patches import Ellipse
 from shapely.geometry import Point, Polygon as SPoly
 from shapely.affinity import scale
@@ -270,7 +271,7 @@ class Analyst:
         top_right = data[(data[self.x] > x) & (data[self.y] > y)].index.values
         populations = list()
         for definition, idx in zip(["--", "-+", "++", "+-"], [bottom_left, top_left, top_right, bottom_right]):
-            geom = Threshold(x=self.x, y=self.y, x_threshold=x, y_threshold=y)
+            geom = ThresholdGeom(x=self.x, y=self.y, x_threshold=x, y_threshold=y)
             populations.append(Population(population_name=definition,
                                           index=idx,
                                           parent=self.parent,
@@ -299,7 +300,7 @@ class Analyst:
         right = data[data[self.x] >= x].index.values
         populations = list()
         for definition, idx in zip(["-", "+"], [left, right]):
-            geom = Threshold(x=self.x, x_threshold=x)
+            geom = ThresholdGeom(x=self.x, x_threshold=x)
             populations.append(Population(population_name=definition,
                                           index=idx,
                                           parent=self.parent,
@@ -340,10 +341,10 @@ class Analyst:
             width, height, angle = probablistic_ellipse(covariances=covar_matrix[i],
                                                         conf=self.conf)
             vertices = Ellipse(centers[i], width, height, angle).get_verts()
-            geom = Polygon(x=self.x,
-                           y=self.y,
-                           x_values=vertices[:, 0],
-                           y_values=vertices[:, 1])
+            geom = PolygonGeom(x=self.x,
+                               y=self.y,
+                               x_values=vertices[:, 0],
+                               y_values=vertices[:, 1])
             idx = data[inside_ellipse(data=data.values,
                                       center=centers[i],
                                       width=width,
@@ -381,10 +382,10 @@ class Analyst:
             label_df = data[data.labels == label]
             idx = label_df.index.values
             x_values, y_values = create_convex_hull(label_df[self.x].values, label_df[self.y].values)
-            geom = Polygon(x=self.x,
-                           y=self.y,
-                           x_values=x_values,
-                           y_values=y_values)
+            geom = PolygonGeom(x=self.x,
+                               y=self.y,
+                               x_values=x_values,
+                               y_values=y_values)
             populations.append(Population(population_name=names[i],
                                           parent=self.parent,
                                           geom=geom,
@@ -504,10 +505,10 @@ class ManualGate(Analyst):
                         angle: float):
         populations = list()
         vertices = Ellipse(center, width, height, angle).get_verts()
-        geom = Polygon(x=self.x,
-                       y=self.y,
-                       x_values=vertices[:, 0],
-                       y_values=vertices[:, 1])
+        geom = PolygonGeom(x=self.x,
+                           y=self.y,
+                           x_values=vertices[:, 0],
+                           y_values=vertices[:, 1])
         idx = data[inside_ellipse(data=data.values,
                                   center=center,
                                   width=width,
@@ -526,10 +527,10 @@ class ManualGate(Analyst):
                         y_values: list):
         populations = list()
         x_values, y_values = create_convex_hull(x_values, y_values)
-        geom = Polygon(x=self.x,
-                       y=self.y,
-                       x_values=x_values,
-                       y_values=y_values)
+        geom = PolygonGeom(x=self.x,
+                           y=self.y,
+                           x_values=x_values,
+                           y_values=y_values)
         idx = inside_polygon(df=data, x=self.x, y=self.y, poly=geom.shape).index
         populations.append(Population(population_name="manual_polygon",
                                       parent=self.parent,

@@ -1,4 +1,4 @@
-from .populations import Threshold, Polygon
+from .geometry import ThresholdGeom, PolygonGeom
 import mongoengine
 
 
@@ -12,12 +12,12 @@ class ChildThreshold(mongoengine.EmbeddedDocument):
         Population name
     definition: str
         Definition of population e.g "+" or "-" for 1 dimensional gate or "++" etc for 2 dimensional gate
-    geom: Threshold
+    geom: ThresholdGeom
         Geometric definition for this child population
     """
     name = mongoengine.StringField()
     definition = mongoengine.StringField()
-    geom = mongoengine.EmbeddedDocumentField(Threshold)
+    geom = mongoengine.EmbeddedDocumentField(ThresholdGeom)
 
 
 class ChildPolygon(mongoengine.EmbeddedDocument):
@@ -28,11 +28,11 @@ class ChildPolygon(mongoengine.EmbeddedDocument):
     -----------
     name: str
         Population name
-    geom: Threshold
+    geom: ThresholdGeom
         Geometric definition for this child population
     """
     name = mongoengine.StringField()
-    geom = mongoengine.EmbeddedDocumentField(Polygon)
+    geom = mongoengine.EmbeddedDocumentField(PolygonGeom)
 
 
 class Gate(mongoengine.Document):
