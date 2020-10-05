@@ -76,7 +76,7 @@ def individual_transforms(data: pd.DataFrame,
 
 def apply_transform(data: pd.DataFrame,
                     features_to_transform: list or str or dict = 'all',
-                    transform_method: str = 'logicle',
+                    transform_method: str or None = 'logicle',
                     **kwargs) -> pd.DataFrame:
     """
     Apply a transformation to the given dataset; valid transformation methods are:
@@ -90,6 +90,8 @@ def apply_transform(data: pd.DataFrame,
     transformed pandas dataframe
     """
     data = data.copy()
+    if transform_method is None:
+        return data
     if isinstance(features_to_transform, dict):
         return individual_transforms(data, features_to_transform, **kwargs)
     if isinstance(features_to_transform, str):
