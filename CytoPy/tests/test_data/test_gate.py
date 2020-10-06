@@ -43,22 +43,61 @@ def test_gate_invalid_sampling():
     assert str(err.value) == "Sampling, if given, must contain method for downsampling AND upsampling"
 
 
-@pytest.mark.parametrize("kwargs",
-                         [{"transform_x": "logicle",
-                           "transform_y": "logicle"},
-                          {"transform_x": "logicle",
-                           "transform_y": "logicle",
-                           "dim_reduction": "UMAP",
-                           "dim_reduction_kwargs": {"n_neighbours": 20}},
-                          {"downsample": "uniform",
-                           "downsample_kwargs": {"n": 1000}}])
-def test_preprocessing(kwargs):
+def test_transform_none():
+    gate = Gate(gate_name="test",
+                parent="test parent",
+                x="X",
+                y="Y",
+                method="manual")
+    data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
+                         "Y": np.random.normal(1, scale=0.5, size=1000)})
+    transformed = gate._transform(data)
+    assert isinstance(transformed, pd.DataFrame)
+    assert transformed.shape[0] == 1000
+    assert transformed.shape[1] == 2
+    for i in ["X", "Y"]:
+        assert transformed[i].mean() == pytest.approx(1., 0.1)
+        assert transformed[i].std() == pytest.approx(0.5, 0.1)
+
+
+def test_transform_x():
     gate = Gate(gate_name="test",
                 parent="test parent",
                 x="X",
                 y="Y",
                 method="manual",
-                preprocessing=kwargs)
+                transformations={"x": "logicle"})
+    data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
+                         "Y": np.random.normal(1, scale=0.5, size=1000)})
+    transformed = gate._transform(data)
+    assert isinstance(transformed, pd.DataFrame)
+    assert transformed.shape[0] == 1000
+    assert transformed.shape[1] == 2
+    assert transformed["X"].mean() != pytest.approx(1., 0.1)
+    assert transformed["X"].std() != pytest.approx(0.5, 0.1)
+    assert transformed["Y"].mean() == pytest.approx(1., 0.1)
+    assert transformed["Y"].std() == pytest.approx(0.5, 0.1)
+
+
+def test_transform_xy():
+    gate = Gate(gate_name="test",
+                parent="test parent",
+                x="X",
+                y="Y",
+                method="manual",
+                transformations={"x": "logicle",
+                                 "y": "logicle"})
+    data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
+                         "Y": np.random.normal(1, scale=0.5, size=1000)})
+    transformed = gate._transform(data)
+    assert isinstance(transformed, pd.DataFrame)
+    assert transformed.shape[0] == 1000
+    assert transformed.shape[1] == 2
+    assert transformed["X"].mean() != pytest.approx(1., 0.1)
+    assert transformed["X"].std() != pytest.approx(0.5, 0.1)
+    assert transformed["Y"].mean() != pytest.approx(1., 0.1)
+    assert transformed["Y"].std() != pytest.approx(0.5, 0.1)
+
 
 
 @pytest.mark.parametrize("d", ["++", "--", "+-", "+++", "+ -"])
