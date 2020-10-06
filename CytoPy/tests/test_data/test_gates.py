@@ -30,28 +30,6 @@ def create_child_definition(name: str,
     return ChildDefinition(population_name=name, geom=geom, definition=definition, signature=signature)
 
 
-def norm(x):
-    return list(map(lambda i: (i - min(x)) / (max(x) - min(x)), x))
-
-
-def test_create_signature():
-    d = {"x": [15, 22, 80, 32],
-         "y": [55, 32, 10, 11],
-         "z": [42, 87, 91, 10]}
-    d_norm = {k: norm(x) for k, x in d.items()}
-    example = pd.DataFrame(d)
-    x = create_signature(example)
-    y = create_signature(example, summary_method=np.mean)
-    z = create_signature(example, idx=[1, 2], summary_method=np.mean)
-    assert isinstance(x, dict)
-    assert isinstance(y, dict)
-    assert isinstance(z, dict)
-    for i in ["x", "y", "z"]:
-        assert pytest.approx(x.get(i), 0.001) == np.median(d_norm.get(i))
-        assert pytest.approx(y.get(i), 0.001) == np.mean(d_norm.get(i))
-        assert pytest.approx(z.get(i), 0.001) == np.mean(np.array(d_norm.get(i))[[1, 2]])
-
-
 def test_pop_likeness():
     template = create_child_definition(name="template", geom=ThresholdGeom())
     pop = create_population(name="test", geom=ThresholdGeom())
