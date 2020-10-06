@@ -1,6 +1,7 @@
 from ...data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ChildThreshold, ChildPolygon, \
-    create_signature
+    create_signature, Population
 from ...data.geometry import ThresholdGeom, PolygonGeom
+from sklearn.datasets import make_blobs
 import pandas as pd
 import numpy as np
 import pytest
@@ -24,23 +25,6 @@ def test_gate_init(klass, method):
     assert gate.method == method
     assert gate.dim_reduction.get("method") == "UMAP"
     assert gate.dim_reduction.get("kwargs").get("n_neighbours") == 100
-
-
-def test_gate_invalid_sampling():
-    with pytest.raises(AssertionError) as err:
-        gate = Gate(gate_name="test",
-                    parent="test parent",
-                    x="X",
-                    y="Y",
-                    sampling={"downsample": "uniform"})
-    assert str(err.value) == "Sampling, if given, must contain method for downsampling AND upsampling"
-    with pytest.raises(AssertionError) as err:
-        gate = Gate(gate_name="test",
-                    parent="test parent",
-                    x="X",
-                    y="Y",
-                    sampling={"upsample": "knn"})
-    assert str(err.value) == "Sampling, if given, must contain method for downsampling AND upsampling"
 
 
 def test_transform_none():
@@ -97,6 +81,57 @@ def test_transform_xy():
     assert transformed["X"].std() != pytest.approx(0.5, 0.1)
     assert transformed["Y"].mean() != pytest.approx(1., 0.1)
     assert transformed["Y"].std() != pytest.approx(0.5, 0.1)
+
+
+@pytest.mark.parametrize("kwargs", [{"method": "uniform",
+                                     "n": 500},
+                                    {"method": "faithful"},
+                                    {"method": "density"},
+                                    {"method": None}])
+def test_downsample(kwargs):
+    gate = Gate(gate_name="test",
+                parent="test parent",
+                x="X",
+                y="Y",
+                method="manual",
+                sampling=kwargs)
+    data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
+                         "Y": np.random.normal(1, scale=0.5, size=1000)})
+    sample = gate._downsample(data=data)
+    if kwargs.get("method") is None:
+        assert sample is None
+    else:
+        assert sample.shape[0] < data.shape[0]
+
+
+def test_upsample():
+    data, labels = make_blobs(n_samples=3000,
+                              n_features=2,
+                              centers=3,
+                              random_state=42)
+    data = pd.DataFrame(data, columns=["X", "Y"])
+    gate = Gate(gate_name="test",
+                parent="test parent",
+                x="X",
+                y="Y",
+                method="manual",
+                sampling={"method": "uniform",
+                          "frac": 0.5})
+    sample = gate._downsample(data=data)
+    sample_labels = labels[sample.index.values]
+    pops = list()
+    for x in np.unique(sample_labels):
+        idx = sample.index.values[np.where(sample_labels == x)[0]]
+        pops.append(Population(population_name=f"Pop_{x}",
+                               parent="root",
+                               index=idx[:498]))
+    pops = gate._upsample(data=data, sample=sample, populations=pops)
+    assert isinstance(pops, list)
+    assert all([isinstance(p, Population) for p in pops])
+    assert all([len(p.index) == 1000 for p in pops])
+    for x in np.unique(labels):
+        p = [i for i in pops if i.population_name == f"Pop_{x}"][0]
+        assert np.array_equal(p.index, np.where(labels == x)[0])
 
 
 @pytest.mark.parametrize("d", ["++", "--", "+-", "+++", "+ -"])
