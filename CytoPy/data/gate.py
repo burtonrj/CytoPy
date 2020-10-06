@@ -3,7 +3,7 @@ from .geometry import ThresholdGeom, PolygonGeom
 from .populations import Population
 from ..flow.transforms import scaler
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
-from warnings import warn
+from ..flow.dim_reduction import dimensionality_reduction
 from typing import List, Dict
 from sklearn import cluster, mixture
 from scipy.spatial import ConvexHull
@@ -179,7 +179,20 @@ class Gate(mongoengine.Document):
         -------
         Pandas.DataFrame
         """
-        pass
+        method = self.dim_reduction.get("method", None)
+        if method is None:
+            return data
+        kwargs = {k: v for k, v in self.dim_reduction.items() if k != "method"}
+        data = dimensionality_reduction(data=data,
+                                        features=kwargs.get("features", data.columns.tolist()),
+                                        method=method,
+                                        n_components=2,
+                                        return_embeddings_only=False,
+                                        return_reducer=False,
+                                        **kwargs)
+        self.x = f"{method}1"
+        self.y = f"{method}2"
+        return data
 
     def _init_model(self) -> object or None:
         """
