@@ -1,5 +1,5 @@
 from ...data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ChildThreshold, ChildPolygon, \
-    create_signature, Population
+    create_signature, Population, threshold_1d, threshold_2d
 from ...data.geometry import ThresholdGeom, PolygonGeom
 from sklearn.datasets import make_blobs
 import pandas as pd
@@ -260,6 +260,32 @@ def test_threshold_match_children_2d():
     assert pos.population_name == "positive"
     neg = [p for p in pops if p.definition == "--,-+"][0]
     assert neg.population_name == "negative"
+
+
+def test_threshold_1d():
+    x = np.random.normal(loc=1., scale=1.5, size=1000)
+    data = pd.DataFrame({"X": x})
+    results = threshold_1d(data=data, x="X", x_threshold=0.5)
+    assert len(results.keys()) == 2
+    assert all(isinstance(df, pd.DataFrame) for df in results.values())
+    assert len(np.where(x >= 0.5)[0]) == results.get("+").shape[0]
+    assert len(np.where(x < 0.5)[0]) == results.get("-").shape[0]
+
+
+def test_threshold_2d():
+    x = np.random.normal(loc=1., scale=1.5, size=1000)
+    y = np.random.normal(loc=1., scale=1.5, size=1000)
+    data = pd.DataFrame({"X": x,
+                         "Y": y})
+    results = threshold_2d(data=data, x="X", y="Y", x_threshold=0.5, y_threshold=0.5)
+    assert len(results.keys()) == 4
+    assert all(isinstance(df, pd.DataFrame) for df in results.values())
+    x_pos, y_pos = np.where(x >= 0.5)[0], np.where(y >= 0.5)[0]
+    x_neg, y_neg = np.where(x < 0.5)[0], np.where(y < 0.5)[0]
+    assert len(np.intersect1d(x_pos, y_pos)) == results.get("++").shape[0]
+    assert len(np.intersect1d(x_pos, y_neg)) == results.get("+-").shape[0]
+    assert len(np.intersect1d(x_neg, y_pos)) == results.get("-+").shape[0]
+    assert len(np.intersect1d(x_neg, y_neg)) == results.get("--").shape[0]
 
 
 def norm(x):

@@ -496,28 +496,6 @@ class EllipseGate(Gate):
         """
         pass
 
-    def reset_gate(self) -> None:
-        """
-        Removes existing children and resets all parameters.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    def label_children(self,
-                       labels: dict) -> None:
-        """
-        Rename children using a dictionary of labels where the key correspond to the existing child name
-        and the value is the new desired population name.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
     def _match_to_children(self,
                            new_populations: List[Population]) -> List[Population]:
         """
@@ -645,7 +623,8 @@ def threshold_1d(data: pd.DataFrame,
         Negative population (less than threshold) and positive population (greater than or equal to threshold)
         in a dictionary as so: {'-': Pandas.DataFrame, '+': Pandas.DataFrame}
     """
-    pass
+    return {"+": data[data[x] >= x_threshold],
+            "-": data[data[x] < x_threshold]}
 
 
 def threshold_2d(data: pd.DataFrame,
@@ -673,7 +652,10 @@ def threshold_2d(data: pd.DataFrame,
     -------
     dict
     """
-    pass
+    return {"++": data[(data[x] >= x_threshold) & (data[y] >= y_threshold)],
+            "--": data[(data[x] < x_threshold) & (data[y] < y_threshold)],
+            "+-": data[(data[x] >= x_threshold) & (data[y] < y_threshold)],
+            "-+": data[(data[x] < x_threshold) & (data[y] >= y_threshold)]}
 
 
 def find_peaks(p: np.array,
