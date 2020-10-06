@@ -35,7 +35,7 @@ def test_threshold_add_child_invalid_1d(d):
                            definition=d,
                            geom=ThresholdGeom(x="X", x_threshold=0.56, y_threshold=0.75))
     with pytest.raises(AssertionError) as err:
-        threshold._add_child(child)
+        threshold.add_child(child)
     assert str(err.value) == "Invalid child definition, should be either '+' or '-'"
 
 
@@ -49,7 +49,7 @@ def test_threshold_add_child_invalid_2d(d):
                            definition=d,
                            geom=ThresholdGeom(x_threshold=0.56, y_threshold=0.75))
     with pytest.raises(AssertionError) as err:
-        threshold._add_child(child)
+        threshold.add_child(child)
     assert str(err.value) == "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
 
 
@@ -62,7 +62,7 @@ def test_threshold_add_child():
     child = ChildThreshold(name="test child",
                            definition="++",
                            geom=ThresholdGeom(x_threshold=0.56, y_threshold=0.75))
-    threshold._add_child(child)
+    threshold.add_child(child)
     assert len(threshold.children)
     assert threshold.children[0].geom.x == threshold.x
     assert threshold.children[0].geom.y == threshold.y
