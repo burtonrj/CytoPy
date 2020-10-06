@@ -5,7 +5,6 @@ from ..flow.transforms import scaler
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
 from typing import List, Dict
-from sklearn import cluster, mixture
 from scipy.spatial import ConvexHull
 from scipy import linalg, stats
 from sklearn.cluster import *
@@ -17,36 +16,56 @@ import mongoengine
 import inspect
 
 
-class ChildThreshold(mongoengine.EmbeddedDocument):
+class Child(mongoengine.EmbeddedDocument):
+    """
+    Base class for a gate child population
+    """
+    name = mongoengine.StringField()
+    meta = {"allow_inheritance": True}
+
+
+class ChildThreshold(Child):
     """
     Child population of a Threshold gate
 
     Parameters
     -----------
-    name: str
-        Population name
     definition: str
         Definition of population e.g "+" or "-" for 1 dimensional gate or "++" etc for 2 dimensional gate
     geom: ThresholdGeom
         Geometric definition for this child population
     """
-    name = mongoengine.StringField()
     definition = mongoengine.StringField()
     geom = mongoengine.EmbeddedDocumentField(ThresholdGeom)
 
+    def match_definition(self,
+                         definition: str):
+        """
+        Given a definition, return True or False as to whether it matches this ChildThreshold's
+        definition. If definition contains multiples separated by a comma, or the ChildThreshold's
+        definition contains multiple, first split and then compare. Return True if matches any.
 
-class ChildPolygon(mongoengine.EmbeddedDocument):
+        Parameters
+        ----------
+        definition: str
+
+        Returns
+        -------
+        bool
+        """
+        definition = definition.split(",")
+        return any([x in self.definition.split(",") for x in definition])
+
+
+class ChildPolygon(Child):
     """
     Child population of a Polgon or Ellipse gate
 
     Parameters
     -----------
-    name: str
-        Population name
     geom: ThresholdGeom
         Geometric definition for this child population
     """
-    name = mongoengine.StringField()
     geom = mongoengine.EmbeddedDocumentField(PolygonGeom)
 
 
@@ -63,12 +82,23 @@ class Gate(mongoengine.Document):
     dim_reduction = mongoengine.DictField()
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
+    children = mongoengine.EmbeddedDocumentListField(Child)
 
     meta = {
         'db_alias': 'core',
         'collection': 'gates',
         'allow_inheritance': True
     }
+
+    def __init__(self, *args, **values):
+        method = values.get("method", None)
+        assert method is not None, "No method given"
+        err = f"Module {method} not supported. See docs for supported methods."
+        assert method in ["manual", "density"] + list(globals().keys()), err
+        super().__init__(*args, **values)
+        self.model = None
+        if method not in ["manual", "density"]:
+            self.model = globals()[method](**self.method_kwargs)
 
     def _transform(self,
                    data: pd.DataFrame) -> pd.DataFrame:
@@ -194,18 +224,39 @@ class Gate(mongoengine.Document):
         self.y = f"{method}2"
         return data
 
-    def _init_model(self) -> object or None:
+    def reset_gate(self) -> None:
         """
-        Initialise model used for autonomous gate. If DensityGate or a manual method, this
-        will return None.
+        Removes existing children and resets all parameters.
 
         Returns
         -------
-        object or None
-            Either Scikit-Learn clustering object or HDBSCAN or None in the case of
-            ThresholdGate or static "manual" method.
+        None
         """
-        pass
+        self.children = []
+
+    def label_children(self,
+                       labels: dict,
+                       drop: bool = True) -> None:
+        """
+        Rename children using a dictionary of labels where the key correspond to the existing child name
+        and the value is the new desired population name. If drop is True, then children that are absent
+        from the given dictionary will be dropped.
+
+        Parameters
+        ----------
+        labels: dict
+            Mapping for new children name
+        drop: bool (default=True)
+            If True, children absent from labels will be dropped
+
+        Returns
+        -------
+        None
+        """
+        if drop:
+            self.children = [c for c in self.children if c.name in labels.keys()]
+        for c in self.children:
+            c.name = labels.get(c.name)
 
 
 class ThresholdGate(Gate):
@@ -230,35 +281,15 @@ class ThresholdGate(Gate):
         None
         """
         if self.y is not None:
-            assert child.definition in ["++", "+-", "-+", "--"], "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
+            definition = child.definition.split(",")
+            assert all(i in ["++", "+-", "-+", "--"]
+                       for i in definition), "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
         else:
             assert child.definition in ["+", "-"], "Invalid child definition, should be either '+' or '-'"
         child.geom.x = self.x
         child.geom.y = self.y
         child.geom.transform_x, child.geom.transform_y = self.transformations.get("x", None), self.transformations.get("y", None)
         self.children.append(child)
-
-    def reset_gate(self) -> None:
-        """
-        Removes existing children and resets all parameters.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    def label_children(self,
-                       labels: dict) -> None:
-        """
-        Rename children using a dictionary of labels where the key correspond to the existing child name
-        and the value is the new desired population name.
-
-        Returns
-        -------
-        None
-        """
-        pass
 
     def _match_to_children(self,
                            new_populations: List[Population]) -> List[Population]:
@@ -275,7 +306,13 @@ class ThresholdGate(Gate):
         -------
         list
         """
-        pass
+        labeled = list()
+        for p in new_populations:
+            matching_child = [c for c in self.children if c.match_definition(p.definition)]
+            assert len(matching_child) == 1, f"Population should match exactly one child, matched: {len(matching_child)}"
+            p.population_name = matching_child[0].name
+            labeled.append(p)
+        return labeled
 
     def fit(self,
             data: pd.DataFrame) -> None:
@@ -349,28 +386,6 @@ class PolygonGate(Gate):
         Parameters
         ----------
         child: ChildPolygon
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    def reset_gate(self) -> None:
-        """
-        Removes existing children and resets all parameters.
-
-        Returns
-        -------
-        None
-        """
-        pass
-
-    def label_children(self,
-                       labels: dict) -> None:
-        """
-        Rename children using a dictionary of labels where the key correspond to the existing child name
-        and the value is the new desired population name.
 
         Returns
         -------
@@ -791,30 +806,6 @@ def find_inflection_point(x: np.array,
 
     """
     pass
-
-
-def valid_sklearn(klass: str):
-    """
-    Given the name of a Scikit-Learn class, checks validity. If invalid, raises Assertion error,
-    otherwise returns the class name.
-
-    Parameters
-    ----------
-    klass: str
-
-    Returns
-    -------
-    str
-    """
-    valid_clusters = [x[0] for x in inspect.getmembers(cluster, inspect.isclass)
-                      if 'sklearn.cluster' in x[1].__module__]
-    valid_mixtures = [x[0] for x in inspect.getmembers(mixture, inspect.isclass)
-                      if 'sklearn.mixture' in x[1].__module__]
-    valid = valid_clusters + valid_mixtures + ["HDBSCAN"]
-    err = f"""Invalid class name. Must be one of the following from Scikit-Learn's cluster module: {valid_clusters};
- or from Scikit-Learn's mixture module: {valid_mixtures}; or 'HDBSCAN'"""
-    assert klass in valid, err
-    return klass
 
 
 def create_convex_hull(x_values: np.array,
