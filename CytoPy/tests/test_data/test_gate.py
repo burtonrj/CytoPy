@@ -99,7 +99,6 @@ def test_transform_xy():
     assert transformed["Y"].std() != pytest.approx(0.5, 0.1)
 
 
-
 @pytest.mark.parametrize("d", ["++", "--", "+-", "+++", "+ -"])
 def test_threshold_add_child_invalid_1d(d):
     threshold = ThresholdGate(gate_name="test",

@@ -121,35 +121,84 @@ def density_dependent_downsampling(data: pd.DataFrame,
     return df.sample(frac=frac, weights=prob)
 
 
+def calculate_optimal_neighbours(x: pd.DataFrame,
+                                 y: np.array,
+                                 scoring: str,
+                                 **kwargs):
+    """
+    Calculate the opitmal n_neighbours parameter for KNeighborsClassifier using GridSearchCV.
+    Returns optimal n and highest score
+
+    Parameters
+    ----------
+    x: Pandas.DataFrame
+    y: np.array
+    scoring: str
+    kwargs: dict
+
+    Returns
+    -------
+    int, float
+    """
+    n = np.arange(int(x.shape[0] * 0.01),
+                  int(x.shape[0] * 0.05),
+                  int(x.shape[0] * 0.01) / 2, dtype=np.int)
+    knn = KNeighborsClassifier(**kwargs)
+    grid_cv = GridSearchCV(knn, {"n_neighbors": n}, scoring=scoring, n_jobs=-1, cv=10)
+    grid_cv.fit(x, y)
+    return grid_cv.best_params_.get("n_neighbors"), grid_cv.best_score_
+
+
 def upsample_knn(sample: pd.DataFrame,
-                 populations: List[Population],
-                 original: pd.DataFrame,
+                 original_data: pd.DataFrame,
+                 labels: list,
                  features: list,
-                 n: int or None = None,
                  verbose: bool = True,
+                 scoring: str = "balanced_accuracy",
                  **kwargs):
+    """
+    Given some sampled dataframe and the original dataframe from which it was derived, use the
+    given labels (which should correspond to the sampled dataframe row index) to fit a nearest
+    neighbours model to the sampled data and predict the assignment of labels in the original data.
+    Uses sklearn.neighbors.KNeighborsClassifier for KNN implementation. If n_neighbors parameter
+    is not provided, will estimate using grid search cross validation. The scoring parameter
+    can be tuned by changing the `scoring` input (default="balanced_accuracy")
+
+    Parameters
+    ----------
+    sample: Pandas.DataFrame
+        Sampled dataframe that has been classified/gated/etc
+    original_data: Pandas.DataFrame
+        Original dataframe prior to sampling (unlabeled)
+    labels: list
+        List of labels (should correspond to the label for each row)
+    features: list
+        List of features (column names)
+    verbose: bool (default=True)
+        If True, will provide feedback to stdout
+    scoring: str (default="balanced_accuracy")
+        Scoring parameter to use for GridSearchCV. Only relevant is n_neighbors parameter is not provided
+    kwargs: dict
+        Additional keyword arguments passed to Scikit-Learn's KNeighborsClassifier
+
+    Returns
+    -------
+    numpy.Array
+        Array of labels for original data
+    """
     feedback = vprint(verbose)
     feedback("Upsampling...")
-    if "n" in kwargs.keys():
-        kwargs.pop("n")
-    sample = sample.copy()
-    sample["label"] = None
-    for i, p in enumerate(populations):
-        sample.loc[p.index, "label"] = i
-    sample["label"].fillna(-1, inplace=True)
+    n = kwargs.get("n_neighbors", None)
     if n is None:
-        feedback("Calculating optimal n by cross-validation...")
-        n = np.arange(int(sample.shape[0]*0.01),
-                      int(sample.shape[0]*0.05),
-                      int(sample.shape[0]*0.01)/2, dtype=np.int)
-        knn = KNeighborsClassifier(**kwargs)
-        grid_cv = GridSearchCV(knn, {"n_neighbors": n}, scoring="balanced_accuracy", n_jobs=-1, cv=10)
-        grid_cv.fit(sample[features].values, sample["label"].values)
-        n = grid_cv.best_params_.get("n_neighbors")
-        feedback(f"Continuing with n={n}; chosen with balanced accuracy of {round(grid_cv.best_score_, 3)}...")
+        feedback("Calculating optimal n_neighbours by grid search CV...")
+        n, score = calculate_optimal_neighbours(x=sample[features].values,
+                                                y=labels,
+                                                scoring=scoring,
+                                                **kwargs)
+        feedback(f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}...")
     feedback("Training...")
     X_train, X_test, y_train, y_test = train_test_split(sample[features].values,
-                                                        sample["label"].values,
+                                                        labels,
                                                         test_size=0.2,
                                                         random_state=42)
     knn = KNeighborsClassifier(n_neighbors=n, **kwargs)
@@ -159,51 +208,7 @@ def upsample_knn(sample: pd.DataFrame,
     feedback(f"...training balanced accuracy score: {train_acc}")
     feedback(f"...validation balanced accuracy score: {val_acc}")
     feedback("Predicting labels in original data...")
-    original["label"] = knn.predict(original[features].values)
-    for i, p in enumerate(populations):
-        p.index = original[original["label"] == i].index.values
-    return populations
+    new_labels = knn.predict(original_data[features].values)
+    feedback("Complete!")
+    return new_labels
 
-
-def upsample_svm(sample: pd.DataFrame,
-                 populations: List[Population],
-                 original: pd.DataFrame,
-                 features: list,
-                 verbose: bool = True,
-                 **kwargs):
-    feedback = vprint(verbose)
-    feedback("Upsampling...")
-    sample = sample.copy()
-    sample["label"] = None
-    for i, p in enumerate(populations):
-        sample.loc[p.index, "label"] = i
-    sample["label"].fillna(-1, inplace=True)
-    if not kwargs:
-        feedback("Calculating optimal parameters by cross-validation...")
-        svm = SVC()
-        params = {"C": [0.5, 0.75, 1.0],
-                  "kernel": ["linear", "poly", "rbf", "sigmoid"],
-                  "degree": [3, 4, 5],
-                  "class_weight": [None, "balanced"]}
-        grid_cv = RandomizedSearchCV(svm, params, scoring="balanced_accuracy", n_jobs=-1, n_iter=10, cv=10)
-        grid_cv.fit(sample[features].values, sample["label"].values)
-        feedback(f"Continuing with params: {grid_cv.best_params_}; "
-                 f"chosen with balanced accuracy of {round(grid_cv.best_score_, 3)}...")
-        svm = grid_cv.best_estimator_
-    else:
-        svm = SVC(**kwargs)
-    feedback("Training...")
-    X_train, X_test, y_train, y_test = train_test_split(sample[features].values,
-                                                        sample["label"].values,
-                                                        test_size=0.2,
-                                                        random_state=42)
-    svm.fit(X_train, y_train)
-    train_acc = balanced_accuracy_score(y_pred=svm.predict(X_train), y_true=y_train)
-    val_acc = balanced_accuracy_score(y_pred=svm.predict(X_test), y_true=y_test)
-    feedback(f"...training balanced accuracy score: {train_acc}")
-    feedback(f"...validation balanced accuracy score: {val_acc}")
-    feedback("Predicting labels in original data...")
-    original["label"] = svm.predict(original[features].values)
-    for i, p in enumerate(populations):
-        p.index = original[original["label"] == i].index.values
-    return populations
