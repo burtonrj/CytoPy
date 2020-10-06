@@ -134,6 +134,25 @@ def test_upsample():
         assert np.array_equal(p.index, np.where(labels == x)[0])
 
 
+def test_dim_reduction():
+    gate = Gate(gate_name="test",
+                parent="test parent",
+                x="X",
+                y="Y",
+                method="manual",
+                dim_reduction={"method": "UMAP",
+                               "n_neighbors": 100})
+    data = pd.DataFrame({"X": np.random.normal(1, 0.5, 1000),
+                         "Y": np.random.normal(1, 0.5, 1000),
+                         "Z": np.random.normal(1, 0.5, 1000),
+                         "W": np.random.normal(1, 0.5, 1000)})
+    data = gate._dim_reduction(data=data)
+    assert gate.x == "UMAP1"
+    assert gate.y == "UMAP2"
+    assert data.shape == (1000, 6)
+    assert all([f"UMAP{i+1}" in data.columns for i in range(2)])
+
+
 @pytest.mark.parametrize("d", ["++", "--", "+-", "+++", "+ -"])
 def test_threshold_add_child_invalid_1d(d):
     threshold = ThresholdGate(gate_name="test",
@@ -145,6 +164,7 @@ def test_threshold_add_child_invalid_1d(d):
     with pytest.raises(AssertionError) as err:
         threshold.add_child(child)
     assert str(err.value) == "Invalid child definition, should be either '+' or '-'"
+
 
 
 @pytest.mark.parametrize("d", ["+", "-", "+--", "+++", "+ -"])
