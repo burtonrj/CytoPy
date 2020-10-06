@@ -2,9 +2,16 @@ from .geometry import ThresholdGeom, PolygonGeom
 from .populations import Population
 from ..flow.transforms import scaler
 from typing import List, Dict
+from sklearn import cluster, mixture
+from scipy.spatial import ConvexHull
+from scipy import linalg, stats
+from sklearn.cluster import *
+from sklearn.mixture import *
+from hdbscan import HDBSCAN
 import pandas as pd
 import numpy as np
 import mongoengine
+import inspect
 
 
 class ChildThreshold(mongoengine.EmbeddedDocument):
@@ -48,9 +55,10 @@ class Gate(mongoengine.Document):
     parent = mongoengine.StringField(required=True)
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField(required=False)
-    preprocessing = mongoengine.DictField()
-    postprocessing = mongoengine.DictField()
-    method = mongoengine.StringField()
+    transformations = mongoengine.DictField()
+    sampling = mongoengine.DictField()
+    dim_reduction = mongoengine.DictField()
+    method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
 
     meta = {
@@ -59,17 +67,37 @@ class Gate(mongoengine.Document):
         'allow_inheritance': True
     }
 
-    def _preprocessing(self,
-                       data: pd.DataFrame) -> pd.DataFrame:
+    def __init__(self, *args, **values):
+        sampling = values.get("sampling", None)
+        if sampling is not None:
+            err = "Sampling, if given, must contain method for downsampling AND upsampling"
+            assert "downsample" in sampling.keys(), err
+            assert "upsample" in sampling.keys(), err
+        super().__init__(*args, **values)
+
+    def _transform(self,
+                   data: pd.DataFrame) -> pd.DataFrame:
         """
-        Apply preprocessing procedures to the given dataframe, as per the preprocessing
-        kwargs stored in self.preprocessing. This can include:
-            * Transformations
-            * Dimensionality reduction
-            * Downsampling
+        Transfrom dataframe prior to gating
 
         Parameters
-        ===========
+        ----------
+        data: Pandas.DataFrame
+
+        Returns
+        -------
+        Pandas.DataFrame
+            Transformed dataframe
+        """
+        pass
+
+    def _downsample(self,
+                    data: pd.DataFrame):
+        """
+        Perform down-sampling prior to gating. Returns down-sampled dataframe.
+
+        Parameters
+        ----------
         data: Pandas.DataFrame
 
         Returns
@@ -78,15 +106,35 @@ class Gate(mongoengine.Document):
         """
         pass
 
-    def _postprocessing(self,
-                        data: pd.DataFrame) -> pd.DataFrame:
+    def _upsample(self,
+                  data: pd.DataFrame,
+                  sample: pd.DataFrame):
         """
-        Apply post-processing to the given data dataframe following the keyword arguments
-        in self.postprocessing. Currently only supporting upsampling.
+        Perform up-sampling after gating. Returns up-sampled dataframe.
 
         Parameters
         ----------
         data: Pandas.DataFrame
+            Original data, prior to down-sampling
+        sample: Pandas.DataFrame
+            Sampled data
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        pass
+
+    def _dim_reduction(self,
+                       data: pd.DataFrame):
+        """
+        Perform dimension reduction prior to gating. Returns dataframe
+        with appended columns for embeddings
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Data to reduce
 
         Returns
         -------
@@ -241,6 +289,116 @@ class PolygonGate(Gate):
     """
     children = mongoengine.EmbeddedDocumentListField(ChildPolygon)
 
+    def add_child(self,
+                  child: ChildPolygon) -> None:
+        """
+        Add a new child for this gate. Checks that child is valid and overwrites geom with gate information.
+
+        Parameters
+        ----------
+        child: ChildPolygon
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    def reset_gate(self) -> None:
+        """
+        Removes existing children and resets all parameters.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    def label_children(self,
+                       labels: dict) -> None:
+        """
+        Rename children using a dictionary of labels where the key correspond to the existing child name
+        and the value is the new desired population name.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    def _match_to_children(self,
+                           new_populations: List[Population]) -> List[Population]:
+        """
+        Given a list of newly create Populations, match the Populations to the gates children and
+        return list of Populations with correct population names.
+
+        Parameters
+        ----------
+        new_populations: list
+            List of newly created Population objects
+
+        Returns
+        -------
+        list
+        """
+        pass
+
+    def fit(self,
+            data: pd.DataFrame) -> None:
+        """
+        Fit the gate using a given dataframe. This will generate new children using the calculated
+        polygons. If children already exist will raise an AssertionError and notify user to call
+        `fit_predict`.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Population data to fit gate to
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    def fit_predict(self,
+                    data: pd.DataFrame) -> List[Population]:
+        """
+        Fit the gate using a given dataframe and then associate predicted Population objects to
+        existing children. If no children exist, an AssertionError will be raised prompting the
+        user to call `fit` method.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Population data to fit gate to
+
+        Returns
+        -------
+        list
+            List of predicted Population objects, labelled according to the gates child objects
+        """
+        pass
+
+    def predict(self,
+                data: pd.DataFrame) -> List[Population]:
+        """
+        Using existing children associated to this gate, the previously calculated polygons of
+        these children will be applied to the given data and then Population objects created and
+        labelled to match the children of this gate. NOTE: the data will not be fitted and polygons
+        applied will be STATIC not data driven. For data driven gates call `fit_predict` method.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Data to apply static polygons to
+
+        Returns
+        -------
+        list
+            List of Population objects
+        """
+
 
 class EllipseGate(Gate):
     """
@@ -249,6 +407,122 @@ class EllipseGate(Gate):
     or more gaussian components such as mixture models.
     """
     children = mongoengine.EmbeddedDocumentListField(ChildPolygon)
+
+    def __init__(self, *args, **values):
+        method = values.get("method", None)
+        valid = ["manual", "GaussianMixture", "BayesianGaussianMixture"]
+        assert method in valid, f"Elliptical gating method should be one of {valid}"
+        super().__init__(*args, **values)
+
+    def add_child(self,
+                  child: ChildPolygon) -> None:
+        """
+        Add a new child for this gate. Checks that child is valid and overwrites geom with gate information.
+
+        Parameters
+        ----------
+        child: ChildPolygon
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    def reset_gate(self) -> None:
+        """
+        Removes existing children and resets all parameters.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    def label_children(self,
+                       labels: dict) -> None:
+        """
+        Rename children using a dictionary of labels where the key correspond to the existing child name
+        and the value is the new desired population name.
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    def _match_to_children(self,
+                           new_populations: List[Population]) -> List[Population]:
+        """
+        Given a list of newly create Populations, match the Populations to the gates children and
+        return list of Populations with correct population names.
+
+        Parameters
+        ----------
+        new_populations: list
+            List of newly created Population objects
+
+        Returns
+        -------
+        list
+        """
+        pass
+
+    def fit(self,
+            data: pd.DataFrame) -> None:
+        """
+        Fit the gate using a given dataframe. This will generate new children using the calculated
+        polygons. If children already exist will raise an AssertionError and notify user to call
+        `fit_predict`.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Population data to fit gate to
+
+        Returns
+        -------
+        None
+        """
+        pass
+
+    def fit_predict(self,
+                    data: pd.DataFrame) -> List[Population]:
+        """
+        Fit the gate using a given dataframe and then associate predicted Population objects to
+        existing children. If no children exist, an AssertionError will be raised prompting the
+        user to call `fit` method.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Population data to fit gate to
+
+        Returns
+        -------
+        list
+            List of predicted Population objects, labelled according to the gates child objects
+        """
+        pass
+
+    def predict(self,
+                data: pd.DataFrame) -> List[Population]:
+        """
+        Using existing children associated to this gate, the previously calculated polygons of
+        these children will be applied to the given data and then Population objects created and
+        labelled to match the children of this gate. NOTE: the data will not be fitted and polygons
+        applied will be STATIC not data driven. For data driven gates call `fit_predict` method.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Data to apply static polygons to
+
+        Returns
+        -------
+        list
+            List of Population objects
+        """
 
 
 def create_signature(data: pd.DataFrame,
@@ -391,6 +665,8 @@ def smoothed_peak_finding(x: np.array,
         See CytoPy.data.gate.find_peaks
     peak_bounary: float (default=0.1)
         See CytoPy.data.gate.find_peaks
+    kwargs: dict
+        Additional keyword arguments to pass to scipy.signal.savgol_filter
 
     Returns
     -------
@@ -398,3 +674,193 @@ def smoothed_peak_finding(x: np.array,
         Smooth probability vector and index of peaks
     """
     pass
+
+
+def find_local_minima(p: np.array,
+                      x: np.array,
+                      peaks: np.array) -> float:
+    """
+    Find local minima between the two highest peaks in the density distribution provided
+
+    Parameters
+    -----------
+    p: Numpy.array
+        probability vector as generated from KDE
+    x: Numpy.array
+        Grid space for probability vector
+    peaks: Numpy.array
+        array of indices for identified peaks
+
+    Returns
+    --------
+    float
+        local minima between highest peaks
+    """
+    sorted_peaks = np.sort(p[peaks])[::-1]
+    if sorted_peaks[0] == sorted_peaks[1]:
+        p1_idx, p2_idx = np.where(p == sorted_peaks[0])[0]
+    else:
+        p1_idx = np.where(p == sorted_peaks[0])[0][0]
+        p2_idx = np.where(p == sorted_peaks[1])[0][0]
+    if p1_idx < p2_idx:
+        between_peaks = p[p1_idx:p2_idx]
+    else:
+        between_peaks = p[p2_idx:p1_idx]
+    local_min = min(between_peaks)
+    return float(x[np.where(p == local_min)[0][0]])
+
+
+def find_inflection_point(x: np.array,
+                          p: np.array,
+                          peak_idx: int,
+                          incline: bool = False,
+                          **kwargs):
+    """
+    Given some probability vector and grid space that represents a PDF as calculated by KDE,
+    and assuming this vector has a single peak of highest density, calculate the inflection point
+    at which the peak flattens. Probability vector is first smoothed using Savitzky-Golay filter.
+
+    Parameters
+    ----------
+    x: np.array
+        Grid space for the probability vector
+    p: np.array
+        Probability vector as calculated by KDE
+    peak_idx: int
+        Index of the peak
+    incline: bool (default=False)
+        If true, calculates the inflection point of the incline towards the peak
+        as opposed to the decline away from the peak
+    kwargs: dict
+        Additional keyword argument to pass to scipy.signal.savgol_filter
+
+    Returns
+    -------
+
+    """
+    pass
+
+
+def valid_sklearn(klass: str):
+    """
+    Given the name of a Scikit-Learn class, checks validity. If invalid, raises Assertion error,
+    otherwise returns the class name.
+
+    Parameters
+    ----------
+    klass: str
+
+    Returns
+    -------
+    str
+    """
+    valid_clusters = [x[0] for x in inspect.getmembers(cluster, inspect.isclass)
+                      if 'sklearn.cluster' in x[1].__module__]
+    valid_mixtures = [x[0] for x in inspect.getmembers(mixture, inspect.isclass)
+                      if 'sklearn.mixture' in x[1].__module__]
+    valid = valid_clusters + valid_mixtures + ["HDBSCAN"]
+    err = f"""Invalid class name. Must be one of the following from Scikit-Learn's cluster module: {valid_clusters};
+ or from Scikit-Learn's mixture module: {valid_mixtures}; or 'HDBSCAN'"""
+    assert klass in valid, err
+    return klass
+
+
+def create_convex_hull(x_values: np.array,
+                       y_values: np.array):
+    """
+    Given the x and y coordinates of a cloud of data points, generate a convex hull,
+    returning the x and y coordinates of its vertices.
+
+    Parameters
+    ----------
+    x_values: Numpy.array
+    y_values: Numpy.array
+
+    Returns
+    -------
+    Numpy.array, Numpy.array
+    """
+    xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
+    hull = ConvexHull(xy)
+    x = [int(i) for i in xy[hull.vertices, 0]]
+    y = [int(i) for i in xy[hull.vertices, 1]]
+    return x, y
+
+
+def probablistic_ellipse(covariances: np.array,
+                         conf: float):
+    """
+    Given the covariance matrix of a mixture component, calculate a elliptical shape that
+    represents a probabilistic confidence interval.
+
+    Parameters
+    ----------
+    covariances: np.array
+        Covariance matrix
+    conf: float
+        The confidence interval (e.g. 0.95 would give the region of 95% confidence)
+
+    Returns
+    -------
+    float, float, float
+        Width, Height and Angle of ellipse
+    """
+    eigen_val, eigen_vec = linalg.eigh(covariances)
+    chi2 = stats.chi2.ppf(conf, 2)
+    eigen_val = 2. * np.sqrt(eigen_val) * np.sqrt(chi2)
+    u = eigen_vec[0] / linalg.norm(eigen_vec[0])
+    angle = 180. * np.arctan(u[1] / u[0]) / np.pi
+    return eigen_val[0], eigen_val[1], (180. + angle)
+
+
+def inside_ellipse(data: np.array,
+                   center: tuple,
+                   width: int or float,
+                   height: int or float,
+                   angle: int or float) -> object:
+    """
+    Return mask of two dimensional matrix specifying if a data point (row) falls
+    within an ellipse
+
+    Parameters
+    -----------
+    data: Numpy.array
+        two dimensional matrix (x,y)
+    center: tuple
+        x,y coordinate corresponding to center of elipse
+    width: int or float
+        semi-major axis of eplipse
+    height: int or float
+        semi-minor axis of elipse
+    angle: int or float
+        angle of ellipse
+
+    Returns
+    --------
+    Numpy.array
+        numpy array of indices for values inside specified ellipse
+    """
+    cos_angle = np.cos(np.radians(180. - angle))
+    sin_angle = np.sin(np.radians(180. - angle))
+
+    x = data[:, 0]
+    y = data[:, 1]
+
+    xc = x - center[0]
+    yc = y - center[1]
+
+    xct = xc * cos_angle - yc * sin_angle
+    yct = xc * sin_angle + yc * cos_angle
+
+    rad_cc = (xct ** 2 / (width / 2.) ** 2) + (yct ** 2 / (height / 2.) ** 2)
+
+    in_ellipse = []
+
+    for r in rad_cc:
+        if r <= 1.:
+            # point in ellipse
+            in_ellipse.append(True)
+        else:
+            # point not in ellipse
+            in_ellipse.append(False)
+    return in_ellipse

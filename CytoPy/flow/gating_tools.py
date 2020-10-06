@@ -1,4 +1,4 @@
-from ..data.experiments import Experiment
+from ..data.experiment import Experiment
 from ..data.populations import Population, merge_populations
 from ..data.geometry import ThresholdGeom, PolygonGeom
 from ..data.gates import Gate, PreProcess, PostProcess
