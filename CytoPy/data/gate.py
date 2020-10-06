@@ -1,3 +1,4 @@
+from ..flow.transforms import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom
 from .populations import Population
 from ..flow.transforms import scaler
@@ -78,7 +79,7 @@ class Gate(mongoengine.Document):
     def _transform(self,
                    data: pd.DataFrame) -> pd.DataFrame:
         """
-        Transfrom dataframe prior to gating
+        Transform dataframe prior to gating
 
         Parameters
         ----------
@@ -89,7 +90,10 @@ class Gate(mongoengine.Document):
         Pandas.DataFrame
             Transformed dataframe
         """
-        pass
+        transforms = {self.x: self.transformations.get("x", None),
+                      self.y: self.transformations.get("y", None)}
+        return apply_transform(data=data,
+                               features_to_transform=transforms)
 
     def _downsample(self,
                     data: pd.DataFrame):
