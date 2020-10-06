@@ -15,39 +15,6 @@ import numpy as np
 import mongoengine
 
 
-def create_signature(data: pd.DataFrame,
-                     idx: np.array or None = None,
-                     summary_method: callable or None = None) -> dict:
-    """
-    Given a dataframe of FCS events, generate a signature of those events; that is, a summary of the
-    dataframes columns using the given summary method.
-
-    Parameters
-    ----------
-    data: Pandas.DataFrame
-    idx: Numpy.array (optional)
-        Array of indexes to be included in this operation, if None, the whole dataframe is used
-    summary_method: callable (optional)
-        Function to use to summarise columns, defaults is Numpy.median
-    Returns
-    -------
-    dict
-        Dictionary representation of signature; {column name: summary statistic}
-    """
-    data = pd.DataFrame(scaler(data=data.values, scale_method="norm", return_scaler=False),
-                        columns=data.columns,
-                        index=data.index)
-    if idx is None:
-        idx = data.index.values
-    # ToDo this should be more robust
-    for x in ["Time", "time"]:
-        if x in data.columns:
-            data.drop(x, 1, inplace=True)
-    summary_method = summary_method or np.median
-    signature = data.loc[idx].apply(summary_method)
-    return {x[0]: x[1] for x in zip(signature.index, signature.values)}
-
-
 def _merge(new_children: List[Population],
            assignments: list):
     # Group the children by their assigned population

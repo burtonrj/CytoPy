@@ -1,6 +1,5 @@
 from flowutils.transforms import logicle, hyperlog, log_transform, asinh
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler
-from warnings import warn
 import pandas as pd
 import numpy as np
 
@@ -40,10 +39,12 @@ def _features(data: pd.DataFrame,
 
 def _transform(data: pd.DataFrame,
                features: list,
-               method: str,
+               method: str or None,
                **kwargs):
     pre_scale = kwargs.get("pre_scale", 1)
     feature_i = [list(data.columns).index(i) for i in features]
+    if method is None:
+        return data
     if method == 'logicle':
         return pd.DataFrame(logicle(data=data.values, channels=feature_i), columns=data.columns, index=data.index)
     if method == 'hyperlog':
@@ -90,8 +91,6 @@ def apply_transform(data: pd.DataFrame,
     transformed pandas dataframe
     """
     data = data.copy()
-    if transform_method is None:
-        return data
     if isinstance(features_to_transform, dict):
         return individual_transforms(data, features_to_transform, **kwargs)
     if isinstance(features_to_transform, str):
