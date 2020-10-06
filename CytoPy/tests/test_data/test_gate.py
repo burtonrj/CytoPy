@@ -6,24 +6,59 @@ import numpy as np
 import pytest
 
 
-@pytest.mark.parametrize("klass", [Gate, ThresholdGate, PolygonGate, EllipseGate])
-def test_gate_init(klass):
+@pytest.mark.parametrize("klass,method", [(Gate, None),
+                                          (ThresholdGate, "density"),
+                                          (PolygonGate, "manual"),
+                                          (EllipseGate, "GaussianMixture")])
+def test_gate_init(klass, method):
     gate = klass(gate_name="test",
                  parent="test parent",
                  x="X",
                  y="Y",
-                 preprocessing=dict(method="test", kwargs={"x": 1, "y": 2}),
-                 postprocessing=dict(method="test", kwargs={"x": 1, "y": 2}))
+                 method=method,
+                 dim_reduction=dict(method="UMAP", kwargs={"n_neighbours": 100}))
     assert gate.gate_name == "test"
     assert gate.parent == "test parent"
     assert gate.x == "X"
     assert gate.y == "Y"
-    assert gate.preprocessing.get("method") == "test"
-    assert gate.postprocessing.get("method") == "test"
-    assert gate.preprocessing.get("kwargs").get("x") == 1
-    assert gate.preprocessing.get("kwargs").get("y") == 2
-    assert gate.postprocessing.get("kwargs").get("x") == 1
-    assert gate.postprocessing.get("kwargs").get("y") == 2
+    assert gate.method == method
+    assert gate.dim_reduction.get("method") == "UMAP"
+    assert gate.dim_reduction.get("kwargs").get("n_neighbours") == 100
+
+
+def test_gate_invalid_sampling():
+    with pytest.raises(AssertionError) as err:
+        gate = Gate(gate_name="test",
+                    parent="test parent",
+                    x="X",
+                    y="Y",
+                    sampling={"downsample": "uniform"})
+    assert str(err.value) == "Sampling, if given, must contain method for downsampling AND upsampling"
+    with pytest.raises(AssertionError) as err:
+        gate = Gate(gate_name="test",
+                    parent="test parent",
+                    x="X",
+                    y="Y",
+                    sampling={"upsample": "knn"})
+    assert str(err.value) == "Sampling, if given, must contain method for downsampling AND upsampling"
+
+
+@pytest.mark.parametrize("kwargs",
+                         [{"transform_x": "logicle",
+                           "transform_y": "logicle"},
+                          {"transform_x": "logicle",
+                           "transform_y": "logicle",
+                           "dim_reduction": "UMAP",
+                           "dim_reduction_kwargs": {"n_neighbours": 20}},
+                          {"downsample": "uniform",
+                           "downsample_kwargs": {"n": 1000}}])
+def test_preprocessing(kwargs):
+    gate = Gate(gate_name="test",
+                parent="test parent",
+                x="X",
+                y="Y",
+                method="manual",
+                preprocessing=kwargs)
 
 
 @pytest.mark.parametrize("d", ["++", "--", "+-", "+++", "+ -"])

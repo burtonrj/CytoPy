@@ -5,7 +5,6 @@ from matplotlib.patches import Ellipse
 from shapely.geometry import Point, Polygon as SPoly
 from shapely.affinity import scale
 from scipy.interpolate import splev, splrep
-from scipy.spatial import ConvexHull
 from scipy import linalg, stats
 from scipy.signal import savgol_filter
 from sklearn.cluster import *
@@ -17,107 +16,6 @@ from warnings import warn
 import pandas as pd
 import numpy as np
 import string
-
-
-def create_convex_hull(x_values: np.array,
-                       y_values: np.array):
-    """
-    Given the x and y coordinates of a cloud of data points, generate a convex hull,
-    returning the x and y coordinates of its vertices.
-
-    Parameters
-    ----------
-    x_values: Numpy.array
-    y_values: Numpy.array
-
-    Returns
-    -------
-    Numpy.array, Numpy.array
-    """
-    xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
-    hull = ConvexHull(xy)
-    x = [int(i) for i in xy[hull.vertices, 0]]
-    y = [int(i) for i in xy[hull.vertices, 1]]
-    return x, y
-
-
-def probablistic_ellipse(covariances: np.array,
-                         conf: float):
-    """
-    Given the covariance matrix of a mixture component, calculate a elliptical shape that
-    represents a probabilistic confidence interval.
-
-    Parameters
-    ----------
-    covariances: np.array
-        Covariance matrix
-    conf: float
-        The confidence interval (e.g. 0.95 would give the region of 95% confidence)
-
-    Returns
-    -------
-    float, float, float
-        Width, Height and Angle of ellipse
-    """
-    eigen_val, eigen_vec = linalg.eigh(covariances)
-    chi2 = stats.chi2.ppf(conf, 2)
-    eigen_val = 2. * np.sqrt(eigen_val) * np.sqrt(chi2)
-    u = eigen_vec[0] / linalg.norm(eigen_vec[0])
-    angle = 180. * np.arctan(u[1] / u[0]) / np.pi
-    return eigen_val[0], eigen_val[1], (180. + angle)
-
-
-def inside_ellipse(data: np.array,
-                   center: tuple,
-                   width: int or float,
-                   height: int or float,
-                   angle: int or float) -> object:
-    """
-    Return mask of two dimensional matrix specifying if a data point (row) falls
-    within an ellipse
-
-    Parameters
-    -----------
-    data: Numpy.array
-        two dimensional matrix (x,y)
-    center: tuple
-        x,y coordinate corresponding to center of elipse
-    width: int or float
-        semi-major axis of eplipse
-    height: int or float
-        semi-minor axis of elipse
-    angle: int or float
-        angle of ellipse
-
-    Returns
-    --------
-    Numpy.array
-        numpy array of indices for values inside specified ellipse
-    """
-    cos_angle = np.cos(np.radians(180. - angle))
-    sin_angle = np.sin(np.radians(180. - angle))
-
-    x = data[:, 0]
-    y = data[:, 1]
-
-    xc = x - center[0]
-    yc = y - center[1]
-
-    xct = xc * cos_angle - yc * sin_angle
-    yct = xc * sin_angle + yc * cos_angle
-
-    rad_cc = (xct ** 2 / (width / 2.) ** 2) + (yct ** 2 / (height / 2.) ** 2)
-
-    in_ellipse = []
-
-    for r in rad_cc:
-        if r <= 1.:
-            # point in ellipse
-            in_ellipse.append(True)
-        else:
-            # point not in ellipse
-            in_ellipse.append(False)
-    return in_ellipse
 
 
 def _polygon_overlap(polys: List[SPoly]):
@@ -142,40 +40,6 @@ def _polygon_overlap(polys: List[SPoly]):
             else:
                 overlaps[i].append(0)
     return overlaps
-
-
-def find_local_minima(probs: np.array,
-                      xx: np.array,
-                      peaks: np.array) -> float:
-    """
-    Find local minima between the two highest peaks in the density distribution provided
-
-    Parameters
-    -----------
-    probs: Numpy.array
-        probability for density estimate
-    xx: Numpy.array
-        x values for corresponding probabilities
-    peaks: Numpy.array
-        array of indices for identified peaks
-
-    Returns
-    --------
-    float
-        local minima between highest peaks
-    """
-    sorted_peaks = np.sort(probs[peaks])[::-1]
-    if sorted_peaks[0] == sorted_peaks[1]:
-        p1_idx, p2_idx = np.where(probs == sorted_peaks[0])[0]
-    else:
-        p1_idx = np.where(probs == sorted_peaks[0])[0][0]
-        p2_idx = np.where(probs == sorted_peaks[1])[0][0]
-    if p1_idx < p2_idx:
-        between_peaks = probs[p1_idx:p2_idx]
-    else:
-        between_peaks = probs[p2_idx:p1_idx]
-    local_min = min(between_peaks)
-    return float(xx[np.where(probs == local_min)[0][0]])
 
 
 def _draw_circle(data: pd.DataFrame,
