@@ -5,6 +5,7 @@ from sklearn.datasets import make_blobs
 import pandas as pd
 import numpy as np
 import pytest
+np.random.seed(42)
 
 
 @pytest.mark.parametrize("klass,method", [(Gate, None),
@@ -150,13 +151,14 @@ def test_dim_reduction():
     assert gate.x == "UMAP1"
     assert gate.y == "UMAP2"
     assert data.shape == (1000, 6)
-    assert all([f"UMAP{i+1}" in data.columns for i in range(2)])
+    assert all([f"UMAP{i + 1}" in data.columns for i in range(2)])
 
 
 @pytest.mark.parametrize("d", ["++", "--", "+-", "+++", "+ -"])
 def test_threshold_add_child_invalid_1d(d):
     threshold = ThresholdGate(gate_name="test",
                               parent="test parent",
+                              method="manual",
                               x="X")
     child = ChildThreshold(name="test child",
                            definition=d,
@@ -166,13 +168,13 @@ def test_threshold_add_child_invalid_1d(d):
     assert str(err.value) == "Invalid child definition, should be either '+' or '-'"
 
 
-
 @pytest.mark.parametrize("d", ["+", "-", "+--", "+++", "+ -"])
 def test_threshold_add_child_invalid_2d(d):
     threshold = ThresholdGate(gate_name="test",
                               parent="test parent",
                               x="X",
-                              y="Y")
+                              y="Y",
+                              method="manual")
     child = ChildThreshold(name="test child",
                            definition=d,
                            geom=ThresholdGeom(x_threshold=0.56, y_threshold=0.75))
@@ -186,7 +188,8 @@ def test_threshold_add_child():
                               parent="test parent",
                               x="X",
                               y="Y",
-                              preprocessing=dict(transform_x="logicle"))
+                              method="manual",
+                              transformations={"x": "logicle"})
     child = ChildThreshold(name="test child",
                            definition="++",
                            geom=ThresholdGeom(x_threshold=0.56, y_threshold=0.75))
@@ -196,6 +199,67 @@ def test_threshold_add_child():
     assert threshold.children[0].geom.y == threshold.y
     assert threshold.children[0].geom.transform_x == "logicle"
     assert not threshold.children[0].geom.transform_y
+
+
+def test_threshold_match_children_1d():
+    threshold = ThresholdGate(gate_name="test",
+                              parent="test parent",
+                              x="X",
+                              method="density")
+    data = np.random.normal(loc=1., scale=1.5, size=1000)
+    threshold.add_child(ChildThreshold(name="positive",
+                                       definition="+",
+                                       geom=ThresholdGeom(x_threshold=0.5)))
+    threshold.add_child(ChildThreshold(name="negative",
+                                       definition="-",
+                                       geom=ThresholdGeom(x_threshold=0.5)))
+    pos = Population(population_name="p1",
+                     parent="root",
+                     definition="+",
+                     geom=ThresholdGeom(x_threshold=0.6),
+                     index=data[np.where(data >= 0.6)])
+    neg = Population(population_name="p2",
+                     parent="root",
+                     definition="-",
+                     geom=ThresholdGeom(x_threshold=0.6),
+                     index=data[np.where(data >= 0.6)])
+    pops = threshold._match_to_children([neg, pos])
+    pos = [p for p in pops if p.definition == "+"][0]
+    assert pos.population_name == "positive"
+    neg = [p for p in pops if p.definition == "-"][0]
+    assert neg.population_name == "negative"
+
+
+def test_threshold_match_children_2d():
+    threshold = ThresholdGate(gate_name="test",
+                              parent="test parent",
+                              x="X",
+                              y="Y",
+                              method="density")
+    x = np.random.normal(loc=1., scale=1.5, size=1000)
+    y = np.random.normal(loc=1., scale=1.5, size=1000)
+    data = pd.DataFrame({"X": x, "Y": y})
+    threshold.add_child(ChildThreshold(name="positive",
+                                       definition="++,+-",
+                                       geom=ThresholdGeom(x_threshold=0.5)))
+    threshold.add_child(ChildThreshold(name="negative",
+                                       definition="--,-+",
+                                       geom=ThresholdGeom(x_threshold=0.5)))
+    pos = Population(population_name="p1",
+                     parent="root",
+                     definition="++",
+                     geom=ThresholdGeom(x_threshold=0.6),
+                     index=data[data.X >= 0.6].index.values)
+    neg = Population(population_name="p2",
+                     parent="root",
+                     definition="--,-+",
+                     geom=ThresholdGeom(x_threshold=0.6),
+                     index=data[data.X < 0.6].index.values)
+    pops = threshold._match_to_children([neg, pos])
+    pos = [p for p in pops if p.definition == "++"][0]
+    assert pos.population_name == "positive"
+    neg = [p for p in pops if p.definition == "--,-+"][0]
+    assert neg.population_name == "negative"
 
 
 def norm(x):
