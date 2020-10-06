@@ -2,6 +2,8 @@ from ..flow.transforms import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom
 from .populations import Population
 from ..flow.transforms import scaler
+from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
+from warnings import warn
 from typing import List, Dict
 from sklearn import cluster, mixture
 from scipy.spatial import ConvexHull
@@ -68,14 +70,6 @@ class Gate(mongoengine.Document):
         'allow_inheritance': True
     }
 
-    def __init__(self, *args, **values):
-        sampling = values.get("sampling", None)
-        if sampling is not None:
-            err = "Sampling, if given, must contain method for downsampling AND upsampling"
-            assert "downsample" in sampling.keys(), err
-            assert "upsample" in sampling.keys(), err
-        super().__init__(*args, **values)
-
     def _transform(self,
                    data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -96,9 +90,10 @@ class Gate(mongoengine.Document):
                                features_to_transform=transforms)
 
     def _downsample(self,
-                    data: pd.DataFrame):
+                    data: pd.DataFrame) -> pd.DataFrame or None:
         """
-        Perform down-sampling prior to gating. Returns down-sampled dataframe.
+        Perform down-sampling prior to gating. Returns down-sampled dataframe or
+        None if sampling method is undefined.
 
         Parameters
         ----------
@@ -106,15 +101,34 @@ class Gate(mongoengine.Document):
 
         Returns
         -------
-        Pandas.DataFrame
+        Pandas.DataFrame or None
         """
-        pass
+        data = data.copy()
+        if self.sampling.get("method", None) == "uniform":
+            n = self.sampling.get("n", None) or self.sampling.get("frac", None)
+            assert n is not None, "Must provide 'n' or 'frac' for uniform downsampling"
+            if isinstance(n, int):
+                return data.sample(n=n)
+            elif isinstance(n, float):
+                return data.sample(frac=0.5)
+            else:
+                raise ValueError("Sampling parameter 'n' must be an integer or float")
+        if self.sampling.get("method", None) == "density":
+            kwargs = {k: v for k, v in self.sampling.items() if k != "method"}
+            return density_dependent_downsampling(data=data,
+                                                  **kwargs)
+        if self.sampling.get("method", None) == "faithful":
+            h = self.sampling.get("h", 0.01)
+            return faithful_downsampling(data=data.values, h=h)
+        return None
 
     def _upsample(self,
                   data: pd.DataFrame,
-                  sample: pd.DataFrame):
+                  sample: pd.DataFrame,
+                  populations: List[Population]):
         """
-        Perform up-sampling after gating. Returns up-sampled dataframe.
+        Perform up-sampling after gating. Returns list of Population objects
+        with index updated to reflect the original data.
 
         Parameters
         ----------
@@ -122,12 +136,33 @@ class Gate(mongoengine.Document):
             Original data, prior to down-sampling
         sample: Pandas.DataFrame
             Sampled data
+        populations: list
+            List of populations with assigned indexes
 
         Returns
         -------
-        Pandas.DataFrame
+        list
         """
-        pass
+        sample = sample.copy()
+        sample["label"] = None
+        for i, p in enumerate(populations):
+            sample.loc[sample.index.isin(p.index), "label"] = i
+        sample["label"].fillna(-1, inplace=True)
+        labels = sample["label"].values
+        sample.drop("label", axis=1, inplace=True)
+        new_labels = upsample_knn(sample=sample,
+                                  original_data=data,
+                                  labels=labels,
+                                  features=[i for i in [self.x, self.y] if i is not None],
+                                  verbose=self.sampling.get("verbose", True),
+                                  scoring=self.sampling.get("upsample_scoring", "balanced_accuracy"),
+                                  **self.sampling.get("knn_kwargs", {}))
+        for i, p in enumerate(populations):
+            new_idx = data.index.values[np.where(new_labels == i)]
+            if len(new_idx) == 0:
+                raise ValueError(f"Up-sampling failed, no events labelled for {p.population_name}")
+            p.index = new_idx
+        return populations
 
     def _dim_reduction(self,
                        data: pd.DataFrame):
@@ -187,7 +222,7 @@ class ThresholdGate(Gate):
             assert child.definition in ["+", "-"], "Invalid child definition, should be either '+' or '-'"
         child.geom.x = self.x
         child.geom.y = self.y
-        child.geom.transform_x, child.geom.transform_y = self.preprocessing.get("transform_x", None), self.preprocessing.get("transform_y", None)
+        child.geom.transform_x, child.geom.transform_y = self.transformations.get("x", None), self.transformations.get("y", None)
         self.children.append(child)
 
     def reset_gate(self) -> None:

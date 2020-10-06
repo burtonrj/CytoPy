@@ -1,11 +1,8 @@
-from ..data.populations import Population
 from ..feedback import vprint
 from sklearn.neighbors import BallTree, KDTree, KNeighborsClassifier
-from sklearn.svm import SVC
-from sklearn.model_selection import GridSearchCV, train_test_split, RandomizedSearchCV
+from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import balanced_accuracy_score
 from functools import partial
-from typing import List
 import pandas as pd
 import numpy as np
 
@@ -46,11 +43,11 @@ def faithful_downsampling(data: np.array,
 
 
 def density_dependent_downsampling(data: pd.DataFrame,
-                                   features: list,
+                                   features: list or None = None,
                                    frac: float = 0.1,
                                    sample_n: int or None = None,
                                    alpha: int = 5,
-                                   mmd_sample_n: int = 2000,
+                                   mmd_sample: float = 0.1,
                                    outlier_dens: float = 1,
                                    target_dens: float = 5):
     """
@@ -65,7 +62,7 @@ def density_dependent_downsampling(data: pd.DataFrame,
     -----------
     data: Pandas.DataFrame
         Data to sample
-    features: list
+    features: list (defaults to all columns)
         Name of columns to be used as features in down-sampling algorithm
     frac: float, (default=0.1)
         fraction of dataset to return as a sample
@@ -74,8 +71,8 @@ def density_dependent_downsampling(data: pd.DataFrame,
     alpha: int, (default=5)
         used for estimating distance threshold between cell and nearest neighbour (default = 5 used in
         original paper)
-    mmd_sample_n: int, (default=2000)
-        number of cells to sample for generation of KD tree
+    mmd_sample: float, (default=0.1)
+        proportion of cells to sample for generation of KD tree
     outlier_dens: float, (default=1)
         used to exclude cells with the lowest local densities; int value as a percentile of the
         lowest local densities e.g. 1 (the default value) means the bottom 1% of cells with lowest local densities
@@ -100,7 +97,8 @@ def density_dependent_downsampling(data: pd.DataFrame,
             return target_d / local_d
 
     df = data.copy()
-    mmd_sample = df.sample(mmd_sample_n)
+    features = features or df.columns.tolist()
+    mmd_sample = df.sample(frac=mmd_sample)
     tree = KDTree(mmd_sample[features], metric='manhattan')
     dist, _ = tree.query(mmd_sample[features], k=2)
     dist = np.median([x[1] for x in dist])
