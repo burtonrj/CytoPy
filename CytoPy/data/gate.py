@@ -4,6 +4,7 @@ from .populations import Population, merge_multiple_populations
 from ..flow.transforms import scaler
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
+from shapely.geometry import Polygon as ShapelyPoly
 from collections import Counter
 from itertools import chain
 from typing import List, Dict
@@ -423,6 +424,8 @@ class ThresholdGate(Gate):
         -------
         list, Pandas.DataFrame
         """
+        if self.method == "manual":
+            return self._manual(), data
         thresholds = list()
         self._xy_in_dataframe(data=data)
         data = self._transform(data=data)
@@ -462,6 +465,20 @@ class ThresholdGate(Gate):
                     else:
                         thresholds.append(find_local_minima(p=p, x=x_grid, peaks=peaks))
         return thresholds, data
+
+    def _manual(self) -> List[float]:
+        """
+        Wrapper called if manual gating method. Searches the method kwargs and returns static thresholds
+
+        Returns
+        -------
+        list
+        """
+        thresholds = [i for i in [self.method_kwargs.get("x_threshold", None),
+                                  self.method_kwargs.get("y_threshold", None)] if i is not None]
+        assert len(thresholds) > 0, "For manual gating you must provide x_threshold and/or y_threshold"
+        assert all([isinstance(i, float) for i in thresholds]), "Thresholds must be floating point values"
+        return thresholds
 
     def fit(self,
             data: pd.DataFrame) -> None or (list, pd.DataFrame):
@@ -609,6 +626,24 @@ class PolygonGate(Gate):
     """
     children = mongoengine.EmbeddedDocumentListField(ChildPolygon)
 
+    def _generate_populations(self,
+                              data: dict,
+                              parent: str) -> List[Population]:
+        """
+        Generate populations from a standard dictionary of dataframes that have had polygon gate(s) applied.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        parent: str
+
+        Returns
+        -------
+        list
+            List of Population objects
+        """
+        pass
+
     def add_child(self,
                   child: ChildPolygon) -> None:
         """
@@ -638,6 +673,34 @@ class PolygonGate(Gate):
         Returns
         -------
         list
+        """
+        pass
+
+    def _manual(self) -> ShapelyPoly:
+        """
+        Wrapper for manual polygon gating. Searches method kwargs for x and y coordinates and returns
+        polygon.
+
+        Returns
+        -------
+        Shapely.geometry.Polygon
+        """
+        pass
+
+    def _fit(self,
+             data: pd.DataFrame) -> List[ShapelyPoly]:
+        """
+        Internal method for fitting gate to the given data and returning geometric polygons for
+        captured populations.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+
+        Returns
+        -------
+        list
+            List of Shapely polygon's
         """
         pass
 
@@ -741,6 +804,34 @@ class EllipseGate(Gate):
         Returns
         -------
         list
+        """
+        pass
+
+    def _manual(self) -> ShapelyPoly:
+        """
+        Wrapper for manual elliptical gating. Searches method kwargs for x and y coordinates and returns
+        polygon.
+
+        Returns
+        -------
+        Shapely.geometry.Polygon
+        """
+        pass
+
+    def _fit(self,
+             data: pd.DataFrame) -> List[ShapelyPoly]:
+        """
+        Internal method for fitting gate to the given data and returning geometric polygons for
+        captured populations.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+
+        Returns
+        -------
+        list
+            List of Shapely polygon's
         """
         pass
 

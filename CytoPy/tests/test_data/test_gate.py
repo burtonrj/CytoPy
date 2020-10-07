@@ -445,7 +445,7 @@ def test_threshold_predict_2d():
     negpos_idx = new_data[(new_data.X < threshold.children[0].geom.x_threshold) &
                           (new_data.Y >= threshold.children[0].geom.y_threshold)].index.values
     posneg_idx = new_data[(new_data.X >= threshold.children[0].geom.x_threshold) &
-                       (new_data.Y < threshold.children[0].geom.y_threshold)].index.values
+                          (new_data.Y < threshold.children[0].geom.y_threshold)].index.values
     pos_pop = [p for p in pops if p.definition == "++"][0]
     neg_pop = [p for p in pops if p.definition == "--"][0]
     posneg_pop = [p for p in pops if p.definition == "+-"][0]
@@ -524,3 +524,68 @@ def test_threshold_fit_predict_2d():
     assert len(top_left.index) < len(other.index)
     assert len(top_left.index) > 900
     assert len(other.index) > 1900
+
+
+def create_polygon_gate():
+    gate = PolygonGate(gate_name="test",
+                       parent="test parent",
+                       x="X",
+                       y="Y",
+                       method="MiniBatchKMeans")
+    return gate
+
+
+def test_create_convex_
+
+
+def test_polygon_add_child():
+    gate = create_polygon_gate()
+    gate.add_child(ChildPolygon(name="test",
+                                geom=PolygonGeom(x_values=np.linspace(0, 1000, 1),
+                                                 y_values=np.linspace(0, 1000, 1))))
+    assert len(gate.children) == 1
+    assert gate.children[0].name == "test"
+    assert gate.children[0].geom.x == gate.x
+    assert gate.children[0].geom.y == gate.y
+    assert gate.children[0].geom.transform_x == gate.transformations.get("x", None)
+    assert gate.children[0].geom.transform_y == gate.transformations.get("y", None)
+
+
+def test_polygon_match_to_children():
+    pass
+
+
+def test_polygon_fit():
+    pass
+
+
+def test_polygon_predict():
+    pass
+
+
+def test_polygon_fit_predict():
+    pass
+
+
+def test_ellipse_add_child_invalid():
+    pass
+
+
+def test_ellipse_add_child():
+    pass
+
+
+def test_ellipse_match_to_children():
+    pass
+
+
+def test_ellipse_fit():
+    pass
+
+
+def test_ellipse_predict():
+    pass
+
+
+def test_ellipse_fit_predict():
+    pass
