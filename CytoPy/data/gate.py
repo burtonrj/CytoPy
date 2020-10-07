@@ -5,7 +5,10 @@ from ..flow.transforms import scaler
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
 from typing import List, Dict
+from KDEpy import FFTKDE
+from detecta import detect_peaks
 from scipy.spatial import ConvexHull
+from scipy.signal import savgol_filter
 from scipy import linalg, stats
 from sklearn.cluster import *
 from sklearn.mixture import *
@@ -94,7 +97,7 @@ class Gate(mongoengine.Document):
         method = values.get("method", None)
         assert method is not None, "No method given"
         err = f"Module {method} not supported. See docs for supported methods."
-        assert method in ["manual", "density"] + list(globals().keys()), err
+        assert method in ["manual", "density", "quantile"] + list(globals().keys()), err
         super().__init__(*args, **values)
         self.model = None
         if method not in ["manual", "density"]:
@@ -114,8 +117,9 @@ class Gate(mongoengine.Document):
         Pandas.DataFrame
             Transformed dataframe
         """
-        transforms = {self.x: self.transformations.get("x", None),
-                      self.y: self.transformations.get("y", None)}
+        transforms = {self.x: self.transformations.get("x", None)}
+        if self.y is not None:
+            transforms[self.y] = self.transformations.get("y", None)
         return apply_transform(data=data,
                                features_to_transform=transforms)
 
@@ -150,7 +154,7 @@ class Gate(mongoengine.Document):
         if self.sampling.get("method", None) == "faithful":
             h = self.sampling.get("h", 0.01)
             return faithful_downsampling(data=data.values, h=h)
-        return None
+        raise ValueError("Invalid downsample method, should be one of: 'uniform', 'density' or 'faithful'")
 
     def _upsample(self,
                   data: pd.DataFrame,
@@ -223,6 +227,12 @@ class Gate(mongoengine.Document):
         self.x = f"{method}1"
         self.y = f"{method}2"
         return data
+
+    def _xy_in_dataframe(self,
+                         data: pd.DataFrame):
+        assert self.x in data.columns, f"{self.x} missing from given dataframe"
+        if self.y:
+            assert self.y in data.columns, f"{self.y} missing from given dataframe"
 
     def reset_gate(self) -> None:
         """
@@ -314,6 +324,63 @@ class ThresholdGate(Gate):
             labeled.append(p)
         return labeled
 
+    def _quantile_gate(self,
+                       data: pd.DataFrame):
+        """
+        Fit gate to the given dataframe by simply drawing the threshold at the desired quantile.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+
+        Returns
+        -------
+        list
+            List of thresholds (one for each dimension)
+        """
+        q = self.method_kwargs.get("q", None)
+        assert q is not None, "Must provide a value for 'q' in method kwargs when using quantile gate"
+        if self.y is None:
+            return [data[self.x].quantile(q)]
+        return [data[self.x].quantile(q), data[self.y].quantile(q)]
+
+    def _process_one_peak(self,
+                          d: str,
+                          data: pd.DataFrame,
+                          x_grid: np.array,
+                          p: np.array,
+                          peak_idx: int):
+        """
+        Process the results of a single peak detected. Returns the threshold for
+        the given dimension.
+
+        Parameters
+        ----------
+        d: str
+            Name of the dimension (feature) under investigation. Must be a column in data.
+        data: Pandas.DataFrame
+            Events dataframe
+        x_grid: Numpy.array
+            x grid upon which probability vector is estimated by KDE
+        p: Numpy.array
+            probability vector as estimated by KDE
+
+        Returns
+        -------
+        float
+        """
+        use_inflection_point = self.method_kwargs.get("use_inflection_point", True)
+        if not use_inflection_point:
+            q = self.method_kwargs.get("q", None)
+            assert q is not None, "Must provide a value for 'q' in method kwargs " \
+                                  "for desired quantile if use_inflection_point is False"
+            return data[d].quantile(q)
+        inflection_point_kwargs = self.method_kwargs.get("inflection_point_kwargs", {})
+        return find_inflection_point(x=x_grid,
+                                     p=p,
+                                     peak_idx=peak_idx,
+                                     **inflection_point_kwargs)
+
     def fit(self,
             data: pd.DataFrame) -> None:
         """
@@ -330,7 +397,56 @@ class ThresholdGate(Gate):
         -------
         None
         """
-        pass
+        thresholds = list()
+        self._xy_in_dataframe(data=data)
+        data = self._transform(data=data)
+        dims = [i for i in [self.x, self.y] if i is not None]
+        if self.sampling.get("method", None) is not None:
+            data = self._downsample(data=data)
+        if self.method == "quantile":
+            thresholds = self._quantile_gate(data=data)
+        else:
+            for d in dims:
+                x_grid, p = (FFTKDE(kernel=self.method_kwargs.get("kernel", "gaussian"),
+                                    bw=self.method_kwargs.get("bw", "silverman"))
+                             .fit(data[d].values)
+                             .evaluate())
+                peaks = find_peaks(p=p,
+                                   min_peak_threshold=self.method_kwargs.get("min_peak_threshold", 0.05),
+                                   peak_boundary=self.method_kwargs.get("peak_boundary", 0.1))
+                assert len(peaks) > 0, "No peaks detected"
+                if len(peaks) == 1:
+                    thresholds.append(self._process_one_peak(d=d,
+                                                             data=data,
+                                                             x_grid=x_grid,
+                                                             p=p,
+                                                             peak_idx=peaks[0]))
+                elif len(peaks) == 2:
+                    thresholds.append(find_local_minima(p=p, x=x_grid, peaks=peaks))
+                else:
+                    smoothed_peak_finding_kwargs = self.method_kwargs.get("smoothed_peak_finding_kwargs", {})
+                    p, peaks = smoothed_peak_finding(p=p, **smoothed_peak_finding_kwargs)
+                    if len(peaks) == 1:
+                        thresholds.append(self._process_one_peak(d=d,
+                                                                 data=data,
+                                                                 x_grid=x_grid,
+                                                                 p=p,
+                                                                 peak_idx=peaks[0]))
+                    else:
+                        thresholds.append(find_local_minima(p=p, x=x_grid, peaks=peaks))
+        if len(dims) == 1:
+            for definition in ["+", "-"]:
+                self.add_child(ChildThreshold(name=definition,
+                                              definition=definition,
+                                              geom=ThresholdGeom(x_threshold=thresholds[0])))
+        else:
+            for definition in ["++", "--", "-+", "+-"]:
+                self.add_child(ChildThreshold(name=definition,
+                                              definition=definition,
+                                              geom=ThresholdGeom(x_threshold=thresholds[0],
+                                                                 y_threshold=thresholds[1])))
+
+
 
     def fit_predict(self,
                     data: pd.DataFrame) -> List[Population]:
@@ -681,16 +797,18 @@ def find_peaks(p: np.array,
     Numpy.array
         Index of peaks
     """
-    pass
+    peaks = detect_peaks(p,
+                         mph=p[np.argmax(p)] * min_peak_threshold,
+                         mpd=len(p) * peak_boundary)
+    return peaks
 
 
-def smoothed_peak_finding(x: np.array,
-                          p: np.array,
+def smoothed_peak_finding(p: np.array,
                           starting_window_length: int = 11,
                           polyorder: int = 3,
                           min_peak_threshold: float = 0.05,
-                          peak_bounary: float = 0.1,
-                          **kwargs):
+                          peak_boundary: float = 0.1,
+                          **kwargs) -> (np.array, np.array):
     """
     Given the grid space and probability vector of some PDF calculated using KDE,
     first attempt to smooth the probability vector using a Savitzky-Golay filter
@@ -702,8 +820,6 @@ def smoothed_peak_finding(x: np.array,
 
     Parameters
     ----------
-    x: np.array
-        Grid space upon which the PDF has been estimated
     p: np.array
         Probability vector resulting from KDE calculation
     starting_window_length: int (default=11)
@@ -712,7 +828,7 @@ def smoothed_peak_finding(x: np.array,
         Order of polynomial for filter
     min_peak_threshold: float (default=0.05)
         See CytoPy.data.gate.find_peaks
-    peak_bounary: float (default=0.1)
+    peak_boundary: float (default=0.1)
         See CytoPy.data.gate.find_peaks
     kwargs: dict
         Additional keyword arguments to pass to scipy.signal.savgol_filter
@@ -722,7 +838,14 @@ def smoothed_peak_finding(x: np.array,
     np.array, np.array
         Smooth probability vector and index of peaks
     """
-    pass
+    smoothed = p.copy()
+    window = starting_window_length
+    while len(find_peaks(smoothed, min_peak_threshold, peak_boundary)) >= 3:
+        if window >= len(smoothed) * .5:
+            raise ValueError("Stable window size exceeded")
+        smoothed = savgol_filter(smoothed, window, polyorder, **kwargs)
+        window += 10
+    return smoothed, find_peaks(smoothed, min_peak_threshold, peak_boundary)
 
 
 def find_local_minima(p: np.array,
@@ -763,6 +886,8 @@ def find_inflection_point(x: np.array,
                           p: np.array,
                           peak_idx: int,
                           incline: bool = False,
+                          window_size: int or None = None,
+                          polyorder: int = 3,
                           **kwargs):
     """
     Given some probability vector and grid space that represents a PDF as calculated by KDE,
@@ -780,14 +905,30 @@ def find_inflection_point(x: np.array,
     incline: bool (default=False)
         If true, calculates the inflection point of the incline towards the peak
         as opposed to the decline away from the peak
+    window_size: int (optional)
+        Window length of filter (must be an odd number). If not given then it is calculated as an
+        odd integer nearest to a 10th of the grid length
+    polyorder: int (default=3)
+        Polynomial order for Savitzky-Golay filter
     kwargs: dict
         Additional keyword argument to pass to scipy.signal.savgol_filter
 
     Returns
     -------
-
+    float
+        Value of x at which the inflection point occurs
     """
-    pass
+    window_size = window_size or int(len(x) * .25)
+    if window_size % 2 == 0:
+        window_size += 1
+    smooth = savgol_filter(p, window_size, polyorder, **kwargs)
+    if incline:
+        ddy = np.diff(np.diff(smooth[:peak_idx]))
+    else:
+        ddy = np.diff(np.diff(smooth[peak_idx:]))
+    if incline:
+        return float(x[np.argmax(ddy)])
+    return float(x[peak_idx + np.argmax(ddy)])
 
 
 def create_convex_hull(x_values: np.array,
