@@ -1,7 +1,9 @@
 from ...data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ChildThreshold, ChildPolygon, \
-    create_signature, Population, threshold_1d, threshold_2d
+    create_signature, Population, threshold_1d, threshold_2d, smoothed_peak_finding, find_local_minima, \
+    find_inflection_point
 from ...data.geometry import ThresholdGeom, PolygonGeom
 from sklearn.datasets import make_blobs
+from KDEpy import FFTKDE
 import pandas as pd
 import numpy as np
 import pytest
@@ -308,3 +310,73 @@ def test_create_signature():
         assert pytest.approx(x.get(i), 0.001) == np.median(d_norm.get(i))
         assert pytest.approx(y.get(i), 0.001) == np.mean(d_norm.get(i))
         assert pytest.approx(z.get(i), 0.001) == np.mean(np.array(d_norm.get(i))[[1, 2]])
+
+
+def test_smoothed_peak_finding():
+    n1 = np.random.normal(loc=0.2, scale=1, size=500)
+    n2 = np.random.normal(loc=2.5, scale=0.2, size=250)
+    n3 = np.random.normal(loc=6.5, scale=0.5, size=500)
+    data = np.hstack([n1, n2, n3])
+    smoothed, peaks = smoothed_peak_finding(p=data)
+    assert isinstance(smoothed, np.ndarray)
+    assert isinstance(peaks, np.ndarray)
+    assert len(peaks) == 2
+
+
+def test_find_local_minima():
+    n1 = np.random.normal(loc=2, scale=1, size=1000)
+    n2 = np.random.normal(loc=10, scale=0.5, size=1000)
+    data = np.hstack([n1, n2])
+    x, y = FFTKDE(kernel='gaussian', bw='silverman').fit(data).evaluate()
+    peak1 = np.where(y == np.max(y[np.where(x < 6)]))[0][0]
+    peak2 = np.where(y == np.max(y[np.where(x > 6)]))[0][0]
+    minima = x[np.where(y == np.min(y[np.where((x > 4) & (x < 7))]))[0][0]]
+    assert find_local_minima(p=y, x=x, peaks=np.array([peak1, peak2])) == minima
+
+
+def test_find_inflection_point():
+    n1 = np.random.normal(loc=2, scale=1, size=1000)
+    x, y = FFTKDE(kernel='gaussian', bw='silverman').fit(n1).evaluate()
+    inflection_point = find_inflection_point(x=x, p=y, peak_idx=np.argmax(y),
+                                             incline=False)
+    assert 3 < inflection_point < 4
+    inflection_point = find_inflection_point(x=x, p=y, peak_idx=np.argmax(y),
+                                             incline=True)
+    assert 0 < inflection_point < 1
+
+
+def test_threshold_fit_1d():
+    n1 = np.random.normal(loc=0.2, scale=1, size=500)
+    n2 = np.random.normal(loc=2.5, scale=0.2, size=250)
+    n3 = np.random.normal(loc=6.5, scale=0.5, size=500)
+    data = pd.DataFrame({"X": np.hstack([n1, n2, n3])})
+    threshold = ThresholdGate(gate_name="test",
+                              parent="test parent",
+                              x="X",
+                              method="density")
+    threshold.fit(data=data)
+    assert len(threshold.children) == 2
+    assert threshold.children[0].geom.x_threshold == threshold.children[1].geom.x_threshold
+    assert round(threshold.children[0].geom.x_threshold) == 4
+    assert all([i in [c.definition for c in threshold.children] for i in ["+", "-"]])
+
+
+def test_threshold_fit_2d():
+    data, labels = make_blobs(n_samples=3000,
+                              n_features=2,
+                              centers=[(1., 1.), (1., 5.), (5., 0.2)],
+                              random_state=42)
+    data = pd.DataFrame({"X": data[:, 0], "Y": data[:, 1]})
+    threshold = ThresholdGate(gate_name="test",
+                              parent="test parent",
+                              x="X",
+                              y="Y",
+                              method="density")
+    threshold.fit(data)
+    assert len(threshold.children) == 4
+    assert len(set([c.geom.x_threshold for c in threshold.children])) == 1
+    assert len(set([c.geom.y_threshold for c in threshold.children])) == 1
+    assert all([i in [c.definition for c in threshold.children] for i in ["++", "--",
+                                                                          "+-", "-+"]])
+    assert 2 < threshold.children[0].geom.x_threshold < 4
+    assert 2 < threshold.children[0].geom.y_threshold < 4
