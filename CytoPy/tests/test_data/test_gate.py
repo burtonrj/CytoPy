@@ -7,6 +7,7 @@ from KDEpy import FFTKDE
 import pandas as pd
 import numpy as np
 import pytest
+
 np.random.seed(42)
 
 
@@ -380,3 +381,146 @@ def test_threshold_fit_2d():
                                                                           "+-", "-+"]])
     assert 2 < threshold.children[0].geom.x_threshold < 4
     assert 2 < threshold.children[0].geom.y_threshold < 4
+
+
+def test_threshold_predict_1d():
+    n1 = np.random.normal(loc=0.2, scale=1, size=500)
+    n2 = np.random.normal(loc=2.5, scale=0.2, size=250)
+    n3 = np.random.normal(loc=6.5, scale=0.5, size=500)
+    data = pd.DataFrame({"X": np.hstack([n1, n2, n3])})
+    threshold = ThresholdGate(gate_name="test",
+                              parent="test parent",
+                              x="X",
+                              method="density")
+    threshold.fit(data=data)
+    new_data = pd.DataFrame({"X": np.hstack([np.random.normal(loc=0.2, scale=1, size=500),
+                                             np.random.normal(loc=6.5, scale=0.5, size=500)])})
+    pops = threshold.predict(new_data, parent="root")
+    assert len(pops) == 2
+    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
+    assert all([p.geom.x == threshold.x for p in pops])
+    assert all([p.geom.y == threshold.y for p in pops])
+    assert all(p.geom.transform_x == threshold.transformations.get("x") for p in pops)
+    assert all(p.geom.transform_y == threshold.transformations.get("y") for p in pops)
+    assert all(i in [p.definition for p in pops] for i in ["+", "-"])
+    neg_idx = new_data[new_data.X < threshold.children[0].geom.x_threshold].index.values
+    pos_idx = new_data[new_data.X >= threshold.children[0].geom.x_threshold].index.values
+    pos_pop = [p for p in pops if p.definition == "+"][0]
+    neg_pop = [p for p in pops if p.definition == "-"][0]
+    assert np.array_equal(neg_pop.index, neg_idx)
+    assert np.array_equal(pos_pop.index, pos_idx)
+
+
+def test_threshold_predict_2d():
+    data, _ = make_blobs(n_samples=3000,
+                         n_features=2,
+                         centers=[(1., 1.), (1., 5.), (5., 0.2)],
+                         random_state=42)
+    data = pd.DataFrame({"X": data[:, 0], "Y": data[:, 1]})
+    threshold = ThresholdGate(gate_name="test",
+                              parent="test parent",
+                              x="X",
+                              y="Y",
+                              method="density")
+    threshold.fit(data=data)
+    new_data, _ = make_blobs(n_samples=3000,
+                             n_features=2,
+                             centers=[(1., 1.), (5., 0.2)],
+                             random_state=42)
+    new_data = pd.DataFrame({"X": new_data[:, 0], "Y": new_data[:, 1]})
+    pops = threshold.predict(new_data, parent="root")
+    assert len(pops) == 4
+    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
+    assert all([p.geom.x == threshold.x for p in pops])
+    assert all([p.geom.y == threshold.y for p in pops])
+    assert all(p.geom.transform_x == threshold.transformations.get("x") for p in pops)
+    assert all(p.geom.transform_y == threshold.transformations.get("y") for p in pops)
+    assert all(i in [p.definition for p in pops] for i in ["++", "--", "-+", "+-"])
+    neg_idx = new_data[(new_data.X < threshold.children[0].geom.x_threshold) &
+                       (new_data.Y < threshold.children[0].geom.y_threshold)].index.values
+    pos_idx = new_data[(new_data.X >= threshold.children[0].geom.x_threshold) &
+                       (new_data.Y >= threshold.children[0].geom.y_threshold)].index.values
+    negpos_idx = new_data[(new_data.X < threshold.children[0].geom.x_threshold) &
+                          (new_data.Y >= threshold.children[0].geom.y_threshold)].index.values
+    posneg_idx = new_data[(new_data.X >= threshold.children[0].geom.x_threshold) &
+                       (new_data.Y < threshold.children[0].geom.y_threshold)].index.values
+    pos_pop = [p for p in pops if p.definition == "++"][0]
+    neg_pop = [p for p in pops if p.definition == "--"][0]
+    posneg_pop = [p for p in pops if p.definition == "+-"][0]
+    negpos_pop = [p for p in pops if p.definition == "-+"][0]
+    assert np.array_equal(neg_pop.index, neg_idx)
+    assert np.array_equal(pos_pop.index, pos_idx)
+    assert np.array_equal(negpos_pop.index, negpos_idx)
+    assert np.array_equal(posneg_pop.index, posneg_idx)
+
+
+def test_threshold_fit_predict_1d():
+    n1 = np.random.normal(loc=0.2, scale=1, size=500)
+    n2 = np.random.normal(loc=2.5, scale=0.2, size=250)
+    n3 = np.random.normal(loc=6.5, scale=0.5, size=500)
+    data = pd.DataFrame({"X": np.hstack([n1, n2, n3])})
+    threshold = ThresholdGate(gate_name="test",
+                              parent="test parent",
+                              x="X",
+                              method="density")
+    threshold.fit(data=data)
+    threshold.label_children({"+": "Positive",
+                              "-": "Negative"})
+    new_data = pd.DataFrame({"X": np.hstack([np.random.normal(loc=0.2, scale=1, size=200),
+                                             np.random.normal(loc=6.5, scale=0.5, size=1000)])})
+    pops = threshold.fit_predict(new_data, parent="root")
+    assert len(pops) == 2
+    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
+    assert all([p.geom.x == threshold.x for p in pops])
+    assert all([p.geom.y == threshold.y for p in pops])
+    assert all(p.geom.transform_x == threshold.transformations.get("x") for p in pops)
+    assert all(p.geom.transform_y == threshold.transformations.get("y") for p in pops)
+    assert all(i in [p.definition for p in pops] for i in ["+", "-"])
+    pos_pop = [p for p in pops if p.definition == "+"][0]
+    assert pos_pop.population_name == "Positive"
+    neg_pop = [p for p in pops if p.definition == "-"][0]
+    assert neg_pop.population_name == "Negative"
+    assert len(pos_pop.index) > len(neg_pop.index)
+    assert len(pos_pop.index) > 800
+    assert len(neg_pop.index) < 300
+
+
+def test_threshold_fit_predict_2d():
+    data, _ = make_blobs(n_samples=4000,
+                         n_features=2,
+                         centers=[(1., 1.), (1., 7.), (7., 2.), (7., 6.2)],
+                         random_state=42)
+    data = pd.DataFrame({"X": data[:, 0], "Y": data[:, 1]})
+    threshold = ThresholdGate(gate_name="test",
+                              parent="test parent",
+                              x="X",
+                              y="Y",
+                              method="density")
+    threshold.fit(data)
+    threshold.label_children({"++": "Top left",
+                              "--": "Other",
+                              "-+": "Other",
+                              "+-": "Other"})
+    data, _ = make_blobs(n_samples=3000,
+                         n_features=2,
+                         centers=[(1., 1.), (1., 7.), (7., 6.2)],
+                         random_state=42)
+    data = pd.DataFrame({"X": data[:, 0], "Y": data[:, 1]})
+    pops = threshold.fit_predict(data=data, parent="root")
+    assert len(pops) == 2
+    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
+    assert all([p.geom.x == threshold.x for p in pops])
+    assert all([p.geom.y == threshold.y for p in pops])
+    assert all(p.geom.transform_x == threshold.transformations.get("x") for p in pops)
+    assert all(p.geom.transform_y == threshold.transformations.get("y") for p in pops)
+    top_left = [p for p in pops if p.population_name == "Top left"][0]
+    other = [p for p in pops if p.population_name == "Other"][0]
+    assert top_left.definition == "++"
+    assert {"+-", "-+", "--"} == set(other.definition.split(","))
+    assert len(top_left.index) < len(other.index)
+    assert len(top_left.index) > 900
+    assert len(other.index) > 1900
