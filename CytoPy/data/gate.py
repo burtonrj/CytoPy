@@ -1,9 +1,11 @@
 from ..flow.transforms import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom
-from .populations import Population
+from .populations import Population, merge_multiple_populations
 from ..flow.transforms import scaler
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
+from collections import Counter
+from itertools import chain
 from typing import List, Dict
 from KDEpy import FFTKDE
 from detecta import detect_peaks
@@ -16,7 +18,6 @@ from hdbscan import HDBSCAN
 import pandas as pd
 import numpy as np
 import mongoengine
-import inspect
 
 
 class Child(mongoengine.EmbeddedDocument):
@@ -159,7 +160,7 @@ class Gate(mongoengine.Document):
     def _upsample(self,
                   data: pd.DataFrame,
                   sample: pd.DataFrame,
-                  populations: List[Population]):
+                  populations: List[Population]) -> List[Population]:
         """
         Perform up-sampling after gating. Returns list of Population objects
         with index updated to reflect the original data.
@@ -244,13 +245,33 @@ class Gate(mongoengine.Document):
         """
         self.children = []
 
+    def _duplicate_children(self) -> None:
+        """
+        Loop through the children and merge any with the same name.
+
+        Returns
+        -------
+        None
+        """
+        child_counts = Counter([c.name for c in self.children])
+        if set(child_counts.values()) == 1:
+            return
+        updated_children = []
+        for name, count in child_counts.items():
+            if count > 2:
+                updated_children.append(merge_children([c for c in self.children if c.name == name]))
+            else:
+                updated_children.append([c for c in self.children if c.name == name][0])
+        self.children = updated_children
+
     def label_children(self,
                        labels: dict,
                        drop: bool = True) -> None:
         """
         Rename children using a dictionary of labels where the key correspond to the existing child name
-        and the value is the new desired population name. If drop is True, then children that are absent
-        from the given dictionary will be dropped.
+        and the value is the new desired population name. If the same population name is given to multiple
+        children, these children will be merged.
+        If drop is True, then children that are absent from the given dictionary will be dropped.
 
         Parameters
         ----------
@@ -267,6 +288,7 @@ class Gate(mongoengine.Document):
             self.children = [c for c in self.children if c.name in labels.keys()]
         for c in self.children:
             c.name = labels.get(c.name)
+        self._duplicate_children()
 
 
 class ThresholdGate(Gate):
@@ -317,15 +339,20 @@ class ThresholdGate(Gate):
         list
         """
         labeled = list()
-        for p in new_populations:
-            matching_child = [c for c in self.children if c.match_definition(p.definition)]
-            assert len(matching_child) == 1, f"Population should match exactly one child, matched: {len(matching_child)}"
-            p.population_name = matching_child[0].name
-            labeled.append(p)
+        for c in self.children:
+            matching_populations = [p for p in new_populations if c.match_definition(p.definition)]
+            if len(matching_populations) == 0:
+                continue
+            elif len(matching_populations) > 1:
+                pop = merge_multiple_populations(matching_populations, new_population_name=c.name)
+            else:
+                pop = matching_populations[0]
+                pop.population_name = c.name
+            labeled.append(pop)
         return labeled
 
     def _quantile_gate(self,
-                       data: pd.DataFrame):
+                       data: pd.DataFrame) -> list:
         """
         Fit gate to the given dataframe by simply drawing the threshold at the desired quantile.
 
@@ -381,25 +408,25 @@ class ThresholdGate(Gate):
                                      peak_idx=peak_idx,
                                      **inflection_point_kwargs)
 
-    def fit(self,
-            data: pd.DataFrame) -> None:
+    def _fit(self,
+             data: pd.DataFrame) -> (list, pd.DataFrame):
         """
-        Fit the gate using a given dataframe. This will generate new children using the calculated
-        thresholds. If children already exist will raise an AssertionError and notify user to call
-        `fit_predict`.
+        Internal method to fit threshold density gating to a given dataframe. Returns the
+        list of thresholds generated and the dataframe the threshold were generated from
+        (will be the downsampled dataframe if sampling methods defined).
 
         Parameters
         ----------
         data: Pandas.DataFrame
-            Population data to fit threshold too
 
         Returns
         -------
-        None
+        list, Pandas.DataFrame
         """
         thresholds = list()
         self._xy_in_dataframe(data=data)
         data = self._transform(data=data)
+        data = self._dim_reduction(data=data)
         dims = [i for i in [self.x, self.y] if i is not None]
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
@@ -434,6 +461,30 @@ class ThresholdGate(Gate):
                                                                  peak_idx=peaks[0]))
                     else:
                         thresholds.append(find_local_minima(p=p, x=x_grid, peaks=peaks))
+        return thresholds, data
+
+    def fit(self,
+            data: pd.DataFrame) -> None or (list, pd.DataFrame):
+        """
+        Fit the gate using a given dataframe. If children already exist will raise an AssertionError
+        and notify user to call `fit_predict`.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Population data to fit threshold too
+
+        Returns
+        -------
+        None
+        """
+        data = data.copy()
+        assert len(self.children) == 0, "Children already defined for this gate. Call 'fit_predict' to " \
+                                        "fit to new data and match populations to children, or call " \
+                                        "'predict' to apply static thresholds to new data. If you want to " \
+                                        "reset the gate and call 'fit' again, first call 'reset_gate'"
+        thresholds, _ = self._fit(data=data)
+        dims = [i for i in [self.x, self.y] if i is not None]
         if len(dims) == 1:
             for definition in ["+", "-"]:
                 self.add_child(ChildThreshold(name=definition,
@@ -445,11 +496,11 @@ class ThresholdGate(Gate):
                                               definition=definition,
                                               geom=ThresholdGeom(x_threshold=thresholds[0],
                                                                  y_threshold=thresholds[1])))
-
-
+        return None
 
     def fit_predict(self,
-                    data: pd.DataFrame) -> List[Population]:
+                    data: pd.DataFrame,
+                    parent: str) -> List[Population]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -459,16 +510,32 @@ class ThresholdGate(Gate):
         ----------
         data: Pandas.DataFrame
             Population data to fit threshold too
+        parent: str
+            Name of the parent population that gate is being applied to
 
         Returns
         -------
         list
             List of predicted Population objects, labelled according to the gates child objects
         """
-        pass
+        data = data.copy()
+        thresholds, fitted_data = self._fit(data=data)
+        y_threshold = None
+        if len(thresholds) == 2:
+            y_threshold = thresholds[1]
+        results = apply_threshold(data=fitted_data,
+                                  x=self.x,
+                                  y=self.y,
+                                  x_threshold=thresholds[0],
+                                  y_threshold=y_threshold)
+        pops = self._generate_populations(data=results, parent=parent)
+        if self.sampling.get("method", None) is not None:
+            pops = self._upsample(data=data, sample=fitted_data, populations=pops)
+        return self._match_to_children(new_populations=pops)
 
     def predict(self,
-                data: pd.DataFrame) -> List[Population]:
+                data: pd.DataFrame,
+                parent: str) -> List[Population]:
         """
         Using existing children associated to this gate, the previously calculated thresholds of
         these children will be applied to the given data and then Population objects created and
@@ -479,12 +546,60 @@ class ThresholdGate(Gate):
         ----------
         data: Pandas.DataFrame
             Data to apply static thresholds too
+        parent: str
+            Name of the parent population that gate is being applied to
 
         Returns
         -------
         list
             List of Population objects
         """
+        assert len(self.children) > 0, "Must call 'fit' prior to predict"
+        pops = list()
+        self._xy_in_dataframe(data=data)
+        data = self._transform(data=data)
+        data = self._dim_reduction(data=data)
+        if self.y is not None:
+            data = threshold_2d(data=data,
+                                x=self.x,
+                                y=self.y,
+                                x_threshold=self.children[0].geom.x_threshold,
+                                y_threshold=self.children[0].geom.y_threshold)
+        else:
+            data = threshold_1d(data=data, x=self.x, x_threshold=self.children[0].geom.x_threshold)
+        return self._generate_populations(data=data, parent=parent)
+
+    def _generate_populations(self,
+                              data: dict,
+                              parent: str) -> List[Population]:
+        """
+        Generate populations from a standard dictionary of dataframes that have had thesholds applied.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        parent: str
+
+        Returns
+        -------
+        list
+            List of Population objects
+        """
+        pops = list()
+        for definition, df in data.items():
+            pops.append(Population(population_name=definition,
+                                   definition=definition,
+                                   parent=parent,
+                                   n=df.shape[0],
+                                   index=df.index.values,
+                                   signature=create_signature(data=df),
+                                   geom=ThresholdGeom(x=self.x,
+                                                      y=self.y,
+                                                      transform_x=self.transformations.get("x", None),
+                                                      transform_y=self.transformations.get("y", None),
+                                                      x_threshold=self.children[0].geom.x_threshold,
+                                                      y_threshold=self.children[0].geom.y_threshold)))
+        return pops
 
 
 class PolygonGate(Gate):
@@ -686,6 +801,39 @@ class EllipseGate(Gate):
         """
 
 
+def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
+    """
+    Given a list of Child objects, merge and return single child
+
+    Parameters
+    ----------
+    children: list
+
+    Returns
+    -------
+    Child or ChildThreshold or ChildPolygon
+    """
+    assert len(set([type(x) for x in children])) == 1, \
+        f"Children must be of same type; not, {[type(x) for x in children]}"
+    assert len(set([c.name for c in children])), "Children should all have the same name"
+    if isinstance(children[0], ChildThreshold):
+        definition = ",".join([c.definition for c in children])
+        return ChildThreshold(name=children[0].name,
+                              definition=definition,
+                              geom=children[0].geom)
+    if isinstance(children[0], ChildPolygon):
+        x = np.unique(np.concatenate([np.array(c.geom.x_values) for c in children], axis=0), axis=0).tolist()
+        y = np.unique(np.concatenate([np.array(c.geom.y_values) for c in children], axis=0), axis=0).tolist()
+        return ChildPolygon(name=children[0].name,
+                            geom=PolygonGeom(x=children[0].geom.x,
+                                             y=children[0].geom.y,
+                                             transform_x=children[0].geom.transform_x,
+                                             transform_y=children[0].geom.transform_y,
+                                             x_values=x,
+                                             y_values=y))
+    return children[0]
+
+
 def create_signature(data: pd.DataFrame,
                      idx: np.array or None = None,
                      summary_method: callable or None = None) -> dict:
@@ -719,6 +867,36 @@ def create_signature(data: pd.DataFrame,
     return {x[0]: x[1] for x in zip(signature.index, signature.values)}
 
 
+def apply_threshold(data: pd.DataFrame,
+                    x: str,
+                    x_threshold: float,
+                    y: str or None = None,
+                    y_threshold: float or None = None) -> Dict[str, pd.DataFrame]:
+    """
+    Simple wrapper for threshold_1d and threhsold_2d
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    x: str
+    x_threshold: float
+    y: str (optional)
+    y_threshold: float (optional)
+
+    Returns
+    -------
+    dict
+    """
+    if y is not None:
+        return threshold_2d(data=data,
+                            x=x,
+                            y=y,
+                            x_threshold=x_threshold,
+                            y_threshold=y_threshold)
+    else:
+        return threshold_1d(data=data, x=x, x_threshold=x_threshold)
+
+
 def threshold_1d(data: pd.DataFrame,
                  x: str,
                  x_threshold: float) -> Dict[str, pd.DataFrame]:
@@ -739,6 +917,7 @@ def threshold_1d(data: pd.DataFrame,
         Negative population (less than threshold) and positive population (greater than or equal to threshold)
         in a dictionary as so: {'-': Pandas.DataFrame, '+': Pandas.DataFrame}
     """
+    data = data.copy()
     return {"+": data[data[x] >= x_threshold],
             "-": data[data[x] < x_threshold]}
 
@@ -768,6 +947,7 @@ def threshold_2d(data: pd.DataFrame,
     -------
     dict
     """
+    data = data.copy()
     return {"++": data[(data[x] >= x_threshold) & (data[y] >= y_threshold)],
             "--": data[(data[x] < x_threshold) & (data[y] < y_threshold)],
             "+-": data[(data[x] >= x_threshold) & (data[y] < y_threshold)],

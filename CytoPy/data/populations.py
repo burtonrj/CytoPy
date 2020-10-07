@@ -1,4 +1,6 @@
+from functools import reduce
 from shapely.ops import unary_union
+from typing import List
 from _warnings import warn
 import numpy as np
 import pandas as pd
@@ -250,4 +252,15 @@ def merge_populations(left: Population,
     if isinstance(left.geom, ThresholdGeom):
         return _merge_thresholds(left, right, new_population_name)
     return _merge_polygons(left, right, new_population_name)
+
+
+def merge_multiple_populations(populations: List[Population],
+                               new_population_name: str or None = None):
+    if new_population_name is None:
+        assert len(set([p.population_name for p in populations])) == 1, \
+            "If a new population name is not given the populations are expected to have the same population name"
+    new_population_name = new_population_name or populations[0].population_name
+    merged_pop = reduce(lambda p1, p2: merge_populations(p1, p2), populations)
+    merged_pop.population_name = new_population_name
+    return merged_pop
 
