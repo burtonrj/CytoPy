@@ -123,6 +123,8 @@ def scaler(data: np.array,
     (Numpy.array, callable) or Numpy.array
         transformed data and sklearn transformer object
     """
+    if len(data) == 0:
+        return data
     if scale_method == 'standard':
         preprocessor = StandardScaler(**kwargs).fit(data)
     elif scale_method == 'norm':

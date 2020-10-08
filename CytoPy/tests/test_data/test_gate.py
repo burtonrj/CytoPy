@@ -1,7 +1,9 @@
 from ...data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ChildThreshold, ChildPolygon, \
     create_signature, Population, threshold_1d, threshold_2d, smoothed_peak_finding, find_local_minima, \
     find_inflection_point
-from ...data.geometry import ThresholdGeom, PolygonGeom
+from ...data.geometry import ThresholdGeom, PolygonGeom, create_polygon, create_convex_hull
+from scipy.spatial.distance import euclidean
+from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs
 from KDEpy import FFTKDE
 import pandas as pd
@@ -395,7 +397,7 @@ def test_threshold_predict_1d():
     threshold.fit(data=data)
     new_data = pd.DataFrame({"X": np.hstack([np.random.normal(loc=0.2, scale=1, size=500),
                                              np.random.normal(loc=6.5, scale=0.5, size=500)])})
-    pops = threshold.predict(new_data, parent="root")
+    pops = threshold.predict(new_data)
     assert len(pops) == 2
     assert all([isinstance(p, Population) for p in pops])
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
@@ -429,7 +431,7 @@ def test_threshold_predict_2d():
                              centers=[(1., 1.), (5., 0.2)],
                              random_state=42)
     new_data = pd.DataFrame({"X": new_data[:, 0], "Y": new_data[:, 1]})
-    pops = threshold.predict(new_data, parent="root")
+    pops = threshold.predict(new_data)
     assert len(pops) == 4
     assert all([isinstance(p, Population) for p in pops])
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
@@ -470,7 +472,7 @@ def test_threshold_fit_predict_1d():
                               "-": "Negative"})
     new_data = pd.DataFrame({"X": np.hstack([np.random.normal(loc=0.2, scale=1, size=200),
                                              np.random.normal(loc=6.5, scale=0.5, size=1000)])})
-    pops = threshold.fit_predict(new_data, parent="root")
+    pops = threshold.fit_predict(new_data)
     assert len(pops) == 2
     assert all([isinstance(p, Population) for p in pops])
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
@@ -509,7 +511,7 @@ def test_threshold_fit_predict_2d():
                          centers=[(1., 1.), (1., 7.), (7., 6.2)],
                          random_state=42)
     data = pd.DataFrame({"X": data[:, 0], "Y": data[:, 1]})
-    pops = threshold.fit_predict(data=data, parent="root")
+    pops = threshold.fit_predict(data=data)
     assert len(pops) == 2
     assert all([isinstance(p, Population) for p in pops])
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
@@ -526,20 +528,27 @@ def test_threshold_fit_predict_2d():
     assert len(other.index) > 1900
 
 
-def create_polygon_gate():
-    gate = PolygonGate(gate_name="test",
-                       parent="test parent",
-                       x="X",
-                       y="Y",
-                       method="MiniBatchKMeans")
+def create_polygon_gate(klass,
+                        method: str,
+                        **kwargs):
+    gate = klass(gate_name="test",
+                 parent="test parent",
+                 x="X",
+                 y="Y",
+                 method=method,
+                 method_kwargs={k: v for k, v in kwargs.items()})
     return gate
 
 
 def test_polygon_add_child():
-    gate = create_polygon_gate()
+    gate = create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans")
+    data, _ = make_blobs(n_samples=3000,
+                         n_features=2,
+                         centers=[(1., 1.), (1., 7.), (7., 6.2)],
+                         random_state=42)
     gate.add_child(ChildPolygon(name="test",
-                                geom=PolygonGeom(x_values=np.linspace(0, 1000, 1),
-                                                 y_values=np.linspace(0, 1000, 1))))
+                                geom=PolygonGeom(x_values=np.linspace(0, 1000, 1).tolist(),
+                                                 y_values=np.linspace(0, 1000, 1).tolist())))
     assert len(gate.children) == 1
     assert gate.children[0].name == "test"
     assert gate.children[0].geom.x == gate.x
@@ -548,41 +557,120 @@ def test_polygon_add_child():
     assert gate.children[0].geom.transform_y == gate.transformations.get("y", None)
 
 
+def test_polygon_generate_populations():
+    data, labels = make_blobs(n_samples=4000,
+                              n_features=2,
+                              cluster_std=0.5,
+                              centers=[(1., 1.), (1., 7.), (7., 6.2), (6., 1.)],
+                              random_state=42)
+    data = pd.DataFrame(data, columns=["X", "Y"])
+    gate = create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans")
+    polys = [Polygon([(-1., -1), (-1, 10), (3, 10), (3, -1), (-1, -1)]),
+             Polygon([(4, -1), (8, -1), (8, 3.8), (4, 3.8), (4, -1)]),
+             Polygon([(4, 4), (4, 10), (10, 10), (10, 4), (4, 4)])]
+    pops = gate._generate_populations(data=data,
+                                      polygons=polys)
+    assert len(pops) == 3
+    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p.geom, PolygonGeom) for p in pops])
+    for p in pops:
+        assert p.geom.x == gate.x
+        assert p.geom.y == gate.y
+        assert p.geom.transform_x == gate.transformations.get("x", None)
+        assert p.geom.transform_y == gate.transformations.get("y", None)
+        assert p.parent == "root"
+    for name, n in zip(["A", "B", "C"], [2000, 1000, 1000]):
+        p = [p for p in pops if p.population_name == name][0]
+        assert len(p.index) == n
+        assert len(p.geom.x_values) == 5
+        assert len(p.geom.y_values) == 5
+
+
 def test_polygon_match_to_children():
-    pass
+    data, labels = make_blobs(n_samples=5000,
+                              n_features=2,
+                              cluster_std=1,
+                              centers=[(1., 1.), (10., 6.2), (1.5, 2.), (11, 7.), (11.5, 7.5)],
+                              random_state=42)
+    data_dict = [{"data": data[np.where(labels == i)],
+                  "signature": create_signature(pd.DataFrame(data[np.where(labels == i)], columns=["X", "Y"])),
+                  "poly": create_polygon(*create_convex_hull(data[np.where(labels == i)][:, 0], data[np.where(labels == i)][:, 1]))}
+                 for i in range(5)]
+    gate = create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans")
+    for i in [0, 1]:
+        gate.add_child(ChildPolygon(name=f"Child{i + 1}",
+                                    signature=data_dict[i].get("signature"),
+                                    geom=PolygonGeom(x_values=data_dict[i].get("poly").exterior.xy[0],
+                                                     y_values=data_dict[i].get("poly").exterior.xy[1])))
+    pops = gate._generate_populations(data=pd.DataFrame(data, columns=["X", "Y"]),
+                                      polygons=[x.get("poly") for x in data_dict[2:]])
+    pops = gate._match_to_children(pops)
+    assert len(pops) == 2
+    assert {p.population_name for p in pops} == {"Child1", "Child2"}
+    assert 1800 < len([p for p in pops if p.population_name == "Child1"][0].index) < 2200
+    assert 2800 < len([p for p in pops if p.population_name == "Child2"][0].index) < 4200
 
 
-def test_polygon_fit():
-    pass
+@pytest.mark.parametrize("gate", [create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans", n_clusters=2),
+                                  create_polygon_gate(klass=EllipseGate, method="GaussianMixture", n_components=2)])
+def test_polygon_fit(gate):
+    data, labels = make_blobs(n_samples=5000,
+                              n_features=2,
+                              cluster_std=1,
+                              centers=[(1., 1.), (10., 6.2)],
+                              random_state=42)
+    data = pd.DataFrame(data, columns=["X", "Y"])
+    gate.fit(data=data)
+    assert len(gate.children) == 2
+    centroids = [create_polygon(*create_convex_hull(data.loc[np.where(labels == i)]["X"].values,
+                                                    data.loc[np.where(labels == i)]["Y"].values)).centroid.xy for i in np.unique(labels)]
+    child_centroids = [create_polygon(*create_convex_hull(c.geom.x_values, c.geom.y_values)).centroid.xy
+                       for c in gate.children]
+    for c in child_centroids:
+        distances = [abs(euclidean(c, centroid)) for centroid in centroids]
+        assert sum([x <= 1. for x in distances]) == 1
 
 
-def test_polygon_predict():
-    pass
+@pytest.mark.parametrize("gate", [create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans", n_clusters=2),
+                                  create_polygon_gate(klass=EllipseGate, method="GaussianMixture", n_components=2)])
+def test_polygon_predict(gate):
+    data, labels = make_blobs(n_samples=5000,
+                              n_features=2,
+                              cluster_std=1,
+                              centers=[(1., 1.), (10., 6.2)],
+                              random_state=42)
+    data = pd.DataFrame(data, columns=["X", "Y"])
+    gate.fit(data=data)
+    gate.label_children(labels={"A": "Pop1", "B": "Pop2"})
+    data, labels = make_blobs(n_samples=5000,
+                              n_features=2,
+                              cluster_std=1,
+                              centers=[(1., 1.)],
+                              random_state=42)
+    data = pd.DataFrame(data, columns=["X", "Y"])
+    pops = gate.predict(data=data)
+    assert len(pops) == 2
+    assert {"Pop1", "Pop2"} == {p.population_name for p in pops}
+    p1 = [p for p in pops if p.population_name == "Pop1"][0]
+    p2 = [p for p in pops if p.population_name == "Pop2"][0]
+    assert sum([4700 < pl < 5000 for pl in [len(p1.index), len(p2.index)]]) == 1
 
 
-def test_polygon_fit_predict():
-    pass
-
-
-def test_ellipse_add_child_invalid():
-    pass
-
-
-def test_ellipse_add_child():
-    pass
-
-
-def test_ellipse_match_to_children():
-    pass
-
-
-def test_ellipse_fit():
-    pass
-
-
-def test_ellipse_predict():
-    pass
-
-
-def test_ellipse_fit_predict():
-    pass
+@pytest.mark.parametrize("gate", [create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans", n_clusters=2),
+                                  create_polygon_gate(klass=EllipseGate, method="GaussianMixture", n_components=2)])
+def test_polygon_fit_predict(gate):
+    data, labels = make_blobs(n_samples=5000,
+                              n_features=2,
+                              cluster_std=1,
+                              centers=[(1., 1.), (10., 6.2), (1.5, 2.), (11, 7.), (11.5, 7.5)],
+                              random_state=42)
+    data = pd.DataFrame(data, columns=["X", "Y"])
+    training = data.loc[np.where((labels == 0) | (labels == 1))]
+    testing = data.loc[np.where((labels == 2) | (labels == 3) | (labels == 4))]
+    gate.fit(data=training)
+    gate.label_children(labels={"A": "Pop1", "B": "Pop2"})
+    pops = gate.fit_predict(testing)
+    assert len(pops) == 2
+    assert {p.population_name for p in pops} == {"Pop1", "Pop2"}
+    assert sum([1900 < len(p.index) < 2100 for p in pops]) == 1
+    assert sum([900 < len(p.index) < 1100 for p in pops]) == 1
