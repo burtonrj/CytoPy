@@ -502,7 +502,7 @@ class ThresholdGate(Gate):
                                         "fit to new data and match populations to children, or call " \
                                         "'predict' to apply static thresholds to new data. If you want to " \
                                         "reset the gate and call 'fit' again, first call 'reset_gate'"
-        thresholds, _ = self._fit(data=data)
+        thresholds = self._fit(data=data)
         dims = [i for i in [self.x, self.y] if i is not None]
         if len(dims) == 1:
             for definition in ["+", "-"]:

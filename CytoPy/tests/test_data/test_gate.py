@@ -6,14 +6,14 @@ from scipy.spatial.distance import euclidean
 from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs
 from KDEpy import FFTKDE
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import pytest
-
 np.random.seed(42)
 
 
-@pytest.mark.parametrize("klass,method", [(Gate, None),
+@pytest.mark.parametrize("klass,method", [(Gate, "manual"),
                                           (ThresholdGate, "density"),
                                           (PolygonGate, "manual"),
                                           (EllipseGate, "GaussianMixture")])
@@ -92,8 +92,7 @@ def test_transform_xy():
 @pytest.mark.parametrize("kwargs", [{"method": "uniform",
                                      "n": 500},
                                     {"method": "faithful"},
-                                    {"method": "density"},
-                                    {"method": None}])
+                                    {"method": "density"}])
 def test_downsample(kwargs):
     gate = Gate(gate_name="test",
                 parent="test parent",
@@ -338,17 +337,27 @@ def test_find_local_minima():
 
 
 def test_find_inflection_point():
+    np.random.seed(42)
     n1 = np.random.normal(loc=2, scale=1, size=1000)
     x, y = FFTKDE(kernel='gaussian', bw='silverman').fit(n1).evaluate()
     inflection_point = find_inflection_point(x=x, p=y, peak_idx=np.argmax(y),
                                              incline=False)
+    plt.plot(x, y)
+    plt.axvline(inflection_point, c="r")
+    plt.title("Test inflection point; incline=False")
+    plt.show()
     assert 3 < inflection_point < 4
     inflection_point = find_inflection_point(x=x, p=y, peak_idx=np.argmax(y),
                                              incline=True)
+    plt.plot(x, y)
+    plt.axvline(inflection_point, c="r")
+    plt.title("Test inflection point; incline=True")
+    plt.show()
     assert 0 < inflection_point < 1
 
 
 def test_threshold_fit_1d():
+    np.random.seed(42)
     n1 = np.random.normal(loc=0.2, scale=1, size=500)
     n2 = np.random.normal(loc=2.5, scale=0.2, size=250)
     n3 = np.random.normal(loc=6.5, scale=0.5, size=500)
@@ -578,7 +587,7 @@ def test_polygon_generate_populations():
         assert p.geom.y == gate.y
         assert p.geom.transform_x == gate.transformations.get("x", None)
         assert p.geom.transform_y == gate.transformations.get("y", None)
-        assert p.parent == "root"
+        assert p.parent == "test parent"
     for name, n in zip(["A", "B", "C"], [2000, 1000, 1000]):
         p = [p for p in pops if p.population_name == name][0]
         assert len(p.index) == n
