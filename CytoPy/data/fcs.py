@@ -81,6 +81,7 @@ class FileGroup(mongoengine.Document):
             self.populations = []
             self.save()
         self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
+        self.data = self.load(columns=values.get("columns", "marker"))
         if self.populations:
             self._load_populations()
 
