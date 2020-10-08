@@ -6,16 +6,10 @@ from ..flow.sampling import faithful_downsampling, density_dependent_downsamplin
 from ..flow.dim_reduction import dimensionality_reduction
 from shapely.geometry import Polygon as ShapelyPoly
 from collections import Counter
-from itertools import chain
 from typing import List, Dict
 from KDEpy import FFTKDE
 from detecta import detect_peaks
-from scipy.spatial import ConvexHull
 from scipy.signal import savgol_filter
-from scipy import linalg, stats
-from sklearn.cluster import *
-from sklearn.mixture import *
-from hdbscan import HDBSCAN
 import pandas as pd
 import numpy as np
 import mongoengine
@@ -1200,104 +1194,3 @@ def find_inflection_point(x: np.array,
     if incline:
         return float(x[np.argmax(ddy)])
     return float(x[peak_idx + np.argmax(ddy)])
-
-
-def create_convex_hull(x_values: np.array,
-                       y_values: np.array):
-    """
-    Given the x and y coordinates of a cloud of data points, generate a convex hull,
-    returning the x and y coordinates of its vertices.
-
-    Parameters
-    ----------
-    x_values: Numpy.array
-    y_values: Numpy.array
-
-    Returns
-    -------
-    Numpy.array, Numpy.array
-    """
-    xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
-    hull = ConvexHull(xy)
-    x = [int(i) for i in xy[hull.vertices, 0]]
-    y = [int(i) for i in xy[hull.vertices, 1]]
-    return x, y
-
-
-def probablistic_ellipse(covariances: np.array,
-                         conf: float):
-    """
-    Given the covariance matrix of a mixture component, calculate a elliptical shape that
-    represents a probabilistic confidence interval.
-
-    Parameters
-    ----------
-    covariances: np.array
-        Covariance matrix
-    conf: float
-        The confidence interval (e.g. 0.95 would give the region of 95% confidence)
-
-    Returns
-    -------
-    float, float, float
-        Width, Height and Angle of ellipse
-    """
-    eigen_val, eigen_vec = linalg.eigh(covariances)
-    chi2 = stats.chi2.ppf(conf, 2)
-    eigen_val = 2. * np.sqrt(eigen_val) * np.sqrt(chi2)
-    u = eigen_vec[0] / linalg.norm(eigen_vec[0])
-    angle = 180. * np.arctan(u[1] / u[0]) / np.pi
-    return eigen_val[0], eigen_val[1], (180. + angle)
-
-
-def inside_ellipse(data: np.array,
-                   center: tuple,
-                   width: int or float,
-                   height: int or float,
-                   angle: int or float) -> object:
-    """
-    Return mask of two dimensional matrix specifying if a data point (row) falls
-    within an ellipse
-
-    Parameters
-    -----------
-    data: Numpy.array
-        two dimensional matrix (x,y)
-    center: tuple
-        x,y coordinate corresponding to center of elipse
-    width: int or float
-        semi-major axis of eplipse
-    height: int or float
-        semi-minor axis of elipse
-    angle: int or float
-        angle of ellipse
-
-    Returns
-    --------
-    Numpy.array
-        numpy array of indices for values inside specified ellipse
-    """
-    cos_angle = np.cos(np.radians(180. - angle))
-    sin_angle = np.sin(np.radians(180. - angle))
-
-    x = data[:, 0]
-    y = data[:, 1]
-
-    xc = x - center[0]
-    yc = y - center[1]
-
-    xct = xc * cos_angle - yc * sin_angle
-    yct = xc * sin_angle + yc * cos_angle
-
-    rad_cc = (xct ** 2 / (width / 2.) ** 2) + (yct ** 2 / (height / 2.) ** 2)
-
-    in_ellipse = []
-
-    for r in rad_cc:
-        if r <= 1.:
-            # point in ellipse
-            in_ellipse.append(True)
-        else:
-            # point not in ellipse
-            in_ellipse.append(False)
-    return in_ellipse

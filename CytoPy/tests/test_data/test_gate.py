@@ -535,9 +535,6 @@ def create_polygon_gate():
     return gate
 
 
-def test_create_convex_
-
-
 def test_polygon_add_child():
     gate = create_polygon_gate()
     gate.add_child(ChildPolygon(name="test",

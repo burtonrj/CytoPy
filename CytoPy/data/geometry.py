@@ -1,47 +1,9 @@
-from shapely.geometry import Polygon
+import numpy as np
+import pandas as pd
+from scipy import linalg, stats
+from scipy.spatial.qhull import ConvexHull
+from shapely.geometry import Polygon, Point
 import mongoengine
-
-
-def polygon_overlap(poly1: Polygon,
-                    poly2: Polygon,
-                    threshold: float = 0.):
-    """
-    Compare the area of two polygons and give the fraction overlap.
-    If fraction overlap does not exceed given threshold or the polygon's do not overlap,
-    return 0.0
-
-    Parameters
-    ----------
-    poly1: Polygon
-    poly2: Polygon
-    threshold: float (default = 0.0)
-
-    Returns
-    -------
-    float
-    """
-    if poly1.intersects(poly2):
-        overlap = float(poly1.intersection(poly2).area / poly1.area)
-        if overlap >= threshold:
-            return overlap
-    return 0.
-
-
-def create_polygon(x: list,
-                   y: list):
-    """
-    Given a list of x coordinated and a list of y coordinates, generate a shapely Polygon
-
-    Parameters
-    ----------
-    x: list
-    y: list
-
-    Returns
-    -------
-    Polygon
-    """
-    return Polygon([(x, y) for x, y in zip(x, y)])
 
 
 class PopulationGeometry(mongoengine.EmbeddedDocument):
@@ -94,3 +56,174 @@ class PolygonGeom(PopulationGeometry):
     """
     x_values = mongoengine.ListField()
     y_values = mongoengine.ListField()
+
+
+def inside_polygon(df: pd.DataFrame,
+                   x: str,
+                   y: str,
+                   poly: Polygon):
+    """
+    Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
+
+    Parameters
+    ----------
+    df: Pandas.DataFrame
+        Data to query
+    x: str
+        name of x-axis plane
+    y: str
+        name of y-axis plane
+    poly: shapely.geometry.Polygon
+        Polygon object to search
+
+    Returns
+    --------
+    Pandas.DataFrame
+        Masked DataFrame containing only those rows that fall within the Polygon
+    """
+    xy = df[[x, y]].values
+    pos_idx = list(map(lambda i: poly.contains(Point(i)), xy))
+    return df.iloc[pos_idx]
+
+
+def polygon_overlap(poly1: Polygon,
+                    poly2: Polygon,
+                    threshold: float = 0.):
+    """
+    Compare the area of two polygons and give the fraction overlap.
+    If fraction overlap does not exceed given threshold or the polygon's do not overlap,
+    return 0.0
+
+    Parameters
+    ----------
+    poly1: Polygon
+    poly2: Polygon
+    threshold: float (default = 0.0)
+
+    Returns
+    -------
+    float
+    """
+    if poly1.intersects(poly2):
+        overlap = float(poly1.intersection(poly2).area / poly1.area)
+        if overlap >= threshold:
+            return overlap
+    return 0.
+
+
+def create_polygon(x: list,
+                   y: list):
+    """
+    Given a list of x coordinated and a list of y coordinates, generate a shapely Polygon
+
+    Parameters
+    ----------
+    x: list
+    y: list
+
+    Returns
+    -------
+    Polygon
+    """
+    return Polygon([(x, y) for x, y in zip(x, y)])
+
+
+def inside_ellipse(data: np.array,
+                   center: tuple,
+                   width: int or float,
+                   height: int or float,
+                   angle: int or float) -> object:
+    """
+    Return mask of two dimensional matrix specifying if a data point (row) falls
+    within an ellipse
+
+    Parameters
+    -----------
+    data: Numpy.array
+        two dimensional matrix (x,y)
+    center: tuple
+        x,y coordinate corresponding to center of elipse
+    width: int or float
+        semi-major axis of eplipse
+    height: int or float
+        semi-minor axis of elipse
+    angle: int or float
+        angle of ellipse
+
+    Returns
+    --------
+    Numpy.array
+        numpy array of indices for values inside specified ellipse
+    """
+    cos_angle = np.cos(np.radians(180. - angle))
+    sin_angle = np.sin(np.radians(180. - angle))
+
+    x = data[:, 0]
+    y = data[:, 1]
+
+    xc = x - center[0]
+    yc = y - center[1]
+
+    xct = xc * cos_angle - yc * sin_angle
+    yct = xc * sin_angle + yc * cos_angle
+
+    rad_cc = (xct ** 2 / (width / 2.) ** 2) + (yct ** 2 / (height / 2.) ** 2)
+
+    in_ellipse = []
+
+    for r in rad_cc:
+        if r <= 1.:
+            # point in ellipse
+            in_ellipse.append(True)
+        else:
+            # point not in ellipse
+            in_ellipse.append(False)
+    return in_ellipse
+
+
+def probablistic_ellipse(covariances: np.array,
+                         conf: float):
+    """
+    Given the covariance matrix of a mixture component, calculate a elliptical shape that
+    represents a probabilistic confidence interval.
+
+    Parameters
+    ----------
+    covariances: np.array
+        Covariance matrix
+    conf: float
+        The confidence interval (e.g. 0.95 would give the region of 95% confidence)
+
+    Returns
+    -------
+    float, float, float
+        Width, Height and Angle of ellipse
+    """
+    eigen_val, eigen_vec = linalg.eigh(covariances)
+    chi2 = stats.chi2.ppf(conf, 2)
+    eigen_val = 2. * np.sqrt(eigen_val) * np.sqrt(chi2)
+    u = eigen_vec[0] / linalg.norm(eigen_vec[0])
+    angle = 180. * np.arctan(u[1] / u[0]) / np.pi
+    return eigen_val[0], eigen_val[1], (180. + angle)
+
+
+def create_convex_hull(x_values: np.array,
+                       y_values: np.array):
+    """
+    Given the x and y coordinates of a cloud of data points, generate a convex hull,
+    returning the x and y coordinates of its vertices.
+
+    Parameters
+    ----------
+    x_values: Numpy.array
+    y_values: Numpy.array
+
+    Returns
+    -------
+    Numpy.array, Numpy.array
+    """
+    xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
+    hull = ConvexHull(xy)
+    x = [int(i) for i in xy[hull.vertices, 0]]
+    y = [int(i) for i in xy[hull.vertices, 1]]
+    return x, y
