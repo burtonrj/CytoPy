@@ -1,6 +1,5 @@
-from ..utilities import inside_polygon
 from ..data.populations import Population
-from ..data.geometry import ThresholdGeom, PolygonGeom
+from ..data.geometry import ThresholdGeom, PolygonGeom, inside_polygon
 from matplotlib.patches import Ellipse
 from shapely.geometry import Point, Polygon as SPoly
 from shapely.affinity import scale

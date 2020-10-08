@@ -1,10 +1,9 @@
 from ..data.experiment import Experiment
 from ..data.populations import Population, merge_populations
-from ..data.geometry import ThresholdGeom, PolygonGeom
+from ..data.geometry import ThresholdGeom, PolygonGeom, inside_polygon
 from ..data.gates import Gate, PreProcess, PostProcess
 from ..data.gating_strategy import GatingStrategy, Action
 from .transforms import apply_transform
-from ..utilities import inside_polygon
 from ..feedback import vprint
 from .plotting import CreatePlot
 from sklearn.neighbors import KNeighborsClassifier

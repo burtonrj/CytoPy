@@ -1,4 +1,4 @@
-from ..utilities import inside_polygon
+from ..data.geometry import inside_polygon
 from shapely.geometry import Polygon
 import pandas as pd
 
