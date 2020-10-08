@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from matplotlib.patches import Ellipse
 from scipy import linalg, stats
 from scipy.spatial.qhull import ConvexHull
 from shapely.geometry import Polygon, Point
@@ -56,6 +57,12 @@ class PolygonGeom(PopulationGeometry):
     """
     x_values = mongoengine.ListField()
     y_values = mongoengine.ListField()
+
+    @property
+    def shape(self):
+        assert self.x_values is not None and self.y_values is not None, \
+            "x and y values not defined for this Polygon"
+        return create_polygon(self.x_values, self.y_values)
 
 
 def inside_polygon(df: pd.DataFrame,
@@ -227,3 +234,28 @@ def create_convex_hull(x_values: np.array,
     x = [int(i) for i in xy[hull.vertices, 0]]
     y = [int(i) for i in xy[hull.vertices, 1]]
     return x, y
+
+
+def ellipse_to_polygon(centroid: (float, float),
+                       width: float,
+                       height: float,
+                       angle: float,
+                       ellipse: Ellipse or None = None):
+    """
+    Convert an ellipse to a shapely Polygon object.
+
+    Parameters
+    ----------
+    centroid: (float, float)
+    width: float
+    height: float
+    angle: float
+    ellipse: Ellipse (optional)
+
+    Returns
+    -------
+    Polygon
+    """
+    ellipse = ellipse or Ellipse(centroid, width, height, angle)
+    vertices = ellipse.get_verts()
+    return Polygon(vertices)
