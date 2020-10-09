@@ -1,6 +1,5 @@
 from .mappings import ChannelMap
 from .populations import Population
-from .gating_strategy import GatingStrategy
 from warnings import warn
 from typing import List, Generator
 import pandas as pd
@@ -67,7 +66,7 @@ class FileGroup(mongoengine.Document):
     processing_datetime = mongoengine.DateTimeField(required=False)
     channel_mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
     populations = mongoengine.EmbeddedDocumentListField(Population)
-    gating_strategy = mongoengine.ReferenceField(GatingStrategy, reverse_delete_rule=mongoengine.PULL)
+    gating_strategy = mongoengine.ListField()
     valid = mongoengine.BooleanField(default=True)
     notes = mongoengine.StringField(required=False)
     meta = {
