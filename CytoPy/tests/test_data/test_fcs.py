@@ -63,9 +63,35 @@ def test_column_names():
     assert x.columns.tolist() == ["Channel1", "Marker2", "Channel2"]
 
 
-def test_filegroup_init():
+def test_filegroup_init_empty():
+    with pytest.warns(UserWarning) as warn:
+        x = FileGroup(primary_id="test", data_directory=f"{os.getcwd()}/test_data")
+        assert x.h5path == f"{os.getcwd()}/test_data/{x.id}.hdf5"
+    assert str(warn.list[0].message) == "FileGroup is empty!"
+
+
+@pytest.mark.parametrize("sample,columns,include_controls",
+                         [(None, "marker", False),
+                          (None, "marker", True),
+                          (None, "columns", False),
+                          (0.5, "columns", False),
+                          (0.5, "marker", True)])
+def test_filegroup_load(sample, columns, include_controls):
     x = FileGroup(primary_id="test", data_directory=f"{os.getcwd()}/test_data")
     assert x.h5path == f"{os.getcwd()}/test_data/{x.id}.hdf5"
+    pd.DataFrame({"X": np.random.normal(1, 0.5, 1000),
+                  "Y": np.random.normal(5, 1.5, 1000)}).to_hdf(key="primary",
+                                                               path_or_buf=x.h5path)
+    pd.DataFrame({"X": np.random.normal(1.5, 0.5, 500),
+                  "Y": np.random.normal(5.5, 1.5, 500)}).to_hdf(key="ctrl1",
+                                                                path_or_buf=x.h5path)
+    pd.DataFrame({"X": np.random.normal(0.5, 0.5, 500),
+                  "Y": np.random.normal(4.5, 1.5, 500)}).to_hdf(key="ctrl2",
+                                                                path_or_buf=x.h5path)
+    data = x.load(sample_size=sample,
+                  columns=columns,
+                  include_controls=include_controls)
+    assert isinstance(data, dict)
 
 
 def test_filegroup_load_populations_error():
