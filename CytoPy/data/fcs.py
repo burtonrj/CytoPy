@@ -5,6 +5,7 @@ from typing import List, Generator
 import pandas as pd
 import numpy as np
 import mongoengine
+import anytree
 import h5py
 import os
 
@@ -77,12 +78,20 @@ class FileGroup(mongoengine.Document):
     def __init__(self, *args, **values):
         super().__init__(*args, **values)
         if not self.id:
-            self.populations = []
             self.save()
         self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
         self.data = self.load(columns=values.get("columns", "marker"))
         if self.populations:
             self._load_populations()
+            self._tree = construct_tree(populations=self.populations)
+        else:
+            self.populations = [Population(population_name="root",
+                                           index=self.data.get("primary").index.values,
+                                           parent="root",
+                                           n=len(self.data.get("primary").index.values))]
+            for ctrl_id, ctrl_data in self.data.get("controls").items():
+                self.get_population("root").set_ctrl_index(**{ctrl_id: ctrl_data.index.values})
+            self._tree = {"root": anytree.Node(name="root", parent=None)}
 
     def _load_populations(self):
         """

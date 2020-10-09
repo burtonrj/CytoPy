@@ -8,43 +8,31 @@ import h5py
 import os
 
 
-def create_example_data(file_id: str):
-    with h5py.File(f"{os.getcwd()}/test_data/{file_id}.hdf5") as f:
+def create_example():
+    x = FileGroup(primary_id="test",
+                  data_directory=f"{os.getcwd()}/test_data",
+                  channel_mappings=[ChannelMap(channel="X", marker="CD4"),
+                                    ChannelMap(channel="Y", marker="CD8")])
+    pd.DataFrame({"X": np.random.normal(1, 0.5, 1000),
+                  "Y": np.random.normal(5, 1.5, 1000)}).to_hdf(key="primary",
+                                                               path_or_buf=x.h5path)
+    for c in ["ctrl1", "ctrl2", "ctrl3"]:
+        pd.DataFrame({"X": np.random.normal(1.5, 0.5, 500),
+                      "Y": np.random.normal(5.5, 1.5, 500)}).to_hdf(key=c,
+                                                                    path_or_buf=x.h5path)
+    with h5py.File(f"{os.getcwd()}/test_data/{x.id}.hdf5") as f:
         f.create_group("index")
-        f.create_group("index/test_pop")
-        f.create_dataset("index/test_pop/primary", data=np.array([1, 2, 3, 4, 5]))
-        f.create_dataset("index/test_pop/ctrl1", data=np.array([1, 2, 3, 4, 5]))
         f.create_group("clusters")
-        f.create_group("clusters/test_pop")
-        f.create_dataset("clusters/test_pop/cluster1", data=np.array([1, 2, 3, 4, 5]))
-    for x in ["primary", "ctrl1", "ctrl2"]:
-        pd.DataFrame(np.random.rand(100, 5)).to_hdf(f"{os.getcwd()}/test_data/{file_id}.hdf5", key=x)
-
-
-def create_example_filegroup(include_controls: bool = True,
-                             include_mappings: bool = True):
-    x = FileGroup(primary_id="test", data_directory=f"{os.getcwd()}/test_data")
-    if include_mappings:
-        x.channel_mappings = [ChannelMap(marker=f"Marker{i+1}", channel=f"Channel{i+1}") for i in range(5)]
-    if include_controls:
-        x.controls = ["ctrl1", "ctrl2"]
-    return x
-
-
-def create_example_populations(x: FileGroup):
-    x.populations = [Population(population_name="root", n=10000, index=np.random.rand(10000)),
-                     Population(population_name="p2", n=500,
-                                index=np.random.rand(500), parent="root",
-                                ctrl_index={"ctrl1": np.random.rand(500)}),
-                     Population(population_name="p3", n=500,
-                                index=np.random.rand(500), parent="root",
-                                ctrl_index={"ctrl1": np.random.rand(500)}),
-                     Population(population_name="p4", n=500, index=np.random.rand(500), parent="root"),
-                     Population(population_name="p5", n=500, index=np.random.rand(500), parent="root",
-                                clusters=[Cluster(cluster_id="c1",
-                                                  index=np.random.rand(500),
-                                                  tag="test",
-                                                  n=500)])]
+        f.create_dataset("index/root", data=np.arange(0, 1000))
+        for pop_id in ["test_pop1", "test_pop2"]:
+            f.create_group(f"index/{pop_id}")
+            f.create_group(f"clusters/{pop_id}")
+            f.create_dataset(f"index/{pop_id}",
+                             data=np.array(sorted(np.random.choice(500, size=15, replace=False))))
+            f.create_dataset("clusters/test_pop/cluster1",
+                             data=np.array(sorted(np.random.choice(500, size=15, replace=False))))
+        for c in ["ctrl1", "ctrl2", "ctrl3"]:
+            f.create_dataset(f"index/root/{c}", data=np.arange(0, 500))
     return x
 
 

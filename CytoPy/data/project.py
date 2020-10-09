@@ -1,4 +1,4 @@
-from .experiments import Experiment
+from .experiment import Experiment
 from .subject import Subject
 from typing import Generator
 import mongoengine

@@ -906,39 +906,4 @@ def _gate_validate_shape(shape: str,
     return method, method_kwargs
 
 
-def _new_tree(data: dict):
-    populations = {"root": Population(population_name="root",
-                                      index=data.get("primary").index.values,
-                                      parent="root",
-                                      n=len(data.get("primary").index.values))}
-    if "controls" in data.keys():
-        for ctrl_id, ctrl_data in data.get("controls").items():
-            populations["root"].set_ctrl_index(**{ctrl_id: ctrl_data.index.values})
-    return {"root": Node(name="root", parent=None)}, populations
 
-
-def _grow_population_tree(tree: dict,
-                          database_populations: list):
-    i = 0
-    while len(database_populations) > 0:
-        if i >= len(database_populations):
-            # Loop back around
-            i = 0
-        branch = _construct_branch(tree, database_populations[i])
-        if branch is not None:
-            tree = branch
-            database_populations = [p for p in database_populations
-                                    if p.population_name != database_populations[i].population_name]
-        else:
-            i = i + 1
-    return tree
-
-
-def _construct_tree(populations: List[Population]):
-    err = "Invalid FileGroup, must contain 'root' population"
-    assert "root" in [p.population_name for p in populations], err
-    populations_dict = {p.population_name: p for p in populations}
-    tree = {"root": Node(name="root", parent=None)}
-    database_populations = [p for p in populations if p.population_name != 'root']
-    tree = _grow_population_tree(tree=tree, database_populations=database_populations)
-    return tree, populations_dict
