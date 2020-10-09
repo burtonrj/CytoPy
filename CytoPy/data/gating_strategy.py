@@ -1,4 +1,6 @@
+from ..feedback import progress_bar, vprint
 from .experiment import Experiment
+from .fcs import FileGroup
 from .gate import Gate
 from datetime import datetime
 import mongoengine
@@ -32,7 +34,7 @@ class GatingStrategy(mongoengine.Document):
     notes: str, optional
         free text comments
     """
-    template_name = mongoengine.StringField(required=True, unique=True)
+    name = mongoengine.StringField(required=True, unique=True)
     gates = mongoengine.ListField(mongoengine.ReferenceField(Gate, reverse_delete_rule=mongoengine.PULL))
     actions = mongoengine.EmbeddedDocumentListField(Action)
     creation_date = mongoengine.DateTimeField(default=datetime.now)
@@ -45,6 +47,8 @@ class GatingStrategy(mongoengine.Document):
     }
 
     def __init__(self, *args, **values):
+        self.verbose = values.pop("verbose", True)
+        self.print = vprint(verbose=self.verbose)
         super().__init__(*args, **values)
         self._filegroup = None
         self._tree = None
@@ -102,8 +106,36 @@ class GatingStrategy(mongoengine.Document):
             g.save()
         super().save(*args, **kwargs)
 
-    def delete(self, delete_gates: bool = True, *args, **kwargs):
+    def delete(self,
+               delete_gates: bool = True,
+               remove_associations: bool = True,
+               *args, **kwargs):
+        """
+        Delete gating strategy. If delete_gates is True, then associated Gate objects will
+        also be deleted. If remove_associations is True, then populations generated from
+        this gating strategy will also be deleted.
+
+        Parameters
+        ----------
+        delete_gates
+        remove_associations
+        args
+        kwargs
+
+        Returns
+        -------
+
+        """
         if delete_gates:
+            self.print("Deleting gates...")
             for g in self.gates:
                 g.delete()
+        if remove_associations:
+            self.print("Deleting associated populations...")
+            for f in progress_bar(FileGroup.objects(), verbose=self.verbose):
+                if self.name in f.gating_strategy:
+                    f.gating_strategy = [gs for gs in f.gating_strategy if gs != self.name]
+                    f.populations = []
+                    f.save()
         super().delete(*args, **kwargs)
+        self.print(f"{self.name} successfully deleted.")
