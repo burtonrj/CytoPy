@@ -709,6 +709,10 @@ class Experiment(mongoengine.Document):
         verbose: bool, (default=True)
             If True function will provide feedback in the form of print statements
             (default=True)
+        missing: str (default="raise")
+            How to handle missing channels (that is, channels that appear in the associated
+            staining panel but cannot be found in the FCS data. Either "raise" to raise
+            AssertionError or "warn" to flag a UserWarning but continue execution.
         processing_datetime: str, optional
         collection_datetime: str, optional
 

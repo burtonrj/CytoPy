@@ -1,24 +1,24 @@
 from ..data.populations import Population
-from typing import List
+from typing import List, Dict
 import anytree
 
-
-def new_tree(data: dict):
+def _construct_branch(tree: Dict[str, anytree.Node],
+                      population: Population):
     """
 
     Parameters
     ----------
-    data
+    tree
+    population
 
     Returns
     -------
 
     """
-    pass
 
 
-def grow_tree(tree: dict,
-              database_populations: list):
+def grow_tree(tree: Dict[str, anytree.Node],
+              database_populations: List[Population]):
     """
 
     Parameters
@@ -30,21 +30,40 @@ def grow_tree(tree: dict,
     -------
 
     """
-    pass
+    i = 0
+    while len(database_populations) > 0:
+        if i >= len(database_populations):
+            # Loop back around
+            i = 0
+        branch = _construct_branch(tree, database_populations[i])
+        if branch is not None:
+            tree = branch
+            database_populations = [p for p in database_populations
+                                    if p.population_name != database_populations[i].population_name]
+        else:
+            i = i + 1
+    return tree
 
 
-def construct_tree(populations: List[Population]):
+def construct_tree(populations: List[Population]) -> Dict[str, anytree.Node]:
     """
+    Given a list of populations, construct a tree of population hierarchy using the
+    population parent information.
 
     Parameters
     ----------
-    populations
-
+    populations: List[Population]
+        List of Population objects
     Returns
     -------
-
+    dict
+        Dictionary of Node objects
     """
-    pass
+    err = "Invalid FileGroup, must contain 'root' population"
+    assert "root" in [p.population_name for p in populations], err
+    tree = {"root": anytree.Node(name="root", parent=None)}
+    database_populations = [p for p in populations if p.population_name != 'root']
+    return grow_tree(tree=tree, database_populations=database_populations)
 
 
 def list_downstream_populations(self,
@@ -63,6 +82,7 @@ def list_downstream_populations(self,
 
     """
     pass
+
 
 def list_dependencies(self,
                       population: str) -> list:
@@ -83,3 +103,20 @@ def list_dependencies(self,
 def list_child_populations(self,
                            population: str):
     pass
+
+
+def _grow_population_tree(tree: dict,
+                          database_populations: list):
+    i = 0
+    while len(database_populations) > 0:
+        if i >= len(database_populations):
+            # Loop back around
+            i = 0
+        branch = _construct_branch(tree, database_populations[i])
+        if branch is not None:
+            tree = branch
+            database_populations = [p for p in database_populations
+                                    if p.population_name != database_populations[i].population_name]
+        else:
+            i = i + 1
+    return tree

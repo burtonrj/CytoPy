@@ -21,3 +21,4 @@ def clean_up():
         os.remove(f"{os.getcwd()}/test_data/{x}")
     db = _get_db("core")
     db.drop_collection('fcs_files')
+
