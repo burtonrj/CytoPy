@@ -41,7 +41,10 @@ def create_example_populations(x: FileGroup):
                                 ctrl_index={"ctrl1": np.random.rand(500)}),
                      Population(population_name="p4", n=500, index=np.random.rand(500), parent="root"),
                      Population(population_name="p5", n=500, index=np.random.rand(500), parent="root",
-                                clusters=[Cluster(cluster_id="c1", index=np.random.rand(500), n=500)])]
+                                clusters=[Cluster(cluster_id="c1",
+                                                  index=np.random.rand(500),
+                                                  tag="test",
+                                                  n=500)])]
     return x
 
 
@@ -77,7 +80,10 @@ def test_filegroup_init_empty():
                           (0.5, "columns", False),
                           (0.5, "marker", True)])
 def test_filegroup_load(sample, columns, include_controls):
-    x = FileGroup(primary_id="test", data_directory=f"{os.getcwd()}/test_data")
+    x = FileGroup(primary_id="test",
+                  data_directory=f"{os.getcwd()}/test_data",
+                  channel_mappings=[ChannelMap(channel="X", marker="CD4"),
+                                    ChannelMap(channel="Y", marker="CD8")])
     assert x.h5path == f"{os.getcwd()}/test_data/{x.id}.hdf5"
     pd.DataFrame({"X": np.random.normal(1, 0.5, 1000),
                   "Y": np.random.normal(5, 1.5, 1000)}).to_hdf(key="primary",
@@ -92,6 +98,25 @@ def test_filegroup_load(sample, columns, include_controls):
                   columns=columns,
                   include_controls=include_controls)
     assert isinstance(data, dict)
+    assert "primary" in data.keys()
+    assert isinstance(data.get("primary"), pd.DataFrame)
+    if columns == "columns":
+        assert set(data.get("primary").columns.tolist()) == {"X", "Y"}
+    else:
+        assert set(data.get("primary").columns.tolist()) == {"CD4", "CD8"}
+    if sample is not None:
+        assert data.get("primary").shape[0] == 500
+    if include_controls:
+        assert "controls" in data.keys()
+        assert isinstance(data.get("controls"), dict)
+        for c in ["ctrl1", "ctrl2"]:
+            assert c in data.get("controls").keys()
+            if columns == "columns":
+                assert set(data.get(c).columns.tolist()) == {"X", "Y"}
+            else:
+                assert set(data.get(c).columns.tolist()) == {"CD4", "CD8"}
+            if sample is not None:
+                assert data.get(c).shape[0] == 250
 
 
 def test_filegroup_load_populations_error():
@@ -184,20 +209,25 @@ def test_delete_pop_err(pop, err):
 def test_delete_pop():
     x = create_example_filegroup()
     x = create_example_populations(x)
+    create_example_data(x.id)
+    x.save()
     x.delete_populations(["p3"])
     assert "p3" not in list(x.list_populations())
     x.delete_populations(["p2", "p5"])
     assert {"root", "p4"} == set([p.population_name for p in x.populations])
+    delete_example_data(x.id)
 
 
 def test_update_pop():
     x = create_example_filegroup()
     x = create_example_populations(x)
+    create_example_data(x.id)
     x.update_population(population_name="p3", new_population=Population(population_name="new",
                                                                         index=np.random.rand(1000),
                                                                         n=1000))
     assert "p3" not in list(x.list_populations())
     assert "new" in list(x.list_populations())
+    delete_example_data(x.id)
 
 
 def test_get_pop_by_parent():
@@ -233,5 +263,3 @@ def test_reset_pop_data():
         assert "primary" not in f["index/test_pop"].keys()
         assert "ctrl1" not in f["index/test_pop"].keys()
         assert "test_pop" not in f["clusters"].keys()
-
-

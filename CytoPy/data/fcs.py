@@ -424,13 +424,14 @@ class FileGroup(mongoengine.Document):
         """
         with h5py.File(self.h5path, "a") as f:
             for p in self.populations:
-                if "primary" in f[f"index/{p.population_name}"].keys():
-                    del f[f"index/{p.population_name}/primary"]
+                if p.population_name in f["index"].keys():
+                    if "primary" in f[f"index/{p.population_name}"].keys():
+                        del f[f"index/{p.population_name}/primary"]
+                    for ctrl_id in p.ctrl_index.keys():
+                        if ctrl_id in f[f"index/{p.population_name}"].keys():
+                            del f[f"index/{p.population_name}/{ctrl_id}"]
                 if p.population_name in f["clusters"].keys():
                     del f[f"clusters/{p.population_name}"]
-                for ctrl_id in p.ctrl_index.keys():
-                    if ctrl_id in f[f"index/{p.population_name}"].keys():
-                        del f[f"index/{p.population_name}/{ctrl_id}"]
 
     def save(self, *args, **kwargs):
         # Calculate meta and save indexes to disk
