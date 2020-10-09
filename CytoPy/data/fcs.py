@@ -139,7 +139,7 @@ class FileGroup(mongoengine.Document):
     def load(self,
              sample_size: int or float or None = None,
              include_controls: bool = True,
-             columns: str = "marker"):
+             columns: str = "marker") -> dict:
         """
         Load events data and return as a Pandas DataFrame.
 
@@ -153,6 +153,9 @@ class FileGroup(mongoengine.Document):
         -------
         Pandas.DataFrame
         """
+        if not os.path.isfile(self.h5path):
+            warn("FileGroup is empty!")
+            return dict()
         data = {"primary": _column_names(df=pd.read_hdf(self.h5path, "primary"),
                                          mappings=self.channel_mappings,
                                          preference=columns)}
