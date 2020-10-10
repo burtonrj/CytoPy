@@ -90,6 +90,7 @@ class FileGroup(mongoengine.Document):
             self.save()
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
             self._init_new_file(data=data)
+            self.data = self.load(columns=values.get("columns", "marker"))
         else:
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
             self.data = self.load(columns=values.get("columns", "marker"))
@@ -124,12 +125,17 @@ class FileGroup(mongoengine.Document):
             else:
                 df.to_hdf(self.h5path, key="primary")
         self.populations = [Population(population_name="root",
-                                       index=self.data.get("primary").index.values,
+                                       index=data.get("primary").index.values,
                                        parent="root",
-                                       n=len(self.data.get("primary").index.values))]
+                                       n=len(data.get("primary").index.values))]
         for ctrl_id, ctrl_data in ctrl_idx.items():
             self.get_population("root").set_ctrl_index(**{ctrl_id: ctrl_data})
-        self._tree = {"root": anytree.Node(name="root", parent=None)}
+        with h5py.File(self.h5path, "a") as f:
+            f.create_group("index")
+            f.create_group("index/root")
+            f.create_group("clusters")
+            f.create_group("cluster/root")
+        self.tree = {"root": anytree.Node(name="root", parent=None)}
         self.save()
 
     def _load_populations(self):
@@ -231,7 +237,7 @@ class FileGroup(mongoengine.Document):
                                                        preference=columns)
                                 for ctrl_id in self.controls}
         if sample_size is not None:
-            data = self._sample_data(data=data, sample_size=sample_size)
+            return self._sample_data(data=data, sample_size=sample_size)
         return data
 
     def _hdf5_exists(self):
@@ -414,27 +420,8 @@ class FileGroup(mongoengine.Document):
                     f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
                 for cluster in p.clusters:
                     cluster.prop_of_events = cluster.n/p.n
-                    f.create_dataset(f'/clusters/{p.population_name}/{cluster.cluster_id}', data=cluster.index)
-
-    def _hdf_create_population_grps(self):
-        """
-        Check if index group exists in HDF5 file, if not, create it. Then check that a group
-        exists for each population and if absent create a group.
-
-        Returns
-        -------
-        None
-        """
-        with h5py.File(self.h5path, "a") as f:
-            if "index" not in f.keys():
-                f.create_group("index")
-            if "clusters" not in f.keys():
-                f.create_group("clusters")
-            for p in self.populations:
-                if p.population_name not in f["index"].keys():
-                    f.create_group(f"index/{p.population_name}")
-                if p.population_name not in f["clusters"].keys():
-                    f.create_group(f"clusters/{p.population_name}")
+                    f.create_dataset(f'/clusters/{p.population_name}/{cluster.cluster_id}',
+                                     data=cluster.index)
 
     def _hdf_reset_population_data(self):
         """
@@ -469,9 +456,9 @@ class FileGroup(mongoengine.Document):
                delete_hdf5_file: bool = True,
                *args,
                **kwargs):
+        super().delete(*args, **kwargs)
         if delete_hdf5_file:
             if os.path.isfile(self.h5path):
                 os.remove(self.h5path)
             else:
                 warn(f"Could not locate hdf5 file {self.h5path}")
-        super().delete(*args, **kwargs)
