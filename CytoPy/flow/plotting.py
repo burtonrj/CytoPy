@@ -1,5 +1,5 @@
 from ..data.gates import Gate
-from ..data.populations import Population
+from ..data.population import Population
 from ..data.geometry import ThresholdGeom, PolygonGeom
 from ..flow.transforms import apply_transform
 from warnings import warn

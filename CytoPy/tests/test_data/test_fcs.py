@@ -1,6 +1,7 @@
-from CytoPy.data.fcs import _column_names, FileGroup
-from CytoPy.data.populations import Cluster, Population
-from CytoPy.data.mappings import ChannelMap
+from ...data.fcs import _column_names, FileGroup
+from ...data.project import Project
+from ...data.population import Cluster, Population
+from ...data.mapping import ChannelMap
 import pandas as pd
 import numpy as np
 import pytest
@@ -8,32 +9,29 @@ import h5py
 import os
 
 
-def create_example():
-    x = FileGroup(primary_id="test",
-                  data_directory=f"{os.getcwd()}/test_data",
-                  channel_mappings=[ChannelMap(channel="X", marker="CD4"),
-                                    ChannelMap(channel="Y", marker="CD8")])
-    pd.DataFrame({"X": np.random.normal(1, 0.5, 1000),
-                  "Y": np.random.normal(5, 1.5, 1000)}).to_hdf(key="primary",
-                                                               path_or_buf=x.h5path)
-    for c in ["ctrl1", "ctrl2", "ctrl3"]:
-        pd.DataFrame({"X": np.random.normal(1.5, 0.5, 500),
-                      "Y": np.random.normal(5.5, 1.5, 500)}).to_hdf(key=c,
-                                                                    path_or_buf=x.h5path)
-    with h5py.File(f"{os.getcwd()}/test_data/{x.id}.hdf5") as f:
-        f.create_group("index")
-        f.create_group("clusters")
-        f.create_dataset("index/root", data=np.arange(0, 1000))
-        for pop_id in ["test_pop1", "test_pop2"]:
-            f.create_group(f"index/{pop_id}")
-            f.create_group(f"clusters/{pop_id}")
-            f.create_dataset(f"index/{pop_id}",
-                             data=np.array(sorted(np.random.choice(500, size=15, replace=False))))
-            f.create_dataset("clusters/test_pop/cluster1",
-                             data=np.array(sorted(np.random.choice(500, size=15, replace=False))))
-        for c in ["ctrl1", "ctrl2", "ctrl3"]:
-            f.create_dataset(f"index/root/{c}", data=np.arange(0, 500))
-    return x
+@pytest.fixture(scope="module", autouse=True)
+def example_data_setup():
+    test_project = Project(project_id="test")
+    test_project.add_experiment(experiment_id="test experiment",
+                                data_directory=f"{os.getcwd()}/test_data",
+                                panel_definition=f"{os.getcwd()}/CytoPy/tests/assets/test_panel.xlsx")
+
+
+def load_exp():
+    test_project = Project.objects(project_id="test").get()
+    return test_project.load_experiment("test experiment")
+
+
+def test_create_fcs_file():
+    test_exp = load_exp()
+    fg_id = test_exp.add_new_sample(sample_id="test sample",
+                                    primary_path=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
+                                    controls_path={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
+                                    compensate=False)
+    assert os.path.isfile(f"{os.getcwd()}/test_data/{fg_id}.hdf5")
+    fg = test_exp.get_sample("test sample")
+    assert len(fg.populations) == 1
+    assert fg.populations[0].population_name == "root"
 
 
 def delete_example_data(file_id: str):
@@ -55,56 +53,38 @@ def test_column_names():
 
 
 def test_filegroup_init_empty():
-    with pytest.warns(UserWarning) as warn:
-        x = FileGroup(primary_id="test", data_directory=f"{os.getcwd()}/test_data")
-        assert x.h5path == f"{os.getcwd()}/test_data/{x.id}.hdf5"
-    assert str(warn.list[0].message) == "FileGroup is empty!"
-
-
-@pytest.mark.parametrize("sample,columns,include_controls",
-                         [(None, "marker", False),
-                          (None, "marker", True),
-                          (None, "columns", False),
-                          (0.5, "columns", False),
-                          (0.5, "marker", True)])
-def test_filegroup_load(sample, columns, include_controls):
-    x = FileGroup(primary_id="test",
-                  data_directory=f"{os.getcwd()}/test_data",
-                  channel_mappings=[ChannelMap(channel="X", marker="CD4"),
-                                    ChannelMap(channel="Y", marker="CD8")])
+    x = FileGroup(primary_id="test", data_directory=f"{os.getcwd()}/test_data")
     assert x.h5path == f"{os.getcwd()}/test_data/{x.id}.hdf5"
-    pd.DataFrame({"X": np.random.normal(1, 0.5, 1000),
-                  "Y": np.random.normal(5, 1.5, 1000)}).to_hdf(key="primary",
-                                                               path_or_buf=x.h5path)
-    pd.DataFrame({"X": np.random.normal(1.5, 0.5, 500),
-                  "Y": np.random.normal(5.5, 1.5, 500)}).to_hdf(key="ctrl1",
-                                                                path_or_buf=x.h5path)
-    pd.DataFrame({"X": np.random.normal(0.5, 0.5, 500),
-                  "Y": np.random.normal(4.5, 1.5, 500)}).to_hdf(key="ctrl2",
-                                                                path_or_buf=x.h5path)
-    data = x.load(sample_size=sample,
-                  columns=columns,
-                  include_controls=include_controls)
-    assert isinstance(data, dict)
-    assert "primary" in data.keys()
-    assert isinstance(data.get("primary"), pd.DataFrame)
+    assert len(x.populations) == 0
+    x.save()
+    x = FileGroup.objects(primary_id="test").get()
+    assert len(x.populations) == 1
+
+
+@pytest.mark.parametrize("columns", ["marker", "channel"])
+def test_filegroup_init(columns):
+    fg = create_example()
+    # Test primary and control data loaded
+    assert isinstance(fg, FileGroup)
+    assert "primary" in fg.data.keys()
+    assert isinstance(fg.data.get("primary"), pd.DataFrame)
+    assert "controls" in fg.data.keys()
+    assert isinstance(fg.data.get("controls"), dict)
+    assert all([x in fg.data.get("controls").keys() for x in ["ctrl1", "ctrl2", "ctrl3"]])
+    assert all([isinstance(x, pd.DataFrame) for x in fg.data.get("controls").values()])
+    # Test column mappings
     if columns == "columns":
-        assert set(data.get("primary").columns.tolist()) == {"X", "Y"}
+        assert set(fg.data.get("primary").columns.tolist()) == {"X", "Y"}
     else:
-        assert set(data.get("primary").columns.tolist()) == {"CD4", "CD8"}
-    if sample is not None:
-        assert data.get("primary").shape[0] == 500
-    if include_controls:
-        assert "controls" in data.keys()
-        assert isinstance(data.get("controls"), dict)
-        for c in ["ctrl1", "ctrl2"]:
-            assert c in data.get("controls").keys()
-            if columns == "columns":
-                assert set(data.get(c).columns.tolist()) == {"X", "Y"}
-            else:
-                assert set(data.get(c).columns.tolist()) == {"CD4", "CD8"}
-            if sample is not None:
-                assert data.get(c).shape[0] == 250
+        assert set(fg.data.get("primary").columns.tolist()) == {"CD4", "CD8"}
+    # Test populations constructed
+    assert len(fg.populations) == 3
+    assert len(fg.tree.keys()) == 3
+    expected_population_names = {"root", "test_pop1", "test_pop2"}
+    assert set([p.population_name for p in fg.populations]) == expected_population_names
+    assert set(fg.tree.keys()) == expected_population_names
+
+    delete_example_data(fg.id)
 
 
 def test_filegroup_load_populations_error():
@@ -143,7 +123,7 @@ def test_filegroup_load(sample_size, include_ctrls, columns, keys):
     sample_size = sample_size or 100
     assert isinstance(df, dict)
     assert all(x in df.keys() for x in keys)
-    assert df["primary"].columns.tolist() == [f"{columns.capitalize()}{i+1}" for i in range(5)]
+    assert df["primary"].columns.tolist() == [f"{columns.capitalize()}{i + 1}" for i in range(5)]
     assert df["primary"].shape[0] == sample_size
     if "controls" in df.keys():
         assert all(x in df["controls"].keys() for x in ["ctrl1", "ctrl2"])
@@ -230,7 +210,7 @@ def test_write_pop():
     x._write_populations()
     p = x.get_population("p3")
     assert p.n == 500
-    assert p.prop_of_parent == 500/10000
+    assert p.prop_of_parent == 500 / 10000
     assert p.prop_of_total == 500 / 10000
     with h5py.File(x.h5path, "r") as f:
         assert all(x in f["index"].keys() for x in ["root", "p2", "p3", "p4", "p5"])

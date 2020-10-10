@@ -1,4 +1,6 @@
-from ...data.experiments import check_excel_template, NormalisedName, _query, _check_duplication, Panel, _data_dir_append_leading_char, Experiment
+from ...data.experiment import check_excel_template, NormalisedName, \
+    _check_duplication, Panel, _data_dir_append_leading_char, Experiment, \
+    _check_pairing
 from ...tests import assets
 import pandas as pd
 import pytest
@@ -9,16 +11,6 @@ def test_check_excel_template():
     mappings, nomenclature = check_excel_template(f"{assets.__path__._path[0]}/test_panel.xlsx")
     assert isinstance(mappings, pd.DataFrame)
     assert isinstance(nomenclature, pd.DataFrame)
-
-
-def test_query():
-    example_mappings = [NormalisedName(standard="IgG1-FITC", regex_str="\s*IgG[-\s.]*1[-\s.]+FITC\s*", case_sensitive=False),
-                        NormalisedName(standard="CD45-ECD", regex_str="\s*CD[-\s.]*45[-\s.]+ECD\s*", case_sensitive=False)]
-    with pytest.raises(AssertionError) as exp:
-        _query("Invalid", example_mappings)
-    assert str(exp.value) == f'Unable to normalise Invalid; no match in linked panel'
-    assert _query("igg1-fitc", example_mappings) == "IgG1-FITC"
-    assert _query("cd45 ECD", example_mappings) == "CD45-ECD"
 
 
 def test_check_duplicates():
@@ -36,28 +28,6 @@ def test_panel_create_from_excel():
     assert all(x in [cm.channel for cm in test.mappings] for x in ["FS Lin", "SS Log", "FL1 Log", "FL2 Log", "FL3 Log", "FL4 Log", "FL5 Log"])
     assert all(x in [m.standard for m in test.markers] for x in ["FS Lin", "SS Log", "IgG1-FITC", "IgG1-PE", "CD45-ECD", "IgG1-PC5", "IgG1-PC7"])
     assert all(x in [c.standard for c in test.channels] for x in ["FS Lin", "SS Log", "FL1 Log", "FL2 Log", "FL3 Log", "FL4 Log", "FL5 Log"])
-
-
-def test_panel_check_pairing():
-    test = Panel(panel_name="Test Panel")
-    test.create_from_excel(f"{assets.__path__._path[0]}/test_panel.xlsx")
-    assert test._check_pairing(channel="FS Lin", marker="FS Lin")
-    assert test._check_pairing(channel="FL2 Log", marker="IgG1-PE")
-    assert not test._check_pairing(channel="FL2 Log", marker="CD45-ECD")
-
-
-def test_panel_standardise_names():
-    test = Panel(panel_name="Test Panel")
-    test.create_from_excel(f"{assets.__path__._path[0]}/test_panel.xlsx")
-    original_mappings = [("FS-Lin", ""), ("SS-Log", ""), ("FL1-Log", "IgG1 Fitc"),
-                         ("FL2 Log", "IgG1 pe"), ("FL3 Log", "cd45 ecd"),
-                         ("FL4 Log", "IgG1 pc5"), ("FL5 Log", "IgG1 pc7")]
-    correct_mappings = [("FS Lin", "FS Lin"), ("SS Log", "SS Log"), ("FL1 Log", "IgG1-FITC"),
-                        ("FL2 Log", "IgG1-PE"), ("FL3 Log", "CD45-ECD"), ("FL4 Log", "IgG1-PC5"),
-                        ("FL5 Log", "IgG1-PC7")]
-    corrected = test.standardise_names(original_mappings)
-    assert all(x[0] == y[0] for x, y in zip(corrected, correct_mappings))
-    assert all(x[1] == y[1] for x, y in zip(corrected, correct_mappings))
 
 
 def test_data_dir_append_leading_char():
