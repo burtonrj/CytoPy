@@ -244,49 +244,6 @@ class FileGroup(mongoengine.Document):
         """
         return os.path.isfile(self.h5path)
 
-    def _add_file(self,
-                  data: np.array,
-                  channel_mappings: List[dict],
-                  control: bool = False,
-                  ctrl_id: str or None = None):
-        """
-        Add new file to the FileGroup. Calls `save` upon completion.
-
-        Parameters
-        ----------
-        data: Numpy.array
-            Matrix of events data
-        channel_mappings: List[dict]
-            List of dictionary objects e.g {"channel": "PE-Cy7", "marker": "CD3"}
-        control: bool (default=False)
-            Indicates if file represents a control e.g. an FMO or isotype control
-        ctrl_id: str or None
-            Required if control=True
-
-        Returns
-        -------
-        None
-        """
-
-        if self.channel_mappings:
-            self._valid_mappings(channel_mappings)
-        else:
-            self.channel_mappings = [ChannelMap(channel=x["channel"], marker=x["marker"])
-                                     for x in channel_mappings]
-        if control:
-            assert ctrl_id, "No ctrl_id given"
-            if self._hdf5_exists():
-                with h5py.File(self.h5path, "r") as f:
-                    assert ctrl_id not in f.keys(), f"Control file with ID {ctrl_id} already exists"
-            pd.DataFrame(data).to_hdf(self.h5path, key=ctrl_id)
-            self.controls.append(ctrl_id)
-        else:
-            if self._hdf5_exists():
-                with h5py.File(self.h5path, "r") as f:
-                    assert "primary" not in f.keys(), "There can only be one primary file associated to each file group"
-            pd.DataFrame(data).to_hdf(self.h5path, key="primary")
-        self.save()
-
     def _valid_mappings(self, channel_mappings: List[dict]):
         """
         Given a list of dictionaries representing channel mappings, check that they match
