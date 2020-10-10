@@ -1,5 +1,5 @@
 from ...data.experiments import Experiment
-from ...data.populations import Cluster
+from ...data.population import Cluster
 from ...feedback import vprint, progress_bar
 from ..explore import Explorer
 from ..gating_tools import Gating, load_population

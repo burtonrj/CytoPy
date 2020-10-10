@@ -1,5 +1,5 @@
 from ...data.experiments import Experiment
-from ...data.populations import Population
+from ...data.population import Population
 from ...tests import assets
 import pandas as pd
 import pytest

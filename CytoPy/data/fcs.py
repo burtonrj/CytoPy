@@ -1,7 +1,8 @@
-from .mappings import ChannelMap
-from .populations import Population
+from ..flow.tree import construct_tree
+from .mapping import ChannelMap
+from .population import Population
 from warnings import warn
-from typing import List, Generator
+from typing import List, Generator, Dict
 import pandas as pd
 import numpy as np
 import mongoengine
@@ -76,22 +77,60 @@ class FileGroup(mongoengine.Document):
     }
 
     def __init__(self, *args, **values):
+        data = values.pop("data", None)
+        mappings = values.pop("mappings", None)
         super().__init__(*args, **values)
-        if not self.id:
+        if data is not None and mappings is not None:
+            assert not self.id, "This FileGroup has already been defined"
+            err = "Invalid data: should be a dictionary of dataframes"
+            assert isinstance(data, dict), err
+            assert all([isinstance(x, pd.DataFrame) for x in data.values()]), err
+            self.channel_mappings = [ChannelMap(channel=x["channel"], marker=x["marker"])
+                                     for x in mappings]
             self.save()
-        self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
-        self.data = self.load(columns=values.get("columns", "marker"))
-        if self.populations:
-            self._load_populations()
-            self._tree = construct_tree(populations=self.populations)
+            self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
+            self._init_new_file(data=data)
         else:
-            self.populations = [Population(population_name="root",
-                                           index=self.data.get("primary").index.values,
-                                           parent="root",
-                                           n=len(self.data.get("primary").index.values))]
-            for ctrl_id, ctrl_data in self.data.get("controls").items():
-                self.get_population("root").set_ctrl_index(**{ctrl_id: ctrl_data.index.values})
-            self._tree = {"root": anytree.Node(name="root", parent=None)}
+            self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
+            self.data = self.load(columns=values.get("columns", "marker"))
+            self._load_populations()
+            self.tree = construct_tree(populations=self.populations)
+
+    def _init_new_file(self,
+                       data: Dict[str, pd.DataFrame]):
+        """
+        Under the assumption that this FileGroup has not been previously defined,
+        generate a HDF5 file and initialise the root Population
+
+        Parameters
+        ----------
+        data: dict
+            Dictionary of dataframes. Should contain a key for "primary" being
+            the primary staining data. The remaining keys and values will be
+            stored as control files.
+
+        Returns
+        -------
+        None
+        """
+        err = "Data dictionary values should be pandas dataframes"
+        assert all([isinstance(x, pd.DataFrame) for x in data.values()]), err
+        ctrl_idx = {}
+        for name, df in data.items():
+            if name != "primary":
+                df.to_hdf(self.h5path, key=name)
+                self.controls.append(name)
+                ctrl_idx[name] = df.index.values
+            else:
+                df.to_hdf(self.h5path, key="primary")
+        self.populations = [Population(population_name="root",
+                                       index=self.data.get("primary").index.values,
+                                       parent="root",
+                                       n=len(self.data.get("primary").index.values))]
+        for ctrl_id, ctrl_data in ctrl_idx.items():
+            self.get_population("root").set_ctrl_index(**{ctrl_id: ctrl_data})
+        self._tree = {"root": anytree.Node(name="root", parent=None)}
+        self.save()
 
     def _load_populations(self):
         """
@@ -129,6 +168,7 @@ class FileGroup(mongoengine.Document):
         Parameters
         ----------
         data: dict
+
         sample_size: int or float
 
         Returns
@@ -144,6 +184,25 @@ class FileGroup(mongoengine.Document):
             data["controls"] = {file_id: x.sample(**kwargs)
                                 for file_id, x in data["controls"].items()}
         return data
+
+    def add_population(self,
+                       population: Population):
+        """
+        Add a new Population to this FileGroup.
+
+        Parameters
+        ----------
+        population: Population
+
+        Returns
+        -------
+        None
+        """
+        err = f"Population with name '{population.population_name}' already exists"
+        assert population.population_name not in self.tree.keys(), err
+        self.populations.append(population)
+        self.tree[population.population_name] = anytree.Node(name=population.population_name,
+                                                             parent=self.tree.get(population.parent))
 
     def load(self,
              sample_size: int or float or None = None,
@@ -162,9 +221,7 @@ class FileGroup(mongoengine.Document):
         -------
         Pandas.DataFrame
         """
-        if not os.path.isfile(self.h5path):
-            warn("FileGroup is empty!")
-            return dict()
+        assert os.path.isfile(self.h5path), "FileGroup is empty!"
         data = {"primary": _column_names(df=pd.read_hdf(self.h5path, "primary"),
                                          mappings=self.channel_mappings,
                                          preference=columns)}
@@ -187,11 +244,11 @@ class FileGroup(mongoengine.Document):
         """
         return os.path.isfile(self.h5path)
 
-    def add_file(self,
-                 data: np.array,
-                 channel_mappings: List[dict],
-                 control: bool = False,
-                 ctrl_id: str or None = None):
+    def _add_file(self,
+                  data: np.array,
+                  channel_mappings: List[dict],
+                  control: bool = False,
+                  ctrl_id: str or None = None):
         """
         Add new file to the FileGroup. Calls `save` upon completion.
 

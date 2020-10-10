@@ -2,7 +2,7 @@ from ..flow.transforms import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
     create_convex_hull, create_polygon, polygon_overlap, ellipse_to_polygon, \
     probablistic_ellipse
-from .populations import Population, merge_multiple_populations
+from .population import Population, merge_multiple_populations
 from ..flow.transforms import scaler
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction

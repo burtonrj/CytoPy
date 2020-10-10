@@ -1,4 +1,4 @@
-from CytoPy.data.populations import Cluster, Population, _check_overlap, _merge_index, \
+from CytoPy.data.population import Cluster, Population, _check_overlap, _merge_index, \
     _merge_signatures, _merge_thresholds, _merge_polygons
 from CytoPy.data.geometry import ThresholdGeom, PolygonGeom
 from shapely.geometry import Polygon as Poly

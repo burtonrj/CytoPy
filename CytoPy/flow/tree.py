@@ -1,6 +1,7 @@
-from ..data.populations import Population
+from ..data.population import Population
 from typing import List, Dict
 import anytree
+
 
 def _construct_branch(tree: Dict[str, anytree.Node],
                       population: Population):
@@ -16,9 +17,15 @@ def _construct_branch(tree: Dict[str, anytree.Node],
 
     """
 
+    if population.parent not in tree.keys():
+        return None
+    tree[population.population_name] = anytree.Node(name=population.population_name,
+                                                    parent=tree[population.parent])
+    return tree
 
-def grow_tree(tree: Dict[str, anytree.Node],
-              database_populations: List[Population]):
+
+def _grow_tree(tree: Dict[str, anytree.Node],
+               database_populations: List[Population]):
     """
 
     Parameters
@@ -63,7 +70,7 @@ def construct_tree(populations: List[Population]) -> Dict[str, anytree.Node]:
     assert "root" in [p.population_name for p in populations], err
     tree = {"root": anytree.Node(name="root", parent=None)}
     database_populations = [p for p in populations if p.population_name != 'root']
-    return grow_tree(tree=tree, database_populations=database_populations)
+    return _grow_tree(tree=tree, database_populations=database_populations)
 
 
 def list_downstream_populations(self,
@@ -104,19 +111,3 @@ def list_child_populations(self,
                            population: str):
     pass
 
-
-def _grow_population_tree(tree: dict,
-                          database_populations: list):
-    i = 0
-    while len(database_populations) > 0:
-        if i >= len(database_populations):
-            # Loop back around
-            i = 0
-        branch = _construct_branch(tree, database_populations[i])
-        if branch is not None:
-            tree = branch
-            database_populations = [p for p in database_populations
-                                    if p.population_name != database_populations[i].population_name]
-        else:
-            i = i + 1
-    return tree

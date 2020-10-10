@@ -1,5 +1,5 @@
 from ..data.experiment import Experiment
-from ..data.populations import Population, merge_populations
+from ..data.population import Population, merge_populations
 from ..data.geometry import ThresholdGeom, PolygonGeom, inside_polygon
 from ..data.gates import Gate, PreProcess, PostProcess
 from ..data.gating_strategy import GatingStrategy, Action
@@ -734,27 +734,6 @@ class Gating:
             DotExporter(root).to_picture(image_name)
         for pre, fill, node in RenderTree(root):
             print('%s%s' % (pre, node.name))
-
-
-def _construct_branch(tree: dict,
-                      new_population: Population):
-    """
-    Construct a single branch of a population tree (see `construct_tree`)
-
-    Parameters
-    ----------
-    tree: dict
-    new_population: Population
-
-    Returns
-    -------
-    dict
-    """
-    if new_population.parent not in tree.keys():
-        return None
-    tree[new_population.population_name] = Node(name=new_population.population_name,
-                                                parent=tree[new_population.parent])
-    return tree
 
 
 def load_population(sample_id: str,
