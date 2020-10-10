@@ -293,6 +293,32 @@ class FileGroup(mongoengine.Document):
         for p in self.populations:
             yield p.population_name
 
+    def print_population_tree(self,
+                              image: bool = False,
+                              path: str or None = None):
+        """
+        Print population tree to stdout or save as an image if 'image' is True.
+
+        Parameters
+        ----------
+        image: bool (default=False)
+            Save tree as a png image
+        path: str (optional)
+            File path for image, ignored if 'image' is False.
+            Defaults to working directory.
+
+        Returns
+        -------
+        None
+        """
+        root = self.tree['root']
+        if image:
+            from anytree.exporter import DotExporter
+            path = path or f'{os.getcwd()}/{self.id}_population_tree.png'
+            DotExporter(root).to_picture(path)
+        for pre, fill, node in anytree.RenderTree(root):
+            print('%s%s' % (pre, node.name))
+
     def delete_clusters(self,
                         clustering_uid: str or None = None,
                         drop_all: bool = False,
@@ -339,6 +365,13 @@ class FileGroup(mongoengine.Document):
         else:
             assert isinstance(populations, list), "Provide a list of population names for removal"
             assert "root" not in populations, "Cannot delete root population"
+            downstream_effects = [self.list_downstream_populations(p) for p in populations]
+            downstream_effects = set([x for sl in downstream_effects for x in sl])
+            if len(downstream_effects) > 0:
+                warn("The following populations are downstream of one or more of the "
+                     "populations listed for deletion and will therefore be deleted: "
+                     f"{downstream_effects}")
+            populations = list(set(list(downstream_effects) + populations))
             self.populations = [p for p in self.populations if p.population_name not in populations]
         self.save()
 
@@ -398,8 +431,30 @@ class FileGroup(mongoengine.Document):
             List of Populations
         """
         for p in self.populations:
-            if p.parent == parent:
+            if p.parent == parent and p.population_name != "root":
                 yield p
+
+    def list_downstream_populations(self,
+                                    population: str) -> list or None:
+        """For a given population find all dependencies
+
+        Parameters
+        ----------
+        population : str
+            population name
+
+        Returns
+        -------
+        list or None
+            List of populations dependent on given population
+
+        """
+        assert population in self.tree.keys(), f'population {population} does not exist; ' \
+                                               f'valid population names include: {self.tree.keys()}'
+        root = self.tree['root']
+        node = self.tree[population]
+        dependencies = [x.name for x in anytree.findall(root, filter_=lambda n: node in n.path)]
+        return [p for p in dependencies if p != population]
 
     def _write_populations(self):
         """
