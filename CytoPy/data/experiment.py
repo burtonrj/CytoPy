@@ -363,34 +363,6 @@ def _data_dir_append_leading_char(path: str):
     return path
 
 
-def _add_file(path: str,
-              filegrp: FileGroup,
-              panel: Panel,
-              compensate: bool = True,
-              ctrl_id: str or None = None,
-              comp_matrix: str or None = None,
-              missing_error: str = "raise"):
-    control = ctrl_id is not None
-    fcs = FCSFile(filepath=path,
-                  comp_matrix=comp_matrix)
-    channel_mappings = list(map(lambda x: standardise_names(channel_marker=x,
-                                                            ref_channels=panel.channels,
-                                                            ref_markers=panel.markers,
-                                                            ref_mappings=panel.mappings),
-                                fcs.channel_mappings))
-    for cm in channel_mappings:
-        err = f'The channel/marker pairing {cm} does not correspond to any defined in panel'
-        assert _check_pairing(ref_mappings=panel.mappings, channel_marker=cm), err
-    _missing_channels(mappings=channel_mappings, channels=panel.channels, errors=missing_error)
-    _duplicate_mappings(channel_mappings)
-    if compensate:
-        fcs.compensate()
-    filegrp.add_file(data=fcs.event_data,
-                     channel_mappings=channel_mappings,
-                     control=control,
-                     ctrl_id=ctrl_id)
-
-
 class Experiment(mongoengine.Document):
     """
     Document representation of Flow Cytometry experiment
@@ -768,9 +740,9 @@ class Experiment(mongoengine.Document):
         return filegrp
 
     def delete(self, delete_panel: bool = True, *args, **kwargs):
+        super().delete(*args, **kwargs)
         if delete_panel:
             self.panel.delete()
-        super().delete(*args, **kwargs)
 
 
 def _load_files(primary_path: str,
@@ -852,6 +824,6 @@ def _load_and_check_mappings(fcs_files: Dict[str, FCSFile],
         _missing_channels(mappings=channel_mappings, channels=panel.channels, errors=missing_error)
         _duplicate_mappings(channel_mappings)
     if require_equal_mappings:
-        _equal_lists([x.get("channel") for x in mappings.values()])
-        _equal_lists([x.get("marker") for x in mappings.values()])
+        _equal_lists([[i.get("channel") for i in x]for x in mappings.values()])
+        _equal_lists([[i.get("marker") for i in x]for x in mappings.values()])
     return mappings.get("primary")
