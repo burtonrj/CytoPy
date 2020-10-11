@@ -117,24 +117,100 @@ class Population(mongoengine.EmbeddedDocument):
         assert not any([x.cluster_id == _id and x.tag == tag for x in self.clusters]), err
         self.clusters.append(cluster)
 
-    def delete_clusters(self, tag: str or None, drop_all: bool = False):
+    def delete_cluster(self,
+                       cluster_id: str or None = None,
+                       tag: str or None = None,
+                       meta_label: str or None = None):
         """
-        Delete clusters with the given clustering definition ID or drop all clusters
+        Delete cluster using either cluster ID, tag, or meta label
 
         Parameters
         ----------
+        cluster_id: str
         tag: str
-        drop_all: bool (default=False)
+        meta_label: str
 
         Returns
         -------
         None
         """
-        if drop_all:
-            self.clusters = []
+        err = "Must provide either cluster_id, tag or meta_label"
+        assert sum([x is not None for x in [cluster_id, tag, meta_label]]) == 1, err
+        if cluster_id:
+            self.clusters = [c for c in self.clusters if c.cluster_id != cluster_id]
+        elif tag:
+            self.clusters = [c for c in self.clusters if c.tag != tag]
+        elif meta_label:
+            self.clusters = [c for c in self.clusters if c.meta_label != meta_label]
+
+    def delete_all_clusters(self,
+                            clusters: list or str = "all"):
+        """
+        Provide either a list of cluster IDs for deletion or give value of "all"
+        to delete all clusters.
+
+        Parameters
+        ----------
+        clusters: list or str (default="all")
+
+        Returns
+        -------
+        None
+        """
+        if isinstance(clusters, list):
+            self.clusters = [c for c in self.clusters if c.cluster_id not in clusters]
         else:
-            assert tag is not None, 'Must provide a valid tag'
-            self.clusters = [x for x in self.clusters if x.tag != tag]
+            self.clusters = []
+
+    def list_clusters(self,
+                      tag: str or None = None,
+                      meta_label: str or None = None) -> List[str]:
+        """
+        List cluster IDs associated to a given tag or meta label
+
+        Parameters
+        ----------
+        tag: str
+        meta_label: str
+
+        Returns
+        -------
+        list
+        """
+        if tag:
+            return [c.cluster_id for c in self.clusters if c.tag == tag]
+        elif meta_label:
+            return [c.cluster_id for c in self.clusters if c.meta_label == meta_label]
+        else:
+            return [c.cluster_id for c in self.clusters]
+
+    def get_clusters(self,
+                     cluster_id: list or None = None,
+                     tag: str or None = None,
+                     meta_label: str or None = None) -> List[Cluster]:
+        """
+        Returns list of cluster objects by either cluster IDs, tag or meta label
+
+        Parameters
+        ----------
+        cluster_id: list
+        tag: str
+        meta_label: str
+
+        Returns
+        -------
+        list
+        """
+        err = "Provide list of cluster IDs and/or tag and/or meta_label"
+        assert len(sum([x is not None for x in [tag, meta_label]])) > 0, err
+        clusters = self.clusters
+        if cluster_id:
+            clusters = [c for c in clusters if c.cluster_id in cluster_id]
+        if tag:
+            clusters = [c for c in clusters if c.tag in tag]
+        if meta_label:
+            clusters = [c for c in clusters if c.meta_label in meta_label]
+        return clusters
 
 
 def _check_overlap(left: Population,
@@ -153,7 +229,8 @@ def _check_overlap(left: Population,
     -------
     bool or None
     """
-    assert all([isinstance(x.geom, PolygonGeom) for x in [left, right]]), "Only Polygon geometries can be checked for overlap"
+    assert all(
+        [isinstance(x.geom, PolygonGeom) for x in [left, right]]), "Only Polygon geometries can be checked for overlap"
     overlap = left.geom.shape.intersects(right.geom.shape)
     if error:
         assert overlap, "Invalid: non-overlapping populations"
@@ -248,7 +325,8 @@ def merge_populations(left: Population,
     _check_transforms_dimensions(left, right)
     new_population_name = new_population_name or f"merge_{left.population_name}_{right.population_name}"
     assert left.parent == right.parent, "Parent populations do not match"
-    assert isinstance(left.geom, type(right.geom)), f"Geometries must be of the same type; left={type(left.geom)}, right={type(right.geom)}"
+    assert isinstance(left.geom, type(
+        right.geom)), f"Geometries must be of the same type; left={type(left.geom)}, right={type(right.geom)}"
     if isinstance(left.geom, ThresholdGeom):
         return _merge_thresholds(left, right, new_population_name)
     return _merge_polygons(left, right, new_population_name)
@@ -263,4 +341,3 @@ def merge_multiple_populations(populations: List[Population],
     merged_pop = reduce(lambda p1, p2: merge_populations(p1, p2), populations)
     merged_pop.population_name = new_population_name
     return merged_pop
-
