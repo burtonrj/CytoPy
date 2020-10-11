@@ -1,11 +1,10 @@
-from ...data.fcs import _column_names, FileGroup
+from ...data.fcs import FileGroup
 from ...data.project import Project
 from ...data.population import Cluster, Population
-from ...data.mapping import ChannelMap
+from mongoengine.errors import DoesNotExist
 import pandas as pd
 import numpy as np
 import pytest
-import h5py
 import os
 
 
@@ -261,13 +260,14 @@ def test_delete_clusters(example_filegroup, drop_all, drop_tag, drop_metalabel, 
         assert p.list_clusters() == expected_clusters
 
 
-def test_update_population():
-    pass
+def test_delete(example_filegroup):
+    fg, populations = create_populations(filegroup=example_filegroup)
+    fg.save()
+    path = fg.h5path
+    fg.delete()
+    assert not os.path.isfile(path=path)
+    with pytest.raises(AssertionError) as err:
+        reload_file()
+    assert str(err.value) == f"Invalid sample: test sample not associated with this experiment"
 
 
-def test_delete():
-    pass
-
-
-def delete_example_data(file_id: str):
-    os.remove(f"{os.getcwd()}/test_data/{file_id}.hdf5")
