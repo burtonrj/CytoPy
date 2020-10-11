@@ -69,7 +69,7 @@ class ChildPolygon(Child):
 
     Parameters
     -----------
-    geom: ThresholdGeom
+    geom: ChildPolygon
         Geometric definition for this child population
     """
     geom = mongoengine.EmbeddedDocumentField(PolygonGeom)
@@ -257,11 +257,11 @@ class Gate(mongoengine.Document):
         None
         """
         child_counts = Counter([c.name for c in self.children])
-        if set(child_counts.values()) == 1:
+        if len(set(child_counts.values())) == 1:
             return
         updated_children = []
         for name, count in child_counts.items():
-            if count > 2:
+            if count >= 2:
                 updated_children.append(merge_children([c for c in self.children if c.name == name]))
             else:
                 updated_children.append([c for c in self.children if c.name == name][0])
@@ -760,7 +760,7 @@ class PolygonGate(Gate):
             List of Shapely polygon's
         """
         if self.method == "manual":
-            return self._manual()
+            return [self._manual()]
         self._xy_in_dataframe(data=data)
         data = self._transform(data=data)
         data = self._dim_reduction(data=data)
@@ -855,6 +855,7 @@ class EllipseGate(PolygonGate):
 
     def __init__(self, *args, **values):
         method = values.get("method", None)
+        self.conf = values.get("method_kwargs", {}).pop("conf", 0.95)
         valid = ["manual", "GaussianMixture", "BayesianGaussianMixture"]
         assert method in valid, f"Elliptical gating method should be one of {valid}"
         super().__init__(*args, **values)
@@ -906,7 +907,7 @@ class EllipseGate(PolygonGate):
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         self.model.fit_predict(data[[self.x, self.y]])
-        ellipses = [probablistic_ellipse(covar, conf=self.method_kwargs.get("conf", 0.95))
+        ellipses = [probablistic_ellipse(covar, conf=self.conf)
                     for covar in self.model.covariances_]
         polygons = [ellipse_to_polygon(centroid, *ellipse)
                     for centroid, ellipse in zip(self.model.means_, ellipses)]

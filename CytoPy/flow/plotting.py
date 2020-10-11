@@ -1,9 +1,10 @@
-from ..data.gates import Gate
+from ..data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, \
+    ChildPolygon, ChildThreshold
 from ..data.population import Population
 from ..data.geometry import ThresholdGeom, PolygonGeom
 from ..flow.transforms import apply_transform
 from warnings import warn
-from typing import List
+from typing import List, Generator
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -299,11 +300,11 @@ class CreatePlot:
         return self._ax
 
     def plot_gate(self,
-                  gate: Gate,
+                  gate: Gate or ThresholdGate or PolygonGate or EllipseGate,
                   parent: pd.DataFrame,
-                  children: List[Population],
                   lw: float = 2.5,
                   y: str or None = None,
+                  transform_x: str or None = None,
                   transform_y: str or None = None,
                   plot_kwargs: dict or None = None,
                   legend_kwargs: dict or None = None):
@@ -314,9 +315,10 @@ class CreatePlot:
 
         Parameters
         ----------
-        children
-        parent
-        gate
+        gate: Gate
+            Gating objects
+        parent: Pandas.DataFrame
+            Parent DataFrame
         lw: float (default = 2.5)
             Linewidth for shapes to plot
         plot_kwargs:
@@ -328,6 +330,15 @@ class CreatePlot:
                 * ncol = 3
                 * fancybox = True
                 * shadow = False
+        y: str (optional)
+            Overrides the plotting configurations for the gate if y is missing
+            and allows user to plot a two-dimensional instead of one dimensional plot.
+            Only value for ThresholdGate.
+        transform_x: str (optional)
+            Overrides the transformation to the x-axis variable
+        transform_y: str (optional)
+            Overrides the transformation to the x-axis variable
+
         Returns
         -------
         Matplotlib.pyplot.axes
@@ -339,43 +350,90 @@ class CreatePlot:
                               "#000000",
                               "#64b9c4",
                               "#9e3657"])
-        assert len(children) == len(gate.children), f"Number of given geometries does not match expected " \
-                                                    f"number of children from gate {gate.gate_name}"
-        for child in gate.children:
-            err = f"{child.population_name} missing from given geometries"
-            assert child.population_name in [c.population_name for c in children], err
+        if y is not None:
+            assert isinstance(gate, ThresholdGate), "Can only override y-axis variable for ThresholdGate"
         plot_kwargs = plot_kwargs or {}
         legend_kwargs = legend_kwargs or dict()
         # Plot the parent population
-        self.transforms = {"x": gate.preprocessing.transform_x,
-                           "y": gate.preprocessing.transform_y or transform_y}
+        self.transforms = {"x": gate.transformations.get("x") or transform_x,
+                           "y": gate.transformations.get("y") or transform_y}
         self._ax = self.plot(data=parent,
                              x=gate.x,
                              y=gate.y or y,
                              **plot_kwargs)
         # If threshold, add threshold lines to plot and return axes
-        if gate.shape == "threshold":
-            x = children[0].geom.x_threshold
-            y = children[0].geom.y_threshold
-            self._add_threshold(x=x,
-                                y=y,
-                                labels={c.definition: c.population_name for c in children},
-                                lw=lw)
-            return self._ax
-        # Otherwise, we assume some other shape
+        if isinstance(gate, ThresholdGate):
+            return self._plot_threshold(children=gate.children,
+                                        lw=lw)
+        # Otherwise, we assume polygon shape
+        return self._plot_polygon(children=gate.children,
+                                  colours=gate_colours,
+                                  lw=lw,
+                                  legend_kwargs=legend_kwargs)
+
+    def _plot_threshold(self,
+                        children: List[ChildThreshold],
+                        lw: float):
+        """
+        Plot Child populations from ThresholdGate
+
+        Parameters
+        ----------
+        children: list
+            List of Population objects
+        lw: float
+            Line width for thresholds
+
+        Returns
+        -------
+        Matplotlib.pyplot.axes
+            Axis object
+        """
+        x = children[0].geom.x_threshold
+        y = children[0].geom.y_threshold
+        self._add_threshold(x=x,
+                            y=y,
+                            labels={c.definition: c.name for c in children},
+                            lw=lw)
+        return self._ax
+
+    def _plot_polygon(self,
+                      children: List[ChildPolygon],
+                      colours: list or Generator,
+                      lw: float,
+                      legend_kwargs: dict):
+        """
+        Plot the Child populations of a Polygon or Elliptical gate.
+
+        Parameters
+        ----------
+        children: list
+            List of Population objects
+        colours: list or generator
+            Colour(s) of polygon outline(s)
+        lw: float
+            Line width of polygon outline(s)
+        legend_kwargs: dict
+            Additional keyword arguments to pass to axis legend. Defaults:
+                * bbox_to_anchor = (0.5, 1.05)
+                * loc = "upper center"
+                * ncol = 3
+                * fancybox = True
+                * shadow = False
+        Returns
+        -------
+        Matplotlib.pyplot.axes
+            Axis object
+        """
         count = 0
         for child in children:
             count += 1
-            colour = next(gate_colours)
-            x_values, y_values = child.geom.shape.exterior.xy
-            self._add_polygon(x_values=x_values,
-                              y_values=y_values,
+            colour = next(colours)
+            self._add_polygon(x_values=child.geom.x_values,
+                              y_values=child.geom.y_values,
                               colour=colour,
-                              label=child.population_name,
+                              label=child.name,
                               lw=lw)
-            if len(gate.children) == 2 and gate.binary:
-                # Gate produces exactly two populations: within gate and outside of gate
-                break
         self._set_legend(shape_n=count, **legend_kwargs)
         return self._ax
 
