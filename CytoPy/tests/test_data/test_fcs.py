@@ -1,7 +1,6 @@
 from ...data.fcs import FileGroup
 from ...data.project import Project
 from ...data.population import Cluster, Population
-from mongoengine.errors import DoesNotExist
 import pandas as pd
 import numpy as np
 import pytest
@@ -269,5 +268,3 @@ def test_delete(example_filegroup):
     with pytest.raises(AssertionError) as err:
         reload_file()
     assert str(err.value) == f"Invalid sample: test sample not associated with this experiment"
-
-
