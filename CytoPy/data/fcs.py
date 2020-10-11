@@ -376,26 +376,6 @@ class FileGroup(mongoengine.Document):
             self.populations = [p for p in self.populations if p.population_name not in populations]
             self.tree = {name: node for name, node in self.tree.items() if name not in populations}
 
-    def update_population(self,
-                          population_name: str,
-                          new_population: Population):
-        """
-        Given an existing population name, replace that population with the new population document
-
-        Parameters
-        -----------
-        population_name: str
-            Name of population to be replaced
-        new_population: Population
-            Updated/new Population document
-
-        Returns
-        --------
-        None
-        """
-        assert population_name in list(self.list_populations()), f"Invalid population {population_name} does not exist"
-        self.populations = [p for p in self.populations if p.population_name != population_name]
-        self.populations.append(new_population)
 
     def get_population(self,
                        population_name: str) -> Population:
