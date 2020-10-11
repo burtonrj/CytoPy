@@ -1,10 +1,10 @@
 from ..flow.tree import construct_tree
+from ..flow.transforms import apply_transform
 from .mapping import ChannelMap
 from .population import Population
 from warnings import warn
 from typing import List, Generator, Dict
 import pandas as pd
-import numpy as np
 import mongoengine
 import anytree
 import h5py
@@ -240,6 +240,75 @@ class FileGroup(mongoengine.Document):
             return self._sample_data(data=data, sample_size=sample_size)
         return data
 
+    def load_population_df(self,
+                           population: str,
+                           transform: str or dict or None = "logicle",
+                           label_downstream_affiliations: bool = False) -> pd.DataFrame:
+        """
+        Load the DataFrame for the events pertaining to a single population.
+
+        Parameters
+        ----------
+        population: str
+            Name of the desired population
+        transform: str or dict (optional)
+            If given, transformation method applied to the columns of the DataFrame. If the
+            value given is a string, it should be the name of the transform method applied
+            to ALL columns. If it is a dictionary, keys should correspond to column names
+            and values the transform to apply to said column.
+        label_downstream_affiliations: bool (default=False)
+            If True, an additional column will be generated named "population_label" containing
+            the end node membership of each event e.g. if you choose CD4+ population and
+            there are subsequent populations belonging to this CD4+ population in a tree
+            like: "CD4+ -> CD4+CD25+ -> CD4+CD25+CD45RA+" then the population label column
+            will contain the name of the lowest possible "leaf" population that an event is
+            assigned too.
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        assert population in self.tree.keys(), f"Invalid population, {population} does not exist"
+        idx = self.get_population(population_name=population).index
+        data = self.data.get("primary").loc[idx]
+        if isinstance(transform, dict):
+            data = apply_transform(data=data, features_to_transform=transform)
+        elif isinstance(transform, str):
+            data = apply_transform(data, transform_method=transform)
+        if label_downstream_affiliations:
+            return self._label_downstream_affiliations(parent=population,
+                                                       data=data)
+        return data
+
+    def _label_downstream_affiliations(self,
+                                       parent: str,
+                                       data: pd.DataFrame) -> pd.DataFrame:
+        """
+        An additional column will be generated named "population_label" containing
+        the end node membership of each event e.g. if you choose CD4+ population and
+        there are subsequent populations belonging to this CD4+ population in a tree
+        like: "CD4+ -> CD4+CD25+ -> CD4+CD25+CD45RA+" then the population label column
+        will contain the name of the lowest possible "leaf" population that an event is
+        assigned too.
+
+        Parameters
+        ----------
+        parent: str
+        data: Pandas.DataFrame
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+
+        data["population_label"] = None
+        dependencies = self.list_downstream_populations(parent)
+        for pop in dependencies:
+            idx = self.populations[pop].index
+            data.loc[idx, 'label'] = pop
+        data["population_label"].fillna(parent, inplace=True)
+        return data
+
     def _hdf5_exists(self):
         """
         Tests if associated HDF5 file exists.
@@ -375,7 +444,6 @@ class FileGroup(mongoengine.Document):
             populations = list(set(list(downstream_effects) + populations))
             self.populations = [p for p in self.populations if p.population_name not in populations]
             self.tree = {name: node for name, node in self.tree.items() if name not in populations}
-
 
     def get_population(self,
                        population_name: str) -> Population:

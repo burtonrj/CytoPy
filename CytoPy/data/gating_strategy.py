@@ -1,7 +1,8 @@
+from ..flow.plotting import CreatePlot
 from ..feedback import progress_bar, vprint
+from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate
 from .experiment import Experiment
 from .fcs import FileGroup
-from .gate import Gate
 from datetime import datetime
 import mongoengine
 
@@ -51,16 +52,154 @@ class GatingStrategy(mongoengine.Document):
         self.print = vprint(verbose=self.verbose)
         super().__init__(*args, **values)
         self._filegroup = None
-        self._tree = None
 
-    def load_data(self):
-        pass
+    def load_data(self,
+                  experiment: Experiment,
+                  sample_id: str):
+        """
+        Load a FileGroup into the GatingStrategy ready for gating.
 
-    def preview_gate(self):
-        pass
+        Parameters
+        ----------
+        experiment: Experiment
+        sample_id: str
 
-    def apply_gate(self):
-        pass
+        Returns
+        -------
+        None
+        """
+        self._filegroup = experiment.get_sample(sample_id=sample_id)
+
+    def list_gates(self) -> list:
+        """
+        List name of existing Gates
+
+        Returns
+        -------
+        list
+        """
+        return [g.gate_name for g in self.gates]
+
+    def list_populations(self) -> list:
+        """
+        Wrapper to FileGroup list_populations. Lists populations
+        in associated FileGroup.
+
+        Returns
+        -------
+        list
+        """
+        assert self._filegroup is not None, "No FileGroup associated"
+        return list(self._filegroup.list_populations())
+
+    def _gate_exists(self,
+                     gate: str):
+        """
+        Raises AssertionError if given gate does not exist
+
+        Returns
+        -------
+        None
+        """
+        assert gate in self.list_gates(), f"Gate {gate} does not exist"
+
+    def get_gate(self,
+                 gate: str) -> Gate:
+        """
+        Given the name of a gate, return the Gate object
+
+        Parameters
+        ----------
+        gate: str
+
+        Returns
+        -------
+        Gate
+        """
+        self._gate_exists(gate=gate)
+        return [g for g in self.gates if g.gate_name == gate][0]
+
+    def preview_gate(self,
+                     gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate,
+                     create_plot_kwargs: dict or None = None,
+                     plot_gate_kwargs: dict or None = None):
+        """
+        Preview the results of some given Gate
+
+        Parameters
+        ----------
+        gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate
+            Name of an existing Gate or a Gate object
+        create_plot_kwargs: dict (optional)
+            Additional arguments passed to CreatePlot
+        plot_gate_kwargs: dict (optional)
+            Additional arguments passed to plot_gate call of CreatePlot
+
+        Returns
+        -------
+        Matplotlib.Axes
+        """
+        create_plot_kwargs = create_plot_kwargs or {}
+        plot_gate_kwargs = plot_gate_kwargs or {}
+        if isinstance(gate, str):
+            gate = self.get_gate(gate=gate)
+        parent_data = self._filegroup.load_population_df(population=gate.parent,
+                                                         transform=None,
+                                                         label_downstream_affiliations=False)
+        gate.fit(data=parent_data)
+        plot = CreatePlot(**create_plot_kwargs)
+        return plot.plot_gate(gate=gate,
+                              parent=parent_data,
+                              **plot_gate_kwargs)
+
+    def apply_gate(self,
+                   gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate,
+                   plot: bool = True,
+                   print_stats: bool = True,
+                   create_plot_kwargs: dict or None = None,
+                   plot_gate_kwargs: dict or None = None):
+        """
+
+        Parameters
+        ----------
+        gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate
+            Name of an existing Gate or a Gate object
+        plot: bool (default=True)
+            If True, returns a Matplotlib.Axes object of plotted gate
+        print_stats: bool (default=True)
+            If True, print gating statistics to stdout
+        create_plot_kwargs: dict (optional)
+            Additional arguments passed to CreatePlot
+        plot_gate_kwargs: dict (optional)
+            Additional arguments passed to plot_gate call of CreatePlot
+
+        Returns
+        -------
+        Matplotlib.Axes or None
+        """
+        create_plot_kwargs = create_plot_kwargs or {}
+        plot_gate_kwargs = plot_gate_kwargs or {}
+        if isinstance(gate, str):
+            gate = self.get_gate(gate=gate)
+        parent_data = self._filegroup.load_population_df(population=gate.parent,
+                                                         transform=None,
+                                                         label_downstream_affiliations=False)
+        populations = gate.fit_predict(data=parent_data)
+        for p in populations:
+            self._filegroup.add_population(population=p)
+        if print_stats:
+            print(f"----- {gate.gate_name} -----")
+            parent_n = parent_data.shape[0]
+            print(f"Parent ({gate.parent}) n: {parent_n}")
+            for p in populations:
+                print(f"...child {p.population_name} n: {p.n}; {p.n/parent_n*100}% of parent")
+            print("------------------------")
+        if plot:
+            plot = CreatePlot(**create_plot_kwargs)
+            return plot.plot_gate(gate=gate,
+                                  parent=parent_data,
+                                  **plot_gate_kwargs)
+        return None
 
     def apply_all(self):
         pass
