@@ -51,7 +51,7 @@ class GatingStrategy(mongoengine.Document):
         self.verbose = values.pop("verbose", True)
         self.print = vprint(verbose=self.verbose)
         super().__init__(*args, **values)
-        self._filegroup = None
+        self.filegroup = None
 
     def load_data(self,
                   experiment: Experiment,
@@ -68,7 +68,7 @@ class GatingStrategy(mongoengine.Document):
         -------
         None
         """
-        self._filegroup = experiment.get_sample(sample_id=sample_id)
+        self.filegroup = experiment.get_sample(sample_id=sample_id)
 
     def list_gates(self) -> list:
         """
@@ -89,8 +89,8 @@ class GatingStrategy(mongoengine.Document):
         -------
         list
         """
-        assert self._filegroup is not None, "No FileGroup associated"
-        return list(self._filegroup.list_populations())
+        assert self.filegroup is not None, "No FileGroup associated"
+        return list(self.filegroup.list_populations())
 
     def _gate_exists(self,
                      gate: str):
@@ -143,9 +143,9 @@ class GatingStrategy(mongoengine.Document):
         plot_gate_kwargs = plot_gate_kwargs or {}
         if isinstance(gate, str):
             gate = self.get_gate(gate=gate)
-        parent_data = self._filegroup.load_population_df(population=gate.parent,
-                                                         transform=None,
-                                                         label_downstream_affiliations=False)
+        parent_data = self.filegroup.load_population_df(population=gate.parent,
+                                                        transform=None,
+                                                        label_downstream_affiliations=False)
         gate.fit(data=parent_data)
         plot = CreatePlot(**create_plot_kwargs)
         return plot.plot_gate(gate=gate,
@@ -156,6 +156,7 @@ class GatingStrategy(mongoengine.Document):
                    gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate,
                    plot: bool = True,
                    print_stats: bool = True,
+                   add_to_strategy: bool = True,
                    create_plot_kwargs: dict or None = None,
                    plot_gate_kwargs: dict or None = None):
         """
@@ -168,6 +169,8 @@ class GatingStrategy(mongoengine.Document):
             If True, returns a Matplotlib.Axes object of plotted gate
         print_stats: bool (default=True)
             If True, print gating statistics to stdout
+        add_to_strategy: bool (default=True)
+            If True, append the Gate to the GatingStrategy
         create_plot_kwargs: dict (optional)
             Additional arguments passed to CreatePlot
         plot_gate_kwargs: dict (optional)
@@ -181,12 +184,12 @@ class GatingStrategy(mongoengine.Document):
         plot_gate_kwargs = plot_gate_kwargs or {}
         if isinstance(gate, str):
             gate = self.get_gate(gate=gate)
-        parent_data = self._filegroup.load_population_df(population=gate.parent,
-                                                         transform=None,
-                                                         label_downstream_affiliations=False)
+        parent_data = self.filegroup.load_population_df(population=gate.parent,
+                                                        transform=None,
+                                                        label_downstream_affiliations=False)
         populations = gate.fit_predict(data=parent_data)
         for p in populations:
-            self._filegroup.add_population(population=p)
+            self.filegroup.add_population(population=p)
         if print_stats:
             print(f"----- {gate.gate_name} -----")
             parent_n = parent_data.shape[0]
@@ -199,10 +202,42 @@ class GatingStrategy(mongoengine.Document):
             return plot.plot_gate(gate=gate,
                                   parent=parent_data,
                                   **plot_gate_kwargs)
+        if add_to_strategy:
+            self.gates.append(gate)
         return None
 
-    def apply_all(self):
+    def apply_all(self,
+                  verbose: bool = True):
+        populations_created = [[c.name for c in g.children] for g in self.gates]
+        populations_created = [x for sl in populations_created for x in sl]
+        assert len(self.gates) > 0, "No gates to apply"
+        err = "One or more of the populations generated from this gating strategy are already " \
+              "presented in the population tree"
+        assert all([x not in self.list_populations() for x in populations_created]), err
         pass
+
+    def _apply_root_gates(self,
+                          verbose: bool):
+        """
+        Apply all Gates where the parent population is "root"
+
+        Parameters
+        ----------
+        verbose
+
+        Returns
+        -------
+
+        """
+        feedback = vprint(verbose)
+        root_gates = [g for g in self.gates if g.parent == "root"]
+        for gate in root_gates:
+            feedback(f"-------------- {gate.gate_name} --------------")
+            self.apply_gate(gate=gate,
+                            print_stats=verbose,
+                            plot=False,
+                            add_to_strategy=False)
+            feedback(f"----------------------------------------------")
 
     def delete_gate(self):
         pass

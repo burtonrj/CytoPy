@@ -9,6 +9,7 @@ from ..flow.dim_reduction import dimensionality_reduction
 from shapely.geometry import Polygon as ShapelyPoly
 from scipy.spatial.distance import euclidean
 from string import ascii_uppercase
+from warnings import warn
 from sklearn.cluster import *
 from sklearn.mixture import *
 from hdbscan import HDBSCAN
@@ -430,8 +431,6 @@ class ThresholdGate(Gate):
             return self._manual()
         thresholds = list()
         self._xy_in_dataframe(data=data)
-        data = self._transform(data=data)
-        data = self._dim_reduction(data=data)
         dims = [i for i in [self.x, self.y] if i is not None]
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
@@ -498,6 +497,8 @@ class ThresholdGate(Gate):
         None
         """
         data = data.copy()
+        data = self._transform(data=data)
+        data = self._dim_reduction(data=data)
         assert len(self.children) == 0, "Children already defined for this gate. Call 'fit_predict' to " \
                                         "fit to new data and match populations to children, or call " \
                                         "'predict' to apply static thresholds to new data. If you want to " \
@@ -534,7 +535,10 @@ class ThresholdGate(Gate):
         list
             List of predicted Population objects, labelled according to the gates child objects
         """
+        assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
         original_data = data.copy()
+        data = self._transform(data=data)
+        data = self._dim_reduction(data=data)
         thresholds = self._fit(data=data)
         y_threshold = None
         if len(thresholds) == 2:
@@ -632,7 +636,6 @@ class PolygonGate(Gate):
         ----------
         data: Pandas.DataFrame
         polygons: list
-        parent: str
 
         Returns
         -------
@@ -762,8 +765,6 @@ class PolygonGate(Gate):
         if self.method == "manual":
             return [self._manual()]
         self._xy_in_dataframe(data=data)
-        data = self._transform(data=data)
-        data = self._dim_reduction(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         labels = self.model.fit_predict(data[[self.x, self.y]])
@@ -788,6 +789,8 @@ class PolygonGate(Gate):
         None
         """
         assert len(self.children) == 0, "Gate is already defined, call 'reset_gate' to clear children"
+        data = self._transform(data=data)
+        data = self._dim_reduction(data=data)
         polygons = self._fit(data=data)
         for name, poly in zip(ascii_uppercase, polygons):
             poly_df = inside_polygon(df=data,
@@ -817,6 +820,8 @@ class PolygonGate(Gate):
             List of predicted Population objects, labelled according to the gates child objects
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
+        data = self._transform(data=data)
+        data = self._dim_reduction(data=data)
         return self._match_to_children(self._generate_populations(data=data.copy(),
                                                                   polygons=self._fit(data=data)))
 
@@ -838,6 +843,8 @@ class PolygonGate(Gate):
         list
             List of Population objects
         """
+        data = self._transform(data=data)
+        data = self._dim_reduction(data=data)
         polygons = [create_polygon(c.geom.x_values, c.geom.y_values) for c in self.children]
         populations = self._generate_populations(data=data, polygons=polygons)
         for p, name in zip(populations, [c.name for c in self.children]):
@@ -902,8 +909,6 @@ class EllipseGate(PolygonGate):
         if not self.method_kwargs.get("probabilistic_ellipse", True):
             return super()._fit(data=data)
         self._xy_in_dataframe(data=data)
-        data = self._transform(data=data)
-        data = self._dim_reduction(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         self.model.fit_predict(data[[self.x, self.y]])
@@ -966,6 +971,9 @@ def create_signature(data: pd.DataFrame,
     dict
         Dictionary representation of signature; {column name: summary statistic}
     """
+    if data.shape[0] == 0:
+        warn("Cannot generate signature for empty dataframe")
+        return {}
     data = pd.DataFrame(scaler(data=data.values, scale_method="norm", return_scaler=False),
                         columns=data.columns,
                         index=data.index)

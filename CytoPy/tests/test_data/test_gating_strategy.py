@@ -68,12 +68,36 @@ def create_ellipse_gate():
     return ellipse
 
 
+def apply_some_gates(gs: GatingStrategy):
+    # Apply threshold gate
+    gate = create_threshold_gate()
+    gs.preview_gate(gate=gate)
+    gate.label_children(labels={"++": "pop1"})
+    gs.apply_gate(gate)
+    # Apply ellipse gate
+    gate = create_ellipse_gate()
+    gate.parent = "pop1"
+    gate.y = "CD45-ECD"
+    gs.preview_gate(gate=gate)
+    gate.label_children({"A": "pop2"})
+    gs.apply_gate(gate)
+    # Apply another threshold gate
+    gate = create_threshold_gate()
+    gate.parent = "pop2"
+    gate.x, gate.y = "IgG1-PC5", None
+    gate.transformations = {"x": "logicle", "y": None}
+    gs.preview_gate(gate=gate)
+    gate.label_children({"+": "pop3", "-": "pop4"})
+    gs.apply_gate(gate=gate)
+    return gs
+
+
 def test_load_data(example_experiment):
     gs = create_gatingstrategy_and_load(example_experiment)
-    assert gs._filegroup is not None
-    assert isinstance(gs._filegroup.data.get("primary"), pd.DataFrame)
-    assert isinstance(gs._filegroup.data.get("controls").get("test_ctrl"), pd.DataFrame)
-    assert list(gs._filegroup.list_populations()) == ["root"]
+    assert gs.filegroup is not None
+    assert isinstance(gs.filegroup.data.get("primary"), pd.DataFrame)
+    assert isinstance(gs.filegroup.data.get("controls").get("test_ctrl"), pd.DataFrame)
+    assert list(gs.filegroup.list_populations()) == ["root"]
 
 
 @pytest.mark.parametrize("gate,child_n",
@@ -95,39 +119,67 @@ def test_preview_gate(example_experiment, gate, child_n):
 def test_apply_gate(example_experiment, gate, populations):
     gs = create_gatingstrategy_and_load(example_experiment)
     gate = gate()
-    gate.fit(data=gs._filegroup.load_population_df(population=gate.parent,
-                                                   transform=None,
-                                                   label_downstream_affiliations=False))
+    gate.fit(data=gs.filegroup.load_population_df(population=gate.parent,
+                                                  transform=None,
+                                                  label_downstream_affiliations=False))
     if isinstance(gate, ThresholdGate):
         gate.label_children(labels={"++": "Top right",
                                     "-+": "Top left",
                                     "--": "Bottom populations",
                                     "+-": "Bottom populations"})
-    elif isinstance(gate, PolygonGate):
-        gate.label_children({"A": "Big pop"})
-    else:
+    elif isinstance(gate, EllipseGate):
         pops = sorted([(c.name, c.geom.x_values) for c in gate.children], key=lambda x: x[1])
         gate.label_children({pops[0][0]: "Little pop",
                              pops[1][0]: "Big pop"})
+    else:
+        gate.label_children({"A": "Big pop"})
     gs.apply_gate(gate=gate,
                   plot=True,
                   print_stats=True)
     plt.show()
-    assert gs.list_populations() == populations
-    not_root = [p for p in gs._filegroup.populations if p.population_name != "root"]
-    root = gs._filegroup.get_population("root")
+    assert set(gs.list_populations()) == set(populations)
+    not_root = [p for p in gs.filegroup.populations if p.population_name != "root"]
+    root = gs.filegroup.get_population("root")
     assert all([len(p.index) < len(root.index) for p in not_root])
     biggest_pop = [p for p in not_root
                    if p.population_name == "Top right" or p.population_name == "Big pop"][0]
     assert all([len(p.index) <= len(biggest_pop.index) for p in not_root])
 
 
-def test_apply_downstream():
-    pass
+def assert_expected_gated_pops(gs: GatingStrategy):
+    # Test expected populations present
+    expected_pops = {"root", "pop1", "pop2", "pop3", "pop4"}
+    assert set(gs.list_populations()) == expected_pops
+    assert all([x in gs.filegroup.tree.keys() for x in expected_pops])
+    # Test population tree
+    gs.filegroup.print_population_tree()
+    assert gs.filegroup.get_population("pop1").parent == "root"
+    assert gs.filegroup.get_population("pop2").parent == "pop1"
+    assert gs.filegroup.get_population("pop3").parent == "pop2"
+    assert gs.filegroup.get_population("pop4").parent == "pop2"
+    # Test population indexes
+    root_n = len(gs.filegroup.get_population("root").index)
+    assert all([len(gs.filegroup.get_population(x).index) < root_n
+                for x in ["pop1", "pop2", "pop3", "pop4"]])
+    assert len(gs.filegroup.get_population("pop1").index) > len(gs.filegroup.get_population("pop2").index)
+    assert len(gs.filegroup.get_population("pop2").index) > len(gs.filegroup.get_population("pop3").index)
+    assert len(gs.filegroup.get_population("pop2").index) > len(gs.filegroup.get_population("pop4").index)
+
+
+def test_apply_downstream(example_experiment):
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    assert_expected_gated_pops(gs)
 
 
 def test_apply_all(example_experiment):
-    pass
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    exp = Project.objects(project_id="test").get().load_experiment("test experiment")
+    gs.load_data(experiment=exp,
+                 sample_id="test sample")
+    gs.apply_all()
+    assert_expected_gated_pops(gs)
 
 
 def test_delete_gate(example_experiment):
