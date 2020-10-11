@@ -320,32 +320,32 @@ class FileGroup(mongoengine.Document):
             print('%s%s' % (pre, node.name))
 
     def delete_clusters(self,
-                        clustering_uid: str or None = None,
-                        drop_all: bool = False,
-                        meta: bool = False):
+                        tag: str or None = None,
+                        meta_label: str or None = None,
+                        drop_all: bool = False):
         """
-        Delete all cluster attaining to a given clustering UID
 
         Parameters
         ----------
-        clustering_uid: str
-            Unique identifier for clustering experiment that should have clusters deleted from file
-        drop_all: bool
-            If True, all clusters for every population are dropped from database regardless of the
-            clustering experiment they are associated too
-        meta: bool
-            If True, delete is applied to meta clusters
+        tag
+        meta_label
+        drop_all
+
         Returns
         -------
-        None
+
         """
-        if meta:
+        if drop_all:
             for p in self.populations:
-                p.delete_meta_clusters(clustering_uid, drop_all)
+                p.delete_all_clusters(clusters="all")
+        elif tag:
+            for p in self.populations:
+                p.delete_cluster(tag=tag)
+        elif meta_label:
+            for p in self.populations:
+                p.delete_cluster(meta_label=meta_label)
         else:
-            for p in self.populations:
-                p.delete_clusters(clustering_uid, drop_all)
-        self.save()
+            raise ValueError("If drop_all is False, must provide tag or meta_label")
 
     def delete_populations(self, populations: list or str) -> None:
         """
@@ -361,7 +361,8 @@ class FileGroup(mongoengine.Document):
         None
         """
         if populations == "all":
-            self.populations = [p for p in self.populations if p.population_name != "root"]
+            self.populations = [p for p in self.populations if p.population_name == "root"]
+            self.tree = {name: node for name, node in self.tree.items() if name == "root"}
         else:
             assert isinstance(populations, list), "Provide a list of population names for removal"
             assert "root" not in populations, "Cannot delete root population"
@@ -373,7 +374,7 @@ class FileGroup(mongoengine.Document):
                      f"{downstream_effects}")
             populations = list(set(list(downstream_effects) + populations))
             self.populations = [p for p in self.populations if p.population_name not in populations]
-        self.save()
+            self.tree = {name: node for name, node in self.tree.items() if name not in populations}
 
     def update_population(self,
                           population_name: str,
@@ -395,7 +396,6 @@ class FileGroup(mongoengine.Document):
         assert population_name in list(self.list_populations()), f"Invalid population {population_name} does not exist"
         self.populations = [p for p in self.populations if p.population_name != population_name]
         self.populations.append(new_population)
-        self.save()
 
     def get_population(self,
                        population_name: str) -> Population:

@@ -39,7 +39,7 @@ def create_populations(filegroup: FileGroup):
                        parent=parent,
                        index=data.index.values)
         p.set_ctrl_index(test_ctrl=ctrldata.index.values)
-        cluster_idx = data.sample(frac=0.25)
+        cluster_idx = data.sample(frac=0.25).index.values
         p.add_cluster(Cluster(cluster_id="test cluster",
                               index=cluster_idx,
                               n=len(cluster_idx),
@@ -49,6 +49,7 @@ def create_populations(filegroup: FileGroup):
     for p in populations:
         filegroup.add_population(population=p)
     return filegroup, populations
+
 
 def reload_file():
     fg = (Project.objects(project_id="test").
@@ -184,30 +185,29 @@ def test_delete_population_error_not_list(example_filegroup):
     assert str(err.value) == "Provide a list of population names for removal"
 
 
+def assert_population_tree(fg: FileGroup,
+                           expected_pops: list):
+    assert list(fg.tree.keys()) == list(fg.list_populations())
+    assert list(fg.tree.keys()) == expected_pops
+    assert list(fg.list_populations()) == expected_pops
+
+
 def test_delete_population(example_filegroup):
     fg, populations = create_populations(filegroup=example_filegroup)
     fg.delete_populations(populations=["pop3"])
     fg.save()
-    fg = reload_file()
-    assert "pop3" not in fg.tree.keys()
-    assert "pop3" not in list(fg.list_populations())
-    for p in ["root", "pop1", "pop2"]:
-        assert p in fg.tree.keys()
-        assert p in list(fg.list_populations())
+    assert_population_tree(reload_file(), ["root", "pop1", "pop2"])
 
 
 def test_delete_population_downstream_effects(example_filegroup):
     fg, populations = create_populations(filegroup=example_filegroup)
+    downstream_pops = set(fg.list_downstream_populations("pop1"))
     with pytest.warns(UserWarning) as warn:
         fg.delete_populations(populations=["pop1"])
-    downstream_pops = set(fg.list_downstream_populations("pop1"))
     assert str(warn.list[0].message) == "The following populations are downstream of one or more of the " \
                                         "populations listed for deletion and will therefore be deleted: " \
                                         f"{downstream_pops}"
-    fg = reload_file()
-    for p in ["pop1", "pop2", "pop3"]:
-        assert p not in fg.tree.keys()
-        assert p not in list(fg.list_populations())
+    assert_population_tree(reload_file(), ["root"])
 
 
 def test_delete_many_populations(example_filegroup):
@@ -216,21 +216,49 @@ def test_delete_many_populations(example_filegroup):
                                  parent="pop2",
                                  index=np.array([])))
     fg.delete_populations(populations=["pop2", "pop3", "pop4"])
+    fg.save()
+    assert_population_tree(reload_file(), ["root", "pop1"])
+
+
+def test_delete_all_populations(example_filegroup):
+    fg, populations = create_populations(filegroup=example_filegroup)
+    fg.delete_populations(populations="all")
+    fg.save()
+    assert_population_tree(reload_file(), ["root"])
+
+
+@pytest.mark.parametrize("drop_all,drop_tag,drop_metalabel,expected_clusters",
+                         [(False, "testing", None, ["test cluster 0", "test cluster 1", "test cluster 2"]),
+                          (False, "testing 2", None, ["test cluster 2"]),
+                          (False, None, "test meta 1", ["test cluster 2"]),
+                          (False, None, "test meta 2", ["test cluster 0", "test cluster 1"]),
+                          (True, None, None, [])])
+def test_delete_clusters(example_filegroup, drop_all, drop_tag, drop_metalabel, expected_clusters):
+    fg, populations = create_populations(filegroup=example_filegroup)
+    for name in ["pop4", "pop5", "pop6"]:
+        p = Population(population_name=name,
+                       n=1000,
+                       parent="pop2",
+                       index=np.arange(0, 1000))
+        p.set_ctrl_index(test_ctrl=np.arange(0, 1000))
+        cluster_idx = np.arange(0, 1000)
+        for i, (tag, metalabel) in enumerate(zip(["testing 2", "testing 2", "testing 3"],
+                                             ["test meta 1", "test meta 1", "test meta 2"])):
+            p.add_cluster(Cluster(cluster_id=f"test cluster {i}",
+                                  index=cluster_idx,
+                                  n=len(cluster_idx),
+                                  prop_of_events=len(cluster_idx) / 30000,
+                                  tag=tag,
+                                  meta_label=metalabel))
+        fg.add_population(population=p)
+    fg.save()
     fg = reload_file()
-    for p in ["pop2", "pop3", "pop4"]:
-        assert p not in fg.tree.keys()
-        assert p not in list(fg.list_populations())
-    for p in ["root", "pop1"]:
-        assert p in fg.tree.keys()
-        assert p in list(fg.list_populations())
-
-
-def test_delete_all_populations():
-    pass
-
-
-def test_delete_clusters():
-    pass
+    fg.delete_clusters(tag=drop_tag, meta_label=drop_metalabel, drop_all=drop_all)
+    fg.save()
+    fg = reload_file()
+    for pop_name in ["pop4", "pop5", "pop6"]:
+        p = fg.get_population(population_name=pop_name)
+        assert p.list_clusters() == expected_clusters
 
 
 def test_update_population():
