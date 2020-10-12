@@ -1,10 +1,9 @@
 from ..data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, \
     ChildPolygon, ChildThreshold
-from ..data.population import Population
 from ..data.geometry import ThresholdGeom, PolygonGeom
 from ..flow.transforms import apply_transform
 from warnings import warn
-from typing import List, Generator
+from typing import List, Generator, Dict
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -578,42 +577,70 @@ class CreatePlot:
 
     def backgate(self,
                  parent: pd.DataFrame,
-                 children: dict,
+                 children: Dict[str, pd.DataFrame],
                  x: str,
                  y: str or None = None,
-                 colour: str = "#db4b6a",
+                 colours: list or None = None,
                  alpha: float = .75,
                  size: float = 5,
                  method: str = "scatter",
                  shade: bool = True,
                  plot_kwargs: dict or None = None,
                  overlay_kwargs: dict or None = None,
-                 **legend_kwargs):
-        if plot_kwargs is None:
-            plot_kwargs = {}
-        if overlay_kwargs is None:
-            overlay_kwargs = {}
+                 legend_kwargs: dict or None = None):
+        """
+        Plot one or more populations as an overlay atop a given parent population.
+        Method should be either "scatter" (default) or "kde", which controls how
+        overlaid populations will appear.
+
+        Parameters
+        ----------
+        parent: Pandas.DataFrame
+        children: dict
+        x: str
+        y: str (optional)
+        colours: list (defaults to Seaborn pastel palette)
+        alpha: float (default=0.75)
+        size: float (default=5)
+        method: str (default="scatter)
+        shade: bool (default=True)
+        plot_kwargs: dict (optional)
+            Keyword arguments passed to CreatePlot.plot
+        overlay_kwargs: dict (optional)
+            Keyword arguments passed to plt.scatter or seaborn.kdeplot cals
+        legend_kwargs: dict (optional)
+
+        Returns
+        -------
+        Matplotlib.axes
+        """
+        colours = cycle(sns.color_palette("pastel"))
+        plot_kwargs = plot_kwargs or {}
+        overlay_kwargs = overlay_kwargs or {}
+        legend_kwargs = legend_kwargs or {}
         self._ax = self.plot(data=parent,
                              x=x,
                              y=y,
                              **plot_kwargs)
-        for child_name, df in children.items():
+        for c, (child_name, df) in zip(colours, children.items()):
             if method == "kde":
                 self._overlay(data=df,
                               x=x,
                               y=y,
                               method=method,
-                              color=colour,
+                              color=c,
                               shade=shade,
+                              label=child_name,
                               **overlay_kwargs)
             else:
                 self._overlay(data=df,
                               x=x,
                               y=y,
                               method=method,
-                              color=colour,
-                              size=size,
+                              color=c,
+                              s=size,
                               alpha=alpha,
+                              label=child_name,
                               **overlay_kwargs)
         self._set_legend(shape_n=len(children), **legend_kwargs)
         return self._ax
@@ -663,10 +690,8 @@ class CreatePlot:
                         plot_kwargs: dict or None = None,
                         overlay_kwargs: dict or None = None):
 
-        if plot_kwargs is None:
-            plot_kwargs = {}
-        if overlay_kwargs is None:
-            overlay_kwargs = {}
+        plot_kwargs = plot_kwargs or {}
+        overlay_kwargs = overlay_kwargs or {}
         self._ax = self.plot(data=data,
                              x=x,
                              y=y,

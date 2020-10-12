@@ -1,6 +1,7 @@
 from ...data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ChildThreshold, ChildPolygon, \
-    create_signature, Population, threshold_1d, threshold_2d, smoothed_peak_finding, find_local_minima, \
+    Population, threshold_1d, threshold_2d, smoothed_peak_finding, find_local_minima, \
     find_inflection_point
+from ...data.population import create_signature
 from ...data.geometry import ThresholdGeom, PolygonGeom, create_polygon, create_convex_hull
 from scipy.spatial.distance import euclidean
 from shapely.geometry import Polygon

@@ -2,17 +2,15 @@ from ..flow.transforms import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
     create_convex_hull, create_polygon, polygon_overlap, ellipse_to_polygon, \
     probablistic_ellipse
-from .population import Population, merge_multiple_populations
-from ..flow.transforms import scaler
+from .population import Population, merge_multiple_populations, create_signature
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
 from shapely.geometry import Polygon as ShapelyPoly
-from scipy.spatial.distance import euclidean
-from string import ascii_uppercase
-from warnings import warn
 from sklearn.cluster import *
 from sklearn.mixture import *
 from hdbscan import HDBSCAN
+from scipy.spatial.distance import euclidean
+from string import ascii_uppercase
 from collections import Counter
 from typing import List, Dict
 from KDEpy import FFTKDE
@@ -91,6 +89,7 @@ class Gate(mongoengine.Document):
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
     children = mongoengine.EmbeddedDocumentListField(Child)
+    ctrl = mongoengine.StringField()
 
     meta = {
         'db_alias': 'core',
@@ -950,42 +949,6 @@ def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
                                              x_values=x,
                                              y_values=y))
     return children[0]
-
-
-def create_signature(data: pd.DataFrame,
-                     idx: np.array or None = None,
-                     summary_method: callable or None = None) -> dict:
-    """
-    Given a dataframe of FCS events, generate a signature of those events; that is, a summary of the
-    dataframes columns using the given summary method.
-
-    Parameters
-    ----------
-    data: Pandas.DataFrame
-    idx: Numpy.array (optional)
-        Array of indexes to be included in this operation, if None, the whole dataframe is used
-    summary_method: callable (optional)
-        Function to use to summarise columns, defaults is Numpy.median
-    Returns
-    -------
-    dict
-        Dictionary representation of signature; {column name: summary statistic}
-    """
-    if data.shape[0] == 0:
-        warn("Cannot generate signature for empty dataframe")
-        return {}
-    data = pd.DataFrame(scaler(data=data.values, scale_method="norm", return_scaler=False),
-                        columns=data.columns,
-                        index=data.index)
-    if idx is None:
-        idx = data.index.values
-    # ToDo this should be more robust
-    for x in ["Time", "time"]:
-        if x in data.columns:
-            data.drop(x, 1, inplace=True)
-    summary_method = summary_method or np.median
-    signature = data.loc[idx].apply(summary_method)
-    return {x[0]: x[1] for x in zip(signature.index, signature.values)}
 
 
 def apply_threshold(data: pd.DataFrame,
