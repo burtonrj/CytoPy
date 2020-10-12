@@ -1,10 +1,12 @@
 from ..flow.tree import construct_tree
 from ..flow.transforms import apply_transform
 from .mapping import ChannelMap
-from .population import Population
+from .geometry import create_convex_hull, create_polygon
+from .population import Population, merge_populations, PolygonGeom, create_signature
 from warnings import warn
 from typing import List, Generator, Dict
 import pandas as pd
+import numpy as np
 import mongoengine
 import anytree
 import h5py
@@ -418,12 +420,14 @@ class FileGroup(mongoengine.Document):
 
     def delete_populations(self, populations: list or str) -> None:
         """
-        Delete given populations
+        Delete given populations. Populations downstream from delete population(s) will
+        also be removed.
 
         Parameters
         ----------
         populations: list or str
-            Either a list of populations (list of strings) to remove or a single population as a string
+            Either a list of populations (list of strings) to remove or a single population as a string.
+            If a value of "all" is given, all populations are dropped.
 
         Returns
         -------
@@ -504,6 +508,78 @@ class FileGroup(mongoengine.Document):
         dependencies = [x.name for x in anytree.findall(root, filter_=lambda n: node in n.path)]
         return [p for p in dependencies if p != population]
 
+    def merge_populations(self,
+                          left: Population,
+                          right: Population,
+                          new_population_name: str or None = None):
+        """
+        Merge two populations present in the current population tree.
+        The merged population will have the combined index of both populations but
+        will not inherit any clusters and will not be associated to any children
+        downstream of either the left or right population. The population will be
+        added to the tree as a descendant of the left populations parent. New
+        population will be added to FileGroup.
+
+        Parameters
+        ----------
+        left: Population
+        right: Population
+        new_population_name: str (optional)
+
+        Returns
+        -------
+        None
+        """
+        self.add_population(merge_populations(left=left, right=right, new_population_name=new_population_name))
+
+    def subtract_populations(self,
+                             left: Population,
+                             right: Population,
+                             new_population_name: str or None = None):
+        """
+        Subtract the right population from the left population.
+        The right population must either have the same parent as the left population
+        or be downstream of the left population. The new population will descend from
+        the same parent as the left population. The new population will have a
+        PolygonGeom geom. New population will be added to FileGroup.
+
+        Parameters
+        ----------
+        left: Population
+        right: Population
+        new_population_name: str (optional)
+
+        Returns
+        -------
+
+        """
+        same_parent = left.parent == right.parent
+        downstream = right.population_name in list(self.list_downstream_populations(left.population_name))
+        assert same_parent or downstream, "Right population should share the same parent as the " \
+                                          "left population or be downstream of the left population"
+        new_population_name = new_population_name or f"subtract_{left.population_name}_{right.population_name}"
+        new_idx = np.array([x for x in left.index if x not in right.index])
+        x, y = left.geom.x, left.geom.y
+        transform_x, transform_y = left.geom.transform_x, left.geom.transform_y
+        parent_data = self.load_population_df(population=left.parent,
+                                              transform={x: transform_x,
+                                                         y: transform_y})
+        x_values, y_values = create_convex_hull(x_values=parent_data.loc[new_idx][x].values,
+                                                y_values=parent_data.loc[new_idx][y].values)
+        new_geom = PolygonGeom(x=x,
+                               y=y,
+                               transform_x=transform_x,
+                               transform_y=transform_y,
+                               x_values=x_values,
+                               y_values=y_values)
+        new_population = Population(population_name=new_population_name,
+                                    parent=left.parent,
+                                    n=len(new_idx),
+                                    index=new_idx,
+                                    geom=new_geom,
+                                    warnings=left.warnings + right.warnings + ["SUBTRACTED POPULATION"])
+        self.add_population(population=new_population)
+
     def _write_populations(self):
         """
         Write population data to disk.
@@ -522,7 +598,7 @@ class FileGroup(mongoengine.Document):
                 for ctrl, idx in p.ctrl_index.items():
                     f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
                 for cluster in p.clusters:
-                    cluster.prop_of_events = cluster.n/p.n
+                    cluster.prop_of_events = cluster.n / p.n
                     f.create_dataset(f'/clusters/{p.population_name}/{cluster.cluster_id}',
                                      data=cluster.index)
 

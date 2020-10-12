@@ -1,5 +1,5 @@
-from ...data.gating_strategy import GatingStrategy
-from ...data.gate import ThresholdGate, PolygonGate, EllipseGate
+from ...data.gating_strategy import GatingStrategy, Action
+from ...data.gate import ThresholdGate, PolygonGate, EllipseGate, PolygonGeom
 from ...data.project import Project
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -83,6 +83,7 @@ def apply_some_gates(gs: GatingStrategy):
     gs.apply_gate(gate)
     # Apply another threshold gate
     gate = create_threshold_gate()
+    gate.gate_name = "test threshold 2"
     gate.parent = "pop2"
     gate.x, gate.y = "IgG1-PC5", None
     gate.transformations = {"x": "logicle", "y": None}
@@ -175,45 +176,141 @@ def test_apply_downstream(example_experiment):
     assert_expected_gated_pops(gs)
 
 
+@pytest.mark.parametrize("action,err",
+                         [("not an action", "not an action does not exist"),
+                          (Action(action_name="merge test",
+                                  method="merge",
+                                  left="invalid",
+                                  right="pop4"), "invalid does not exist"),
+                          (Action(action_name="merge test",
+                                  method="subtract",
+                                  left="pop4",
+                                  right="invalid"), "invalid does not exist"),
+                          (Action(action_name="merge test",
+                                  method="merge",
+                                  left="pop4",
+                                  right="invalid"), "invalid does not exist"),
+                          (Action(action_name="merge test",
+                                  method="invalid method",
+                                  left="pop4",
+                                  right="invalid"), "Accepted methods are: merge, subtract")])
+def test_apply_action_errors(example_experiment, action, err):
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    with pytest.raises(AssertionError) as e:
+        gs.apply_action(action=action)
+    assert str(e.value) == err
+
+
+def test_apply_action_merge(example_experiment):
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    action = Action(action_name="test merge",
+                    method="merge",
+                    left="pop3",
+                    right="pop4")
+    gs.apply_action(action=action, add_to_strategy=True, print_stats=True)
+    assert "test merge" in [a.action_name for a in gs.actions]
+    assert len(gs.actions) == 1
+    new_pop = gs.filegroup.get_population(population_name="merge_pop3_pop4")
+    pop2 = gs.filegroup.get_population(population_name="pop2")
+    pop3 = gs.filegroup.get_population(population_name="pop3")
+    assert new_pop.parent == "pop2"
+    assert new_pop.n == pop2.n
+    assert len(new_pop.index) == len(pop2.index)
+    assert isinstance(new_pop.geom, type(pop3.geom))
+    assert new_pop.geom.x == pop3.geom.x
+    assert new_pop.geom.y == pop3.geom.y
+    assert new_pop.geom.transform_x == pop3.geom.transform_x
+    assert new_pop.geom.transform_y == pop3.geom.transform_y
+    assert all([x in gs.filegroup.tree.keys() for x in ["merge_pop3_pop4", "pop3", "pop4"]])
+
+
+def test_apply_action_subtract(example_experiment):
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    action = Action(action_name="test subtract",
+                    method="subtract",
+                    left="pop2",
+                    right="pop4")
+    gs.apply_action(action=action, add_to_strategy=True, print_stats=True)
+    assert "test subtract" in [a.action_name for a in gs.actions]
+    assert len(gs.actions) == 1
+    new_pop = gs.filegroup.get_population(population_name="subtract_pop2_pop4")
+    pop2 = gs.filegroup.get_population(population_name="pop2")
+    assert new_pop.parent == "pop1"
+    assert new_pop.n == 15995
+    assert len(new_pop.index) == 15995
+    assert isinstance(new_pop.geom, PolygonGeom)
+    assert new_pop.geom.x == pop2.geom.x
+    assert new_pop.geom.y == pop2.geom.y
+    assert new_pop.geom.transform_x == pop2.geom.transform_x
+    assert new_pop.geom.transform_y == pop2.geom.transform_y
+    assert all([x in gs.filegroup.tree.keys() for x in ["subtract_pop2_pop4", "pop3", "pop4"]])
+
+
 def test_apply_all(example_experiment):
     gs = create_gatingstrategy_and_load(example_experiment)
+    with pytest.raises(AssertionError) as err:
+        gs.apply_all()
+    assert str(err.value) == "No gates to apply"
     gs = apply_some_gates(gs)
     exp = Project.objects(project_id="test").get().load_experiment("test experiment")
     gs.load_data(experiment=exp,
                  sample_id="test sample")
     gs.apply_all()
     assert_expected_gated_pops(gs)
+    with pytest.raises(AssertionError) as err:
+        gs.apply_all()
+    assert str(err.value) == "One or more of the populations generated from this gating strategy are already " \
+                             "presented in the population tree"
 
 
 def test_delete_gate(example_experiment):
-    pass
-
-
-def test_edit_gate(example_experiment):
-    pass
-
-
-def test_delete_population(example_experiment):
-    pass
-
-
-def test_delete_action(example_experiment):
-    pass
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    gs.delete_gate("test ellipse")
+    assert "test ellipse" not in [g.gate_name for g in gs.gates]
 
 
 def test_plot_gate(example_experiment):
-    pass
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    plt.close("all")
+    gs.plot_gate(gate=gs.gates[0])
+    plt.show()
+
+
+def test_plot_gate_by_name(example_experiment):
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    plt.close("all")
+    gs.plot_gate(gate="test threshold", create_plot_kwargs={"title": "test threshold"})
+    plt.show()
+
+
+def test_plot_gate_invalid(example_experiment):
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    with pytest.raises(AssertionError) as err:
+        gs.plot_gate(gate="test ellipse", y="FS Lin")
+    assert str(err.value) == "Can only override y-axis variable for ThresholdGate"
 
 
 def test_plot_backgate(example_experiment):
-    pass
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    plt.close("all")
+    gs.plot_backgate(parent="root",
+                     overlay=["pop3", "pop4"],
+                     x="FS Lin",
+                     y="IgG1-FITC",
+                     create_plot_kwargs={"transform_x": None,
+                                         "transform_y": "logicle"})
+    plt.show()
 
 
 def test_plot_population(example_experiment):
-    pass
-
-
-def test_print_population_tree(example_experiment):
     pass
 
 
@@ -222,14 +319,6 @@ def test_population_stats(example_experiment):
 
 
 def test_estimate_ctrl_population(example_experiment):
-    pass
-
-
-def test_merge_populations(example_experiment):
-    pass
-
-
-def test_subtract_populations(example_experiment):
     pass
 
 

@@ -1,3 +1,5 @@
+from ..flow.transforms import scaler
+from .geometry import PopulationGeometry, ThresholdGeom, PolygonGeom
 from functools import reduce
 from shapely.ops import unary_union
 from typing import List
@@ -5,8 +7,6 @@ from _warnings import warn
 import numpy as np
 import pandas as pd
 import mongoengine
-
-from CytoPy.data.geometry import PopulationGeometry, ThresholdGeom, PolygonGeom
 
 
 class Cluster(mongoengine.EmbeddedDocument):
@@ -342,3 +342,39 @@ def merge_multiple_populations(populations: List[Population],
     merged_pop = reduce(lambda p1, p2: merge_populations(p1, p2), populations)
     merged_pop.population_name = new_population_name
     return merged_pop
+
+
+def create_signature(data: pd.DataFrame,
+                     idx: np.array or None = None,
+                     summary_method: callable or None = None) -> dict:
+    """
+    Given a dataframe of FCS events, generate a signature of those events; that is, a summary of the
+    dataframes columns using the given summary method.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    idx: Numpy.array (optional)
+        Array of indexes to be included in this operation, if None, the whole dataframe is used
+    summary_method: callable (optional)
+        Function to use to summarise columns, defaults is Numpy.median
+    Returns
+    -------
+    dict
+        Dictionary representation of signature; {column name: summary statistic}
+    """
+    if data.shape[0] == 0:
+        warn("Cannot generate signature for empty dataframe")
+        return {}
+    data = pd.DataFrame(scaler(data=data.values, scale_method="norm", return_scaler=False),
+                        columns=data.columns,
+                        index=data.index)
+    if idx is None:
+        idx = data.index.values
+    # ToDo this should be more robust
+    for x in ["Time", "time"]:
+        if x in data.columns:
+            data.drop(x, 1, inplace=True)
+    summary_method = summary_method or np.median
+    signature = data.loc[idx].apply(summary_method)
+    return {x[0]: x[1] for x in zip(signature.index, signature.values)}

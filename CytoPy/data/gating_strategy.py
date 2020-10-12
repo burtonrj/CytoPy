@@ -180,6 +180,10 @@ class GatingStrategy(mongoengine.Document):
         -------
         Matplotlib.Axes or None
         """
+        # TODO check if control gate and call _control_gate if necessary
+        if add_to_strategy:
+            assert gate.gate_name not in self.list_gates(), \
+                f"Gate with name {gate.gate_name} already exists. To continue set add_to_strategy to False"
         create_plot_kwargs = create_plot_kwargs or {}
         plot_gate_kwargs = plot_gate_kwargs or {}
         if isinstance(gate, str):
@@ -195,84 +199,331 @@ class GatingStrategy(mongoengine.Document):
             parent_n = parent_data.shape[0]
             print(f"Parent ({gate.parent}) n: {parent_n}")
             for p in populations:
-                print(f"...child {p.population_name} n: {p.n}; {p.n/parent_n*100}% of parent")
+                print(f"...child {p.population_name} n: {p.n}; {p.n / parent_n * 100}% of parent")
             print("------------------------")
+        if add_to_strategy:
+            self.gates.append(gate)
         if plot:
             plot = CreatePlot(**create_plot_kwargs)
             return plot.plot_gate(gate=gate,
                                   parent=parent_data,
                                   **plot_gate_kwargs)
-        if add_to_strategy:
-            self.gates.append(gate)
         return None
 
     def apply_all(self,
                   verbose: bool = True):
+        """
+        Apply all the gates associated to this GatingStrategy
+
+        Parameters
+        ----------
+        verbose: bool (default=True)
+            If True, print feedback to stdout
+
+        Returns
+        -------
+        None
+        """
+        feedback = vprint(verbose)
         populations_created = [[c.name for c in g.children] for g in self.gates]
         populations_created = [x for sl in populations_created for x in sl]
         assert len(self.gates) > 0, "No gates to apply"
         err = "One or more of the populations generated from this gating strategy are already " \
               "presented in the population tree"
         assert all([x not in self.list_populations() for x in populations_created]), err
-        pass
+        gates_to_apply = list(self.gates)
+        actions_to_apply = list(self.actions)
+        i = 0
+        iteration_limit = len(gates_to_apply) * 100
+        feedback("=====================================================")
+        while len(gates_to_apply) > 0:
+            if i >= len(gates_to_apply):
+                i = 0
+            gate = gates_to_apply[i]
+            if gate.parent in self.list_populations():
+                feedback(f"------ Applying {gate.gate_name} ------")
+                self.apply_gate(gate=gate,
+                                plot=False,
+                                print_stats=verbose,
+                                add_to_strategy=False)
+                feedback("----------------------------------------")
+                gates_to_apply = [g for g in gates_to_apply if g.gate_name != gate.gate_name]
+            actions_applied_this_loop = list()
+            for a in actions_to_apply:
+                if a.left in self.list_populations() and a.right in self.list_populations():
+                    feedback(f"------ Applying {a.action_name} ------")
+                    self.apply_action(action=a,
+                                      print_stats=verbose,
+                                      add_to_strategy=False)
+                    feedback("----------------------------------------")
+                    actions_applied_this_loop.append(a.action_name)
+            actions_to_apply = [a for a in actions_to_apply
+                                if a.action_name not in actions_applied_this_loop]
+            i += 1
+            iteration_limit -= 1
+            assert iteration_limit > 0, "Maximum number of iterations reached. This means that one or more parent " \
+                                        "populations are not being identified."
 
-    def _apply_root_gates(self,
-                          verbose: bool):
+    def delete_actions(self,
+                       action_name: str):
         """
-        Apply all Gates where the parent population is "root"
+        Delete an action associated to this GatingStrategy
+
+        Parameters
+        ===========
+        action_name: str
+
+        Returns
+        -------
+        None
+        """
+        self.actions = [a for a in self.actions if a.action_name != action_name]
+
+    def apply_action(self,
+                     action: Action or str,
+                     print_stats: bool = True,
+                     add_to_strategy: bool = True):
+        """
+        Apply an action, that is, a merge or subtraction:
+            * Merge: merge two populations present in the current population tree.
+            The merged population will have the combined index of both populations but
+            will not inherit any clusters and will not be associated to any children
+            downstream of either the left or right population. The population will be
+            added to the tree as a descendant of the left populations parent
+            * Subtraction: subtract the right population from the left population.
+            The right population must either have the same parent as the left population
+            or be downstream of the left population. The new population will descend from
+            the same parent as the left population. The new population will have a
+            PolygonGeom geom.
 
         Parameters
         ----------
-        verbose
+        action: Action
+        print_stats: bool (default=True)
+            Print population statistics to stdout
+        add_to_strategy: bool (default=True)
+            Add action to this GatingStrategy
+        Returns
+        -------
+        None
+        """
+        if isinstance(action, str):
+            matching_action = [a for a in self.actions if a.action_name == action]
+            assert len(matching_action) == 1, f"{action} does not exist"
+            action = matching_action[0]
+        assert action.method in ["merge", "subtract"], "Accepted methods are: merge, subtract"
+        assert action.left in self.list_populations(), f"{action.left} does not exist"
+        assert action.right in self.list_populations(), f"{action.right} does not exist"
+        left = self.filegroup.get_population(action.left)
+        right = self.filegroup.get_population(action.right)
+        if action.method == "merge":
+            self.filegroup.merge_populations(left=left,
+                                             right=right,
+                                             new_population_name=action.new_population_name)
+        else:
+            self.filegroup.subtract_populations(left=left,
+                                                right=right,
+                                                new_population_name=action.new_population_name)
+        if print_stats:
+            new_pop_name = action.new_population_name or f"{action.method}_{left.population_name}_{right.population_name}"
+            new_pop = self.filegroup.get_population(population_name=new_pop_name)
+            print(f"------ {action.action_name} ------")
+            parent_n = self.filegroup.get_population(left.parent).n
+            print(f"Parent ({left.parent}) n: {parent_n}")
+            print(f"Left pop ({left.population_name}) n: {left.n}; {left.n / parent_n * 100}%")
+            print(f"Right pop ({right.population_name}) n: {right.n}; {right.n / parent_n * 100}%")
+            print(f"New population n: {new_pop.n}; {new_pop.n / parent_n * 100}%")
+            print("-----------------------------------")
+        if add_to_strategy:
+            self.actions.append(action)
+
+    def delete_gate(self,
+                    gate_name: str):
+        """
+        Remove a gate from this GatingStrategy. Note: populations generated from this
+        gate will not be deleted. These populations must be deleted separately by calling
+        the 'delete_population' method.
+
+        Parameters
+        ----------
+        gate_name: str
+            Name of the gate for removal
+        Returns
+        -------
+        None
+        """
+        self.gates = [g for g in self.gates if g.gate_name != gate_name]
+
+    def delete_populations(self,
+                           populations: str or list):
+        """
+        Delete given populations. Populations downstream from delete population(s) will
+        also be removed.
+
+        Parameters
+        ----------
+        populations: list or str
+            Either a list of populations (list of strings) to remove or a single population as a string.
+            If a value of "all" is given, all populations are dropped.
+
+        Returns
+        -------
+        None
+        """
+        self.filegroup.delete_populations(populations=populations)
+
+    def delete_action(self,
+                      action_name: str,
+                      remove_populations: bool = True):
+        pass
+
+    def plot_gate(self,
+                  gate: str or Gate or EllipseGate or ThresholdGate or PolygonGate,
+                  create_plot_kwargs: dict or None = None,
+                  **kwargs):
+        """
+        Plot a gate. Give either a Gate object or the name of an existing gate in this
+        GatingStrategy
+
+        Parameters
+        ----------
+        gate: str or Gate or EllipseGate or ThresholdGate or PolygonGate
+        create_plot_kwargs: dict
+            Keyword arguments for CreatePlot object. See CytoPy.plotting.CreatePlot for details.
+        kwargs: dict
+            Keyword arguments for plot_gate call. See CytoPy.plotting.CreatePlot.plot_gate for details.
+
+        Returns
+        -------
+        Matplotlib.Axes
+        """
+        create_plot_kwargs = create_plot_kwargs or {}
+        if isinstance(gate, str):
+            assert gate in self.list_gates(), f"Gate {gate} not recognised"
+            gate = self.get_gate(gate=gate)
+        parent = self.filegroup.load_population_df(population=gate.parent,
+                                                   transform=None,
+                                                   label_downstream_affiliations=False)
+        plotting = CreatePlot(**create_plot_kwargs)
+        return plotting.plot_gate(gate=gate, parent=parent, **kwargs)
+
+    def plot_backgate(self,
+                      parent: str,
+                      overlay: list,
+                      x: str,
+                      y: str or None = None,
+                      create_plot_kwargs: dict or None = None,
+                      **kwargs):
+        """
+
+        Parameters
+        ----------
+        parent
+        overlay
+        x
+        y
+        create_plot_kwargs
+        kwargs
 
         Returns
         -------
 
         """
-        feedback = vprint(verbose)
-        root_gates = [g for g in self.gates if g.parent == "root"]
-        for gate in root_gates:
-            feedback(f"-------------- {gate.gate_name} --------------")
-            self.apply_gate(gate=gate,
-                            print_stats=verbose,
-                            plot=False,
-                            add_to_strategy=False)
-            feedback(f"----------------------------------------------")
+        assert parent in self.list_populations(), "Parent population does not exist"
+        assert all([x in self.list_populations() for x in overlay]), "One or more given populations could not be found"
+        downstream = self.filegroup.list_downstream_populations(population=parent)
+        assert all([x in downstream for x in overlay]), \
+            "One or more of the given populations is not downstream of the given parent"
+        plotting = CreatePlot(**create_plot_kwargs)
+        parent = self.filegroup.load_population_df(population=parent,
+                                                   transform=None,
+                                                   label_downstream_affiliations=False)
+        children = {x: self.filegroup.load_population_df(population=x,
+                                                         transform=None,
+                                                         label_downstream_affiliations=False)
+                    for x in overlay}
+        return plotting.backgate(parent=parent,
+                                 children=children,
+                                 x=x,
+                                 y=y,
+                                 **kwargs)
 
-    def delete_gate(self):
-        pass
+    def plot_population(self,
+                        population: str,
+                        x: str,
+                        y: str or None = None,
+                        transform_x: str or None = "logicle",
+                        transform_y: str or None = "logicle",
+                        create_plot_kwargs: dict or None = None,
+                        **kwargs):
+        """
 
-    def edit_gate(self):
-        pass
+        Parameters
+        ----------
+        population
+        x
+        y
+        transform_x
+        transform_y
+        create_plot_kwargs
+        kwargs
 
-    def delete_population(self):
-        pass
+        Returns
+        -------
 
-    def delete_action(self):
-        pass
+        """
+        assert population in self.list_populations(), f"{population} does not exist"
+        data = self.filegroup.load_population_df(population=population,
+                                                 transform=None,
+                                                 label_downstream_affiliations=False)
+        create_plot_kwargs = create_plot_kwargs or {}
+        plotting = CreatePlot(transform_x=transform_x,
+                              transform_y=transform_y,
+                              **create_plot_kwargs)
+        return plotting.plot(data=data, x=x, y=y, **kwargs)
 
-    def plot_gate(self):
-        pass
+    def print_population_tree(self, **kwargs):
+        """
 
-    def plot_backgate(self):
-        pass
+        Parameters
+        ----------
+        kwargs
 
-    def plot_population(self):
-        pass
+        Returns
+        -------
 
-    def print_population_tree(self):
-        pass
+        """
+        self.filegroup.print_population_tree(**kwargs)
 
-    def population_stats(self):
+    def population_stats(self,
+                         population: str):
+        """
+
+        Parameters
+        ----------
+        population
+
+        Returns
+        -------
+
+        """
+        assert population in self.list_populations(), f"{population} does not exist"
+        pop = self.filegroup.get_population(population_name=population)
+        parent = self.filegroup.get_population(population_name=pop.parent)
+        root = self.filegroup.get_population(population_name="root")
+        return {"name": population,
+                "n": pop.n,
+                "prop_of_parent": pop.n/parent.n,
+                "prop_of_root": pop.n/root.n}
+
+    def _control_gate(self):
+        # Check that control data exists
+        # Call fit_predict on control data
+        # Call predict on primary data
         pass
 
     def estimate_ctrl_population(self):
-        pass
-
-    def merge_populations(self):
-        pass
-
-    def subtract_populations(self):
+        # Estimate control population using KNN
         pass
 
     def save(self, *args, **kwargs):
