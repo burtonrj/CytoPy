@@ -512,10 +512,10 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
-        root_n = [x for x in self.populations if x.population_name == "root"][0].n
+        root_n = self.get_population("root").n
         with h5py.File(self.h5path, "a") as f:
             for p in self.populations:
-                parent_n = [x for x in self.populations if x.population_name == p.parent][0].n
+                parent_n = self.get_population(p.parent).n
                 p.prop_of_parent = p.n / parent_n
                 p.prop_of_total = p.n / root_n
                 f.create_dataset(f'/index/{p.population_name}/primary', data=p.index)

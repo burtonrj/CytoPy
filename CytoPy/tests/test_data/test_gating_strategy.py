@@ -162,8 +162,11 @@ def assert_expected_gated_pops(gs: GatingStrategy):
     assert all([len(gs.filegroup.get_population(x).index) < root_n
                 for x in ["pop1", "pop2", "pop3", "pop4"]])
     assert len(gs.filegroup.get_population("pop1").index) > len(gs.filegroup.get_population("pop2").index)
+    assert gs.filegroup.get_population("pop1").n > gs.filegroup.get_population("pop2").n
     assert len(gs.filegroup.get_population("pop2").index) > len(gs.filegroup.get_population("pop3").index)
+    assert gs.filegroup.get_population("pop2").n > gs.filegroup.get_population("pop3").n
     assert len(gs.filegroup.get_population("pop2").index) > len(gs.filegroup.get_population("pop4").index)
+    assert gs.filegroup.get_population("pop2").n > gs.filegroup.get_population("pop4").n
 
 
 def test_apply_downstream(example_experiment):

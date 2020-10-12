@@ -309,11 +309,12 @@ def _merge_polygons(left: Population,
                            transform_y=left.geom.transform_y,
                            x_values=x,
                            y_values=y)
+    new_idx = _merge_index(left, right)
     new_population = Population(population_name=new_population_name,
-                                n=len(left.index) + len(right.index),
+                                n=len(new_idx),
                                 parent=left.parent,
                                 warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
-                                index=_merge_index(left, right),
+                                index=new_idx,
                                 geom=new_geom,
                                 signature=_merge_signatures(left, right))
     return new_population
