@@ -522,10 +522,6 @@ class GatingStrategy(mongoengine.Document):
         # Call predict on primary data
         pass
 
-    def estimate_ctrl_population(self):
-        # Estimate control population using KNN
-        pass
-
     def save(self, *args, **kwargs):
         for g in self.gates:
             g.save()

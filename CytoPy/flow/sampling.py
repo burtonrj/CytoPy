@@ -1,6 +1,7 @@
+from .neighbours import calculate_optimal_neighbours, knn
 from ..feedback import vprint
 from sklearn.neighbors import BallTree, KDTree, KNeighborsClassifier
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import balanced_accuracy_score
 from functools import partial
 import pandas as pd
@@ -119,34 +120,6 @@ def density_dependent_downsampling(data: pd.DataFrame,
     return df.sample(frac=frac, weights=prob)
 
 
-def calculate_optimal_neighbours(x: pd.DataFrame,
-                                 y: np.array,
-                                 scoring: str,
-                                 **kwargs):
-    """
-    Calculate the opitmal n_neighbours parameter for KNeighborsClassifier using GridSearchCV.
-    Returns optimal n and highest score
-
-    Parameters
-    ----------
-    x: Pandas.DataFrame
-    y: np.array
-    scoring: str
-    kwargs: dict
-
-    Returns
-    -------
-    int, float
-    """
-    n = np.arange(int(x.shape[0] * 0.01),
-                  int(x.shape[0] * 0.05),
-                  int(x.shape[0] * 0.01) / 2, dtype=np.int)
-    knn = KNeighborsClassifier(**kwargs)
-    grid_cv = GridSearchCV(knn, {"n_neighbors": n}, scoring=scoring, n_jobs=-1, cv=10)
-    grid_cv.fit(x, y)
-    return grid_cv.best_params_.get("n_neighbors"), grid_cv.best_score_
-
-
 def upsample_knn(sample: pd.DataFrame,
                  original_data: pd.DataFrame,
                  labels: list,
@@ -195,18 +168,18 @@ def upsample_knn(sample: pd.DataFrame,
                                                 **kwargs)
         feedback(f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}...")
     feedback("Training...")
-    X_train, X_test, y_train, y_test = train_test_split(sample[features].values,
-                                                        labels,
-                                                        test_size=0.2,
-                                                        random_state=42)
-    knn = KNeighborsClassifier(n_neighbors=n, **kwargs)
-    knn.fit(X_train, y_train)
-    train_acc = balanced_accuracy_score(y_pred=knn.predict(X_train), y_true=y_train)
-    val_acc = balanced_accuracy_score(y_pred=knn.predict(X_test), y_true=y_test)
+    train_acc, val_acc, model = knn(data=sample,
+                                    features=features,
+                                    labels=labels,
+                                    n_neighbours=n,
+                                    holdout_size=0.2,
+                                    random_state=42,
+                                    return_model=True,
+                                    **kwargs)
     feedback(f"...training balanced accuracy score: {train_acc}")
     feedback(f"...validation balanced accuracy score: {val_acc}")
     feedback("Predicting labels in original data...")
-    new_labels = knn.predict(original_data[features].values)
+    new_labels = model.predict(original_data[features].values)
     feedback("Complete!")
     return new_labels
 
