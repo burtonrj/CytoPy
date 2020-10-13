@@ -1,6 +1,5 @@
 from ...data.experiment import check_excel_template, NormalisedName, \
-    _check_duplication, Panel, _data_dir_append_leading_char, Experiment, \
-    _check_pairing
+    _check_duplication, Panel, _data_dir_append_leading_char, Experiment
 from ...tests import assets
 import pandas as pd
 import pytest
