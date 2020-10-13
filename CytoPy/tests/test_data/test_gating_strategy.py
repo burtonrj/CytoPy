@@ -114,7 +114,7 @@ def test_preview_gate(example_experiment, gate, child_n):
 
 
 @pytest.mark.parametrize("gate,populations",
-                         [(create_threshold_gate, ["root","Top right", "Top left", "Bottom populations"]),
+                         [(create_threshold_gate, ["root", "Top right", "Top left", "Bottom populations"]),
                           (create_poly_gate, ["root", "Big pop"]),
                           (create_ellipse_gate, ["root", "Big pop", "Little pop"])])
 def test_apply_gate(example_experiment, gate, populations):
@@ -311,20 +311,59 @@ def test_plot_backgate(example_experiment):
 
 
 def test_plot_population(example_experiment):
-    pass
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    plt.close("all")
+    gs.plot_population(population="pop1",
+                       x="FS Lin",
+                       y="IgG1-FITC")
+    plt.show()
 
 
 def test_population_stats(example_experiment):
-    pass
-
-
-def test_estimate_ctrl_population(example_experiment):
-    pass
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    stats = gs.population_stats(population="root")
+    assert isinstance(stats, dict)
+    assert stats.get("name") == "root"
+    assert stats.get("n") == 30000
+    assert stats.get("prop_of_parent") == 1.0
+    assert stats.get("prop_of_root") == 1.0
 
 
 def test_save(example_experiment):
-    pass
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    gs.save()
+    gs = GatingStrategy.objects(name="test")
+    assert len(gs) == 1
+    gs = gs.get()
+    assert len(gs.gates) == 3
 
 
-def test_delete():
-    pass
+@pytest.mark.parametrize("remove_associations", [True, False])
+def test_delete(example_experiment, remove_associations):
+    gs = create_gatingstrategy_and_load(example_experiment)
+    gs = apply_some_gates(gs)
+    gs.save()
+    gs = GatingStrategy.objects(name="test").get()
+    populations = [[c.name for c in g.children] for g in gs.gates]
+    populations = list(set([x for sl in populations for x in sl]))
+    gs.delete(remove_associations=remove_associations,
+              delete_gates=remove_associations)
+    assert len(GatingStrategy.objects(name="test")) == 0
+    n = [0, 0]
+    if not remove_associations:
+        n = [2, 1]
+    for n_, gate in zip(n, [ThresholdGate, EllipseGate]):
+        assert len(gate.objects()) == n_
+    fg = (Project.objects(project_id="test")
+          .get()
+          .load_experiment("test experiment")
+          .get_sample("test sample"))
+    if remove_associations:
+        assert len(fg.gating_strategy) == 0
+        assert all([p not in fg.list_populations() for p in populations])
+    else:
+        assert len(fg.gating_strategy) == 1
+        assert all([p in fg.list_populations() for p in populations])

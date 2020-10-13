@@ -191,7 +191,10 @@ class GatingStrategy(mongoengine.Document):
         parent_data = self.filegroup.load_population_df(population=gate.parent,
                                                         transform=None,
                                                         label_downstream_affiliations=False)
-        populations = gate.fit_predict(data=parent_data)
+        if gate.ctrl is None:
+            populations = gate.fit_predict(data=parent_data)
+        else:
+            populations = self._control_gate(gate=gate)
         for p in populations:
             self.filegroup.add_population(population=p)
         if print_stats:
@@ -513,19 +516,54 @@ class GatingStrategy(mongoengine.Document):
         root = self.filegroup.get_population(population_name="root")
         return {"name": population,
                 "n": pop.n,
-                "prop_of_parent": pop.n/parent.n,
-                "prop_of_root": pop.n/root.n}
+                "prop_of_parent": pop.n / parent.n,
+                "prop_of_root": pop.n / root.n}
 
-    def _control_gate(self):
-        # Check that control data exists
-        # Call fit_predict on control data
-        # Call predict on primary data
-        pass
+    def _control_gate(self,
+                      gate: Gate or ThresholdGate or PolygonGate or EllipseGate):
+        """
+        Internal method for applying a gate using control data. Will first attempt to fetch the parent
+        population for the control data (see CytoPy.data.fcs.FileGroup.load_ctrl_population_df)
+        and then will fit the gate to this data. The resulting gate will be applied statically to
+        the parent population from the primary data.
+
+        Parameters
+        ----------
+        gate: Gate or ThresholdGate or PolygonGate or EllipseGate
+
+        Returns
+        -------
+        list
+            List of Populations
+        """
+        assert gate.ctrl in self.filegroup.data.get("controls").keys(), f"FileGroup does not have data for {ctrl}"
+        ctrl_parent_data = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl,
+                                                                  population=gate.parent,
+                                                                  transform=None)
+        # Fit control data
+        populations = gate.fit_predict(data=ctrl_parent_data)
+        updated_children = list()
+        for p in populations:
+            eq_child = [c for c in gate.children if c.name == p.population_name]
+            assert len(eq_child) == 1, "Invalid gate. Estimated populations do not match children."
+            eq_child = eq_child[0]
+            eq_child.geom = p.geom
+            updated_children.append(eq_child)
+        gate.children = updated_children
+        # Predict original data
+        parent_data = self.filegroup.load_population_df(population=gate.parent,
+                                                        transform=None,
+                                                        label_downstream_affiliations=False)
+        return gate.fit_predict(data=parent_data)
 
     def save(self, *args, **kwargs):
         for g in self.gates:
             g.save()
         super().save(*args, **kwargs)
+        if self.name not in self.filegroup.gating_strategy:
+            self.filegroup.gating_strategy.append(self.name)
+        if self.filegroup is not None:
+            self.filegroup.save()
 
     def delete(self,
                delete_gates: bool = True,
@@ -547,16 +585,18 @@ class GatingStrategy(mongoengine.Document):
         -------
 
         """
+        super().delete(*args, **kwargs)
+        populations = [[c.name for c in g.children] for g in self.gates]
+        populations = list(set([x for sl in populations for x in sl]))
         if delete_gates:
             self.print("Deleting gates...")
             for g in self.gates:
                 g.delete()
         if remove_associations:
-            self.print("Deleting associated populations...")
+            self.print("Deleting associated populations in FileGroups...")
             for f in progress_bar(FileGroup.objects(), verbose=self.verbose):
                 if self.name in f.gating_strategy:
                     f.gating_strategy = [gs for gs in f.gating_strategy if gs != self.name]
-                    f.populations = []
+                    f.delete_populations(populations=populations)
                     f.save()
-        super().delete(*args, **kwargs)
         self.print(f"{self.name} successfully deleted.")
