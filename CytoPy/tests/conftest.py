@@ -15,10 +15,3 @@ def setup():
     disconnect(alias="core")
 
 
-@pytest.fixture(autouse=True)
-def clean_up():
-    for x in os.listdir(f"{os.getcwd()}/test_data"):
-        os.remove(f"{os.getcwd()}/test_data/{x}")
-    db = _get_db("core")
-    db.drop_collection('fcs_files')
-
