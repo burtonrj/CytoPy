@@ -47,7 +47,7 @@ class Project(mongoengine.Document):
 
     def load_experiment(self, experiment_id: str) -> Experiment:
         """
-        For a given experiment in project, load the experiment object
+        Load the experiment object for a given experiment ID
 
         Parameters
         ----------

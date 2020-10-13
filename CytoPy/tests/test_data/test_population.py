@@ -28,25 +28,17 @@ def test_cluster_init():
 
 
 def test_polygon_shape():
-    poly, _, _ = PolygonGeom(x_values=[0, 0, 5, 5, 0],
-                             y_values=[0, 5, 5, 0, 0])
+    poly = PolygonGeom(x_values=[0, 0, 5, 5, 0],
+                       y_values=[0, 5, 5, 0, 0])
     assert isinstance(poly.shape, Poly)
     assert np.array_equal(poly.shape.exterior.xy[0], np.array([0, 0, 5, 5, 0]))
     assert np.array_equal(poly.shape.exterior.xy[1], np.array([0, 5, 5, 0, 0]))
 
 
-def test_overlap():
-    poly1, poly2, _ = generate_polygons()
-    assert poly1.overlap(poly2.shape) == 0.5
-    assert poly2.overlap(poly1.shape) == 1.0
-    assert poly1.overlap(poly2.shape, 0.6) == 0.0
-    assert poly2.overlap(poly1.shape, 0.6) == 1.0
-
-
 def test_population_init():
     x = Population(population_name="test",
                    parent="test_parent")
-    x.index = [0, 1, 2, 3, 4, 5]
+    x.index = np.array([0, 1, 2, 3, 4, 5])
     assert np.array_equal(np.array([0, 1, 2, 3, 4, 5]), x.index)
     assert x.n == 6
     x.set_ctrl_index(x=np.array([0, 1, 2, 3, 4, 5]),

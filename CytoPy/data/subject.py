@@ -115,12 +115,6 @@ class Subject(mongoengine.DynamicDocument):
     -----------
     subject_id: str, required
         Unique identifier for subject
-    age: int
-        Age of subject
-    dob: Date
-        Date of birth
-    gender: int
-        Gender of subject; 1 = Female, 0 = Male
     files: ListField
         List of references to files associated to subject
     drug_data: EmbeddedDocListField
@@ -133,9 +127,6 @@ class Subject(mongoengine.DynamicDocument):
         Additional notes
     """
     subject_id = mongoengine.StringField(required=True, unique=True)
-    age = mongoengine.IntField(required=False)
-    dob = mongoengine.DateField(required=False)
-    gender = mongoengine.IntField(required=False) # 1 = Female, 0 = Male
 
     # Associated FCS Files
     files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.PULL))
