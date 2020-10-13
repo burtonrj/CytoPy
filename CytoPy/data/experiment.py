@@ -15,7 +15,20 @@ import os
 import re
 
 
-def _check_sheet_names(path: str):
+def _check_sheet_names(path: str) -> (pd.DataFrame, pd.DataFrame):
+    """
+    Check sheet names are as expected. That is: nomenclature and mappings.
+    Return Pandas DataFrame for each sheet.
+
+    Parameters
+    ----------
+    path: str
+        Path to excel file
+
+    Returns
+    -------
+    Pandas.DataFrame, Pandas.DataFrame
+    """
     # Check sheet names
     xls = xlrd.open_workbook(path, on_demand=True)
     err = f"Template must contain two sheets: nomenclature and mappings"
@@ -25,13 +38,35 @@ def _check_sheet_names(path: str):
     return mappings, nomenclature
 
 
-def _check_nomenclature_headings(nomenclature):
+def _check_nomenclature_headings(nomenclature: pd.DataFrame):
+    """
+    Raise AssertionError if columns in nomenclature DataFrame are invalid.
+
+    Parameters
+    ----------
+    nomenclature: Pandas.DataFrame
+
+    Returns
+    -------
+    None
+    """
     err = "Nomenclature sheet of excel template must contain the following column headers: " \
           "'name','regex','case','permutations'"
     assert all([x in ['name', 'regex', 'permutations', 'case'] for x in nomenclature.columns]), err
 
 
-def _check_mappings_headings(mappings):
+def _check_mappings_headings(mappings: pd.DataFrame):
+    """
+    Raise AssertionError if columns in mappings DataFrame are invalid.
+
+    Parameters
+    ----------
+    mappings: Pandas.DataFrame
+
+    Returns
+    -------
+    None
+    """
     err = "Mappings sheet of excel template must contain the following column headers: 'channel', 'marker'"
     assert all([x in ['channel', 'marker'] for x in mappings.columns]), err
 
@@ -195,6 +230,23 @@ def _standardise(x: str or None,
                  ref: List[NormalisedName],
                  mappings: List[ChannelMap],
                  alt: str):
+    """
+    Given a channel/marker, either return the corresponding standard name
+    according to a list of standards (ref) or if the channel/marker is None,
+    return the channel/marker in the ChannelMap object associated with it's
+    matching channel/marker (alt)
+
+    Parameters
+    ----------
+    x: str
+    ref: list
+    mappings: list
+    alt: str
+
+    Returns
+    -------
+    str
+    """
     if x is not None:
         return _query_normalised_list(x, ref)
     default = [m for m in mappings if m.channel == alt or m.marker == alt][0]
@@ -207,6 +259,21 @@ def standardise_names(channel_marker: dict,
                       ref_channels: List[NormalisedName],
                       ref_markers: List[NormalisedName],
                       ref_mappings: List[ChannelMap]):
+    """
+    Given a dictionary detailing a channel/marker pair ({"channel": str, "marker": str})
+    standardise its contents using the reference material provided.
+
+    Parameters
+    ----------
+    channel_marker: dict
+    ref_channels: list
+    ref_markers: list
+    ref_mappings: list
+
+    Returns
+    -------
+    dict
+    """
     channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(channel_marker.get("marker"))
     if channel is None and marker is None:
         raise ValueError("Cannot standardise column names because both channel and marker missing from mappings")
@@ -216,6 +283,18 @@ def standardise_names(channel_marker: dict,
 
 
 def _duplicate_mappings(mappings: List[dict]):
+    """
+    Check for duplicates in a list of dictionaries describing channel/marker mappings.
+    Raise AssertionError if duplicates found.
+
+    Parameters
+    ----------
+    mappings: list
+
+    Returns
+    -------
+    None
+    """
     channels = [x.get("channel") for x in mappings]
     assert not _check_duplication(channels), "Duplicate channels provided"
     markers = [x.get("marker") for x in mappings]
@@ -225,6 +304,20 @@ def _duplicate_mappings(mappings: List[dict]):
 def _missing_channels(mappings: List[dict],
                       channels: List[NormalisedName],
                       errors: str = "raise"):
+    """
+    Check a list of channel/marker dictionaries for missing channels according to
+    the reference channels given.
+
+    Parameters
+    ----------
+    mappings: list
+    channels: list
+    errors: str
+
+    Returns
+    -------
+    None
+    """
     existing_channels = [x.get("channel") for x in mappings]
     for x in channels:
         if x.standard not in existing_channels:
@@ -352,6 +445,17 @@ class Panel(mongoengine.Document):
 
 
 def _data_dir_append_leading_char(path: str):
+    """
+    Format a file path to handle Win and Unix OS
+
+    Parameters
+    ----------
+    path: str
+
+    Returns
+    -------
+    str
+    """
     leading_char = path[len(path) - 1]
     if leading_char not in ["\\", "/"]:
         if len(path.split("\\")) > 1:
@@ -617,16 +721,6 @@ class Experiment(mongoengine.Document):
             return None
         return [f for f in self.fcs_files if f.primary_id == sample_id][0].id.__str__()
 
-    def get_data(self,
-                 sample_id: str,
-                 sample_size: int or None = None,
-                 include_controls: bool = True,
-                 columns: str = "marker") -> dict:
-        filegrp = self.get_sample(sample_id)
-        return filegrp.load(sample_size=sample_size,
-                            include_controls=include_controls,
-                            columns=columns)
-
     def remove_sample(self, sample_id: str):
         """
         Remove sample (FileGroup) from experiment.
@@ -740,6 +834,20 @@ class Experiment(mongoengine.Document):
         return filegrp
 
     def delete(self, delete_panel: bool = True, *args, **kwargs):
+        """
+        Delete Experiment.
+
+        Parameters
+        ----------
+        delete_panel: bool (default=True)
+            If True, delete associated Panel
+        args: list
+        kwargs: dict
+
+        Returns
+        -------
+        None
+        """
         super().delete(*args, **kwargs)
         if delete_panel:
             self.panel.delete()
