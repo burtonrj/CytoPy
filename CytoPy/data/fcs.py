@@ -1,8 +1,10 @@
+from ..feedback import vprint
 from ..flow.tree import construct_tree
 from ..flow.transforms import apply_transform
+from ..flow.neighbours import knn, calculate_optimal_neighbours
 from .mapping import ChannelMap
-from .geometry import create_convex_hull, create_polygon
-from .population import Population, merge_populations, PolygonGeom, create_signature
+from .geometry import create_convex_hull
+from .population import Population, merge_populations, PolygonGeom
 from warnings import warn
 from typing import List, Generator, Dict
 import pandas as pd
@@ -241,6 +243,130 @@ class FileGroup(mongoengine.Document):
         if sample_size is not None:
             return self._sample_data(data=data, sample_size=sample_size)
         return data
+
+    def load_ctrl_population_df(self,
+                                ctrl: str,
+                                population: str,
+                                transform: str or dict or None = "logicle",
+                                **kwargs):
+        """
+        Load the DataFrame for the events pertaining to a single population from a
+        control. If the control is absent from this FileGroup it will raise an AssertionError.
+        If the population has not been estimated for the given control, it will attempt to
+        estimate the population using KNearestNeighbours classifier. See estimated_ctrl_population
+        for details.
+
+        Parameters
+        ----------
+        ctrl: str
+            Name of the control sample to load
+        population: str
+            Name of the desired population
+        transform: str or dict (optional)
+            If given, transformation method applied to the columns of the DataFrame. If the
+            value given is a string, it should be the name of the transform method applied
+            to ALL columns. If it is a dictionary, keys should correspond to column names
+            and values the transform to apply to said column.
+        kwargs
+            Additional keyword arguments passed to estimated_ctrl_population
+
+        Returns
+        -------
+
+        """
+        assert ctrl in self.data.get("controls").keys(), \
+            f"No such control {ctrl} associated to this FileGroup"
+        if ctrl not in self.get_population(population_name=population).ctrl_index.keys():
+            warn(f"Population {population} missing for control {ctrl}, will attempt to "
+                 f"estimate population using KNN")
+            self.estimate_ctrl_population(ctrl=ctrl, population=population, **kwargs)
+        idx = self.get_population(population_name=population).ctrl_index.get(ctrl)
+        data = self.data.get("controls").get(ctrl).loc[idx]
+        if isinstance(transform, dict):
+            data = apply_transform(data=data, features_to_transform=transform)
+        elif isinstance(transform, str):
+            data = apply_transform(data, transform_method=transform)
+        return data
+
+    def estimate_ctrl_population(self,
+                                 ctrl: str,
+                                 population: str,
+                                 verbose: bool = True,
+                                 scoring: str = "balanced_accuracy",
+                                 **kwargs):
+        """
+        Estimate a population for a control sample by training a KNearestNeighbors classifier
+        on the population in the primary data and using this model to predict membership
+        in the control data. If n_neighbors parameter of Scikit-Learns KNearestNeighbors class
+        is not given, it will be estimated using grid search cross-validation and optimisation
+        of the given scoring parameter. See CytoPy.flow.neighbours for further details.
+
+        Results of the population estimation will be saved to the populations ctrl_index property.
+
+        Parameters
+        ----------
+        ctrl: str
+            Control to estimate population for
+        population: str
+            Population to estimate
+        verbose: bool (default=True)
+        scoring: str (default="balanced_accuracy")
+        kwargs: dict
+            Additional keyword arguments passed to initiate KNearestNeighbors object
+
+        Returns
+        -------
+        None
+        """
+        feedback = vprint(verbose=verbose)
+        feedback(f"====== Estimating {population} for {ctrl} control ======")
+        population = self.get_population(population_name=population)
+        if ctrl not in self.get_population(population_name=population.parent).ctrl_index.keys():
+            feedback(f"Control missing parent {population.parent}, will attempt to estimate....")
+            self.estimate_ctrl_population(ctrl=ctrl,
+                                          population=population.parent,
+                                          verbose=verbose,
+                                          scoring=scoring,
+                                          **kwargs)
+            feedback(f"{population.parent} estimated, resuming estimation of {population.population_name}....")
+        features = [x for x in [population.geom.x, population.geom.y] if x is not None]
+        training_data = self.load_population_df(population=population.parent,
+                                                transform={"x": population.geom.transform_x,
+                                                           "y": population.geom.transform_y},
+                                                label_downstream_affiliations=False).copy()
+        training_data["labels"] = 0
+        training_data.loc[population.index]["labels"] = 1
+        labels = training_data["labels"].values
+        n = kwargs.get("n_neighbors", None)
+        if n is None:
+            feedback("Calculating optimal n_neighbours by grid search CV...")
+            n, score = calculate_optimal_neighbours(x=training_data[features].values,
+                                                    y=labels,
+                                                    scoring=scoring,
+                                                    **kwargs)
+            feedback(f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}...")
+        # Estimate control population using KNN
+        feedback("Training KNN classifier....")
+        train_acc, val_acc, model = knn(data=training_data,
+                                        features=features,
+                                        labels=labels,
+                                        n_neighbours=n,
+                                        holdout_size=0.2,
+                                        random_state=42,
+                                        return_model=True,
+                                        **kwargs)
+        feedback(f"...training balanced accuracy score: {train_acc}")
+        feedback(f"...validation balanced accuracy score: {val_acc}")
+        feedback(f"Predicting {population.population_name} for {ctrl} control...")
+        ctrl_data = self.load_ctrl_population_df(ctrl=ctrl,
+                                                 population=population.parent,
+                                                 transform={"x": population.geom.transform_x,
+                                                            "y": population.geom.transform_y},
+                                                 label_downstream_affiliations=False)
+        ctrl_labels = model.predict(ctrl_data[features].values)
+        ctrl_idx = ctrl_data.index.values[np.where(ctrl_labels == 1)]
+        population.set_ctrl_index(**{ctrl: ctrl_idx})
+        feedback("===============================================")
 
     def load_population_df(self,
                            population: str,
