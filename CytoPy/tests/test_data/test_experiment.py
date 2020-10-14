@@ -1,5 +1,6 @@
-from ...data.experiment import check_excel_template, NormalisedName, \
-    _check_duplication, Panel, _data_dir_append_leading_char, Experiment
+from ...data.experiment import check_excel_template, \
+    _check_duplication, Panel, _data_dir_append_leading_char, \
+    Experiment, FileGroup
 from ...tests import assets
 import pandas as pd
 import pytest
@@ -64,6 +65,16 @@ def test_exp_add_new_sample(example_experiment):
     assert os.path.isfile(f"{os.getcwd()}/test_data/{new_filegroup.id}.hdf5")
 
 
+def test_delete(example_experiment):
+    example_experiment.add_new_sample(sample_id="test_sample",
+                                      primary_path=f"{assets.__path__._path[0]}/test.FCS",
+                                      compensate=False)
+    example_experiment.save()
+    example_experiment.delete()
+    assert len(Experiment.objects()) == 0
+    assert len(FileGroup.objects()) == 0
+
+
 def test_exp_update_data_dir(example_experiment):
     with pytest.raises(AssertionError) as ex:
         example_experiment.update_data_directory("not_a_path")
@@ -71,4 +82,3 @@ def test_exp_update_data_dir(example_experiment):
     example_experiment.update_data_directory(assets.__path__._path[0])
     assert example_experiment.data_directory == assets.__path__._path[0]
     shutil.rmtree(f"{assets.__path__._path[0]}/test_data", ignore_errors=True)
-

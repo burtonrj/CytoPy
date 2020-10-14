@@ -180,7 +180,6 @@ class GatingStrategy(mongoengine.Document):
         -------
         Matplotlib.Axes or None
         """
-        # TODO check if control gate and call _control_gate if necessary
         if add_to_strategy:
             assert gate.gate_name not in self.list_gates(), \
                 f"Gate with name {gate.gate_name} already exists. To continue set add_to_strategy to False"
@@ -536,7 +535,7 @@ class GatingStrategy(mongoengine.Document):
         list
             List of Populations
         """
-        assert gate.ctrl in self.filegroup.data.get("controls").keys(), f"FileGroup does not have data for {ctrl}"
+        assert gate.ctrl in self.filegroup.controls, f"FileGroup does not have data for {gate.ctrl}"
         ctrl_parent_data = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl,
                                                                   population=gate.parent,
                                                                   transform=None)

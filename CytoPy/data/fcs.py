@@ -2,7 +2,6 @@ from ..feedback import vprint
 from ..flow.tree import construct_tree
 from ..flow.transforms import apply_transform
 from ..flow.neighbours import knn, calculate_optimal_neighbours
-from .mapping import ChannelMap
 from .geometry import create_convex_hull
 from .population import Population, merge_populations, PolygonGeom
 from warnings import warn
@@ -70,7 +69,6 @@ class FileGroup(mongoengine.Document):
     compensated = mongoengine.BooleanField(default=False)
     collection_datetime = mongoengine.DateTimeField(required=False)
     processing_datetime = mongoengine.DateTimeField(required=False)
-    channel_mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
     populations = mongoengine.EmbeddedDocumentListField(Population)
     gating_strategy = mongoengine.ListField()
     valid = mongoengine.BooleanField(default=True)
@@ -82,17 +80,19 @@ class FileGroup(mongoengine.Document):
 
     def __init__(self, *args, **values):
         data = values.pop("data", None)
-        mappings = values.pop("mappings", None)
+        channels = values.pop("channels", None)
+        markers = values.pop("markers", None)
         self.columns_default = values.pop("columns_default", "marker")
         super().__init__(*args, **values)
-        if data is not None and mappings is not None:
+        if data is not None:
             assert not self.id, "This FileGroup has already been defined"
-            self.channel_mappings = [ChannelMap(channel=x["channel"], marker=x["marker"])
-                                     for x in mappings]
+            assert channels is not None, "Must provide channels to create new FileGroup"
+            assert markers is not None, "Must provide markers to create new FileGroup"
             self.save()
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
-            self._init_new_file(data=data)
+            self._init_new_file(data=data, channels=channels, markers=markers)
         else:
+            assert self.id is not None, "FileGroup has not been previously defined. Please provide primary data."
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
             self._load_populations()
             self.tree = construct_tree(populations=self.populations)
@@ -115,9 +115,8 @@ class FileGroup(mongoengine.Document):
         """
         with h5py.File(self.h5path, "r") as f:
             assert source in f.keys(), f"Invalid source, expected one of: {f.keys()}"
-            data = _column_names(pd.DataFrame(f[source], dtype=np.float16),
-                                 mappings=self.channel_mappings,
-                                 preference=self.columns_default)
+            columns = f[f"mappings/{source}/{self.columns_default}"]
+            data = pd.DataFrame(f[source], dtype=np.float16, columns=columns)
         if isinstance(sample_size, int):
             return data.sample(n=sample_size)
         if isinstance(sample_size, float):
@@ -125,45 +124,67 @@ class FileGroup(mongoengine.Document):
         return data
 
     def _init_new_file(self,
-                       data: Dict[str, pd.DataFrame]):
+                       data: np.array,
+                       channels: List[str],
+                       markers: List[str]):
         """
         Under the assumption that this FileGroup has not been previously defined,
         generate a HDF5 file and initialise the root Population
 
         Parameters
         ----------
-        data: dict
-            Dictionary of dataframes. Should contain a key for "primary" being
-            the primary staining data. The remaining keys and values will be
-            stored as control files.
+        data: Numpy.Array
+        channels: list
+        markers: list
 
         Returns
         -------
         None
         """
-        err = "Invalid data: should be a dictionary of Numpy arrays"
-        assert isinstance(data, dict), err
-        assert all([isinstance(x, np.ndarray) for x in data.values()]), err
-        ctrl_idx = {}
         with h5py.File(self.h5path, "w") as f:
-            for name, a in data.items():
-                if name != "primary":
-                    f.create_dataset(name=name, data=a)
-                    self.controls.append(name)
-                    ctrl_idx[name] = np.arange(0, a.shape[0])
-                else:
-                    f.create_dataset(name="primary", data=a)
-            self.populations = [Population(population_name="root",
-                                           index=np.arange(0, data.get("primary").shape[0]),
-                                           parent="root",
-                                           n=data.get("primary").shape[0])]
-            for ctrl_id, ctrl_data in ctrl_idx.items():
-                self.get_population("root").set_ctrl_index(**{ctrl_id: ctrl_data})
+            f.create_dataset(name="primary", data=data)
+            f.create_group("mappings")
+            f.create_group("mappings/primary")
+            f.create_dataset("mappings/primary/channels", data=np.array(channels, dtype='S'))
+            f.create_dataset("mappings/primary/markers", data=np.array(markers, dtype='S'))
             f.create_group("index")
             f.create_group("index/root")
             f.create_group("clusters")
             f.create_group("cluster/root")
+        self.populations = [Population(population_name="root",
+                                       index=np.arange(0, data.shape[0]),
+                                       parent="root",
+                                       n=data.shape[0])]
         self.tree = {"root": anytree.Node(name="root", parent=None)}
+        self.save()
+
+    def add_ctrl_file(self,
+                      ctrl_id: str,
+                      data: np.array,
+                      channels: List[str],
+                      markers: List[str]):
+        """
+        Add a new control file to this FileGroup.
+
+        Parameters
+        ----------
+        ctrl_id: str
+        data: Numpy.Array
+        channels: list
+        markers: list
+
+        Returns
+        -------
+        None
+        """
+        with h5py.File(self.h5path, "a") as f:
+            assert ctrl_id not in self.controls, f"Entry for {ctrl_id} already exists"
+            f.create_dataset(name=ctrl_id, data=data)
+            f.create_group(f"mappings/{ctrl_id}")
+            f.create_dataset(f"mappings/{ctrl_id}/channels", data=np.array(channels, dtype='S'))
+            f.create_dataset(f"mappings/{ctrl_id}/markers", data=np.array(markers, dtype='S'))
+        root = self.get_population(population_name="root")
+        root.set_ctrl_index(**{ctrl_id: np.arange(0, data.shape[0])})
         self.save()
 
     def _load_populations(self):
