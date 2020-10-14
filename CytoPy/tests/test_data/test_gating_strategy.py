@@ -96,8 +96,8 @@ def apply_some_gates(gs: GatingStrategy):
 def test_load_data(example_experiment):
     gs = create_gatingstrategy_and_load(example_experiment)
     assert gs.filegroup is not None
-    assert isinstance(gs.filegroup.data.get("primary"), pd.DataFrame)
-    assert isinstance(gs.filegroup.data.get("controls").get("test_ctrl"), pd.DataFrame)
+    assert isinstance(gs.filegroup.data("primary"), pd.DataFrame)
+    assert isinstance(gs.filegroup.data("test_ctrl"), pd.DataFrame)
     assert list(gs.filegroup.list_populations()) == ["root"]
 
 

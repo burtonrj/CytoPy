@@ -751,7 +751,7 @@ class Experiment(mongoengine.Document):
                        processing_datetime: str or None = None,
                        collection_datetime: str or None = None,
                        missing_error: str = "raise",
-                       require_equal_mappings: bool = True) -> FileGroup:
+                       require_equal_mappings: bool = True):
         """
         Add a new sample (FileGroup) to this experiment
 
@@ -789,37 +789,38 @@ class Experiment(mongoengine.Document):
         --------
         None
         """
-
+        processing_datetime = processing_datetime or datetime.now()
+        collection_datetime = collection_datetime or datetime.now()
         controls_path = controls_path or {}
         feedback = vprint(verbose)
         assert not self.sample_exists(sample_id), f'A file group with id {sample_id} already exists'
-        # Load files and store in dictionary as pandas dataframes
-        feedback("Loading cytometry data...")
-        files = _load_files(primary_path=primary_path,
-                            controls_path=controls_path,
-                            comp_matrix=comp_matrix)
-        # Load mappings and check the mappings match between files
-        feedback("Checking channel/marker mappings...")
-        mappings = _load_and_check_mappings(fcs_files=files,
-                                            panel=self.panel,
-                                            missing_error=missing_error,
-                                            require_equal_mappings=require_equal_mappings)
+        feedback("Creating new FileGroup...")
+        fcs_file = FCSFile(filepath=primary_path, comp_matrix=comp_matrix)
         if compensate:
-            feedback("Compensating data...")
-            for fcs_file in files.values():
-                fcs_file.compensate()
-        # Create FileGroup
-        processing_datetime = processing_datetime or datetime.now()
-        collection_datetime = collection_datetime or datetime.now()
-        feedback("Generating FileGroup object...")
+            feedback("Compensating primary file...")
+            fcs_file.compensate()
+        feedback("Checking channel/marker mappings...")
+        mappings = self._standardise_mappings(fcs_file.channel_mappings,
+                                              missing_error=missing_error)
         filegrp = FileGroup(primary_id=sample_id,
                             data_directory=self.data_directory,
                             compensated=compensate,
                             collection_datetime=collection_datetime,
                             processing_datetime=processing_datetime,
-                            mappings=mappings,
-                            data={file_id: fcs.event_data
-                                  for file_id, fcs in files.items()})
+                            data=fcs_file.event_data,
+                            channels=[x.get("channel") for x in mappings],
+                            markers=[x.get("marker") for x in mappings])
+        for ctrl_id, path in controls_path.items():
+            feedback(f"Adding control file {ctrl_id}...")
+            fcs_file = FCSFile(filepath=path, comp_matrix=comp_matrix)
+            if compensate:
+                feedback("Compensating...")
+                fcs_file.compensate()
+            mappings = self._standardise_mappings(fcs_file.channel_mappings,
+                                                  missing_error=missing_error)
+            filegrp.add_ctrl_file(data=fcs_file.event_data,
+                                  channels=[x.get("channel") for x in mappings],
+                                  markers=[x.get("marker") for x in mappings])
         if subject_id is not None:
             feedback(f"Associating too {subject_id} Subject...")
             try:
@@ -831,9 +832,37 @@ class Experiment(mongoengine.Document):
         feedback(f'Successfully created {sample_id} and associated to {self.experiment_id}')
         self.fcs_files.append(filegrp)
         self.save()
-        del files
+        del fcs_file
         del filegrp
         gc.collect()
+
+    def _standardise_mappings(self,
+                              mappings: dict,
+                              missing_error: str):
+        """
+        Given some mappings (list of dictionaries with keys: channel, marker) compare the
+        mappings to the Experiment Panel. Returns the standardised mappings.
+
+        Parameters
+        ----------
+        mappings: list
+        missing_error: str
+
+        Returns
+        -------
+        list
+        """
+        mappings = list(map(lambda x: standardise_names(channel_marker=x,
+                                                        ref_channels=self.panel.channels,
+                                                        ref_markers=self.panel.markers,
+                                                        ref_mappings=self.panel.mappings),
+                            mappings))
+        for cm in mappings:
+            err = f'The channel/marker pairing {cm} does not correspond to any defined in panel'
+            assert _check_pairing(ref_mappings=self.panel.mappings, channel_marker=cm), err
+        _missing_channels(mappings=mappings, channels=self.panel.channels, errors=missing_error)
+        _duplicate_mappings(mappings)
+        return mappings
 
     def delete(self, delete_panel: bool = True, *args, **kwargs):
         """
@@ -853,87 +882,7 @@ class Experiment(mongoengine.Document):
         super().delete(*args, **kwargs)
         if delete_panel:
             self.panel.delete()
+        for f in self.fcs_files:
+            f.delete()
 
 
-def _load_files(primary_path: str,
-                controls_path: Dict[str, str],
-                comp_matrix: str or None) -> Dict[str, FCSFile]:
-    """
-    Internal method for loading a dictionary of FCSFile objects
-
-    Parameters
-    ----------
-    primary_path: str
-    controls_path: dict
-    comp_matrix: str (optional)
-
-    Returns
-    -------
-    dict
-    """
-    files = {"primary": FCSFile(filepath=primary_path, comp_matrix=comp_matrix)}
-    for ctr_id, path in controls_path.items():
-        files[ctr_id] = FCSFile(filepath=path, comp_matrix=comp_matrix)
-    return files
-
-
-def _equal_lists(nested_lists: List[list]):
-    """
-    Given a list of nested lists, assert that all
-    lists are equivalent.
-
-    Parameters
-    ----------
-    nested_lists: list
-
-    Returns
-    -------
-    list
-    """
-    for x in nested_lists:
-        for y in nested_lists:
-            assert x == y, f"Conflicting mappings: {x} != {y}"
-
-
-def _load_and_check_mappings(fcs_files: Dict[str, FCSFile],
-                             panel: Panel,
-                             missing_error: str,
-                             require_equal_mappings: bool) -> List[dict]:
-    """
-    Given a dictionary of FCSFile objects, check the channel mappings match
-    what is expected from the Panel and (if require_equal_mappings is True)
-    that the mappings match between the files.
-
-    Parameters
-    ----------
-    fcs_files: dict
-        Dictionary of FCSFile objects
-    panel: Panel
-        Panel object
-    missing_error: str
-        How to handle missing channels (that is, channels that appear in the associated
-        staining panel but cannot be found in the FCS data. Either "raise" to raise
-        AssertionError or "warn" to flag a UserWarning but continue execution.
-    require_equal_mappings
-        Require that the channel/marker names are equivalent between primary data
-        and control files.
-    Returns
-    -------
-
-    """
-    mappings = {file_id: list(map(lambda x: standardise_names(channel_marker=x,
-                                                              ref_channels=panel.channels,
-                                                              ref_markers=panel.markers,
-                                                              ref_mappings=panel.mappings),
-                                  fcs_file.channel_mappings))
-                for file_id, fcs_file in fcs_files.items()}
-    for channel_mappings in mappings.values():
-        for cm in channel_mappings:
-            err = f'The channel/marker pairing {cm} does not correspond to any defined in panel'
-            assert _check_pairing(ref_mappings=panel.mappings, channel_marker=cm), err
-        _missing_channels(mappings=channel_mappings, channels=panel.channels, errors=missing_error)
-        _duplicate_mappings(channel_mappings)
-    if require_equal_mappings:
-        _equal_lists([[i.get("channel") for i in x]for x in mappings.values()])
-        _equal_lists([[i.get("marker") for i in x]for x in mappings.values()])
-    return mappings.get("primary")
