@@ -15,25 +15,28 @@ import os
 
 
 def _column_names(df: pd.DataFrame,
-                  mappings: list,
-                  preference: str = "marker"):
+                  channels: list,
+                  markers: list,
+                  preference: str = "markers"):
     """
-    Given a dataframe of fcs events and a list of ChannelMapping objects, return the dataframe
-    with column name updated according to the preference
+    Given a dataframe of fcs events and lists of channels and markers, set the
+    column names according to the given preference.
 
     Parameters
     ----------
     df: pd.DataFrame
-    mappings: list
+    channels: list
+    markers: list
     preference: str
-        Valid values are: 'marker' or 'channel'
+        Valid values are: 'markers' or 'channels'
 
     Returns
     -------
     Pandas.DataFrame
     """
-    assert preference in ["marker", "channel"], "preference should be either 'marker' or 'channel'"
-    other = [x for x in ["marker", "channel"] if x != preference][0]
+    mappings = [{"channels": c, "markers": m} for c, m in zip(channels, markers)]
+    assert preference in ["markers", "channels"], "preference should be either 'markers' or 'channels'"
+    other = [x for x in ["markers", "channels"] if x != preference][0]
     col_names = list(map(lambda x: x[preference] if x[preference] else x[other], mappings))
     df.columns = col_names
     return df
@@ -82,7 +85,9 @@ class FileGroup(mongoengine.Document):
         data = values.pop("data", None)
         channels = values.pop("channels", None)
         markers = values.pop("markers", None)
-        self.columns_default = values.pop("columns_default", "marker")
+        self.columns_default = values.pop("columns_default", "markers")
+        assert self.columns_default in ["markers", "channels"], \
+            "columns_default must be one of: 'markers', 'channels'"
         super().__init__(*args, **values)
         if data is not None:
             assert not self.id, "This FileGroup has already been defined"
@@ -115,8 +120,12 @@ class FileGroup(mongoengine.Document):
         """
         with h5py.File(self.h5path, "r") as f:
             assert source in f.keys(), f"Invalid source, expected one of: {f.keys()}"
-            columns = f[f"mappings/{source}/{self.columns_default}"]
-            data = pd.DataFrame(f[source], dtype=np.float16, columns=columns)
+            channels = [x.decode("utf-8") for x in f[f"mappings/{source}/channels"][:]]
+            markers = [x.decode("utf-8") for x in f[f"mappings/{source}/markers"][:]]
+            data = _column_names(df=pd.DataFrame(f[source][:]),
+                                 channels=channels,
+                                 markers=markers,
+                                 preference=self.columns_default)
         if isinstance(sample_size, int):
             return data.sample(n=sample_size)
         if isinstance(sample_size, float):
@@ -560,6 +569,8 @@ class FileGroup(mongoengine.Document):
                      f"{downstream_effects}")
             populations = list(set(list(downstream_effects) + populations))
             self.populations = [p for p in self.populations if p.population_name not in populations]
+            for name in populations:
+                self.tree[name].parent = None
             self.tree = {name: node for name, node in self.tree.items() if name not in populations}
 
     def get_population(self,
@@ -735,6 +746,26 @@ class FileGroup(mongoengine.Document):
                 if p.population_name in f["clusters"].keys():
                     del f[f"clusters/{p.population_name}"]
 
+    def population_stats(self,
+                         population: str):
+        """
+
+        Parameters
+        ----------
+        population
+
+        Returns
+        -------
+
+        """
+        pop = self.get_population(population_name=population)
+        parent = self.get_population(population_name=pop.parent)
+        root = self.get_population(population_name="root")
+        return {"population_name": population,
+                "n": pop.n,
+                "prop_of_parent": pop.n / parent.n,
+                "prop_of_root": pop.n / root.n}
+
     def save(self, *args, **kwargs):
         # Calculate meta and save indexes to disk
         if self.populations:
@@ -754,3 +785,21 @@ class FileGroup(mongoengine.Document):
                 os.remove(self.h5path)
             else:
                 warn(f"Could not locate hdf5 file {self.h5path}")
+
+
+def population_stats(filegroup: FileGroup) -> pd.DataFrame:
+    """
+    Given a FileGroup generate a DataFrame detailing the number of events, proportion
+    of parent population, and proportion of total (root population) for each
+    population in the FileGroup.
+
+    Parameters
+    ----------
+    filegroup: FileGroup
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
+    return pd.DataFrame([filegroup.population_stats(p)
+                         for p in list(filegroup.list_populations())])

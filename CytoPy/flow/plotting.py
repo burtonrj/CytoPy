@@ -1,5 +1,6 @@
 from ..data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, \
     ChildPolygon, ChildThreshold
+from ..data.fcs import FileGroup
 from ..data.geometry import ThresholdGeom, PolygonGeom
 from ..flow.transforms import apply_transform
 from warnings import warn
@@ -580,7 +581,7 @@ class CreatePlot:
                  children: Dict[str, pd.DataFrame],
                  x: str,
                  y: str or None = None,
-                 colours: list or None = None,
+                 colours: str or None = "pastel",
                  alpha: float = .75,
                  size: float = 5,
                  method: str = "scatter",
@@ -599,7 +600,7 @@ class CreatePlot:
         children: dict
         x: str
         y: str (optional)
-        colours: list (defaults to Seaborn pastel palette)
+        colours: str (defaults to Seaborn pastel palette)
         alpha: float (default=0.75)
         size: float (default=5)
         method: str (default="scatter)
@@ -614,7 +615,7 @@ class CreatePlot:
         -------
         Matplotlib.axes
         """
-        colours = cycle(sns.color_palette("pastel"))
+        colours = cycle(sns.color_palette(colours))
         plot_kwargs = plot_kwargs or {}
         overlay_kwargs = overlay_kwargs or {}
         legend_kwargs = legend_kwargs or {}
@@ -716,19 +717,14 @@ class CreatePlot:
         return self._ax
 
     def _set_legend(self,
-                    shape_n: int,
                     **kwargs):
         anchor = kwargs.get("bbox_to_anchor", (1.1, 0.95))
         loc = kwargs.get("loc", 2)
         ncol = kwargs.get("ncol", 3)
         fancy = kwargs.get("fancybox", True)
         shadow = kwargs.get("shadow", False)
-        if shape_n == 1:
-            if self._ax.get_legend() is not None:
-                self._ax.get_legend().remove()
-        else:
-            self._ax.legend(loc=loc,
-                            bbox_to_anchor=anchor,
-                            ncol=ncol,
-                            fancybox=fancy,
-                            shadow=shadow)
+        self._ax.legend(loc=loc,
+                        bbox_to_anchor=anchor,
+                        ncol=ncol,
+                        fancybox=fancy,
+                        shadow=shadow)

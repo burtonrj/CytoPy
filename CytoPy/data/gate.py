@@ -6,6 +6,7 @@ from .population import Population, merge_multiple_populations, create_signature
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
 from shapely.geometry import Polygon as ShapelyPoly
+from multiprocessing import Pool, cpu_count
 from sklearn.cluster import *
 from sklearn.mixture import *
 from hdbscan import HDBSCAN
@@ -535,14 +536,14 @@ class ThresholdGate(Gate):
             List of predicted Population objects, labelled according to the gates child objects
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
-        original_data = data.copy()
+        data = data.copy()
         data = self._transform(data=data)
         data = self._dim_reduction(data=data)
         thresholds = self._fit(data=data)
         y_threshold = None
         if len(thresholds) == 2:
             y_threshold = thresholds[1]
-        results = apply_threshold(data=original_data,
+        results = apply_threshold(data=data,
                                   x=self.x,
                                   y=self.y,
                                   x_threshold=thresholds[0],
