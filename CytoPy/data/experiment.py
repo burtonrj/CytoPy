@@ -799,9 +799,15 @@ class Experiment(mongoengine.Document):
         if compensate:
             feedback("Compensating primary file...")
             fcs_file.compensate()
-        feedback("Checking channel/marker mappings...")
-        mappings = self._standardise_mappings(fcs_file.channel_mappings,
-                                              missing_error=missing_error)
+        try:
+            feedback("Checking channel/marker mappings...")
+            mappings = self._standardise_mappings(fcs_file.channel_mappings,
+                                                  missing_error=missing_error)
+        except AssertionError as err:
+            warn(f"Failed to add {sample_id}: {str(err)}")
+            del fcs_file
+            gc.collect()
+            return
         filegrp = FileGroup(primary_id=sample_id,
                             data_directory=self.data_directory,
                             compensated=compensate,
@@ -816,9 +822,18 @@ class Experiment(mongoengine.Document):
             if compensate:
                 feedback("Compensating...")
                 fcs_file.compensate()
-            mappings = self._standardise_mappings(fcs_file.channel_mappings,
-                                                  missing_error=missing_error)
+            try:
+                mappings = self._standardise_mappings(fcs_file.channel_mappings,
+                                                      missing_error=missing_error)
+            except AssertionError as err:
+                warn(f"Failed to add {sample_id}, error occured for {ctrl_id} files: {str(err)}")
+                filegrp.delete()
+                del fcs_file
+                del filegrp
+                gc.collect()
+                return
             filegrp.add_ctrl_file(data=fcs_file.event_data,
+                                  ctrl_id=ctrl_id,
                                   channels=[x.get("channel") for x in mappings],
                                   markers=[x.get("marker") for x in mappings])
         if subject_id is not None:

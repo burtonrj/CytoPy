@@ -497,27 +497,6 @@ class GatingStrategy(mongoengine.Document):
         """
         self.filegroup.print_population_tree(**kwargs)
 
-    def population_stats(self,
-                         population: str):
-        """
-
-        Parameters
-        ----------
-        population
-
-        Returns
-        -------
-
-        """
-        assert population in self.list_populations(), f"{population} does not exist"
-        pop = self.filegroup.get_population(population_name=population)
-        parent = self.filegroup.get_population(population_name=pop.parent)
-        root = self.filegroup.get_population(population_name="root")
-        return {"name": population,
-                "n": pop.n,
-                "prop_of_parent": pop.n / parent.n,
-                "prop_of_root": pop.n / root.n}
-
     def _control_gate(self,
                       gate: Gate or ThresholdGate or PolygonGate or EllipseGate):
         """

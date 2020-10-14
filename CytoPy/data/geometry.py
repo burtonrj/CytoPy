@@ -231,8 +231,8 @@ def create_convex_hull(x_values: np.array,
     """
     xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
     hull = ConvexHull(xy)
-    x = [int(i) for i in xy[hull.vertices, 0]]
-    y = [int(i) for i in xy[hull.vertices, 1]]
+    x = [float(i) for i in xy[hull.vertices, 0]]
+    y = [float(i) for i in xy[hull.vertices, 1]]
     return x, y
 
 
