@@ -13,16 +13,17 @@ def example_filegroup():
     exp = test_project.add_experiment(experiment_id="test experiment",
                                       data_directory=f"{os.getcwd()}/test_data",
                                       panel_definition=f"{os.getcwd()}/CytoPy/tests/assets/test_panel.xlsx")
-    yield exp.add_new_sample(sample_id="test sample",
-                             primary_path=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
-                             controls_path={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
-                             compensate=False)
+    exp.add_new_sample(sample_id="test sample",
+                       primary_path=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
+                       controls_path={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
+                       compensate=False)
+    yield exp.get_sample(sample_id="test sample")
     test_project.delete()
 
 
 def create_populations(filegroup: FileGroup):
-    p1data = filegroup.data.get("primary").sample(frac=0.8)
-    p1ctrldata = filegroup.data.get("controls").get("test_ctrl").sample(frac=0.8)
+    p1data = filegroup.data("primary", sample_size=0.8)
+    p1ctrldata = filegroup.data("test_ctrl", sample_size=0.8)
     p2data = p1data.sample(frac=0.5)
     p2ctrldata = p1ctrldata.sample(frac=0.5)
     p3data = p2data.sample(frac=0.5)
@@ -62,8 +63,8 @@ def test_create_fcs_file(example_filegroup):
     assert os.path.isfile(f"{os.getcwd()}/test_data/{fg.id}.hdf5")
     experiment = Project.objects(project_id="test").get().load_experiment("test experiment")
     fg = experiment.get_sample("test sample")
-    primary_data = pd.read_hdf(path_or_buf=fg.h5path, key="primary")
-    ctrl_data = pd.read_hdf(path_or_buf=fg.h5path, key="test_ctrl")
+    primary_data = fg.data("primary")
+    ctrl_data = fg.data("test_ctrl")
     assert len(fg.populations) == 1
     assert fg.populations[0].population_name == "root"
     assert len(fg.tree.keys()) == 1
@@ -75,31 +76,6 @@ def test_create_fcs_file(example_filegroup):
     assert np.array_equal(ctrl_data.index.values, root.ctrl_index.get("test_ctrl"))
     assert primary_data.shape == (30000, 7)
     assert ctrl_data.shape == (30000, 7)
-
-
-@pytest.mark.parametrize("sample_size,include_controls,columns",
-                         [(None, False, "marker"),
-                          (None, True, "channel"),
-                          (0.5, True, "marker"),
-                          (500, False, "channel")])
-def test_filegroup_load(example_filegroup, sample_size, include_controls, columns):
-    fg = example_filegroup
-    data = fg.load(sample_size=sample_size,
-                   include_controls=include_controls,
-                   columns=columns)
-    assert isinstance(data, dict)
-    assert "primary" in data.keys()
-    assert isinstance(data.get("primary"), pd.DataFrame)
-    if include_controls:
-        assert "controls" in data.keys()
-        assert "test_ctrl" in data.get("controls").keys()
-        assert isinstance(data.get("controls").get("test_ctrl"), pd.DataFrame)
-    if isinstance(sample_size, int):
-        assert data.get("primary").shape[0] == sample_size
-    if isinstance(sample_size, float):
-        assert data.get("primary").shape[0] == 15000
-    expected_columns = [cm[columns] for cm in fg.channel_mappings]
-    assert all([x in data.get("primary").columns for x in expected_columns])
 
 
 def test_add_population(example_filegroup):
