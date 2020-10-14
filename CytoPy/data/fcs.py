@@ -149,10 +149,10 @@ class FileGroup(mongoengine.Document):
             for name, a in data.items():
                 if name != "primary":
                     f.create_dataset(name=name, data=a)
-                self.controls.append(name)
-                ctrl_idx[name] = np.arange(0, a.shape[0])
-            else:
-                f.create_dataset(name="primary", data=a)
+                    self.controls.append(name)
+                    ctrl_idx[name] = np.arange(0, a.shape[0])
+                else:
+                    f.create_dataset(name="primary", data=a)
             self.populations = [Population(population_name="root",
                                            index=np.arange(0, data.get("primary").shape[0]),
                                            parent="root",
