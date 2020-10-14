@@ -13,6 +13,7 @@ import shutil
 import xlrd
 import os
 import re
+import gc
 
 
 def _check_sheet_names(path: str) -> (pd.DataFrame, pd.DataFrame):
@@ -501,15 +502,15 @@ class Experiment(mongoengine.Document):
         panel_definition = kwargs.pop("panel_definition", None)
         panel_name = kwargs.pop("panel_name", None)
         super().__init__(*args, **kwargs)
-        if not self.panel:
-            self.panel = self._generate_panel(panel_definition=panel_definition,
-                                              panel_name=panel_name)
-            self.panel.save()
         if self.data_directory:
             assert os.path.isdir(self.data_directory), f"data directory {self.data_directory} does not exist"
             self.data_directory = _data_dir_append_leading_char(self.data_directory)
         else:
             raise ValueError("No data directory provided")
+        if not self.panel:
+            self.panel = self._generate_panel(panel_definition=panel_definition,
+                                              panel_name=panel_name)
+            self.panel.save()
 
     @staticmethod
     def _check_panel(panel_name: str or None,
@@ -786,8 +787,7 @@ class Experiment(mongoengine.Document):
 
         Returns
         --------
-        FileGroup
-            Newly created FileGroup object
+        None
         """
 
         controls_path = controls_path or {}
@@ -818,7 +818,7 @@ class Experiment(mongoengine.Document):
                             collection_datetime=collection_datetime,
                             processing_datetime=processing_datetime,
                             mappings=mappings,
-                            data={file_id: pd.DataFrame(fcs.event_data)
+                            data={file_id: fcs.event_data
                                   for file_id, fcs in files.items()})
         if subject_id is not None:
             feedback(f"Associating too {subject_id} Subject...")
@@ -831,7 +831,9 @@ class Experiment(mongoengine.Document):
         feedback(f'Successfully created {sample_id} and associated to {self.experiment_id}')
         self.fcs_files.append(filegrp)
         self.save()
-        return filegrp
+        del files
+        del filegrp
+        gc.collect()
 
     def delete(self, delete_panel: bool = True, *args, **kwargs):
         """

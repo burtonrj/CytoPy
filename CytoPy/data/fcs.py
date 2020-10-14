@@ -83,23 +83,46 @@ class FileGroup(mongoengine.Document):
     def __init__(self, *args, **values):
         data = values.pop("data", None)
         mappings = values.pop("mappings", None)
+        self.columns_default = values.pop("columns_default", "marker")
         super().__init__(*args, **values)
         if data is not None and mappings is not None:
             assert not self.id, "This FileGroup has already been defined"
-            err = "Invalid data: should be a dictionary of dataframes"
-            assert isinstance(data, dict), err
-            assert all([isinstance(x, pd.DataFrame) for x in data.values()]), err
             self.channel_mappings = [ChannelMap(channel=x["channel"], marker=x["marker"])
                                      for x in mappings]
             self.save()
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
             self._init_new_file(data=data)
-            self.data = self.load(columns=values.get("columns", "marker"))
         else:
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
-            self.data = self.load(columns=values.get("columns", "marker"))
             self._load_populations()
             self.tree = construct_tree(populations=self.populations)
+
+    def data(self,
+             source: str,
+             sample_size: int or float or None = None) -> pd.DataFrame:
+        """
+        Load the FileGroup dataframe for the desired source file.
+
+        Parameters
+        ----------
+        source: str
+            Name of the file to load from e.g. either "primary" or the name of a control
+        sample_size: int or float (optional)
+            Sample the DataFrame
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        with h5py.File(self.h5path, "r") as f:
+            assert source in f.keys(), f"Invalid source, expected one of: {f.keys()}"
+            data = _column_names(pd.DataFrame(f[source], dtype=np.float16),
+                                 mappings=self.channel_mappings,
+                                 preference=self.columns_default)
+        if isinstance(sample_size, int):
+            return data.sample(n=sample_size)
+        if isinstance(sample_size, float):
+            return data.sample(frac=sample_size)
+        return data
 
     def _init_new_file(self,
                        data: Dict[str, pd.DataFrame]):
@@ -118,23 +141,24 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
-        err = "Data dictionary values should be pandas dataframes"
-        assert all([isinstance(x, pd.DataFrame) for x in data.values()]), err
+        err = "Invalid data: should be a dictionary of Numpy arrays"
+        assert isinstance(data, dict), err
+        assert all([isinstance(x, np.ndarray) for x in data.values()]), err
         ctrl_idx = {}
-        for name, df in data.items():
-            if name != "primary":
-                df.to_hdf(self.h5path, key=name)
+        with h5py.File(self.h5path, "w") as f:
+            for name, a in data.items():
+                if name != "primary":
+                    f.create_dataset(name=name, data=a)
                 self.controls.append(name)
-                ctrl_idx[name] = df.index.values
+                ctrl_idx[name] = np.arange(0, a.shape[0])
             else:
-                df.to_hdf(self.h5path, key="primary")
-        self.populations = [Population(population_name="root",
-                                       index=data.get("primary").index.values,
-                                       parent="root",
-                                       n=len(data.get("primary").index.values))]
-        for ctrl_id, ctrl_data in ctrl_idx.items():
-            self.get_population("root").set_ctrl_index(**{ctrl_id: ctrl_data})
-        with h5py.File(self.h5path, "a") as f:
+                f.create_dataset(name="primary", data=a)
+            self.populations = [Population(population_name="root",
+                                           index=np.arange(0, data.get("primary").shape[0]),
+                                           parent="root",
+                                           n=data.get("primary").shape[0])]
+            for ctrl_id, ctrl_data in ctrl_idx.items():
+                self.get_population("root").set_ctrl_index(**{ctrl_id: ctrl_data})
             f.create_group("index")
             f.create_group("index/root")
             f.create_group("clusters")
@@ -168,33 +192,6 @@ class FileGroup(mongoengine.Document):
                     else:
                         c.index = f[k + f"/{c.cluster_id}"][:]
 
-    @staticmethod
-    def _sample_data(data: dict,
-                     sample_size: int or float):
-        """
-        Given a dictionary of dataframes like that produced from FileGroup.load() method, sample
-        using given sample size.
-
-        Parameters
-        ----------
-        data: dict
-
-        sample_size: int or float
-
-        Returns
-        -------
-        dict
-        """
-        data = data.copy()
-        kwargs = dict(n=sample_size)
-        if type(sample_size) == float:
-            kwargs = dict(frac=sample_size)
-        data["primary"] = data["primary"].sample(**kwargs)
-        if "controls" in data.keys():
-            data["controls"] = {file_id: x.sample(**kwargs)
-                                for file_id, x in data["controls"].items()}
-        return data
-
     def add_population(self,
                        population: Population):
         """
@@ -213,36 +210,6 @@ class FileGroup(mongoengine.Document):
         self.populations.append(population)
         self.tree[population.population_name] = anytree.Node(name=population.population_name,
                                                              parent=self.tree.get(population.parent))
-
-    def load(self,
-             sample_size: int or float or None = None,
-             include_controls: bool = True,
-             columns: str = "marker") -> dict:
-        """
-        Load events data and return as a Pandas DataFrame.
-
-        Parameters
-        ----------
-        sample_size: int or float or None (optional)
-        include_controls: bool (default=True)
-        columns: str (default="marker")
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        assert os.path.isfile(self.h5path), "FileGroup is empty!"
-        data = {"primary": _column_names(df=pd.read_hdf(self.h5path, "primary"),
-                                         mappings=self.channel_mappings,
-                                         preference=columns)}
-        if include_controls:
-            data["controls"] = {ctrl_id: _column_names(df=pd.read_hdf(self.h5path, ctrl_id),
-                                                       mappings=self.channel_mappings,
-                                                       preference=columns)
-                                for ctrl_id in self.controls}
-        if sample_size is not None:
-            return self._sample_data(data=data, sample_size=sample_size)
-        return data
 
     def load_ctrl_population_df(self,
                                 ctrl: str,
@@ -274,14 +241,13 @@ class FileGroup(mongoengine.Document):
         -------
 
         """
-        assert ctrl in self.data.get("controls").keys(), \
-            f"No such control {ctrl} associated to this FileGroup"
+        assert ctrl in self.controls, f"No such control {ctrl} associated to this FileGroup"
         if ctrl not in self.get_population(population_name=population).ctrl_index.keys():
             warn(f"Population {population} missing for control {ctrl}, will attempt to "
                  f"estimate population using KNN")
             self.estimate_ctrl_population(ctrl=ctrl, population=population, **kwargs)
         idx = self.get_population(population_name=population).ctrl_index.get(ctrl)
-        data = self.data.get("controls").get(ctrl).loc[idx]
+        data = self.data(source=ctrl).loc[idx]
         if isinstance(transform, dict):
             data = apply_transform(data=data, features_to_transform=transform)
         elif isinstance(transform, str):
@@ -398,7 +364,7 @@ class FileGroup(mongoengine.Document):
         """
         assert population in self.tree.keys(), f"Invalid population, {population} does not exist"
         idx = self.get_population(population_name=population).index
-        data = self.data.get("primary").loc[idx]
+        data = self.data(source="primary").loc[idx]
         if isinstance(transform, dict):
             data = apply_transform(data=data, features_to_transform=transform)
         elif isinstance(transform, str):
