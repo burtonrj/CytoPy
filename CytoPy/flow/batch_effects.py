@@ -1,8 +1,7 @@
-from ..data.experiments import Experiment
+from ..data.experiment import Experiment
 from ..feedback import progress_bar, vprint
 from .dim_reduction import dimensionality_reduction
 from .transforms import scaler
-from .gating_tools import load_population
 from scipy.spatial.distance import jensenshannon as jsd
 from scipy.stats import entropy as kl
 from scipy.cluster import hierarchy
