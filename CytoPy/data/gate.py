@@ -151,7 +151,7 @@ class Gate(mongoengine.Document):
             if isinstance(n, int):
                 return data.sample(n=n)
             elif isinstance(n, float):
-                return data.sample(frac=0.5)
+                return data.sample(frac=n)
             else:
                 raise ValueError("Sampling parameter 'n' must be an integer or float")
         if self.sampling.get("method", None) == "density":

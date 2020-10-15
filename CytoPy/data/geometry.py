@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+from multiprocessing import Pool, cpu_count
+from functools import partial
 from matplotlib.patches import Ellipse
 from scipy import linalg, stats
 from scipy.spatial.qhull import ConvexHull
@@ -65,10 +67,17 @@ class PolygonGeom(PopulationGeometry):
         return create_polygon(self.x_values, self.y_values)
 
 
+def point_in_poly(coords: np.array,
+                  poly: Polygon):
+    point = Point(coords)
+    return poly.contains(point)
+
+
 def inside_polygon(df: pd.DataFrame,
                    x: str,
                    y: str,
-                   poly: Polygon):
+                   poly: Polygon,
+                   njobs: int = -1):
     """
     Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
 
@@ -82,15 +91,21 @@ def inside_polygon(df: pd.DataFrame,
         name of y-axis plane
     poly: shapely.geometry.Polygon
         Polygon object to search
+    njobs: int
+        Number of jobs to run in parallel, by default uses all available cores
 
     Returns
     --------
     Pandas.DataFrame
         Masked DataFrame containing only those rows that fall within the Polygon
     """
+    if njobs < 0:
+        njobs = cpu_count()
     xy = df[[x, y]].values
-    pos_idx = list(map(lambda i: poly.contains(Point(i)), xy))
-    return df.iloc[pos_idx]
+    f = partial(point_in_poly, poly=poly)
+    with Pool(njobs) as pool:
+        mask = list(pool.map(f, xy))
+    return df.iloc[mask]
 
 
 def polygon_overlap(poly1: Polygon,

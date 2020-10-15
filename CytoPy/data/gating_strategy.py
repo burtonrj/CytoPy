@@ -380,7 +380,7 @@ class GatingStrategy(mongoengine.Document):
         pass
 
     def plot_gate(self,
-                  gate: str or Gate or EllipseGate or ThresholdGate or PolygonGate,
+                  gate: str,
                   create_plot_kwargs: dict or None = None,
                   **kwargs):
         """
@@ -400,14 +400,18 @@ class GatingStrategy(mongoengine.Document):
         Matplotlib.Axes
         """
         create_plot_kwargs = create_plot_kwargs or {}
-        if isinstance(gate, str):
-            assert gate in self.list_gates(), f"Gate {gate} not recognised"
-            gate = self.get_gate(gate=gate)
+        assert isinstance(gate, str), "Provide the name of an existing Gate in this GatingStrategy"
+        assert gate in self.list_gates(), \
+            f"Gate {gate} not recognised. Have you applied it and added it to the strategy?"
+        gate = self.get_gate(gate=gate)
         parent = self.filegroup.load_population_df(population=gate.parent,
                                                    transform=None,
                                                    label_downstream_affiliations=False)
         plotting = CreatePlot(**create_plot_kwargs)
-        return plotting.plot_gate(gate=gate, parent=parent, **kwargs)
+        return plotting.plot_population_geoms(parent=parent,
+                                              children=[self.filegroup.get_population(c.name)
+                                                        for c in gate.children],
+                                              **kwargs)
 
     def plot_backgate(self,
                       parent: str,
