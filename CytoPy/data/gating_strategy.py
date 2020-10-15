@@ -148,9 +148,9 @@ class GatingStrategy(mongoengine.Document):
                                                         label_downstream_affiliations=False)
         gate.fit(data=parent_data)
         plot = CreatePlot(**create_plot_kwargs)
-        return plot.plot_gate(gate=gate,
-                              parent=parent_data,
-                              **plot_gate_kwargs)
+        return plot.plot_gate_children(gate=gate,
+                                       parent=parent_data,
+                                       **plot_gate_kwargs)
 
     def apply_gate(self,
                    gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate,
@@ -180,13 +180,13 @@ class GatingStrategy(mongoengine.Document):
         -------
         Matplotlib.Axes or None
         """
+        if isinstance(gate, str):
+            gate = self.get_gate(gate=gate)
         if add_to_strategy:
             assert gate.gate_name not in self.list_gates(), \
                 f"Gate with name {gate.gate_name} already exists. To continue set add_to_strategy to False"
         create_plot_kwargs = create_plot_kwargs or {}
         plot_gate_kwargs = plot_gate_kwargs or {}
-        if isinstance(gate, str):
-            gate = self.get_gate(gate=gate)
         parent_data = self.filegroup.load_population_df(population=gate.parent,
                                                         transform=None,
                                                         label_downstream_affiliations=False)
@@ -207,9 +207,9 @@ class GatingStrategy(mongoengine.Document):
             self.gates.append(gate)
         if plot:
             plot = CreatePlot(**create_plot_kwargs)
-            return plot.plot_gate(gate=gate,
-                                  parent=parent_data,
-                                  **plot_gate_kwargs)
+            return plot.plot_population_geoms(parent=parent_data,
+                                              children=populations,
+                                              **plot_gate_kwargs)
         return None
 
     def apply_all(self,

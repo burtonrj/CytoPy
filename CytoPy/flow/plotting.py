@@ -1,6 +1,5 @@
 from ..data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, \
-    ChildPolygon, ChildThreshold
-from ..data.fcs import FileGroup
+    ChildPolygon, ChildThreshold, Population
 from ..data.geometry import ThresholdGeom, PolygonGeom
 from ..flow.transforms import apply_transform
 from warnings import warn
@@ -299,26 +298,98 @@ class CreatePlot:
         self._set_legend(shape_n=1, **legend_kwargs)
         return self._ax
 
-    def plot_gate(self,
-                  gate: Gate or ThresholdGate or PolygonGate or EllipseGate,
-                  parent: pd.DataFrame,
-                  lw: float = 2.5,
-                  y: str or None = None,
-                  transform_x: str or None = None,
-                  transform_y: str or None = None,
-                  plot_kwargs: dict or None = None,
-                  legend_kwargs: dict or None = None):
+    def plot_gate_children(self,
+                           gate: Gate or ThresholdGate or EllipseGate or PolygonGate,
+                           parent: pd.DataFrame,
+                           lw: float = 2.5,
+                           y: str or None = None,
+                           transform_x: str or None = None,
+                           transform_y: str or None = None,
+                           plot_kwargs: dict or None = None,
+                           legend_kwargs: dict or None = None):
         """
-        Plot a Gate object. This will plot the geometric shapes generated from a single Gate, overlaid on the
-        parent population upon which the Gate has been applied in the context of the current Gating object and
-        it's associated cytometry data.
+       Plot a Gate object. This will plot the geometric shapes generated from a single Gate, overlaid on the
+       parent population given as Pandas.DataFrame. It should be noted, this will plot the geometric definitions
+       of a gates children, i.e. the expected populations. If you have generated new populations from new data
+       using a Gate you should plot with the 'plot_population_geoms' method
+
+       Parameters
+       ----------
+       gate: Gate or ThresholdGate or EllipseGate or PolygonGate
+       parent: Pandas.DataFrame
+           Parent DataFrame
+       lw: float (default = 2.5)
+           Linewidth for shapes to plot
+       plot_kwargs:
+           Additional keyword arguments to pass to plot_population (generates the plot of parent population)
+       legend_kwargs:
+           Additional keyword arguments to pass to axis legend. Defaults:
+               * bbox_to_anchor = (0.5, 1.05)
+               * loc = "upper center"
+               * ncol = 3
+               * fancybox = True
+               * shadow = False
+       y: str (optional)
+           Overrides the plotting configurations for the gate if y is missing
+           and allows user to plot a two-dimensional instead of one dimensional plot.
+           Only value for ThresholdGate.
+       transform_x: str (optional)
+           Overrides the transformation to the x-axis variable
+       transform_y: str (optional)
+           Overrides the transformation to the x-axis variable
+
+       Returns
+       -------
+       Matplotlib.pyplot.axes
+           Axis object
+       """
+        plot_kwargs = plot_kwargs or {}
+        legend_kwargs = legend_kwargs or dict()
+        gate_colours = cycle(["#c92c2c",
+                              "#2df74e",
+                              "#e0d572",
+                              "#000000",
+                              "#64b9c4",
+                              "#9e3657"])
+        self.transforms = {"x": gate.transformations.get("x", None) or transform_x,
+                           "y": gate.transformations.get("y", None) or transform_y}
+        self._ax = self.plot(data=parent,
+                             x=gate.x,
+                             y=gate.y or y,
+                             **plot_kwargs)
+        # If threshold, add threshold lines to plot and return axes
+        if isinstance(gate, ThresholdGate):
+            return self._plot_threshold(definitions={c.definition: c.name for c in gate.children},
+                                        geoms=[c.geom for c in gate.children],
+                                        lw=lw)
+        # Otherwise, we assume polygon shape
+        return self._plot_polygon(geoms=[c.geom for c in gate.children],
+                                  labels=[c.name for c in gate.children],
+                                  colours=gate_colours,
+                                  lw=lw,
+                                  legend_kwargs=legend_kwargs)
+
+    def plot_population_geoms(self,
+                              parent: pd.DataFrame,
+                              children: List[Population],
+                              lw: float = 2.5,
+                              y: str or None = None,
+                              transform_x: str or None = None,
+                              transform_y: str or None = None,
+                              plot_kwargs: dict or None = None,
+                              legend_kwargs: dict or None = None):
+        """
+        This will plot the geometric shapes some list of child populations generated from a single Gate,
+        overlaid on the parent population upon which the Gate has been applied in the context of the current
+        Gating object and it's associated cytometry data.
 
         Parameters
         ----------
-        gate: Gate
-            Gating objects
         parent: Pandas.DataFrame
             Parent DataFrame
+        children: list
+            List of Population objects that derive from the parent. Population geometries will
+            be overlaid on the parent population.
         lw: float (default = 2.5)
             Linewidth for shapes to plot
         plot_kwargs:
@@ -350,37 +421,44 @@ class CreatePlot:
                               "#000000",
                               "#64b9c4",
                               "#9e3657"])
+        assert len(set(str(type(x.geom) for x in children))), "Children geometries must all be of the same type"
         if y is not None:
-            assert isinstance(gate, ThresholdGate), "Can only override y-axis variable for ThresholdGate"
+            assert isinstance(children[0].geom, ThresholdGeom), "Can only override y-axis variable for Threshold " \
+                                                                "geometries"
         plot_kwargs = plot_kwargs or {}
         legend_kwargs = legend_kwargs or dict()
         # Plot the parent population
-        self.transforms = {"x": gate.transformations.get("x") or transform_x,
-                           "y": gate.transformations.get("y") or transform_y}
+        self.transforms = {"x": children[0].geom.transform_x or transform_x,
+                           "y": children[0].geom.transform_y or transform_y}
         self._ax = self.plot(data=parent,
-                             x=gate.x,
-                             y=gate.y or y,
+                             x=children[0].geom.x,
+                             y=children[0].geom.y or y,
                              **plot_kwargs)
         # If threshold, add threshold lines to plot and return axes
-        if isinstance(gate, ThresholdGate):
-            return self._plot_threshold(children=gate.children,
+        if isinstance(children[0].geom, ThresholdGeom):
+            return self._plot_threshold(definitions={c.definition: c.population_name for c in children},
+                                        geoms=[c.geom for c in children],
                                         lw=lw)
         # Otherwise, we assume polygon shape
-        return self._plot_polygon(children=gate.children,
+        return self._plot_polygon(geoms=[c.geom for c in children],
+                                  labels=[c.population_name for c in children],
                                   colours=gate_colours,
                                   lw=lw,
                                   legend_kwargs=legend_kwargs)
 
     def _plot_threshold(self,
-                        children: List[ChildThreshold],
+                        definitions: Dict[str, str],
+                        geoms: List[ThresholdGeom],
                         lw: float):
         """
         Plot Child populations from ThresholdGate
 
         Parameters
         ----------
-        children: list
-            List of Population objects
+        definitions: dict
+            Dictionary of {definition: population/child name}
+        geoms: list
+            List of ThresholdGeom objects
         lw: float
             Line width for thresholds
 
@@ -389,16 +467,17 @@ class CreatePlot:
         Matplotlib.pyplot.axes
             Axis object
         """
-        x = children[0].geom.x_threshold
-        y = children[0].geom.y_threshold
+        x = geoms[0].x_threshold
+        y = geoms[0].y_threshold
         self._add_threshold(x=x,
                             y=y,
-                            labels={c.definition: c.name for c in children},
+                            labels=definitions,
                             lw=lw)
         return self._ax
 
     def _plot_polygon(self,
-                      children: List[ChildPolygon],
+                      geoms: List[PolygonGeom],
+                      labels: List[str],
                       colours: list or Generator,
                       lw: float,
                       legend_kwargs: dict):
@@ -407,7 +486,7 @@ class CreatePlot:
 
         Parameters
         ----------
-        children: list
+        geoms: list
             List of Population objects
         colours: list or generator
             Colour(s) of polygon outline(s)
@@ -425,16 +504,14 @@ class CreatePlot:
         Matplotlib.pyplot.axes
             Axis object
         """
-        count = 0
-        for child in children:
-            count += 1
+        for i, g in enumerate(geoms):
             colour = next(colours)
-            self._add_polygon(x_values=child.geom.x_values,
-                              y_values=child.geom.y_values,
+            self._add_polygon(x_values=g.x_values,
+                              y_values=g.y_values,
                               colour=colour,
-                              label=child.name,
+                              label=labels[i],
                               lw=lw)
-        self._set_legend(shape_n=count, **legend_kwargs)
+        self._set_legend(**legend_kwargs)
         return self._ax
 
     def _add_polygon(self,
