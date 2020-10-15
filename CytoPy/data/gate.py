@@ -6,6 +6,7 @@ from .population import Population, merge_multiple_populations, create_signature
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
 from shapely.geometry import Polygon as ShapelyPoly
+from shapely.ops import cascaded_union
 from multiprocessing import Pool, cpu_count
 from sklearn.cluster import *
 from sklearn.mixture import *
@@ -258,7 +259,7 @@ class Gate(mongoengine.Document):
         None
         """
         child_counts = Counter([c.name for c in self.children])
-        if len(set(child_counts.values())) == 1:
+        if all([i == 1 for i in child_counts.values()]):
             return
         updated_children = []
         for name, count in child_counts.items():
@@ -940,8 +941,8 @@ def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
                               definition=definition,
                               geom=children[0].geom)
     if isinstance(children[0], ChildPolygon):
-        x = np.unique(np.concatenate([np.array(c.geom.x_values) for c in children], axis=0), axis=0).tolist()
-        y = np.unique(np.concatenate([np.array(c.geom.y_values) for c in children], axis=0), axis=0).tolist()
+        merged_poly = cascaded_union([c.geom.shape for c in children])
+        x, y = merged_poly.exterior.xy[0], merged_poly.exterior.xy[1]
         return ChildPolygon(name=children[0].name,
                             geom=PolygonGeom(x=children[0].geom.x,
                                              y=children[0].geom.y,
