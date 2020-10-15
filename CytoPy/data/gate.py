@@ -11,6 +11,7 @@ from multiprocessing import Pool, cpu_count
 from sklearn.cluster import *
 from sklearn.mixture import *
 from hdbscan import HDBSCAN
+from warnings import warn
 from scipy.spatial.distance import euclidean
 from string import ascii_uppercase
 from collections import Counter
@@ -250,6 +251,39 @@ class Gate(mongoengine.Document):
         """
         self.children = []
 
+
+class ThresholdGate(Gate):
+    """
+    A ThresholdGate is for density based gating that applies one or two-dimensional gates
+    to data in the form of straight lines, parallel to the axis that fall in the area of minimum
+    density.
+    """
+    children = mongoengine.EmbeddedDocumentListField(ChildThreshold)
+
+    def add_child(self,
+                  child: ChildThreshold) -> None:
+        """
+        Add a new child for this gate. Checks that definition is valid and overwrites geom with gate information.
+
+        Parameters
+        ----------
+        child: ChildThreshold
+
+        Returns
+        -------
+        None
+        """
+        if self.y is not None:
+            definition = child.definition.split(",")
+            assert all(i in ["++", "+-", "-+", "--"]
+                       for i in definition), "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
+        else:
+            assert child.definition in ["+", "-"], "Invalid child definition, should be either '+' or '-'"
+        child.geom.x = self.x
+        child.geom.y = self.y
+        child.geom.transform_x, child.geom.transform_y = self.transformations.get("x", None), self.transformations.get("y", None)
+        self.children.append(child)
+
     def _duplicate_children(self) -> None:
         """
         Loop through the children and merge any with the same name.
@@ -294,39 +328,6 @@ class Gate(mongoengine.Document):
         for c in self.children:
             c.name = labels.get(c.name)
         self._duplicate_children()
-
-
-class ThresholdGate(Gate):
-    """
-    A ThresholdGate is for density based gating that applies one or two-dimensional gates
-    to data in the form of straight lines, parallel to the axis that fall in the area of minimum
-    density.
-    """
-    children = mongoengine.EmbeddedDocumentListField(ChildThreshold)
-
-    def add_child(self,
-                  child: ChildThreshold) -> None:
-        """
-        Add a new child for this gate. Checks that definition is valid and overwrites geom with gate information.
-
-        Parameters
-        ----------
-        child: ChildThreshold
-
-        Returns
-        -------
-        None
-        """
-        if self.y is not None:
-            definition = child.definition.split(",")
-            assert all(i in ["++", "+-", "-+", "--"]
-                       for i in definition), "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
-        else:
-            assert child.definition in ["+", "-"], "Invalid child definition, should be either '+' or '-'"
-        child.geom.x = self.x
-        child.geom.y = self.y
-        child.geom.transform_x, child.geom.transform_y = self.transformations.get("x", None), self.transformations.get("y", None)
-        self.children.append(child)
 
     def _match_to_children(self,
                            new_populations: List[Population]) -> List[Population]:
@@ -660,6 +661,33 @@ class PolygonGate(Gate):
                                    signature=create_signature(pop_df)))
         return pops
 
+    def label_children(self,
+                       labels: dict,
+                       drop: bool = True) -> None:
+        """
+        Rename children using a dictionary of labels where the key correspond to the existing child name
+        and the value is the new desired population name. If the same population name is given to multiple
+        children, these children will be merged.
+        If drop is True, then children that are absent from the given dictionary will be dropped.
+
+        Parameters
+        ----------
+        labels: dict
+            Mapping for new children name
+        drop: bool (default=True)
+            If True, children absent from labels will be dropped
+
+        Returns
+        -------
+        None
+        """
+        assert len(set(labels.values())) == len(labels.values()), \
+            "Duplicate labels provided. Child merging not available for polygon gates"
+        if drop:
+            self.children = [c for c in self.children if c.name in labels.keys()]
+        for c in self.children:
+            c.name = labels.get(c.name)
+
     def add_child(self,
                   child: ChildPolygon) -> None:
         """
@@ -681,32 +709,6 @@ class PolygonGate(Gate):
         assert isinstance(child.geom.y_values, list), "ChildPolygon y_values should be of type list"
         self.children.append(child)
 
-    def _child_similarity_score(self,
-                                population: Population) -> str:
-        """
-        Compare a population to the Child objects contained within this gate and return the name
-        of the child population with the highest similarity score, where the similarity score
-        is given by: fraction area overlap * absolute euclidean distance between signatures.
-
-        Parameters
-        ----------
-        population: Population
-
-        Returns
-        -------
-        str
-        """
-        scores = list()
-        for child in self.children:
-            area = polygon_overlap(population.geom.shape, child.geom.shape)
-            common_features = set(population.signature.keys()).intersection(child.signature.keys())
-            vector_signatures = np.array([[population.signature.get(i), child.signature.get(i)]
-                                         for i in common_features]).T
-            sig_score = abs(euclidean(vector_signatures[:, 0], vector_signatures[:, 1]))
-            scores.append(area * sig_score)
-        highest_score_idx = np.argmax(scores)
-        return [c.name for c in self.children][highest_score_idx]
-
     def _match_to_children(self,
                            new_populations: List[Population]) -> List[Population]:
         """
@@ -716,7 +718,7 @@ class PolygonGate(Gate):
         Similarity score = fraction area overlap * absolute euclidean distance between signatures.
 
         Parameters
-        ----------
+        -----------
         new_populations: list
             List of newly created Population objects
 
@@ -724,15 +726,14 @@ class PolygonGate(Gate):
         -------
         list
         """
-        for pop in new_populations:
-            pop.population_name = self._child_similarity_score(pop)
-        assigned_name_counts = Counter([p.population_name for p in new_populations])
-        if all(i == 1 for i in assigned_name_counts.values()):
-            return new_populations
-        merged = list()
-        for name in [k for k, v in assigned_name_counts.items() if v > 1]:
-            merged.append(merge_multiple_populations([p for p in new_populations if p.population_name == name]))
-        return [p for p in new_populations if assigned_name_counts.get(p.population_name) == 1] + merged
+        matched_populations = list()
+        for child in self.children:
+            scores = [_child_similarity_score(child=child, population=pop)
+                      for pop in new_populations]
+            matching_population = new_populations[int(np.argmax(scores))]
+            matching_population.population_name = child.name
+            matched_populations.append(matching_population)
+        return matched_populations
 
     def _manual(self) -> ShapelyPoly:
         """
@@ -942,8 +943,10 @@ def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
                               geom=children[0].geom)
     if isinstance(children[0], ChildPolygon):
         merged_poly = cascaded_union([c.geom.shape for c in children])
+        new_signature = pd.DataFrame([c.signature for c in children]).mean().to_dict()
         x, y = merged_poly.exterior.xy[0], merged_poly.exterior.xy[1]
         return ChildPolygon(name=children[0].name,
+                            signature=new_signature,
                             geom=PolygonGeom(x=children[0].geom.x,
                                              y=children[0].geom.y,
                                              transform_x=children[0].geom.transform_x,
@@ -951,6 +954,32 @@ def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
                                              x_values=x,
                                              y_values=y))
     return children[0]
+
+
+def _child_similarity_score(child: ChildPolygon,
+                            population: Population) -> dict:
+    """
+    Compare a population to a ChildPolygon contained and return the similarity score.
+    The similarity score is given by: fraction area overlap * (1 - absolute euclidean distance between signatures).
+    This generates a score between 0 and 1, where 1 is identical populations and 0 is absolutely
+    different populations.
+
+    Parameters
+    ----------
+    child: ChildPolygon
+    population: Population
+
+    Returns
+    -------
+    str
+    """
+    assert isinstance(population.geom, PolygonGeom), "Similarity score is only for comparison of Polygon type gates"
+    area = polygon_overlap(child.geom.shape, population.geom.shape)
+    common_features = set(population.signature.keys()).intersection(child.signature.keys())
+    vector_signatures = np.array([[population.signature.get(i), child.signature.get(i)]
+                                  for i in common_features]).T
+    dist_score = 1. - abs(euclidean(vector_signatures[:, 0], vector_signatures[:, 1]))
+    return dist_score * area
 
 
 def apply_threshold(data: pd.DataFrame,
