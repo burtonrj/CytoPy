@@ -1,8 +1,7 @@
-from ...data.experiments import Experiment
+from ...data.experiment import Experiment
 from ...data.population import Cluster
 from ...feedback import vprint, progress_bar
 from ..explore import Explorer
-from ..gating_tools import Gating, load_population
 from ..transforms import scaler
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM

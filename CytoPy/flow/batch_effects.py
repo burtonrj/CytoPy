@@ -1,4 +1,4 @@
-from ..data.experiment import Experiment
+from ..data.experiment import Experiment, FileGroup
 from ..feedback import progress_bar, vprint
 from .dim_reduction import dimensionality_reduction
 from .transforms import scaler
@@ -91,6 +91,34 @@ def kde_wrapper(data: pd.DataFrame,
     return FFTKDE(kernel=kernel, bw=bw).fit(data.values)()[1]
 
 
+def load_and_sample(filegroup: FileGroup,
+                    population: str,
+                    transform: str or None,
+                    sample_size: int or float or None = None) -> (str, pd.DataFrame):
+    """
+    Given a FileGroup and the name of the desired population, load the
+    population with transformations applied and downsample if necessary.
+
+    Parameters
+    ----------
+    filegroup: FileGroup
+    population: str
+    transform: str (optional)
+    sample_size: int or float (optional)
+
+    Returns
+    -------
+    str, Pandas.DataFrame
+    """
+    data = filegroup.load_population_df(population=population,
+                                        transform=transform)
+    if isinstance(sample_size, int):
+        return filegroup.primary_id, data.sample(n=sample_size)
+    if isinstance(sample_size, float):
+        return filegroup.primary_id, data.sample(frac=sample_size)
+    return filegroup.primary_id, data
+
+
 class EvaluateBatchEffects:
     """
     Class for assessing the degree of variation observed in a single experiment. This can be
@@ -141,7 +169,7 @@ class EvaluateBatchEffects:
         if self.njobs < 0:
             self.njobs = cpu_count()
         if samples is None:
-            self.sample_ids = experiment.list_samples()
+            self.sample_ids = list(experiment.list_samples())
         else:
             for x in samples:
                 assert x in experiment.list_samples(), f"Invalid sample ID; {x} not found for given experiment"
@@ -159,25 +187,23 @@ class EvaluateBatchEffects:
         self.kde_cache = {}
 
     def load_and_sample(self,
-                        sample_n: int = 10000):
+                        sample_size: int or float = 10000):
         """
         Load sample data from experiment and return as a dictionary of Pandas DataFrames.
 
         Parameters
         ----------
-        sample_n: int
+        sample_size: int or float
             Total number of events to sample from each file
 
         Returns
         -------
         dict
         """
-        _load = partial(load_population,
-                        experiment=self.experiment,
-                        population=self.root_population,
-                        sample_n=sample_n,
+        _load = partial(load_and_sample,
+                        sample_size=sample_size,
                         transform=self.transform,
-                        indexed=True)
+                        population=self.root_population)
         with Pool(self.njobs) as pool:
             data = list(progress_bar(pool.imap(_load, self.sample_ids),
                                      verbose=self.verbose,
@@ -185,28 +211,29 @@ class EvaluateBatchEffects:
         return {x[0]: x[1] for x in data}
 
     def _calc_ref_sample(self,
-                         sample_n: int = 1000):
+                         sample_size: int or float = 1000):
         """
         Estimates a valid reference sample, see CytoPy.batch_effects.covar_euclidean_norm.
 
         Parameters
         ----------
-        sample_n: int (default=1000)
+        sample_size: int or float (default=1000)
 
         Returns
         -------
         str
         """
         self.print("--- Calculating Reference Sample ---")
-        return covar_euclidean_norm(data=self.load_and_sample(sample_n=sample_n),
+        return covar_euclidean_norm(data=self.load_and_sample(sample_size=sample_size),
                                     verbose=self.verbose)
 
     def marker_variance(self,
                         comparison_samples: list,
-                        sample_n: int,
+                        sample_size: int or float = 1000,
                         markers: list or None = None,
                         figsize: tuple = (10, 10),
                         xlim: tuple or None = None,
+                        data: dict or None = None,
                         **kwargs):
         """
         Compare the kernel density estimates for each marker in the associated experiment for the given
@@ -217,10 +244,12 @@ class EvaluateBatchEffects:
         ----------
         comparison_samples: list
             List of valid sample IDs for the associated experiment
-        sample_n: int
+        sample_size: int or float (default=1000)
             Number of events to sample from each prior to KDE
         markers: list (optional)
             List of markers to include (defaults to all available markers)
+        data: dict
+            Cached dictionary of data (expected to be like that produced from 'load_and_sample')
         figsize: figsize (default=(10,10))
         xlim: tuple (optional)
             x-axis limits
@@ -232,7 +261,7 @@ class EvaluateBatchEffects:
         matplotlib.Figure
         """
         fig = plt.figure(figsize=figsize)
-        data = self.load_and_sample(sample_n=sample_n)
+        data = data or self.load_and_sample(sample_size=sample_size)
         assert all([x in self.sample_ids for x in comparison_samples]), \
             f'One or more invalid sample IDs; valid IDs include: {self.sample_ids}'
         if markers is None:
@@ -260,24 +289,29 @@ class EvaluateBatchEffects:
 
     def dim_reduction_grid(self,
                            features: list,
-                           sample_n: int,
+                           sample_size: int or float = 1000,
                            figsize: tuple = (10, 10),
                            method: str = 'PCA',
                            kde: bool = False,
                            scale: bool = True,
+                           data: dict or None = None,
                            dim_reduction_kwargs: dict or None = None,
                            scale_kwargs: dict or None = None):
         """
         Generate a grid of embeddings using a valid dimensionality reduction technique, in each plot a reference sample
         is shown in blue and a comparison sample in red. The reference sample is conserved across all plots.
+
         reference_id: str
             This sample will appear in red as a comparison
+        sample_size: int or float (default=1000)
         comparison_samples: list
             List of samples to compare to reference (blue)
         features: list
             List of features to use for dimensionality reduction
         figsize: tuple, (default=(10,10))
             Size of figure
+        data: dict
+            Cached dictionary of data (expected to be like that produced from 'load_and_sample')
         method: str, (default='PCA')
             Method to use for dimensionality reduction (see flow.dim_reduction)
         kde: bool, (default=False)
@@ -291,7 +325,7 @@ class EvaluateBatchEffects:
         scale_kwargs = scale_kwargs or {}
         fig = plt.figure(figsize=figsize)
         nrows = math.ceil(len(self.sample_ids) / 3)
-        data = self.load_and_sample(sample_n=sample_n)
+        data = data or self.load_and_sample(sample_size=sample_size)
         if scale:
             data = scale_data(data=data, **scale_kwargs)
         self.print('Plotting...')
@@ -375,7 +409,7 @@ class EvaluateBatchEffects:
     def calc_divergence(self,
                         target_id: str,
                         features: list,
-                        sample_n: int = 5000,
+                        sample_size: int or float = 5000,
                         data: dict or None = None,
                         distance_metric: str or callable = 'jsd',
                         reduce_first: bool = False,
@@ -393,7 +427,7 @@ class EvaluateBatchEffects:
             Should be a valid sample ID for the associated experiment
         features: list
             Markers to be included in multidimensional KDE
-        sample_n: int (default=5000)
+        sample_size: int or float (default=5000)
             Number of events to sample for calculation
         data: dict (optional)
             If provided, data will be sourced from this dictionary rather than making a call to `load_and_sample`. If given
@@ -426,10 +460,11 @@ class EvaluateBatchEffects:
         metrics = {"kl": kl,
                    "jsd": jsd}
         if isinstance(distance_metric, str):
-            assert distance_metric in ['jsd', 'kl'], 'Invalid divergence metric must be one of either jsd, kl, or a callable function]'
+            assert distance_metric in ['jsd', 'kl'], \
+                'Invalid divergence metric must be one of either jsd, kl, or a callable function]'
             distance_metric = metrics.get(distance_metric)
         # Load data and scale if necessary
-        data = data or self.load_and_sample(sample_n=sample_n)
+        data = data or self.load_and_sample(sample_size=sample_size)
         if scale:
             data = scale_data(data=data, **scale_kwargs)
         # Calculate PDF of target, cache result
@@ -468,13 +503,14 @@ class EvaluateBatchEffects:
         return [(name, distance_metric(self.kde_cache.get(target_id), q)) for name, q in self.kde_cache.items()]
 
     def similarity_matrix(self,
-                          sample_n: int,
+                          sample_size: int or float = 5000,
                           figsize: tuple = (12, 12),
                           distance_metric: str or callable = 'jsd',
                           clustering_method: str = 'average',
                           features: None or list = None,
                           reduce_first: bool = True,
                           dim_reduction_method: str = "UMAP",
+                          data: dict or None = None,
                           scale: bool = False,
                           dim_reduction_kwargs: dict or None = None,
                           scale_kwargs: dict or None = None,
@@ -484,7 +520,7 @@ class EvaluateBatchEffects:
 
         Parameters
         ----------
-        sample_n: int
+        sample_size: int or float (default=5000)
             Number of events to sample for analysis
         figsize: tuple (default=(12,12))
             Figure size
@@ -502,6 +538,9 @@ class EvaluateBatchEffects:
             Dimension reduction method, see CytoPy.flow.dim_reduction
         dim_reduction_kwargs: dict
             Keyword arguments for dimension reduction method, see CytoPy.flow.dim_reduction
+        data: dict (optional)
+            If provided, data will be sourced from this dictionary rather than making a call to `load_and_sample`. If given
+            then value given for sample is ignored.
         scale: bool (default=False)
             Whether to scale data prior to calculation
         scale_kwargs
@@ -523,7 +562,7 @@ class EvaluateBatchEffects:
                  "is an asymmetrical function and as such it is not advised to use this metric for the "
                  "similarity matrix'")
         # Fetch data and scale if necessary
-        data = self.load_and_sample(sample_n=sample_n)
+        data = data or self.load_and_sample(sample_size=sample_size)
         if scale:
             data = scale_data(data=data, **scale_kwargs)
         features = features or data.get(list(data.keys())[0]).columns.tolist()

@@ -1,9 +1,8 @@
 from ...data.supervised_classifier import SklearnClassifier, KerasClassifier
-from ...data.experiments import Experiment
+from ...data.experiment import Experiment
 from ...data.population import Population
 from ...feedback import vprint, progress_bar
 from ..sampling import density_dependent_downsampling, faithful_downsampling
-from ..gating_tools import Gating, check_population_tree
 from ..transforms import scaler
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import train_test_split, KFold, learning_curve
