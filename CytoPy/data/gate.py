@@ -415,7 +415,7 @@ class ThresholdGate(Gate):
                                      **inflection_point_kwargs)
 
     def _fit(self,
-             data: pd.DataFrame) -> List[float]:
+             data: pd.DataFrame) -> list:
         """
         Internal method to fit threshold density gating to a given dataframe. Returns the
         list of thresholds generated and the dataframe the threshold were generated from
@@ -469,7 +469,7 @@ class ThresholdGate(Gate):
                         thresholds.append(find_local_minima(p=p, x=x_grid, peaks=peaks))
         return thresholds
 
-    def _manual(self) -> List[float]:
+    def _manual(self) -> list:
         """
         Wrapper called if manual gating method. Searches the method kwargs and returns static thresholds
 
@@ -521,7 +521,7 @@ class ThresholdGate(Gate):
         return None
 
     def fit_predict(self,
-                    data: pd.DataFrame) -> List[Population]:
+                    data: pd.DataFrame) -> list:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -550,11 +550,13 @@ class ThresholdGate(Gate):
                                   y=self.y,
                                   x_threshold=thresholds[0],
                                   y_threshold=y_threshold)
-        pops = self._generate_populations(data=results)
+        pops = self._generate_populations(data=results,
+                                          x_threshold=thresholds[0],
+                                          y_threshold=y_threshold)
         return self._match_to_children(new_populations=pops)
 
     def predict(self,
-                data: pd.DataFrame) -> List[Population]:
+                data: pd.DataFrame) -> list:
         """
         Using existing children associated to this gate, the previously calculated thresholds of
         these children will be applied to the given data and then Population objects created and
@@ -583,16 +585,22 @@ class ThresholdGate(Gate):
                                 y_threshold=self.children[0].geom.y_threshold)
         else:
             data = threshold_1d(data=data, x=self.x, x_threshold=self.children[0].geom.x_threshold)
-        return self._generate_populations(data=data)
+        return self._generate_populations(data=data,
+                                          x_threshold=self.children[0].geom.x_threshold,
+                                          y_threshold=self.children[0].geom.y_threshold)
 
     def _generate_populations(self,
-                              data: dict) -> List[Population]:
+                              data: dict,
+                              x_threshold: float,
+                              y_threshold: float or None) -> list:
         """
         Generate populations from a standard dictionary of dataframes that have had thesholds applied.
 
         Parameters
         ----------
         data: Pandas.DataFrame
+        x_threshold: float
+        y_threshold: float (optional)
 
         Returns
         -------
@@ -611,8 +619,8 @@ class ThresholdGate(Gate):
                                                       y=self.y,
                                                       transform_x=self.transformations.get("x", None),
                                                       transform_y=self.transformations.get("y", None),
-                                                      x_threshold=self.children[0].geom.x_threshold,
-                                                      y_threshold=self.children[0].geom.y_threshold)))
+                                                      x_threshold=x_threshold,
+                                                      y_threshold=y_threshold)))
         return pops
 
 

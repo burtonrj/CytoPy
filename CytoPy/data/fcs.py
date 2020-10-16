@@ -127,6 +127,10 @@ class FileGroup(mongoengine.Document):
                                  markers=markers,
                                  preference=self.columns_default)
         if isinstance(sample_size, int):
+            if sample_size >= data.shape[0]:
+                warn(f"Number of observations larger than requested sample size {data.shape[0]}, "
+                     f"returning complete data (n={data.shape[0]})")
+                return data
             return data.sample(n=sample_size)
         if isinstance(sample_size, float):
             return data.sample(frac=sample_size)

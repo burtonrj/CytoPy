@@ -2,6 +2,8 @@ from ..data.experiment import Experiment, FileGroup
 from ..feedback import progress_bar, vprint
 from .dim_reduction import dimensionality_reduction
 from .transforms import scaler
+from sklearn.model_selection import GridSearchCV
+from sklearn.neighbors import KernelDensity
 from scipy.spatial.distance import jensenshannon as jsd
 from scipy.stats import entropy as kl
 from scipy.cluster import hierarchy
@@ -17,6 +19,45 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import math
+
+
+def bw_optimisation(data: pd.DataFrame,
+                    features: list,
+                    kernel: str = "gaussian",
+                    bandwidth: tuple = (0.01, 0.1, 20),
+                    cv: int = 10,
+                    verbose: int = 1):
+    """
+    Using GridSearchCV and the Scikit-Learn implementation of KDE, find the optimal
+    bandwidth for the given data using grid search cross-validation
+
+    Parameters
+    ----------
+    data: pd.DataFrame
+    features: features
+    kernel: str (default="gaussian")
+    bandwidth: tuple (default=(0.01, 0.1, 20))
+    cv: int (default=10)
+    verbose: int (default=1)
+
+    Returns
+    -------
+    float
+    """
+    bandwidth = np.linspace(*bandwidth)
+    kde = KernelDensity(kernel=kernel)
+    grid = GridSearchCV(estimator=kde,
+                        param_grid={"bandwidth": bandwidth},
+                        cv=cv,
+                        n_jobs=-1,
+                        verbose=verbose)
+    grid.fit(data[features])
+    return grid.best_params_.get("bandwidth")
+
+
+def _common_features(data: Dict[str, pd.DataFrame]):
+    features = [df.columns.tolist() for df in data.values()]
+    return list(set(features[0]).intersection(*features))
 
 
 def covar_euclidean_norm(data: Dict[str, pd.DataFrame],
@@ -43,7 +84,8 @@ def covar_euclidean_norm(data: Dict[str, pd.DataFrame],
     feedback = vprint(verbose)
     feedback('Calculate covariance matrix for each sample...')
     # Calculate covar for each
-    covar = {k: np.cov(v, rowvar=False) for k, v in data.items()}
+    features = _common_features(data=data)
+    covar = {k: np.cov(v[features], rowvar=False) for k, v in data.items()}
     feedback('Search for sample with smallest average euclidean distance to all other samples...')
     # Make comparisons
     sample_ids = list(data.keys())
@@ -94,7 +136,7 @@ def kde_wrapper(data: pd.DataFrame,
 def load_and_sample(filegroup: FileGroup,
                     population: str,
                     transform: str or None,
-                    sample_size: int or float or None = None) -> (str, pd.DataFrame):
+                    sample_size: int or float or None = None) -> pd.DataFrame:
     """
     Given a FileGroup and the name of the desired population, load the
     population with transformations applied and downsample if necessary.
@@ -108,18 +150,22 @@ def load_and_sample(filegroup: FileGroup,
 
     Returns
     -------
-    str, Pandas.DataFrame
+    Pandas.DataFrame
     """
     data = filegroup.load_population_df(population=population,
                                         transform=transform)
     if isinstance(sample_size, int):
-        return filegroup.primary_id, data.sample(n=sample_size)
+        if sample_size >= data.shape[0]:
+            warn(f"Number of observations larger than requested sample size {data.shape[0]}, "
+                 f"returning complete data (n={data.shape[0]})")
+            return data
+        return data.sample(n=sample_size)
     if isinstance(sample_size, float):
-        return filegroup.primary_id, data.sample(frac=sample_size)
-    return filegroup.primary_id, data
+        return data.sample(frac=sample_size)
+    return data
 
 
-class EvaluateBatchEffects:
+class EvaluateVariance:
     """
     Class for assessing the degree of variation observed in a single experiment. This can be
     useful for determining the influence of batch effects in your cytometry experiment.
@@ -132,6 +178,8 @@ class EvaluateBatchEffects:
         Population to sample from e.g. T cells or Monocytes
     samples: list (optional)
         Samples to include in investigation (if None, uses all samples)
+    sample_size: int (default=5000)
+        Default sample size when taking uniform samples of biological data
     transform: str (default="logicle")
         How to transform the data prior to processing
     verbose: bool (default=True)
@@ -142,15 +190,16 @@ class EvaluateBatchEffects:
         Kernel to use for KDE, for options see KDEpy.FFTKDE
     kde_bw: str or float (default="ISJ"
         Bandwidth/bandwidth estimation method to use for KDE. See KDEpy for options.
-        Defaults too mproved Sheather Jones (ISJ) algorithm, which does not assume normality
+        Defaults too improved Sheather Jones (ISJ) algorithm, which does not assume normality
         and is robust to multimodal distributions. If you need to speed up results, change this to
-        'silvermans' which is less accurate but less computaitonally intensive.
+        'silvermans' which is less accurate but less computationally intensive.
     """
 
     def __init__(self,
                  experiment: Experiment,
                  root_population: str,
                  samples: list or None = None,
+                 sample_size: int = 5000,
                  reference_sample: str or None = None,
                  transform: str = 'logicle',
                  verbose: bool = True,
@@ -165,16 +214,29 @@ class EvaluateBatchEffects:
         self.kde_cache = dict()
         self.njobs = njobs
         self.kde_kernel = kde_kernel
-        self.kde_bw = kde_bw
+        self._kde_bw = kde_bw
+        self.sample_size = sample_size
         if self.njobs < 0:
             self.njobs = cpu_count()
-        if samples is None:
-            self.sample_ids = list(experiment.list_samples())
-        else:
-            for x in samples:
-                assert x in experiment.list_samples(), f"Invalid sample ID; {x} not found for given experiment"
-            self.sample_ids = samples
+        self.sample_ids = samples or list(experiment.list_samples())
+        for x in self.sample_ids:
+            assert x in list(experiment.list_samples()), f"Invalid sample ID; {x} not found for given experiment"
+            fg = self.experiment.get_sample(x)
+            assert root_population in fg.tree.keys(), f"Root population {self.root_population} absent form {x}"
         self.reference_id = reference_sample or self._calc_ref_sample()
+
+    @property
+    def kde_bw(self):
+        return self._kde_bw
+
+    @kde_bw.setter
+    def kde_bw(self, x: str or float):
+        if isinstance(x, str):
+            assert x in ["silverman", "ISJ"], \
+                "If kde_bw is a string value, should either be 'silverman' or 'ISJ'"
+        else:
+            assert isinstance(x, float), "kde_bw should be a float or 'silverman' or 'ISJ'"
+        self._kde_bw = x
 
     def clean_cache(self):
         """
@@ -187,31 +249,35 @@ class EvaluateBatchEffects:
         self.kde_cache = {}
 
     def load_and_sample(self,
-                        sample_size: int or float = 10000):
+                        sample_size: int or float or None = None):
         """
         Load sample data from experiment and return as a dictionary of Pandas DataFrames.
 
         Parameters
         ----------
-        sample_size: int or float
+        sample_size: int or float (optional)
             Total number of events to sample from each file
 
         Returns
         -------
         dict
         """
+        sample_size = sample_size or self.sample_size
         _load = partial(load_and_sample,
                         sample_size=sample_size,
                         transform=self.transform,
                         population=self.root_population)
-        with Pool(self.njobs) as pool:
-            data = list(progress_bar(pool.imap(_load, self.sample_ids),
-                                     verbose=self.verbose,
-                                     total=len(self.sample_ids)))
-        return {x[0]: x[1] for x in data}
+        files = [self.experiment.get_sample(s) for s in self.sample_ids]
+        data = dict()
+        for f in progress_bar(files, verbose=True):
+            data[f.primary_id] = load_and_sample(filegroup=f,
+                                                 sample_size=sample_size,
+                                                 transform=self.transform,
+                                                 population=self.root_population)
+        return data
 
     def _calc_ref_sample(self,
-                         sample_size: int or float = 1000):
+                         sample_size: int or float or None = None):
         """
         Estimates a valid reference sample, see CytoPy.batch_effects.covar_euclidean_norm.
 
@@ -223,13 +289,16 @@ class EvaluateBatchEffects:
         -------
         str
         """
+        sample_size = sample_size or self.sample_size
         self.print("--- Calculating Reference Sample ---")
-        return covar_euclidean_norm(data=self.load_and_sample(sample_size=sample_size),
-                                    verbose=self.verbose)
+        ref = covar_euclidean_norm(data=self.load_and_sample(sample_size=sample_size),
+                                   verbose=self.verbose)
+        self.print(f"--- Identified {ref} as suitable reference ---")
+        return ref
 
     def marker_variance(self,
                         comparison_samples: list,
-                        sample_size: int or float = 1000,
+                        sample_size: int or float or None = None,
                         markers: list or None = None,
                         figsize: tuple = (10, 10),
                         xlim: tuple or None = None,
@@ -244,7 +313,7 @@ class EvaluateBatchEffects:
         ----------
         comparison_samples: list
             List of valid sample IDs for the associated experiment
-        sample_size: int or float (default=1000)
+        sample_size: int or float (optional)
             Number of events to sample from each prior to KDE
         markers: list (optional)
             List of markers to include (defaults to all available markers)
@@ -261,6 +330,7 @@ class EvaluateBatchEffects:
         matplotlib.Figure
         """
         fig = plt.figure(figsize=figsize)
+        sample_size = sample_size or self.sample_size
         data = data or self.load_and_sample(sample_size=sample_size)
         assert all([x in self.sample_ids for x in comparison_samples]), \
             f'One or more invalid sample IDs; valid IDs include: {self.sample_ids}'
@@ -282,14 +352,15 @@ class EvaluateBatchEffects:
                 else:
                     ax = sns.kdeplot(data.get(comparison_sample_id)[marker],
                                      color='r', shade=False, alpha=0.5, ax=ax)
-                    ax.get_legend().remove()
+                    if ax.get_legend() is not None:
+                        ax.get_legend().remove()
             ax.set(aspect="auto")
         fig.tight_layout()
         return fig
 
     def dim_reduction_grid(self,
                            features: list,
-                           sample_size: int or float = 1000,
+                           sample_size: int or float or None = None,
                            figsize: tuple = (10, 10),
                            method: str = 'PCA',
                            kde: bool = False,
@@ -303,7 +374,7 @@ class EvaluateBatchEffects:
 
         reference_id: str
             This sample will appear in red as a comparison
-        sample_size: int or float (default=1000)
+        sample_size: int or float (optional)
         comparison_samples: list
             List of samples to compare to reference (blue)
         features: list
@@ -321,6 +392,7 @@ class EvaluateBatchEffects:
         None
             Plot printed to stdout
         """
+        sample_size = sample_size or self.sample_size
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         scale_kwargs = scale_kwargs or {}
         fig = plt.figure(figsize=figsize)
@@ -340,37 +412,34 @@ class EvaluateBatchEffects:
                                                       **dim_reduction_kwargs)
         i = 0
         fig.suptitle(f'{method}, Reference: {self.reference_id}', y=1.05)
-        for s in progress_bar(self.sample_ids, verbose=self.verbose):
+        for sample_id, df in progress_bar(data.items(), verbose=self.verbose):
             i += 1
-            df = data.get(s)
             df['label'] = 'Comparison'
             ax = fig.add_subplot(nrows, 3, i)
             if not all([f in df.columns for f in features]):
-                print(f'Features missing from {s}, skipping')
+                print(f'Features missing from {sample_id}, skipping')
                 continue
             embeddings = reducer.transform(df[features])
-            x = f'{method}_0'
-            y = f'{method}_1'
+            x = f'{method}1'
+            y = f'{method}2'
             ax.scatter(reference[x], reference[y], c='blue', s=4, alpha=0.2)
             if kde:
                 sns.kdeplot(reference[x], reference[y], c='blue', n_levels=100, ax=ax, shade=False)
             ax.scatter(embeddings[:, 0], embeddings[:, 1], c='red', s=4, alpha=0.1)
             if kde:
-                sns.kdeplot(embeddings[:, 0], embeddings[:, 1], c='red', n_levels=100, ax=ax, shade=False)
-            ax.set_title(s)
+                sns.kdeplot(embeddings[:, 0], embeddings[:, 1], c='red',
+                            n_levels=100, ax=ax, shade=False)
+            ax.set_title(sample_id)
             ax.set_yticklabels([])
             ax.set_xticklabels([])
             ax.set(aspect='auto')
         fig.tight_layout()
-        fig.show()
+        return fig
 
     def _estimate_pdf(self,
                       target_id: str,
-                      target: pd.DataFrame,
                       features: list,
-                      reduce_first: bool = False,
-                      dim_reduction_method: str = "UMAP",
-                      dim_reduction_kwargs: dict or None = None):
+                      target: pd.DataFrame):
         """
         Given a sample ID and its events dataframe, estimate the PDF by KDE with the option
         to perform dimensionality reduction first. Resulting PDF is saved to kde_cache.
@@ -380,43 +449,21 @@ class EvaluateBatchEffects:
         target_id: str
         target: Pandas.DataFrame
         features: list
-        reduce_first: bool (default=False)
-        dim_reduction_method: str (default="UMAP")
-        dim_reduction_kwargs: dict (optional)
 
         Returns
         -------
         None
         """
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
         target = target[features].copy().select_dtypes(include=['number'])
-        reduced_features = None
-        if reduce_first:
-            self.print("...performing dimensionality reduction on target")
-            target = dimensionality_reduction(target,
-                                              features=features,
-                                              method=dim_reduction_method,
-                                              return_reducer=False,
-                                              return_embeddings_only=False,
-                                              **dim_reduction_kwargs)
-            reduced_features = [f"{dim_reduction_method}_{i}"
-                                for i in range(dim_reduction_kwargs.get("n_components"))]
-        self.print("...estimating PDF for target")
-        if reduced_features is not None:
-            target = target[reduced_features]
-        self.kde_cache[target_id] = FFTKDE(kernel=self.kde_kernel, bw=self.kde_bw).fit(target.values)()[1]
+        kde = FFTKDE(kernel=self.kde_kernel, bw=self.kde_bw)
+        self.kde_cache[target_id] = kde.fit(target.values).evaluate(2)[1]
 
     def calc_divergence(self,
                         target_id: str,
                         features: list,
-                        sample_size: int or float = 5000,
+                        sample_size: int or float or None = None,
                         data: dict or None = None,
-                        distance_metric: str or callable = 'jsd',
-                        reduce_first: bool = False,
-                        dim_reduction_method: str = "UMAP",
-                        dim_reduction_kwargs: dict or None = None,
-                        scale: bool = False,
-                        scale_kwargs: dict or None = None) -> np.array:
+                        distance_metric: str or callable = 'jsd') -> np.array:
         """
         Given some target sample ID, estimate the PDF (with the option to perform dimensionality reduction first) and
         calculate the statistical distance between the target and the PDF of all other samples in the associated experiment.
@@ -427,7 +474,7 @@ class EvaluateBatchEffects:
             Should be a valid sample ID for the associated experiment
         features: list
             Markers to be included in multidimensional KDE
-        sample_size: int or float (default=5000)
+        sample_size: int or float (optional)
             Number of events to sample for calculation
         data: dict (optional)
             If provided, data will be sourced from this dictionary rather than making a call to `load_and_sample`. If given
@@ -436,16 +483,6 @@ class EvaluateBatchEffects:
             Either a callable function to calculate the statistical distance or a string value; options are:
                 * jsd: Jensson-shannon distance
                 * kl:Kullback-Leibler divergence (entropy)
-        reduce_first: bool (default=False)
-            If True, dimensionality reduction performed first using the method specified by dim_reduction_method
-        dim_reduction_method: str (default="UMAP")
-            Dimension reduction method, see CytoPy.flow.dim_reduction
-        dim_reduction_kwargs: dict
-            Keyword arguments for dimension reduction method, see CytoPy.flow.dim_reduction
-        scale: bool (default=False)
-            Whether to scale data prior to calculation
-        scale_kwargs
-            Keyword arguments for CytoPy.flow.transform.scaler
 
         Returns
         -------
@@ -453,9 +490,8 @@ class EvaluateBatchEffects:
             List of statistical distances, with results given as a list of nested tuples of type: (sample ID, distance).
         """
         # Set defaults
-        if "n_components" not in dim_reduction_kwargs:
-            dim_reduction_kwargs["n_components"] = 2
-        scale_kwargs = scale_kwargs or {}
+        sample_size = sample_size or self.sample_size
+        data = data or self.load_and_sample(sample_size=sample_size)
         # Assign distance metric func
         metrics = {"kl": kl,
                    "jsd": jsd}
@@ -463,53 +499,21 @@ class EvaluateBatchEffects:
             assert distance_metric in ['jsd', 'kl'], \
                 'Invalid divergence metric must be one of either jsd, kl, or a callable function]'
             distance_metric = metrics.get(distance_metric)
-        # Load data and scale if necessary
-        data = data or self.load_and_sample(sample_size=sample_size)
-        if scale:
-            data = scale_data(data=data, **scale_kwargs)
-        # Calculate PDF of target, cache result
-        self.print("Calculating PDF for target...")
-        if target_id not in self.kde_cache.keys():
-            self._estimate_pdf(target_id=target_id,
-                               target=data.get(target_id),
-                               features=features,
-                               reduce_first=reduce_first,
-                               dim_reduction_method=dim_reduction_method,
-                               dim_reduction_kwargs=dim_reduction_kwargs)
-        self.print("Calculate PDF for all other samples and calculate distance from target...")
-        # Perform dim reduction is requested
-        if reduce_first:
-            reduction_f = partial(dimensionality_reduction,
-                                  features=features,
-                                  method=dim_reduction_method,
-                                  return_reducer=False,
-                                  return_embeddings_only=False,
-                                  **dim_reduction_kwargs)
-            with Pool(self.njobs) as pool:
-                self.print("...performing dimensionality reduction on comparisons")
-                samples_df = list(progress_bar(pool.imap(reduction_f, data.values()),
-                                               verbose=self.verbose,
-                                               total=len(list(data.values()))))
-        self.print("...estimating PDF for comparisons")
-        kde_f = partial(kde_wrapper,
-                        kernel=self.kde_kernel,
-                        bw=self.kde_bw)
-        with Pool(self.njobs) as pool:
-            q_ = list(progress_bar(pool.imap(kde_f, samples_df),
-                                   verbose=self.verbose,
-                                   total=len(samples_df)))
-        for name, q in zip(data.keys(), q_):
-            self.kde_cache[name] = q
-        return [(name, distance_metric(self.kde_cache.get(target_id), q)) for name, q in self.kde_cache.items()]
+        for sample_id, df in data.items():
+            if sample_id not in self.kde_cache.keys():
+                self._estimate_pdf(target_id=sample_id,
+                                   target=df,
+                                   features=features)
+        return [(name, distance_metric(self.kde_cache.get(target_id), q))
+                for name, q in self.kde_cache.items()]
 
     def similarity_matrix(self,
-                          sample_size: int or float = 5000,
+                          sample_size: int or float or None = None,
                           figsize: tuple = (12, 12),
                           distance_metric: str or callable = 'jsd',
                           clustering_method: str = 'average',
                           features: None or list = None,
-                          reduce_first: bool = True,
-                          dim_reduction_method: str = "UMAP",
+                          dim_reduction_method: str or None = "UMAP",
                           data: dict or None = None,
                           scale: bool = False,
                           dim_reduction_kwargs: dict or None = None,
@@ -520,7 +524,7 @@ class EvaluateBatchEffects:
 
         Parameters
         ----------
-        sample_size: int or float (default=5000)
+        sample_size: int or float (optional)
             Number of events to sample for analysis
         figsize: tuple (default=(12,12))
             Figure size
@@ -532,10 +536,8 @@ class EvaluateBatchEffects:
             Method passed to call to scipy.cluster.heirachy
         features: list (optional)
             List of markers to use in analysis. If not given, will use all available markers.
-        reduce_first: bool (default=False)
-            If True, dimensionality reduction performed first using the method specified by dim_reduction_method
-        dim_reduction_method: str (default="UMAP")
-            Dimension reduction method, see CytoPy.flow.dim_reduction
+        dim_reduction_method: str, optional (default="UMAP")
+            Dimension reduction method, see CytoPy.flow.dim_reduction. Set to None to not reduce first
         dim_reduction_kwargs: dict
             Keyword arguments for dimension reduction method, see CytoPy.flow.dim_reduction
         data: dict (optional)
@@ -554,6 +556,7 @@ class EvaluateBatchEffects:
             Linkage array, ordered array of sample IDs and seaborn ClusterGrid object
         """
         # Set defaults
+        sample_size = sample_size or self.sample_size
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         scale_kwargs = scale_kwargs or {}
         cluster_plot_kwargs = cluster_plot_kwargs or {}
@@ -565,20 +568,36 @@ class EvaluateBatchEffects:
         data = data or self.load_and_sample(sample_size=sample_size)
         if scale:
             data = scale_data(data=data, **scale_kwargs)
+        elif dim_reduction_method == "PCA":
+            warn("Standard scaling recommended prior to dimensionality reduction by PCA")
         features = features or data.get(list(data.keys())[0]).columns.tolist()
         distance_df = pd.DataFrame()
 
+        # Perform dimensionality reduction
+        if dim_reduction_method is not None:
+            n_components = dim_reduction_kwargs.get("n_components", 2)
+            ref_embeddings, reducer = dimensionality_reduction(data=data[self.reference_id],
+                                                               features=features,
+                                                               return_reducer=True,
+                                                               return_embeddings_only=True,
+                                                               n_components=n_components,
+                                                               **dim_reduction_kwargs)
+            with Pool(self.njobs) as pool:
+                self.print("...performing dimensionality reduction on comparisons")
+                embeddings = list(progress_bar(pool.imap(reducer.transform, data.values()),
+                                               verbose=self.verbose,
+                                               total=len(list(data.values()))))
+            features = [f"embedding{i+1}" for i in range(n_components)]
+            data = {k: em for k, em in zip(data.keys(), pd.DataFrame(embeddings,
+                                                                     columns=features))}
+
         # Generate distance matrix
+        self.print("Calculating pairwise statistical distances...")
         for s in progress_bar(data.keys(), verbose=self.verbose):
             distances = self.calc_divergence(target_id=s,
                                              features=features,
                                              data=data,
-                                             distance_metric=distance_metric,
-                                             reduce_first=reduce_first,
-                                             dim_reduction_method=dim_reduction_method,
-                                             dim_reduction_kwargs=dim_reduction_kwargs,
-                                             scale=scale,
-                                             scale_kwargs=scale_kwargs)
+                                             distance_metric=distance_metric)
             name_distances = defaultdict(list)
             for n, d in distances:
                 name_distances[n].append(d)
