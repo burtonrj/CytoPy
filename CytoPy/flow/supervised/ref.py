@@ -1,7 +1,6 @@
-from ...data.experiments import Experiment
+from ...data.experiment import Experiment
 from ...data.fcs import FileGroup
 from ...feedback import progress_bar, vprint
-from ..gating_tools import Gating
 from warnings import warn
 import pandas as pd
 
