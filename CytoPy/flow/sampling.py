@@ -1,11 +1,23 @@
 from .neighbours import calculate_optimal_neighbours, knn
 from ..feedback import vprint
-from sklearn.neighbors import BallTree, KDTree, KNeighborsClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import balanced_accuracy_score
+from sklearn.neighbors import BallTree, KDTree
 from functools import partial
+from warnings import warn
 import pandas as pd
 import numpy as np
+
+
+def uniform_downsampling(data: pd.DataFrame,
+                         sample_size: int or float):
+    if isinstance(sample_size, int):
+        if sample_size >= data.shape[0]:
+            warn(f"Number of observations larger than requested sample size {data.shape[0]}, "
+                 f"returning complete data (n={data.shape[0]})")
+            return data
+        return data.sample(n=sample_size)
+    if isinstance(sample_size, float):
+        return data.sample(frac=sample_size)
+    raise ValueError("sample_size should be an int or float value")
 
 
 def faithful_downsampling(data: np.array,
@@ -110,8 +122,8 @@ def density_dependent_downsampling(data: pd.DataFrame,
     prob_f = partial(prob_downsample, target_d=td, outlier_d=od)
     prob = list(map(lambda x: prob_f(x), ld))
     if sum(prob) == 0:
-        print('Error: density dependendent downsampling failed; weights sum to zero. Defaulting to uniform '
-              'samplings')
+        warn('Error: density dependendent downsampling failed; weights sum to zero. '
+             'Defaulting to uniform sampling')
         if sample_n is not None:
             return df.sample(n=sample_n)
         return df.sample(frac=frac)
@@ -182,4 +194,3 @@ def upsample_knn(sample: pd.DataFrame,
     new_labels = model.predict(original_data[features].values)
     feedback("Complete!")
     return new_labels
-

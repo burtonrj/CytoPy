@@ -2,6 +2,7 @@ from ..feedback import vprint
 from ..flow.tree import construct_tree
 from ..flow.transforms import apply_transform
 from ..flow.neighbours import knn, calculate_optimal_neighbours
+from ..flow.sampling import uniform_downsampling
 from .geometry import create_convex_hull
 from .population import Population, merge_populations, PolygonGeom
 from warnings import warn
@@ -99,8 +100,11 @@ class FileGroup(mongoengine.Document):
         else:
             assert self.id is not None, "FileGroup has not been previously defined. Please provide primary data."
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
-            self._load_populations()
-            self.tree = construct_tree(populations=self.populations)
+            try:
+                self._load_populations()
+                self.tree = construct_tree(populations=self.populations)
+            except AssertionError as err:
+                warn(f"Failed to load data for {self.primary_id} ({self.id}); data may be corrupt or missing; {str(err)}")
 
     def data(self,
              source: str,
@@ -126,14 +130,9 @@ class FileGroup(mongoengine.Document):
                                  channels=channels,
                                  markers=markers,
                                  preference=self.columns_default)
-        if isinstance(sample_size, int):
-            if sample_size >= data.shape[0]:
-                warn(f"Number of observations larger than requested sample size {data.shape[0]}, "
-                     f"returning complete data (n={data.shape[0]})")
-                return data
-            return data.sample(n=sample_size)
-        if isinstance(sample_size, float):
-            return data.sample(frac=sample_size)
+        if sample_size is not None:
+            return uniform_downsampling(data=data,
+                                        sample_size=sample_size)
         return data
 
     def _init_new_file(self,

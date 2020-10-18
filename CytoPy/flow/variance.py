@@ -1,6 +1,7 @@
 from ..data.experiment import Experiment, FileGroup
 from ..feedback import progress_bar, vprint
 from .dim_reduction import dimensionality_reduction
+from .sampling import density_dependent_downsampling, faithful_downsampling, uniform_downsampling
 from .transforms import scaler
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
@@ -19,6 +20,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import math
+import copy
 
 
 def bw_optimisation(data: pd.DataFrame,
@@ -136,7 +138,9 @@ def kde_wrapper(data: pd.DataFrame,
 def load_and_sample(filegroup: FileGroup,
                     population: str,
                     transform: str or None,
-                    sample_size: int or float or None = None) -> pd.DataFrame:
+                    sample_size: int or float = 5000,
+                    sample_method: str or None = None,
+                    **kwargs) -> pd.DataFrame:
     """
     Given a FileGroup and the name of the desired population, load the
     population with transformations applied and downsample if necessary.
@@ -147,6 +151,7 @@ def load_and_sample(filegroup: FileGroup,
     population: str
     transform: str (optional)
     sample_size: int or float (optional)
+    sample_method: str (optional)
 
     Returns
     -------
@@ -154,14 +159,12 @@ def load_and_sample(filegroup: FileGroup,
     """
     data = filegroup.load_population_df(population=population,
                                         transform=transform)
-    if isinstance(sample_size, int):
-        if sample_size >= data.shape[0]:
-            warn(f"Number of observations larger than requested sample size {data.shape[0]}, "
-                 f"returning complete data (n={data.shape[0]})")
-            return data
-        return data.sample(n=sample_size)
-    if isinstance(sample_size, float):
-        return data.sample(frac=sample_size)
+    if sample_method == "uniform":
+        return uniform_downsampling(data=data, sample_size=sample_size)
+    if sample_method == "density":
+        return density_dependent_downsampling(data=data, **kwargs)
+    if sample_method == "faithful":
+        return faithful_downsampling(data=data, **kwargs)
     return data
 
 
@@ -392,6 +395,7 @@ class EvaluateVariance:
         None
             Plot printed to stdout
         """
+        data = copy.deepcopy(data)
         sample_size = sample_size or self.sample_size
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         scale_kwargs = scale_kwargs or {}
