@@ -499,8 +499,9 @@ class EvaluateVariance:
             assert distance_metric in ['jsd', 'kl'], \
                 'Invalid divergence metric must be one of either jsd, kl, or a callable function]'
             distance_metric = metrics.get(distance_metric)
-        for sample_id, df in data.items():
+        for i, (sample_id, df) in enumerate(data.items()):
             if sample_id not in self.kde_cache.keys():
+                self.print(f"({i}) Estimating pdf for {sample_id}")
                 self._estimate_pdf(target_id=sample_id,
                                    target=df,
                                    features=features)
