@@ -581,11 +581,12 @@ class Experiment(mongoengine.Document):
         None
         """
         assert os.path.isdir(new_path), "Invalid directory given for new_path"
-        shutil.move(self.data_directory, new_path)
         for file in self.fcs_files:
             file.data_directory = new_path
+            shutil.move(f"{self.data_directory}/{file.id}", f"{new_path}/{file.id}")
             file.save()
         self.data_directory = new_path
+        shutil.move(self.data_directory, new_path)
         self.save()
 
     def delete_all_populations(self,
@@ -750,8 +751,7 @@ class Experiment(mongoengine.Document):
                        verbose: bool = True,
                        processing_datetime: str or None = None,
                        collection_datetime: str or None = None,
-                       missing_error: str = "raise",
-                       require_equal_mappings: bool = True):
+                       missing_error: str = "raise"):
         """
         Add a new sample (FileGroup) to this experiment
 
@@ -779,9 +779,6 @@ class Experiment(mongoengine.Document):
             How to handle missing channels (that is, channels that appear in the associated
             staining panel but cannot be found in the FCS data. Either "raise" to raise
             AssertionError or "warn" to flag a UserWarning but continue execution.
-        require_equal_mappings: bool (default=True)
-            Require that the channel/marker names are equivalent between primary data
-            and control files.
         processing_datetime: str, optional
         collection_datetime: str, optional
 
