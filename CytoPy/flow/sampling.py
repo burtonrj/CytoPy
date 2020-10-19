@@ -1,6 +1,7 @@
 from .neighbours import calculate_optimal_neighbours, knn
 from ..feedback import vprint
 from sklearn.neighbors import BallTree, KDTree
+from multiprocessing import Pool, cpu_count
 from functools import partial
 from warnings import warn
 import pandas as pd
@@ -11,7 +12,7 @@ def uniform_downsampling(data: pd.DataFrame,
                          sample_size: int or float):
     if isinstance(sample_size, int):
         if sample_size >= data.shape[0]:
-            warn(f"Number of observations larger than requested sample size {data.shape[0]}, "
+            warn(f"Number of observations larger than requested sample size {sample_size}, "
                  f"returning complete data (n={data.shape[0]})")
             return data
         return data.sample(n=sample_size)
@@ -55,14 +56,23 @@ def faithful_downsampling(data: np.array,
     return communities
 
 
+def prob_downsample(local_d, target_d, outlier_d):
+    if local_d <= outlier_d:
+        return 0
+    if outlier_d < local_d <= target_d:
+        return 1
+    if local_d > target_d:
+        return target_d / local_d
+
+
 def density_dependent_downsampling(data: pd.DataFrame,
                                    features: list or None = None,
-                                   frac: float = 0.1,
-                                   sample_n: int or None = None,
+                                   sample_size: int or float = 0.1,
                                    alpha: int = 5,
-                                   mmd_sample: float = 0.1,
+                                   tree_sample: float or int = 0.1,
                                    outlier_dens: float = 1,
-                                   target_dens: float = 5):
+                                   target_dens: float = 5,
+                                   njobs: int = -1):
     """
     Perform density dependent down-sampling to remove risk of under-sampling rare populations;
     adapted from SPADE*
@@ -77,15 +87,14 @@ def density_dependent_downsampling(data: pd.DataFrame,
         Data to sample
     features: list (defaults to all columns)
         Name of columns to be used as features in down-sampling algorithm
-    frac: float, (default=0.1)
-        fraction of dataset to return as a sample
-    sample_n: int, optional
-        number of events to return in sample (used as alternative to frac)
+    sample_size: int or float (default=0.1)
+        number of events to return in sample, either as an integer of fraction of original
+        sample size
     alpha: int, (default=5)
         used for estimating distance threshold between cell and nearest neighbour (default = 5 used in
         original paper)
-    mmd_sample: float, (default=0.1)
-        proportion of cells to sample for generation of KD tree
+    tree_sample: float or int, (default=0.1)
+        proportion/number of cells to sample for generation of KD tree
     outlier_dens: float, (default=1)
         used to exclude cells with the lowest local densities; int value as a percentile of the
         lowest local densities e.g. 1 (the default value) means the bottom 1% of cells with lowest local densities
@@ -94,42 +103,45 @@ def density_dependent_downsampling(data: pd.DataFrame,
         determines how many cells will survive the down-sampling process; int value as a
         percentile of the lowest local densities e.g. 5 (the default value) means the density of bottom 5% of cells
         will serve as the density threshold for rare cell populations
-
+    njobs: int (default=-1)
+        Number of jobs to run in unison when calculating weights (defaults to all available cores)
     Returns
     -------
     Pandas.DataFrame
         Down-sampled pandas dataframe
     """
-
-    def prob_downsample(local_d, target_d, outlier_d):
-        if local_d <= outlier_d:
-            return 0
-        if outlier_d < local_d <= target_d:
-            return 1
-        if local_d > target_d:
-            return target_d / local_d
-
+    if isinstance(sample_size, int) and sample_size >= data.shape[0]:
+        warn("Requested sample size >= size of dataframe")
+        return data
+    if njobs < 0:
+        njobs = cpu_count()
     df = data.copy()
     features = features or df.columns.tolist()
-    mmd_sample = df.sample(frac=mmd_sample)
-    tree = KDTree(mmd_sample[features], metric='manhattan')
-    dist, _ = tree.query(mmd_sample[features], k=2)
+    if isinstance(tree_sample, float):
+        tree_sample = df.sample(frac=tree_sample)
+    else:
+        if tree_sample > df.shape[0]:
+            warn("Cannot take a larger sample than population; defaulting to whole dataframe "
+                 "for generating KDTree")
+            tree_sample = df.shape[0]
+        tree_sample = df.sample(n=tree_sample)
+    tree = KDTree(tree_sample[features], metric='manhattan')
+    dist, _ = tree.query(tree_sample[features], k=2)
     dist = np.median([x[1] for x in dist])
     dist_threshold = dist * alpha
     ld = tree.query_radius(df[features], r=dist_threshold, count_only=True)
     od = np.percentile(ld, q=outlier_dens)
     td = np.percentile(ld, q=target_dens)
     prob_f = partial(prob_downsample, target_d=td, outlier_d=od)
-    prob = list(map(lambda x: prob_f(x), ld))
+    with Pool(njobs) as pool:
+        prob = list(pool.map(prob_f, ld))
     if sum(prob) == 0:
         warn('Error: density dependendent downsampling failed; weights sum to zero. '
              'Defaulting to uniform sampling')
-        if sample_n is not None:
-            return df.sample(n=sample_n)
-        return df.sample(frac=frac)
-    if sample_n is not None:
-        return df.sample(n=sample_n, weights=prob)
-    return df.sample(frac=frac, weights=prob)
+        return uniform_downsampling(data=data, sample_size=sample_size)
+    if isinstance(sample_size, int):
+        return df.sample(n=sample_size, weights=prob)
+    return df.sample(frac=sample_size, weights=prob)
 
 
 def upsample_knn(sample: pd.DataFrame,
@@ -194,3 +206,6 @@ def upsample_knn(sample: pd.DataFrame,
     new_labels = model.predict(original_data[features].values)
     feedback("Complete!")
     return new_labels
+
+
+

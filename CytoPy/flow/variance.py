@@ -10,9 +10,8 @@ from scipy.stats import entropy as kl
 from scipy.cluster import hierarchy
 from scipy.spatial import distance
 from multiprocessing import Pool, cpu_count
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from KDEpy import FFTKDE
-from functools import partial
 from typing import Dict
 from warnings import warn
 import matplotlib.pyplot as plt
@@ -20,13 +19,12 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import math
-import copy
 
 
 def bw_optimisation(data: pd.DataFrame,
                     features: list,
                     kernel: str = "gaussian",
-                    bandwidth: tuple = (0.01, 0.1, 20),
+                    bandwidth: tuple = (0.01, 0.1, 10),
                     cv: int = 10,
                     verbose: int = 1):
     """
@@ -104,7 +102,7 @@ def covar_euclidean_norm(data: Dict[str, pd.DataFrame],
     return sample_ids[int(ref_ind)]
 
 
-def scale_data(data: Dict[str, pd.DataFrame],
+def scale_data(data: OrderedDict,
                method: str or None = "standard",
                **kwargs):
     """
@@ -122,11 +120,52 @@ def scale_data(data: Dict[str, pd.DataFrame],
     -------
     dict
     """
-    return {k: pd.DataFrame(scaler(data=v.values,
-                                   scale_method=method,
-                                   return_scaler=False,
-                                   **kwargs),
-                            columns=v.columns) for k, v in data.items()}
+    scaled = OrderedDict()
+    for k, df in data.items():
+        scaled[k] = pd.DataFrame(scaler(data=df.values,
+                                        scale_method=method,
+                                        return_scaler=False,
+                                        **kwargs),
+                                 columns=df.columns)
+    return scaled
+
+
+def load_and_sample(experiment: Experiment,
+                    sample_ids: list,
+                    population: str,
+                    sample_size: int or float,
+                    sampling_method: str or None = "uniform",
+                    transform: str = "logicle",
+                    **kwargs):
+    """
+    Load sample data from experiment and return as a dictionary of Pandas DataFrames.
+
+    Parameters
+    ----------
+    experiment: Experiment
+    sample_ids: list
+    sample_size: int or float (optional)
+        Total number of events to sample from each file
+    sampling_method: str
+    transform: str
+    population: str
+    kwargs
+        Additional keyword arguments for sampling method
+
+    Returns
+    -------
+    OrderedDict
+    """
+    files = [experiment.get_sample(s) for s in sample_ids]
+    data = OrderedDict()
+    for f in progress_bar(files, verbose=True):
+        data[f.primary_id] = _sample_filegroup(filegroup=f,
+                                               sample_size=sample_size,
+                                               sampling_method=sampling_method,
+                                               transform=transform,
+                                               population=population,
+                                               **kwargs)
+    return data
 
 
 def kde_wrapper(data: pd.DataFrame,
@@ -135,12 +174,12 @@ def kde_wrapper(data: pd.DataFrame,
     return FFTKDE(kernel=kernel, bw=bw).fit(data.values)()[1]
 
 
-def load_and_sample(filegroup: FileGroup,
-                    population: str,
-                    transform: str or None,
-                    sample_size: int or float = 5000,
-                    sample_method: str or None = None,
-                    **kwargs) -> pd.DataFrame:
+def _sample_filegroup(filegroup: FileGroup,
+                      population: str,
+                      transform: str or None,
+                      sample_size: int or float = 5000,
+                      sampling_method: str or None = None,
+                      **kwargs) -> pd.DataFrame:
     """
     Given a FileGroup and the name of the desired population, load the
     population with transformations applied and downsample if necessary.
@@ -151,7 +190,7 @@ def load_and_sample(filegroup: FileGroup,
     population: str
     transform: str (optional)
     sample_size: int or float (optional)
-    sample_method: str (optional)
+    sampling_method: str (optional)
 
     Returns
     -------
@@ -159,21 +198,175 @@ def load_and_sample(filegroup: FileGroup,
     """
     data = filegroup.load_population_df(population=population,
                                         transform=transform)
-    if sample_method == "uniform":
+    if sampling_method == "uniform":
         return uniform_downsampling(data=data, sample_size=sample_size)
-    if sample_method == "density":
-        return density_dependent_downsampling(data=data, **kwargs)
-    if sample_method == "faithful":
+    if sampling_method == "density":
+        return density_dependent_downsampling(data=data, sample_size=sample_size, **kwargs)
+    if sampling_method == "faithful":
         return faithful_downsampling(data=data, **kwargs)
     return data
 
 
-class EvaluateVariance:
+def marker_variance(data: OrderedDict,
+                    reference: str,
+                    comparison_samples: list or None = None,
+                    markers: list or None = None,
+                    figsize: tuple = (10, 10),
+                    xlim: tuple or None = None,
+                    verbose: bool = True,
+                    kernel: str = "gaussian",
+                    kde_bw: str or float = "silverman",
+                    **kwargs):
+    """
+    Compare the kernel density estimates for each marker in the associated experiment for the given
+    comparison samples. The estimated distributions of the comparison samples will be plotted against
+    the reference sample.
+
+    Parameters
+    ----------
+    data: dict
+    reference: str
+    comparison_samples: list
+        List of valid sample IDs for the associated experiment
+    markers: list (optional)
+        List of markers to include (defaults to all available markers)
+    figsize: figsize (default=(10,10))
+    xlim: tuple (optional)
+        x-axis limits
+    verbose: bool (default=True)
+    kernel: str (default="gaussian")
+    kde_bw: str or float (default="silverman")
+    kwargs: dict
+        Additional kwargs passed to Matplotlib.Axes.plot call
+
+    Returns
+    -------
+    matplotlib.Figure
+    """
+    assert reference in data.keys(), "Reference absent from given data"
+    comparison_samples = comparison_samples or [x for x in data.keys() if x != reference]
+    fig = plt.figure(figsize=figsize)
+    markers = markers or data.get(reference).columns.tolist()
+    i = 0
+    nrows = math.ceil(len(markers) / 3)
+    fig.suptitle(f'Per-channel KDE, Reference: {reference}', y=1.05)
+    for marker in progress_bar(markers, verbose=verbose):
+        i += 1
+        ax = fig.add_subplot(nrows, 3, i)
+        x, y = (FFTKDE(kernel=kernel,
+                       bw=kde_bw)
+                .fit(data.get(reference)[marker].values)
+                .evaluate())
+        ax.plot(x, y, color="b", **kwargs)
+        ax.fill_between(x, 0, y, facecolor="b", alpha=0.2)
+        ax.set_title(f'Total variance in {marker}')
+        if xlim:
+            ax.set_xlim(xlim)
+        for comparison_sample_id in comparison_samples:
+            if comparison_sample_id not in data.keys():
+                warn(f"{comparison_sample_id} is not a valid ID")
+                continue
+            if marker not in data.get(comparison_sample_id).columns:
+                warn(f"{marker} missing from {comparison_sample_id}, this marker will be ignored")
+            else:
+                x, y = (FFTKDE(kernel=kernel,
+                               bw=kde_bw)
+                        .fit(data.get(comparison_sample_id)[marker].values)
+                        .evaluate())
+                ax.plot(x, y, color="r", **kwargs)
+                if ax.get_legend() is not None:
+                    ax.get_legend().remove()
+        ax.set(aspect="auto")
+    fig.tight_layout()
+    return fig
+
+
+def dim_reduction_grid(data: OrderedDict,
+                       reference: str,
+                       features: list,
+                       comparison_samples: list or None = None,
+                       figsize: tuple = (10, 10),
+                       method: str = 'PCA',
+                       kde: bool = False,
+                       verbose: bool = True,
+                       dim_reduction_kwargs: dict or None = None):
+    """
+    Generate a grid of embeddings using a valid dimensionality reduction technique, in each plot a reference sample
+    is shown in blue and a comparison sample in red. The reference sample is conserved across all plots.
+
+    Parameters
+    ------------
+    data: dict
+    reference: str
+        This sample will appear in red as a comparison
+    comparison_samples: list
+        List of samples to compare to reference (blue)
+    features: list
+        List of features to use for dimensionality reduction
+    figsize: tuple, (default=(10,10))
+        Size of figure
+    method: str, (default='PCA')
+        Method to use for dimensionality reduction (see flow.dim_reduction)
+    dim_reduction_kwargs: dict
+    kde: bool, (default=False)
+        If True, overlay with two-dimensional PDF estimated by KDE
+    verbose: bool (default=True)
+
+    Returns
+    -------
+    None
+        Plot printed to stdout
+    """
+    assert reference in data.keys(), "Reference absent from given data"
+    comparison_samples = comparison_samples or [x for x in data.keys() if x != reference]
+    dim_reduction_kwargs = dim_reduction_kwargs or {}
+    fig = plt.figure(figsize=figsize)
+    nrows = math.ceil(len(comparison_samples) / 3)
+    reference = data.get(reference).copy()
+    reference['label'] = 'Target'
+    assert all([f in reference.columns for f in features]), \
+        f'Invalid features; valid are: {reference.columns}'
+    reference, reducer = dimensionality_reduction(reference,
+                                                  features=features,
+                                                  method=method,
+                                                  n_components=2,
+                                                  return_reducer=True,
+                                                  **dim_reduction_kwargs)
+    i = 0
+    fig.suptitle(f'{method}, Reference: {reference}', y=1.05)
+    for sample_id, df in progress_bar(data.items(), verbose=verbose):
+        if sample_id == reference:
+            continue
+        if not all([f in df.columns for f in features]):
+            warn(f'Features missing from {sample_id}, skipping')
+            continue
+        i += 1
+        df['label'] = 'Comparison'
+        ax = fig.add_subplot(nrows, 3, i)
+        embeddings = reducer.transform(df[features])
+        x = f'{method}1'
+        y = f'{method}2'
+        ax.scatter(reference[x], reference[y], c='blue', s=4, alpha=0.2)
+        if kde:
+            sns.kdeplot(reference[x], reference[y], c='blue', n_levels=100, ax=ax, shade=False)
+        ax.scatter(embeddings[:, 0], embeddings[:, 1], c='red', s=4, alpha=0.1)
+        if kde:
+            sns.kdeplot(embeddings[:, 0], embeddings[:, 1], c='red',
+                        n_levels=100, ax=ax, shade=False)
+        ax.set_title(sample_id)
+        ax.set_yticklabels([])
+        ax.set_xticklabels([])
+        ax.set(aspect='auto')
+    fig.tight_layout()
+    return fig
+
+
+class SimilarityMatrix:
     """
     Class for assessing the degree of variation observed in a single experiment. This can be
     useful for determining the influence of batch effects in your cytometry experiment.
 
-    Parameters
+    Attributes
     -----------
     experiment: Experiment
         Experiment to investigate
@@ -199,34 +392,27 @@ class EvaluateVariance:
     """
 
     def __init__(self,
-                 experiment: Experiment,
-                 root_population: str,
-                 samples: list or None = None,
-                 sample_size: int = 5000,
-                 reference_sample: str or None = None,
-                 transform: str = 'logicle',
+                 data: OrderedDict,
+                 reference: str or None = None,
                  verbose: bool = True,
                  njobs: int = -1,
+                 scale: str or None = None,
                  kde_kernel: str = "gaussian",
-                 kde_bw: str or float = "ISJ"):
-        self.experiment = experiment
-        self.transform = transform
-        self.root_population = root_population
+                 kde_bw: str or float = "silverman",
+                 scale_kwargs: dict or None = None):
+        assert reference in data.keys(), "Invalid reference, not present in given data"
+        scale_kwargs = scale_kwargs or {}
         self.verbose = verbose
         self.print = vprint(verbose)
         self.kde_cache = dict()
         self.njobs = njobs
         self.kde_kernel = kde_kernel
         self._kde_bw = kde_bw
-        self.sample_size = sample_size
+        self.reference = reference
         if self.njobs < 0:
             self.njobs = cpu_count()
-        self.sample_ids = samples or list(experiment.list_samples())
-        for x in self.sample_ids:
-            assert x in list(experiment.list_samples()), f"Invalid sample ID; {x} not found for given experiment"
-            fg = self.experiment.get_sample(x)
-            assert root_population in fg.tree.keys(), f"Root population {self.root_population} absent form {x}"
-        self.reference_id = reference_sample or self._calc_ref_sample()
+        if scale is not None:
+            self.data = scale_data(data=data, method=scale, **scale_kwargs)
 
     @property
     def kde_bw(self):
@@ -235,8 +421,9 @@ class EvaluateVariance:
     @kde_bw.setter
     def kde_bw(self, x: str or float):
         if isinstance(x, str):
-            assert x in ["silverman", "ISJ"], \
-                "If kde_bw is a string value, should either be 'silverman' or 'ISJ'"
+            valid = list(FFTKDE._bw_methods.keys()) + ["cv"]
+            assert x in valid, \
+                f"If kde_bw is a string value, should either be one of: {valid}"
         else:
             assert isinstance(x, float), "kde_bw should be a float or 'silverman' or 'ISJ'"
         self._kde_bw = x
@@ -251,226 +438,41 @@ class EvaluateVariance:
         """
         self.kde_cache = {}
 
-    def load_and_sample(self,
-                        sample_size: int or float or None = None):
-        """
-        Load sample data from experiment and return as a dictionary of Pandas DataFrames.
-
-        Parameters
-        ----------
-        sample_size: int or float (optional)
-            Total number of events to sample from each file
-
-        Returns
-        -------
-        dict
-        """
-        sample_size = sample_size or self.sample_size
-        _load = partial(load_and_sample,
-                        sample_size=sample_size,
-                        transform=self.transform,
-                        population=self.root_population)
-        files = [self.experiment.get_sample(s) for s in self.sample_ids]
-        data = dict()
-        for f in progress_bar(files, verbose=True):
-            data[f.primary_id] = load_and_sample(filegroup=f,
-                                                 sample_size=sample_size,
-                                                 transform=self.transform,
-                                                 population=self.root_population)
-        return data
-
-    def _calc_ref_sample(self,
-                         sample_size: int or float or None = None):
-        """
-        Estimates a valid reference sample, see CytoPy.batch_effects.covar_euclidean_norm.
-
-        Parameters
-        ----------
-        sample_size: int or float (default=1000)
-
-        Returns
-        -------
-        str
-        """
-        sample_size = sample_size or self.sample_size
-        self.print("--- Calculating Reference Sample ---")
-        ref = covar_euclidean_norm(data=self.load_and_sample(sample_size=sample_size),
-                                   verbose=self.verbose)
-        self.print(f"--- Identified {ref} as suitable reference ---")
-        return ref
-
-    def marker_variance(self,
-                        comparison_samples: list,
-                        sample_size: int or float or None = None,
-                        markers: list or None = None,
-                        figsize: tuple = (10, 10),
-                        xlim: tuple or None = None,
-                        data: dict or None = None,
-                        **kwargs):
-        """
-        Compare the kernel density estimates for each marker in the associated experiment for the given
-        comparison samples. The estimated distributions of the comparison samples will be plotted against
-        the reference sample.
-
-        Parameters
-        ----------
-        comparison_samples: list
-            List of valid sample IDs for the associated experiment
-        sample_size: int or float (optional)
-            Number of events to sample from each prior to KDE
-        markers: list (optional)
-            List of markers to include (defaults to all available markers)
-        data: dict
-            Cached dictionary of data (expected to be like that produced from 'load_and_sample')
-        figsize: figsize (default=(10,10))
-        xlim: tuple (optional)
-            x-axis limits
-        kwargs: dict
-            Additional kwargs passed to Seaborn.kdeplot call
-
-        Returns
-        -------
-        matplotlib.Figure
-        """
-        fig = plt.figure(figsize=figsize)
-        sample_size = sample_size or self.sample_size
-        data = data or self.load_and_sample(sample_size=sample_size)
-        assert all([x in self.sample_ids for x in comparison_samples]), \
-            f'One or more invalid sample IDs; valid IDs include: {self.sample_ids}'
-        if markers is None:
-            markers = data.get(self.reference_id).columns.tolist()
-        i = 0
-        nrows = math.ceil(len(markers) / 3)
-        fig.suptitle(f'Per-channel KDE, Reference: {self.reference_id}', y=1.05)
-        for marker in progress_bar(markers, verbose=self.verbose):
-            i += 1
-            ax = fig.add_subplot(nrows, 3, i)
-            ax = sns.kdeplot(data.get(self.reference_id)[marker], shade=True, color="b", ax=ax, **kwargs)
-            ax.set_title(f'Total variance in {marker}')
-            if xlim:
-                ax.set_xlim(xlim)
-            for comparison_sample_id in comparison_samples:
-                if marker not in data.get(comparison_sample_id).columns:
-                    warn(f"{marker} missing from {comparison_sample_id}, this marker will be ignored")
-                else:
-                    ax = sns.kdeplot(data.get(comparison_sample_id)[marker],
-                                     color='r', shade=False, alpha=0.5, ax=ax)
-                    if ax.get_legend() is not None:
-                        ax.get_legend().remove()
-            ax.set(aspect="auto")
-        fig.tight_layout()
-        return fig
-
-    def dim_reduction_grid(self,
-                           features: list,
-                           sample_size: int or float or None = None,
-                           figsize: tuple = (10, 10),
-                           method: str = 'PCA',
-                           kde: bool = False,
-                           scale: bool = True,
-                           data: dict or None = None,
-                           dim_reduction_kwargs: dict or None = None,
-                           scale_kwargs: dict or None = None):
-        """
-        Generate a grid of embeddings using a valid dimensionality reduction technique, in each plot a reference sample
-        is shown in blue and a comparison sample in red. The reference sample is conserved across all plots.
-
-        reference_id: str
-            This sample will appear in red as a comparison
-        sample_size: int or float (optional)
-        comparison_samples: list
-            List of samples to compare to reference (blue)
-        features: list
-            List of features to use for dimensionality reduction
-        figsize: tuple, (default=(10,10))
-            Size of figure
-        data: dict
-            Cached dictionary of data (expected to be like that produced from 'load_and_sample')
-        method: str, (default='PCA')
-            Method to use for dimensionality reduction (see flow.dim_reduction)
-        kde: bool, (default=False)
-            If True, overlay with two-dimensional PDF estimated by KDE
-        Returns
-        -------
-        None
-            Plot printed to stdout
-        """
-        data = copy.deepcopy(data)
-        sample_size = sample_size or self.sample_size
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
-        scale_kwargs = scale_kwargs or {}
-        fig = plt.figure(figsize=figsize)
-        nrows = math.ceil(len(self.sample_ids) / 3)
-        data = data or self.load_and_sample(sample_size=sample_size)
-        if scale:
-            data = scale_data(data=data, **scale_kwargs)
-        self.print('Plotting...')
-        reference = data.pop(self.reference_id)
-        reference['label'] = 'Target'
-        assert all([f in reference.columns for f in features]), f'Invalid features; valid are: {reference.columns}'
-        reference, reducer = dimensionality_reduction(reference,
-                                                      features=features,
-                                                      method=method,
-                                                      n_components=2,
-                                                      return_reducer=True,
-                                                      **dim_reduction_kwargs)
-        i = 0
-        fig.suptitle(f'{method}, Reference: {self.reference_id}', y=1.05)
-        for sample_id, df in progress_bar(data.items(), verbose=self.verbose):
-            i += 1
-            df['label'] = 'Comparison'
-            ax = fig.add_subplot(nrows, 3, i)
-            if not all([f in df.columns for f in features]):
-                print(f'Features missing from {sample_id}, skipping')
-                continue
-            embeddings = reducer.transform(df[features])
-            x = f'{method}1'
-            y = f'{method}2'
-            ax.scatter(reference[x], reference[y], c='blue', s=4, alpha=0.2)
-            if kde:
-                sns.kdeplot(reference[x], reference[y], c='blue', n_levels=100, ax=ax, shade=False)
-            ax.scatter(embeddings[:, 0], embeddings[:, 1], c='red', s=4, alpha=0.1)
-            if kde:
-                sns.kdeplot(embeddings[:, 0], embeddings[:, 1], c='red',
-                            n_levels=100, ax=ax, shade=False)
-            ax.set_title(sample_id)
-            ax.set_yticklabels([])
-            ax.set_xticklabels([])
-            ax.set(aspect='auto')
-        fig.tight_layout()
-        return fig
-
     def _estimate_pdf(self,
-                      target_id: str,
+                      sample_id: str,
                       features: list,
-                      target: pd.DataFrame):
+                      df: pd.DataFrame,
+                      **kwargs):
         """
         Given a sample ID and its events dataframe, estimate the PDF by KDE with the option
         to perform dimensionality reduction first. Resulting PDF is saved to kde_cache.
 
         Parameters
         ----------
-        target_id: str
-        target: Pandas.DataFrame
+        sample_id: str
+        df: Pandas.DataFrame
         features: list
 
         Returns
         -------
         None
         """
-        target = target[features].copy().select_dtypes(include=['number'])
-        kde = FFTKDE(kernel=self.kde_kernel, bw=self.kde_bw)
-        self.kde_cache[target_id] = kde.fit(target.values).evaluate(2)[1]
+        bw = self.kde_bw
+        if bw == "cv":
+            bw = bw_optimisation(data=df, features=features, **kwargs)
+        df = df[features].copy().select_dtypes(include=['number'])
+        kde = FFTKDE(kernel=self.kde_kernel, bw=bw)
+        self.kde_cache[sample_id] = kde.fit(df.values).evaluate()[1]
 
     def calc_divergence(self,
                         target_id: str,
                         features: list,
-                        sample_size: int or float or None = None,
                         data: dict or None = None,
                         distance_metric: str or callable = 'jsd') -> np.array:
         """
         Given some target sample ID, estimate the PDF (with the option to perform dimensionality reduction first) and
-        calculate the statistical distance between the target and the PDF of all other samples in the associated experiment.
+        calculate the statistical distance between the target and the PDF of all other samples in the associated
+        experiment.
 
         Parameters
         ----------
@@ -478,8 +480,6 @@ class EvaluateVariance:
             Should be a valid sample ID for the associated experiment
         features: list
             Markers to be included in multidimensional KDE
-        sample_size: int or float (optional)
-            Number of events to sample for calculation
         data: dict (optional)
             If provided, data will be sourced from this dictionary rather than making a call to `load_and_sample`. If given
             then value given for sample is ignored.
@@ -493,9 +493,6 @@ class EvaluateVariance:
         list
             List of statistical distances, with results given as a list of nested tuples of type: (sample ID, distance).
         """
-        # Set defaults
-        sample_size = sample_size or self.sample_size
-        data = data or self.load_and_sample(sample_size=sample_size)
         # Assign distance metric func
         metrics = {"kl": kl,
                    "jsd": jsd}
@@ -506,31 +503,71 @@ class EvaluateVariance:
         for i, (sample_id, df) in enumerate(data.items()):
             if sample_id not in self.kde_cache.keys():
                 self.print(f"({i}) Estimating pdf for {sample_id}")
-                self._estimate_pdf(target_id=sample_id,
-                                   target=df,
+                self._estimate_pdf(sample_id=sample_id,
+                                   df=df,
                                    features=features)
         return [(name, distance_metric(self.kde_cache.get(target_id), q))
                 for name, q in self.kde_cache.items()]
 
+    def _generate_reducer(self,
+                          features: list,
+                          n_components: int,
+                          dim_reduction_method: str,
+                          **kwargs):
+        reference = self.data.get(self.reference)
+        ref_embeddings, reducer = dimensionality_reduction(data=reference,
+                                                           method=dim_reduction_method,
+                                                           features=features,
+                                                           return_reducer=True,
+                                                           return_embeddings_only=True,
+                                                           n_components=n_components,
+                                                           **kwargs)
+        return reducer
+
+    def _dim_reduction(self,
+                       reducer: object,
+                       col_names: list):
+        with Pool(self.njobs) as pool:
+            self.print("...performing dimensionality reduction")
+            embeddings = list(progress_bar(pool.imap(reducer.transform, self.data.values()),
+                                           verbose=self.verbose,
+                                           total=len(self.data.values())))
+        embeddings = {k: em for k, em in zip(self.data.keys(),
+                                             pd.DataFrame(embeddings, columns=col_names))}
+        return embeddings
+
+    def _pairwise_stat_dist(self,
+                            embeddings: dict,
+                            features: list,
+                            distance_metric: str):
+        self.print("Calculating pairwise statistical distances...")
+        distance_df = pd.DataFrame()
+        for s in progress_bar(embeddings.keys(), verbose=self.verbose):
+            distances = self.calc_divergence(target_id=s,
+                                             features=features,
+                                             data=embeddings.get(s),
+                                             distance_metric=distance_metric)
+            name_distances = defaultdict(list)
+            for n, d in distances:
+                name_distances[n].append(d)
+            name_distances = pd.DataFrame(name_distances)
+            name_distances["sample_id"] = s
+            distance_df = pd.concat([distance_df, name_distances])
+        return distance_df
+
     def similarity_matrix(self,
-                          sample_size: int or float or None = None,
                           figsize: tuple = (12, 12),
                           distance_metric: str or callable = 'jsd',
                           clustering_method: str = 'average',
                           features: None or list = None,
-                          dim_reduction_method: str or None = "UMAP",
-                          data: dict or None = None,
-                          scale: bool = False,
+                          dim_reduction_method: str = "PCA",
                           dim_reduction_kwargs: dict or None = None,
-                          scale_kwargs: dict or None = None,
                           cluster_plot_kwargs: dict or None = None):
         """
         Generate a heatmap of pairwise statistical distances with the axis clustered using agglomerative clustering.
 
         Parameters
         ----------
-        sample_size: int or float (optional)
-            Number of events to sample for analysis
         figsize: tuple (default=(12,12))
             Figure size
         distance_metric: callable or str (default='jsd')
@@ -541,17 +578,10 @@ class EvaluateVariance:
             Method passed to call to scipy.cluster.heirachy
         features: list (optional)
             List of markers to use in analysis. If not given, will use all available markers.
-        dim_reduction_method: str, optional (default="UMAP")
+        dim_reduction_method: str (default="PCA")
             Dimension reduction method, see CytoPy.flow.dim_reduction. Set to None to not reduce first
         dim_reduction_kwargs: dict
             Keyword arguments for dimension reduction method, see CytoPy.flow.dim_reduction
-        data: dict (optional)
-            If provided, data will be sourced from this dictionary rather than making a call to `load_and_sample`. If given
-            then value given for sample is ignored.
-        scale: bool (default=False)
-            Whether to scale data prior to calculation
-        scale_kwargs
-            Keyword arguments for CytoPy.flow.transform.scaler
         cluster_plot_kwargs: dict
             Additional keyword arguments passed to Seaborn.clustermap call
 
@@ -561,55 +591,26 @@ class EvaluateVariance:
             Linkage array, ordered array of sample IDs and seaborn ClusterGrid object
         """
         # Set defaults
-        sample_size = sample_size or self.sample_size
         dim_reduction_kwargs = dim_reduction_kwargs or {}
-        scale_kwargs = scale_kwargs or {}
         cluster_plot_kwargs = cluster_plot_kwargs or {}
         if distance_metric == "kl":
             warn("Kullback-Leiber Divergence chosen as statistical distance metric, KL divergence "
                  "is an asymmetrical function and as such it is not advised to use this metric for the "
                  "similarity matrix'")
-        # Fetch data and scale if necessary
-        data = data or self.load_and_sample(sample_size=sample_size)
-        if scale:
-            data = scale_data(data=data, **scale_kwargs)
-        elif dim_reduction_method == "PCA":
-            warn("Standard scaling recommended prior to dimensionality reduction by PCA")
-        features = features or data.get(list(data.keys())[0]).columns.tolist()
-        distance_df = pd.DataFrame()
 
-        # Perform dimensionality reduction
-        if dim_reduction_method is not None:
-            n_components = dim_reduction_kwargs.get("n_components", 2)
-            ref_embeddings, reducer = dimensionality_reduction(data=data[self.reference_id],
-                                                               features=features,
-                                                               return_reducer=True,
-                                                               return_embeddings_only=True,
-                                                               n_components=n_components,
-                                                               **dim_reduction_kwargs)
-            with Pool(self.njobs) as pool:
-                self.print("...performing dimensionality reduction on comparisons")
-                embeddings = list(progress_bar(pool.imap(reducer.transform, data.values()),
-                                               verbose=self.verbose,
-                                               total=len(list(data.values()))))
-            features = [f"embedding{i+1}" for i in range(n_components)]
-            data = {k: em for k, em in zip(data.keys(), pd.DataFrame(embeddings,
-                                                                     columns=features))}
-
+        features = features or self.data.get(self.reference).columns.tolist()
+        # Create the reducer
+        n_components = dim_reduction_kwargs.get("n_components", 2)
+        reducer = self._generate_reducer(features=features,
+                                         n_components=n_components,
+                                         dim_reduction_method=dim_reduction_method,
+                                         **dim_reduction_kwargs)
+        features = [f"embedding{i + 1}" for i in range(n_components)]
+        embeddings = self._dim_reduction(reducer=reducer, col_names=features)
         # Generate distance matrix
-        self.print("Calculating pairwise statistical distances...")
-        for s in progress_bar(data.keys(), verbose=self.verbose):
-            distances = self.calc_divergence(target_id=s,
-                                             features=features,
-                                             data=data,
-                                             distance_metric=distance_metric)
-            name_distances = defaultdict(list)
-            for n, d in distances:
-                name_distances[n].append(d)
-            name_distances = pd.DataFrame(name_distances)
-            name_distances["sample_id"] = s
-            distance_df = pd.concat([distance_df, name_distances])
-
+        distance_df = self._pairwise_stat_dist(embeddings=embeddings,
+                                               distance_metric=distance_metric,
+                                               features=features)
         # Perform hierarchical clustering
         r = distance_df.drop('sample_id', axis=1).values
         c = distance_df.drop('sample_id', axis=1).T.values
