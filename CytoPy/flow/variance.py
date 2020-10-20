@@ -9,10 +9,8 @@ from scipy.spatial.distance import jensenshannon as jsd
 from scipy.stats import entropy as kl
 from scipy.cluster import hierarchy
 from scipy.spatial import distance
-from multiprocessing import Pool, cpu_count
 from collections import defaultdict, OrderedDict
 from KDEpy import FFTKDE
-from typing import Dict
 from warnings import warn
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -148,7 +146,7 @@ def load_and_sample(experiment: Experiment,
                     sample_size: int or float,
                     sample_ids: list or None = None,
                     sampling_method: str or None = "uniform",
-                    transform: str = "logicle",
+                    transform: str or None = "logicle",
                     **kwargs) -> OrderedDict:
     """
     Load sample data from experiment and return as a dictionary of Pandas DataFrames.
@@ -160,7 +158,7 @@ def load_and_sample(experiment: Experiment,
     sample_size: int or float (optional)
         Total number of events to sample from each file
     sampling_method: str
-    transform: str
+    transform: str (optional)
     population: str
     kwargs
         Additional keyword arguments for sampling method
@@ -404,7 +402,6 @@ class SimilarityMatrix:
                  data: OrderedDict,
                  reference: str or None = None,
                  verbose: bool = True,
-                 njobs: int = -1,
                  kde_kernel: str = "gaussian",
                  kde_bw: str or float = "cv",
                  kde_norm: int = 2):
@@ -412,13 +409,10 @@ class SimilarityMatrix:
         self.verbose = verbose
         self.print = vprint(verbose)
         self.kde_cache = dict()
-        self.njobs = njobs
         self.kde_kernel = kde_kernel
         self.kde_norm = kde_norm
         self._kde_bw = "cv"
         self.reference = reference
-        if self.njobs < 0:
-            self.njobs = cpu_count()
         self.data = data
         self.kde_bw = kde_bw
 
@@ -589,7 +583,69 @@ class SimilarityMatrix:
             distance_df = pd.concat([distance_df, name_distances])
         return distance_df
 
+    def matrix(self,
+               distance_metric: str or callable = 'jsd',
+               features: None or list = None,
+               dim_reduction_method: str = "PCA",
+               dim_reduction_kwargs: dict or None = None,
+               bw_optimisaiton_kwargs: dict or None = None) -> pd.DataFrame:
+        """
+        Generate a Pandas DataFrame containing a symmetrical matrix of
+        pairwise statistical distances for every sample in self.data
+
+        Parameters
+        ----------
+        distance_metric: callable or str (default='jsd')
+            Either a callable function to calculate the statistical distance or a string value; options are:
+                * jsd: Jensson-shannon distance
+                * kl:Kullback-Leibler divergence (entropy)
+        features: list (optional)
+            List of markers to use in analysis. If not given, will use all available markers.
+        dim_reduction_method: str (default="PCA")
+            Dimension reduction method, see CytoPy.flow.dim_reduction. Set to None to not reduce first
+        dim_reduction_kwargs: dict
+            Keyword arguments for dimension reduction method, see CytoPy.flow.dim_reduction
+        bw_optimisaiton_kwargs: dict
+            Additional keyword arguments passed to CytoPy.flow.variance.bw_optimisation call
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        # Set defaults
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        bw_optimisaiton_kwargs = bw_optimisaiton_kwargs or {}
+        if distance_metric == "kl":
+            warn("Kullback-Leiber Divergence chosen as statistical distance metric, KL divergence "
+                 "is an asymmetrical function and as such it is not advised to use this metric for the "
+                 "similarity matrix'")
+
+        features = features or self.data.get(self.reference).columns.tolist()
+        # Create the reducer
+        n_components = dim_reduction_kwargs.get("n_components", 2)
+        reducer = self._generate_reducer(features=features,
+                                         n_components=n_components,
+                                         dim_reduction_method=dim_reduction_method,
+                                         **dim_reduction_kwargs)
+        # Perform dim reduction
+        self.print("...performing dimensionality reduction")
+        embeddings = self._dim_reduction(reducer=reducer,
+                                         features=features,
+                                         n_components=n_components)
+        # Estimate PDFs
+        self.print("...estimate PDFs of embeddings")
+        features = [f"embedding{i + 1}" for i in range(n_components)]
+        for sample_id, df in progress_bar(embeddings.items()):
+            self._estimate_pdf(sample_id=sample_id,
+                               df=df,
+                               features=features,
+                               **bw_optimisaiton_kwargs)
+        # Generate distance matrix
+        self.print("...calculating pairwise statistical distances")
+        return self._pairwise_stat_dist(distance_metric=distance_metric)
+
     def __call__(self,
+                 distance_df = pd.DataFrame or None,
                  figsize: tuple = (12, 12),
                  distance_metric: str or callable = 'jsd',
                  clustering_method: str = 'average',
@@ -621,7 +677,7 @@ class SimilarityMatrix:
         cluster_plot_kwargs: dict
             Additional keyword arguments passed to Seaborn.clustermap call
         bw_optimisaiton_kwargs: dict
-
+            Additional keyword arguments passed to CytoPy.flow.variance.bw_optimisation call
 
         Returns
         -------
@@ -632,34 +688,12 @@ class SimilarityMatrix:
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         cluster_plot_kwargs = cluster_plot_kwargs or {}
         bw_optimisaiton_kwargs = bw_optimisaiton_kwargs or {}
-        if distance_metric == "kl":
-            warn("Kullback-Leiber Divergence chosen as statistical distance metric, KL divergence "
-                 "is an asymmetrical function and as such it is not advised to use this metric for the "
-                 "similarity matrix'")
-
-        features = features or self.data.get(self.reference).columns.tolist()
-        # Create the reducer
-        n_components = dim_reduction_kwargs.get("n_components", 2)
-        reducer = self._generate_reducer(features=features,
-                                         n_components=n_components,
-                                         dim_reduction_method=dim_reduction_method,
-                                         **dim_reduction_kwargs)
-        # Perform dim reduction
-        self.print("...performing dimensionality reduction")
-        embeddings = self._dim_reduction(reducer=reducer,
-                                         features=features,
-                                         n_components=n_components)
-        # Estimate PDFs
-        self.print("...estimate PDFs of embeddings")
-        features = [f"embedding{i + 1}" for i in range(n_components)]
-        for sample_id, df in progress_bar(embeddings.items()):
-            self._estimate_pdf(sample_id=sample_id,
-                               df=df,
-                               features=features,
-                               **bw_optimisaiton_kwargs)
-        # Generate distance matrix
-        self.print("...calculating pairwise statistical distances")
-        distance_df = self._pairwise_stat_dist(distance_metric=distance_metric)
+        if distance_df is None:
+            distance_df = self.matrix(distance_metric=distance_metric,
+                                      features=features,
+                                      dim_reduction_method=dim_reduction_method,
+                                      dim_reduction_kwargs=dim_reduction_kwargs,
+                                      bw_optimisaiton_kwargs=bw_optimisaiton_kwargs)
         # Perform hierarchical clustering
         r = distance_df.drop('sample_id', axis=1).values
         c = distance_df.drop('sample_id', axis=1).T.values
@@ -682,3 +716,29 @@ class SimilarityMatrix:
         ax.set_xlabel('')
         ax.set_ylabel('')
         return row_linkage, distance_df.sample_id.values, g
+
+
+def generate_groups(linkage_matrix: np.array,
+                    sample_ids: list or np.array,
+                    n_groups: int):
+    """
+    Given the output of SimilarityMatrix (that is the linkage matrix and ordered list of sample
+    IDs) and a desired number of groups, return a Pandas DataFrame of sample IDs and assigned group ID, generated by
+    cutting the linkage matrix in such a way that the desired number of groups are generated.
+    Parameters
+    ----------
+    linkage_matrix: np.array
+        Linkage matrix generated from EvaluateBatchEffects.similarity_matrix (using SciPy.cluster.hierarchy.linkage)
+    sample_ids: list or np.array
+        Ordered list of sample IDs generated from EvaluateBatchEffects.similarity_matrix
+    n_groups: int
+        Desired number of groups
+    Returns
+    -------
+    Pandas.DataFrame
+    """
+    groups = pd.DataFrame({'sample_id': sample_ids,
+                           'group': list(map(lambda x: x + 1,
+                                             hierarchy.cut_tree(linkage_matrix, n_groups).flatten()))})
+    groups = groups.sort_values('group')
+    return groups

@@ -1,21 +1,16 @@
 from ...data.experiment import Experiment
 from ...data.fcs import FileGroup
-from ...feedback import progress_bar, vprint
-from warnings import warn
+from ...feedback import vprint
+from ..variance import load_and_sample, _common_features
 import pandas as pd
 
 
-def _sample(df: pd.DataFrame,
-            n: int):
-    if df.shape[0] <= n:
-        return df
-    return df.sample(n=n)
-
-
 def create_reference_sample(experiment: Experiment,
-                            sample_n: int = 2500,
+                            sample_size: int or float = 2500,
+                            sampling_method: str = "uniform",
+                            sampling_kwargs: dict or None = None,
                             root_population='root',
-                            samples: list or None = None,
+                            sample_ids: list or None = None,
                             new_file_name: str or None = None,
                             verbose: bool = True) -> None:
     """
@@ -30,16 +25,16 @@ def create_reference_sample(experiment: Experiment,
     root_population: str
         if the files in this experiment have already been gated, you can specify to sample
         from a particular population e.g. Live CD3+ cells or Live CD45- cells
-    samples: list, optional
+    sample_ids: list, optional
         list of sample IDs for samples to be included (default = all samples in experiment)
     new_file_name: str
         name of file group generated
     sampling_method: str, (default='uniform')
         method to use for sampling files (currently only supports 'uniform')
-    sample_n: int, (default=1000)
+    sample_size: int or float, (default=1000)
         number or fraction of events to sample from each file
-    include_population_labels: bool, (default=False)
-        If True, populations in the new file generated are inferred from the existing samples
+    sampling_kwargs: dict
+        Additional keyword arguments passed to sampling method
     verbose: bool, (default=True)
         Whether to provide feedback
     Returns
@@ -47,38 +42,29 @@ def create_reference_sample(experiment: Experiment,
     None
     """
     vprint_ = vprint(verbose)
-    samples = samples or list(experiment.list_samples())
-    assert all([s in experiment.list_samples() for s in samples]), \
+    new_file_name = new_file_name or f'{experiment.experiment_id}_sampled_data'
+    assert all([s in experiment.list_samples() for s in sample_ids]), \
         'One or more samples specified do not belong to experiment'
 
     vprint_('-------------------- Generating Reference Sample --------------------')
     vprint_('Sampling experiment data...')
-    new_file_name = new_file_name or f'{experiment.experiment_id}_sampled_data'
-    data = list()
-    for _id in progress_bar(samples, verbose=verbose):
-        g = Gating(experiment, sample_id=_id, include_controls=False)
-        if root_population not in g.populations.keys():
-            warn(f'Skipping {_id} as {root_population} is absent from gated populations')
-            continue
-        df = _sample(g.get_population_df(population_name=root_population, transform=None),
-                     n=sample_n)
-        data.append(df)
-    all_columns = list(df.columns.tolist() for df in data)
-    features = list()
-    for c in set([x for sl in all_columns for x in sl]):
-        if all([c in x for x in all_columns]):
-            features.append(c)
-    data = pd.concat([df[features] for df in data])
+    data = load_and_sample(experiment=experiment,
+                           population=root_population,
+                           sample_size=sample_size,
+                           sample_ids=sample_ids,
+                           sampling_method=sampling_method,
+                           transform=None,
+                           **sampling_kwargs)
+    features = _common_features(data)
+    data = pd.concat([x[features] for x in data.values()])
     data = data.reset_index(drop=True)
-    vprint_('Sampling complete!')
-
     vprint_('Creating new file entry...')
-    mappings = [dict(channel=f, marker=f) for f in features]
     new_filegroup = FileGroup(primary_id=new_file_name,
-                              data_directory=experiment.data_directory)
+                              data_directory=experiment.data_directory,
+                              data=data,
+                              channels=features,
+                              markers=features)
     new_filegroup.notes = 'sampled data'
-    new_filegroup.add_file(data=data[features],
-                           channel_mappings=mappings)
     vprint_('Inserting sampled data to database...')
     new_filegroup.save()
     experiment.fcs_files.append(new_filegroup)
