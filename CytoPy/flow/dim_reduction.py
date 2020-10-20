@@ -59,11 +59,11 @@ def dimensionality_reduction(data: pd.DataFrame,
                          "must be one of: 'UMAP', 'tSNE', 'PCA', 'PHATE', 'KernelPCA'")
     embeddings = reducer.fit_transform(data[features])
     if return_embeddings_only:
+        if return_reducer:
+            return embeddings, reducer
         return embeddings
     for i, e in enumerate(embeddings.T):
         data[f'{method}{i+1}'] = e
     if return_reducer:
-        if return_embeddings_only:
-            return embeddings, reducer
         return data, reducer
     return data
