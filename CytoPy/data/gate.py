@@ -1235,3 +1235,97 @@ def find_inflection_point(x: np.array,
     if incline:
         return float(x[np.argmax(ddy)])
     return float(x[peak_idx + np.argmax(ddy)])
+
+
+def _reset_population(population: Population):
+    """
+    When a population geometry is updated, this function removes associated
+    clusters and control indexes.
+
+    Parameters
+    ----------
+    population: Population
+
+    Returns
+    -------
+    None
+    """
+    if len(population.list_clusters()) > 0:
+        warn(f"{population.population_name} has associated clusters which will be removed")
+        population.delete_all_clusters()
+    for ctrl_id in population.ctrl_index.keys():
+        warn(f"{ctrl_id} index for {population.population_name} will be reset")
+        population.ctrl_index.pop(ctrl_id)
+
+
+def update_threshold(population: Population,
+                     parent_data: pd.DataFrame,
+                     x_threshold: float,
+                     y_threshold: float or None = None):
+    """
+    Given an existing population and some new threshold(s) (different to what is already
+    associated to the Population), update the Population index and geom accordingly.
+    Any associated clusters will be removed and any controls will have to be estimated
+    again.
+
+    Parameters
+    ----------
+    population: Population
+    parent_data: Pandas.DataFrame
+    x_threshold: float
+    y_threshold: float (optional)
+        Required if 2D threshold geometry
+
+    Returns
+    -------
+    None
+    """
+    if population.geom.y_threshold is None:
+        new_data = threshold_1d(data=parent_data,
+                                x=population.geom.x,
+                                x_threshold=x_threshold).get(population.definition)
+        population.index = new_data.index.values
+        population.geom.x_threshold = x_threshold
+    else:
+        assert y_threshold is not None, "2D threshold requires y_threshold"
+        new_data = threshold_2d(data=parent_data,
+                                x=population.geom.x,
+                                x_threshold=x_threshold,
+                                y=population.geom.y,
+                                y_threshold=y_threshold)
+        definitions = population.definition.split(",")
+        new_data = pd.concat([new_data.get(d) for d in definitions])
+        population.index = new_data.index.values
+        population.geom.x_threshold = x_threshold
+        population.geom.y_threshold = y_threshold
+        _reset_population(population)
+
+
+def update_polygon(population: Population,
+                   parent_data: pd.DataFrame,
+                   x_values: list,
+                   y_values: list):
+    """
+    Given an existing population and some new definition for it's polygon gate
+    (different to what is already associated to the Population), update the Population
+    index and geom accordingly. Any associated clusters will be removed and any controls
+    will have to be estimated
+    again.
+    Parameters
+    ----------
+    population
+    parent_data
+    x_values
+    y_values
+
+    Returns
+    -------
+
+    """
+    poly = create_polygon(x=x_values, y=y_values)
+    new_data = inside_polygon(df=parent_data,
+                              x=population.geom.x,
+                              y=population.geom.y,
+                              poly=poly)
+    population.index = new_data.index.values
+    _reset_population(population)
