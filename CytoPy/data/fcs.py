@@ -446,25 +446,6 @@ class FileGroup(mongoengine.Document):
         """
         return os.path.isfile(self.h5path)
 
-    def _valid_mappings(self, channel_mappings: List[dict]):
-        """
-        Given a list of dictionaries representing channel mappings, check that they match
-        the channel mappings associated to this instance of FileGroup. Raises Assertion error in
-        the event that the channel mappings do not match.
-
-        Parameters
-        ----------
-        channel_mappings: List[dict]
-
-        Returns
-        -------
-        None
-        """
-        for cm in channel_mappings:
-            err = f"{cm} does not match the expected channel mappings for this file group"
-            assert sum([x.check_matched_pair(cm["channel"], cm["marker"])
-                        for x in self.channel_mappings]) == 1, err
-
     def list_gated_controls(self) -> Generator:
         """
         List ID of controls that have a cached index in each population of the saved population tree

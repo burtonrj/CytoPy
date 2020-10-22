@@ -155,8 +155,11 @@ class Gate(mongoengine.Document):
             else:
                 raise ValueError("Sampling parameter 'n' must be an integer or float")
         if self.sampling.get("method", None) == "density":
-            kwargs = {k: v for k, v in self.sampling.items() if k != "method"}
+            kwargs = {k: v for k, v in self.sampling.items()
+                      if k not in  ["method", "features"]}
+            features = [f for f in [self.x, self.y] if f is not None]
             return density_dependent_downsampling(data=data,
+                                                  features=features,
                                                   **kwargs)
         if self.sampling.get("method", None) == "faithful":
             h = self.sampling.get("h", 0.01)

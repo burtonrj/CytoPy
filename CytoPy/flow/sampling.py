@@ -69,6 +69,7 @@ def density_dependent_downsampling(data: pd.DataFrame,
                                    features: list or None = None,
                                    sample_size: int or float = 0.1,
                                    alpha: int = 5,
+                                   distance_metric: str = "manhattan",
                                    tree_sample: float or int = 0.1,
                                    outlier_dens: float = 1,
                                    target_dens: float = 5,
@@ -113,28 +114,16 @@ def density_dependent_downsampling(data: pd.DataFrame,
     if isinstance(sample_size, int) and sample_size >= data.shape[0]:
         warn("Requested sample size >= size of dataframe")
         return data
-    if njobs < 0:
-        njobs = cpu_count()
     df = data.copy()
     features = features or df.columns.tolist()
-    if isinstance(tree_sample, float):
-        tree_sample = df.sample(frac=tree_sample)
-    else:
-        if tree_sample > df.shape[0]:
-            warn("Cannot take a larger sample than population; defaulting to whole dataframe "
-                 "for generating KDTree")
-            tree_sample = df.shape[0]
-        tree_sample = df.sample(n=tree_sample)
-    tree = KDTree(tree_sample[features], metric='manhattan')
-    dist, _ = tree.query(tree_sample[features], k=2)
-    dist = np.median([x[1] for x in dist])
-    dist_threshold = dist * alpha
-    ld = tree.query_radius(df[features], r=dist_threshold, count_only=True)
-    od = np.percentile(ld, q=outlier_dens)
-    td = np.percentile(ld, q=target_dens)
-    prob_f = partial(prob_downsample, target_d=td, outlier_d=od)
-    with Pool(njobs) as pool:
-        prob = list(pool.map(prob_f, ld))
+    tree_sample = uniform_downsampling(data=df, sample_size=tree_sample)
+    prob = density_probability_assignment(sample=tree_sample[features],
+                                          data=df[features],
+                                          distance_metric=distance_metric,
+                                          alpha=alpha,
+                                          outlier_dens=outlier_dens,
+                                          target_dens=target_dens,
+                                          njobs=njobs)
     if sum(prob) == 0:
         warn('Error: density dependendent downsampling failed; weights sum to zero. '
              'Defaulting to uniform sampling')
@@ -142,6 +131,56 @@ def density_dependent_downsampling(data: pd.DataFrame,
     if isinstance(sample_size, int):
         return df.sample(n=sample_size, weights=prob)
     return df.sample(frac=sample_size, weights=prob)
+
+
+def density_probability_assignment(sample: pd.DataFrame,
+                                   data: pd.DataFrame,
+                                   distance_metric: str = "manhattan",
+                                   alpha: int = 5,
+                                   outlier_dens: float = 1,
+                                   target_dens: float = 5,
+                                   njobs: int = -1):
+    if njobs < 0:
+        njobs = cpu_count()
+    tree = KDTree(sample, metric=distance_metric)
+    dist, _ = tree.query(data, k=2)
+    dist = np.median([x[1] for x in dist])
+    dist_threshold = dist * alpha
+    ld = tree.query_radius(data, r=dist_threshold, count_only=True)
+    od = np.percentile(ld, q=outlier_dens)
+    td = np.percentile(ld, q=target_dens)
+    prob_f = partial(prob_downsample, target_d=td, outlier_d=od)
+    with Pool(njobs) as pool:
+        prob = list(pool.map(prob_f, ld))
+    return np.array(prob)
+
+
+def upsample_density(data: pd.DataFrame,
+                     features: list or None = None,
+                     upsample_factor: int = 2,
+                     sample_size: int or None = None,
+                     tree_sample: int or float = 0.1,
+                     distance_metric: str = "manhattan",
+                     alpha: int = 5,
+                     outlier_dens: float = 1,
+                     target_dens: float = 5,
+                     njobs: int = -1):
+    features = features or data.columns.tolist()
+    tree_sample = uniform_downsampling(data=data, sample_size=tree_sample)
+    prob = density_probability_assignment(sample=tree_sample[features],
+                                          data=data[features],
+                                          distance_metric=distance_metric,
+                                          alpha=alpha,
+                                          outlier_dens=outlier_dens,
+                                          target_dens=target_dens,
+                                          njobs=njobs)
+    low_dens_idx = np.where(prob > 1.)
+    low_dens_regions = data.iloc[low_dens_idx]
+    upsampled_data = [low_dens_regions for _ in range(upsample_factor)]
+    data = pd.concat([data] + upsampled_data)
+    if sample_size is None:
+        return data
+    return uniform_downsampling(data=data, sample_size=sample_size)
 
 
 def upsample_knn(sample: pd.DataFrame,
