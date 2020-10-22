@@ -1,6 +1,7 @@
 from ...data.supervised_classifier import SklearnClassifier, KerasClassifier
 from ...data.experiment import Experiment
-from ...data.population import Population
+from ...data.population import Population, create_signature
+from ...data.fcs import FileGroup
 from ...feedback import vprint, progress_bar
 from ..sampling import density_dependent_downsampling, faithful_downsampling
 from ..transforms import scaler
@@ -13,7 +14,6 @@ from sklearn.ensemble import *
 from sklearn.svm import *
 from keras.models import Sequential, load_model
 from imblearn.over_sampling import RandomOverSampler
-from anytree import Node
 from warnings import warn
 from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
@@ -24,12 +24,34 @@ import pickle
 
 
 def _build_sklearn_model(classifier: SklearnClassifier):
-    assert classifier.klass in globals().keys(), f"Module {classifier.klass} not found, have you imported it into " \
-                                                 f"the working environment?"
+    """
+    Initiate a SklearnClassifier object using Classes in the global environment
+
+    Parameters
+    ----------
+    classifier: SklearnClassifier
+
+    Returns
+    -------
+    object
+    """
+    assert classifier.klass in globals().keys(), \
+        f"Module {classifier.klass} not found, have you imported it into the working environment?"
     return globals()[classifier.klass](**classifier.params)
 
 
 def _build_keras_model(classifier: KerasClassifier):
+    """
+    Create and compile a Keras Sequential model using the given KerasClassifier object
+
+    Parameters
+    ----------
+    classifier: KerasClassifier
+
+    Returns
+    -------
+    object
+    """
     required_imports = [x.klass for x in classifier.layers]
     for i in required_imports:
         assert i in globals().keys(), f"Module {i} not found, have you imported it into " \
@@ -48,7 +70,34 @@ def _build_keras_model(classifier: KerasClassifier):
 def _metrics(metrics: list,
              y_true: np.array,
              y_pred: np.array or None = None,
-             y_score: np.array or None = None):
+             y_score: np.array or None = None) -> dict:
+    """
+    Given a list of Scikit-Learn supported metrics (https://scikit-learn.org/stable/modules/model_evaluation.html)
+    return a dictionary of results after checking that the required inputs are provided.
+
+    Parameters
+    ----------
+    metrics: list
+        List of string values; names of required metrics
+    y_true: Numpy.Array
+        True labels or binary label indicators. The binary and multiclass cases expect labels
+        with shape (n_samples,) while the multilabel case expects binary label indicators with
+        shape (n_samples, n_classes).
+    y_pred: Numpy.Array
+        Estimated targets as returned by a classifier
+    y_score: Numpy.Array
+        Target scores. In the binary and multilabel cases, these can be either probability
+        estimates or non-thresholded decision values (as returned by decision_function on
+        some classifiers). In the multiclass case, these must be probability estimates which
+         sum to 1. The binary case expects a shape (n_samples,), and the scores must be the
+         scores of the class with the greater label. The multiclass and multilabel cases expect
+         a shape (n_samples, n_classes). In the multiclass case, the order of the class scores must
+         correspond to the order of labels, if provided, or else to the numerical or
+         lexicographical order of the labels in y_true.
+    Returns
+    -------
+
+    """
     results = dict()
     for m in metrics:
         if "f1" in m:
@@ -59,7 +108,7 @@ def _metrics(metrics: list,
         else:
             f = getattr(skmetrics, m)
             if "y_score" in inspect.signature(f).parameters.keys():
-                assert y_score is not None, f"Metric required {m} requires probabilities of positive class but " \
+                assert y_score is not None, f"Metric requested ({m}) requires probabilities of positive class but " \
                                             f"y_score not provided; y_score is None."
                 results[m] = f(y_true=y_true, y_score=y_score)
             elif "y_pred" in inspect.signature(f).parameters.keys():
@@ -69,27 +118,46 @@ def _metrics(metrics: list,
     return results
 
 
-def _load_population_labels(ref: Gating,
-                            expected_labels: list):
-    loaded_population_labels = ref.valid_populations(populations=expected_labels)
-    assert len(loaded_population_labels) > 2, "Reference sample does not contain any gated populations"
-    if len(loaded_population_labels) != len(expected_labels):
-        warn("One or more given population labels does not tie up with the populations in the reference "
-             f"sample, defaulting to the following valid labels: {loaded_population_labels}")
-    return loaded_population_labels
+def _load_population_labels(ref: FileGroup,
+                            expected_labels: list) -> list:
+    """
+    Given some reference FileGroup and the expected population labels, check the
+    validity of the labels and return list of valid populations only.
+
+    Parameters
+    ----------
+    ref: FileGroup
+    expected_labels: list
+
+    Returns
+    -------
+    List
+    """
+    assert len(ref.populations) >= 2, "Reference sample does not contain any gated populations"
+    valid_populations = list()
+    for x in expected_labels:
+        if x in ref.tree.keys():
+            valid_populations.append(x)
+        else:
+            warn(f"Ref FileGroup missing expected population {x}")
+    return valid_populations
 
 
-def _load_features(ref: Gating,
-                   expected_features: list):
-    features = [x for x in ref.data.get("primary").columns if x in expected_features]
-    if len(features) != len(expected_features):
-        warn(f"One or more features missing from reference sample, "
-             f"proceeding with the following features: {features}")
-    return features
+def _check_downstream_populations(ref: FileGroup,
+                                  population_labels: list) -> None:
+    """
+    Check that in the ordered list of population labels, the first label is upstream
+    of all subsequent labels
 
+    Parameters
+    ----------
+    ref: FileGroup
+    population_labels: list
 
-def _check_downstream_populations(ref: Gating,
-                                  population_labels: list):
+    Returns
+    -------
+    None
+    """
     downstream = ref.list_downstream_populations(population_labels[0])
     assert all([x in downstream for x in population_labels[1:]]), \
         "The first population in population_labels should be the 'root' population, with all further populations " \
@@ -97,43 +165,92 @@ def _check_downstream_populations(ref: Gating,
         "downstream from the given root."
 
 
-def _multilabel(ref: Gating,
+def _multilabel(ref: FileGroup,
                 population_labels: list,
                 transform: str,
-                features: list):
-    root = ref.get_population_df(population_name=population_labels[0],
-                                 transform=transform)
+                features: list) -> (pd.DataFrame, pd.DataFrame):
+    """
+    Load the root population DataFrame from the reference FileGroup (assumed to be the first
+    population in 'population_labels'). Then iterate over the remaining population creating a
+    dummy matrix of population affiliations for each row of the root population.
+
+    Parameters
+    ----------
+    ref: FileGroup
+    population_labels: list
+    transform: str
+    features: list
+
+    Returns
+    -------
+    (Pandas.DataFrame, Pandas.DataFrame)
+        Root population flourescent intensity values, population affiliations (dummy matrix)
+    """
+    root = ref.load_population_df(population=population_labels[0],
+                                  transform=transform)
     for pop in population_labels[1:]:
         root[pop] = 0
-        root.loc[ref.populations.get(pop).index, pop] = 1
+        root.loc[ref.get_population(pop).index, pop] = 1
     return root[features], root[population_labels[1:]]
 
 
-def _singlelabel(ref: Gating,
+def _singlelabel(ref: FileGroup,
                  population_labels: list,
                  transform: str,
-                 features: list):
-    root = ref.get_population_df(population_name=population_labels[0],
-                                 transform=transform)
+                 features: list) -> (pd.DataFrame, np.ndarray):
+    """
+    Load the root population DataFrame from the reference FileGroup (assumed to be the first
+    population in 'population_labels'). Then iterate over the remaining population creating a
+    Array of population affiliations; each cell (row) is associated to their terminal leaf node
+    in the FileGroup population tree.
+
+    Parameters
+    ----------
+    ref: FileGroup
+    population_labels: list
+    transform: str
+    features: list
+
+    Returns
+    -------
+    (Pandas.DataFrame, Numpy.Array)
+        Root population flourescent intensity values, labels
+    """
+    root = ref.load_population_df(population=population_labels[0],
+                                  transform=transform)
     y = np.zeros(root.shape[0])
     for i, pop in enumerate(population_labels[1:]):
-        pop_idx = ref.populations[pop].index
+        pop_idx = ref.get_population(population_name=pop).index
         np.put(y, pop_idx, i + 1)
-    return root[features], pd.DataFrame(y, columns=population_labels[1:])
+    return root[features], y
 
 
-def _class_weights(y: pd.Series,
+def _class_weights(y: np.ndarray,
                    population_labels: list,
-                   classifier: SklearnClassifier or KerasClassifier):
+                   classifier: SklearnClassifier or KerasClassifier) -> dict:
+    """
+    Generate dictionary of class weights to handle class imbalance.
+
+    Parameters
+    ----------
+    y: Numpy.Array
+        Labels
+    population_labels: list
+        Ordered population labels
+    classifier: SklearnClassifier or KerasClassifier
+        Classifier object
+    Returns
+    -------
+    dict
+    """
+    assert not classifier.multi_label, "Class weights not supported for multi-label classifiers"
     if classifier.balance == "auto-weights":
-        assert not classifier.multi_label, "Class weights not supported for multi-label classifiers"
         classes = np.arange(0, len(population_labels) - 1)
         weights = compute_class_weight('balanced',
                                        classes=classes,
                                        y=y)
         return {k: w for k, w in zip(classes, weights)}
     elif classifier.balance_dict:
-        assert not classifier.multi_label, "Class weights not supported for multi-label classifiers"
         class_weights = {k: w for k, w in classifier.balance_dict}
         return {i: class_weights.get(p) for i, p in enumerate(population_labels[1:])}
     else:
@@ -142,29 +259,74 @@ def _class_weights(y: pd.Series,
 
 
 def _downsample(X: pd.DataFrame,
-                y: pd.Serier,
+                y: np.ndarray,
                 features: list,
                 method: str,
-                **kwargs):
+                **kwargs) -> (pd.DataFrame, np.ndarray):
+    """
+    Downsample feature space and labels using given method.
+
+    Parameters
+    ----------
+    X: Pandas.DataFrame
+        Feature space
+    y: Numpy.Array
+        Labels; should be shape (obs,) for multiclass classification or (obs, populations)
+        for multilabel classification
+    features: list
+        Names of the features (columns in X)
+    method: str
+        Downsample method (uniform, density or faithful)
+    kwargs
+        Additional keyword arguments passed to sampling method
+    Returns
+    -------
+    Pandas.DataFrame, Numpy.Array
+    """
+    X["y"] = y
+    valid = ['uniform', 'density', 'faithful']
+    assert method in valid, f"Downsample should have a value of: {valid}"
     if method == "uniform":
         frac = kwargs.get("frac", 0.5)
         X = X.sample(frac=frac)
-        y = y[y.index.isin(X.index)]
-        return X, y
     elif method == "density":
         X = density_dependent_downsampling(data=X,
                                            features=features,
                                            **kwargs)
-        y = y[y.index.isin(X.index)]
-        return X, y
     elif method == "faithful":
         X = faithful_downsampling(data=X, **kwargs)
-        y = y[y.index.isin(X.index)]
-        return X, y
-    raise ValueError("Downsample should have a value of: 'uniform', 'density', or 'faithful'")
+    y = X["y"].values
+    X.drop("y", inplace=True)
+    return X, y
 
 
 class CellClassifier:
+    """
+    Create a supervised classifier for the annotation of cytometry data. This class
+    takes a template for a Scikit-Learn or Keras implementation of a supervised learning
+    algorithm and provides the necessary apparatus to load cytometry data, train a model
+    and then predict the populations of subsequent biological specimens. The predicted
+    populations follow the same design as gated populations; they are represented by
+    a Population object associated to the FileGroup.
+
+    Attributes
+    ===========
+    classifier: SklearnClassifier or KerasClassifier
+        A definition for wither a Scikit-Learn supervised classifier or Keras classifier,
+        see CytoPy.data.supervised_classifier to read how to define
+    experiment: Experiment
+        Experiment to load data from and classify
+    ref_sample: str
+        Name of the sample that will be loaded from the given experiment and used as
+        training data
+    population_labels: list
+        Populations the user wishes to predict in subsequent unlabelled samples
+    verbose: bool (default=True)
+        Whether to print feedback to stdout
+    population_prefix: str (default="sml")
+        Prefix assigned to predicted populations
+    """
+
     def __init__(self,
                  classifier: SklearnClassifier or KerasClassifier,
                  experiment: Experiment,
@@ -186,50 +348,68 @@ class CellClassifier:
         self.print = vprint(verbose)
         self.class_weights = None
         self.population_prefix = population_prefix
+        assert ref_sample in experiment.list_samples(), \
+            "Invalid reference sample, could not be found in given experiment"
+        self.ref = ref_sample
+        self.population_labels = population_labels
+        self.X, self.y = None, None
 
-        self.print("----- Building CellClassifier -----")
-        assert ref_sample in experiment.list_samples(), "Invalid reference sample, could not be found in given experiment"
+    def _check_init(self):
+        assert self.X is not None, "Call 'load_training_data prior to fit'"
+
+    def load_training_data(self):
         self.print("Loading reference sample...")
-        ref = Gating(experiment=experiment, sample_id=ref_sample, include_controls=False)
-        self.population_labels = _load_population_labels(ref=ref, expected_labels=population_labels)
-        check_population_tree(gating=ref, populations=self.population_labels)
+        ref = self.experiment.get_sample(self.ref)
+        self.print("Checking population labels...")
+        _load_population_labels(ref=ref, expected_labels=self.population_labels)
         _check_downstream_populations(ref=ref, population_labels=self.population_labels)
-        self.classifier.features = _load_features(ref=ref, expected_features=classifier.features)
-        self.print("Preparing training and testing data...")
-        if classifier.multi_label:
+        self.print("Creating training data...")
+        if self.classifier.multi_label:
             self.X, self.y = _multilabel(ref=ref,
                                          population_labels=self.population_labels,
-                                         features=classifier.features,
-                                         transform=classifier.transform)
+                                         features=self.classifier.features,
+                                         transform=self.classifier.transform)
         else:
             self.X, self.y = _singlelabel(ref=ref,
                                           population_labels=self.population_labels,
-                                          features=classifier.features,
-                                          transform=classifier.transform)
-        if classifier.scale:
+                                          features=self.classifier.features,
+                                          transform=self.classifier.transform)
+        if self.classifier.scale:
             self.print("Scaling data...")
-            kwargs = classifier.scale_kwargs or {}
-            self.X[self.classifier.features] = scaler(self.X,
-                                                      return_scaler=False,
-                                                      scale_method=classifier.scale,
-                                                      **kwargs)
+            self._scale_data()
         else:
             warn("For the majority of classifiers it is recommended to scale the data (exception being tree-based "
                  "algorithms)")
-        if classifier.balance == "oversample":
+        self._balance()
+        self._downsample()
+        self.print('Ready for training!')
+
+    def _scale_data(self):
+        kwargs = self.classifier.scale_kwargs or {}
+        self.X[self.classifier.features] = scaler(self.X,
+                                                  return_scaler=False,
+                                                  scale_method=self.classifier.scale,
+                                                  **kwargs)
+
+    def _balance(self):
+        if self.classifier.balance == "oversample":
+            self.print("Correcting imbalance with oversampling...")
             self.X, self.y = RandomOverSampler(random_state=42).fit_resample(self.X, self.y)
-        elif classifier.balance:
+        elif self.classifier.balance:
+            self.print("Setting up class weights...")
             self.class_weights = _class_weights(y=self.y,
-                                                classifier=classifier,
+                                                classifier=self.classifier,
                                                 population_labels=self.population_labels)
-        if classifier.downsample:
-            kwargs = classifier.downsample_kwargs or {}
+
+    def _downsample(self):
+        if self.classifier.downsample:
+            self.print("Downsampling data...")
+            kwargs = self.classifier.downsample_kwargs or {}
             self.X, self.y = _downsample(X=self.X,
                                          y=self.y,
-                                         features=classifier.features,
-                                         method=classifier.downsample,
+                                         features=self.classifier.features,
+                                         method=self.classifier.downsample,
                                          **kwargs)
-        self.print('Ready for training!')
 
     def _predict(self,
                  X: pd.DataFrame,
@@ -258,6 +438,7 @@ class CellClassifier:
                              return_predictions: bool = True,
                              train_test_split_kwargs: dict or None = None,
                              fit_kwargs: dict or None = None):
+        self._check_init()
         self.print("==========================================")
         metrics = metrics or ["balanced_accuracy_score", "f1_weighted", "roc_auc_score"]
         train_test_split_kwargs = train_test_split_kwargs or {}
@@ -295,6 +476,7 @@ class CellClassifier:
                   metrics: list or None = None,
                   shuffle: bool = True,
                   random_state: int = 42):
+        self._check_init()
         metrics = metrics or ["balanced_accuracy_score", "f1_weighted", "roc_auc_score"]
         kf = KFold(n_splits=n_splits,
                    random_state=random_state,
@@ -313,68 +495,73 @@ class CellClassifier:
 
     def predict(self,
                 sample_id: str,
+                parent_population: str,
                 threshold: float = 0.5,
                 return_predictions: bool = True,
                 **kwargs):
-        g = Gating(experiment=self.experiment,
-                   sample_id=sample_id,
-                   include_controls=False)
-        assert self.population_labels[0] in g.populations.keys(), f"Root population {self.population_labels[0]} " \
-                                                                  f"missing from {sample_id}"
-        X = g.get_population_df(population_name=self.population_labels[0],
-                                transform=self.classifier.transform,
-                                transform_features=self.classifier.features)[self.classifier.features]
+        target = self.experiment.get_sample(sample_id)
+        assert parent_population in target.tree.keys(), \
+            f"Parent population {parent_population} missing from {sample_id}"
+        X = target.load_population_df(population=self.population_labels[0],
+                                      transform=self.classifier.transform)[self.classifier.features]
         self.model.fit(X, **kwargs)
         y_pred, y_proba, y_score = self._predict(X, threshold=threshold)
         if not self.classifier.multi_label:
-            idx = np.where(y_pred == 0)[0]
-            g.populations["Unclassified"] = Population(population_name=f"{self.population_prefix}_Unclassified",
-                                                       index=idx,
-                                                       n=len(idx),
-                                                       parent=self.population_labels[0],
-                                                       warnings=["supervised_classification"])
-            g.tree["Unclassified"] = Node(name=f"{self.population_prefix}_Unclassified",
-                                          parent=g.tree[self.population_labels[0]])
+            idx = X.index.values[np.where(y_pred == 0)[0]]
+            target.add_population(Population(population_name=f"{self.population_prefix}_Unclassified",
+                                             index=idx,
+                                             n=len(idx),
+                                             parent=parent_population,
+                                             warnings=["supervised_classification"],
+                                             signature=create_signature(data=X, idx=idx)))
         for i, pop in enumerate(self.population_labels[1:]):
             if self.classifier.multi_label:
-                idx = np.where(y_pred[:, i] == 1)[0]
+                idx = X.index.values[np.where(y_pred[:, i] == 1)[0]]
             else:
-                idx = np.where(y_pred == i)[0]
-            g.populations[pop] = Population(population_name=f"{self.population_prefix}_{pop}",
-                                            index=idx,
-                                            n=len(idx),
-                                            parent=self.population_labels[0],
-                                            warnings=["supervised_classification"])
-            g.tree[pop] = Node(name=f"{self.population_prefix}_{pop}",
-                               parent=g.tree[self.population_labels[0]])
+                idx = X.index.values[np.where(y_pred == i)[0]]
+            target.add_population(Population(population_name=f"{self.population_prefix}_{pop}",
+                                             index=idx,
+                                             n=len(idx),
+                                             parent=parent_population,
+                                             warnings=["supervised_classification"],
+                                             signature=create_signature(data=X, idx=idx)))
         if return_predictions:
-            return g, {"y_pred": y_pred, "y_proba": y_proba, "y_score": y_score}
-        return g
+            return target, {"y_pred": y_pred, "y_proba": y_proba, "y_score": y_score}
+        return target
 
     def load_validation(self,
-                        validation_id: str):
-        g = Gating(experiment=self.experiment,
-                   sample_id=validation_id,
-                   include_controls=False)
-        assert all([x in g.populations.keys() for x in self.population_labels]), "Validation sample should contain " \
-                                                                                 "the following populations: " \
-                                                                                 f"{self.population_labels}"
+                        validation_id: str,
+                        parent_population: str):
+        val = self.experiment.get_sample(validation_id)
+        populations = [parent_population] + self.population_labels[:1]
+        assert all([x in val.tree.keys() for x in populations]), \
+            f"Validation sample should contain the following populations: {populations}"
         if self.classifier.multi_label:
-            X, y = _multilabel(ref=g, population_labels=self.population_labels, transform=self.classifier.transform, features=self.classifier.features)
+            X, y = _multilabel(ref=val,
+                               population_labels=populations,
+                               transform=self.classifier.transform,
+                               features=self.classifier.features)
         else:
-            X, y = _singlelabel(ref=g, population_labels=self.population_labels, transform=self.classifier.transform, features=self.classifier.features)
+            X, y = _singlelabel(ref=val,
+                                population_labels=populations,
+                                transform=self.classifier.transform,
+                                features=self.classifier.features)
         return X, y
 
     def plot_learning_curve(self,
                             ax: Axes or None = None,
                             validation_id: str or None = None,
+                            parent_population: str or None = None,
                             x_label: str = "Training examples",
                             y_label: str = "Score",
                             train_sizes: np.array or None = None,
                             **kwargs):
+        self._check_init()
         X, y = self.X, self.y
         if validation_id is not None:
-            X, y = self.load_validation(validation_id=validation_id)
+            assert parent_population is not None, "Must provide a parent population"
+            X, y = self.load_validation(validation_id=validation_id,
+                                        parent_population=parent_population)
 
         train_sizes = train_sizes or np.linspace(0.1, 1.0, 10)
         verbose = 0
@@ -405,11 +592,12 @@ class CellClassifier:
 
     def validate(self,
                  validation_id: str,
+                 parent_population: str,
                  threshold: float = 0.5,
                  metrics: list or None = None,
                  return_predictions: bool = True):
         metrics = metrics or ["balanced_accuracy_score", "f1_weighted"]
-        X, y = self.load_validation(validation_id=validation_id)
+        X, y = self.load_validation(validation_id=validation_id, parent_population=parent_population)
         y_pred, y_proba, y_score = self._predict(X, threshold=threshold)
         results = _metrics(metrics=metrics, y_true=y, y_pred=y_pred, y_score=y_score)
         if return_predictions:

@@ -645,7 +645,7 @@ class SimilarityMatrix:
         return self._pairwise_stat_dist(distance_metric=distance_metric)
 
     def __call__(self,
-                 distance_df = pd.DataFrame or None,
+                 distance_df: pd.DataFrame or None = None,
                  figsize: tuple = (12, 12),
                  distance_metric: str or callable = 'jsd',
                  clustering_method: str = 'average',
