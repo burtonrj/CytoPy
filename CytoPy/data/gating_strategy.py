@@ -1,6 +1,7 @@
 from ..flow.plotting import CreatePlot
 from ..feedback import progress_bar, vprint
-from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, PolygonGeom
+from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, \
+    PolygonGeom, update_polygon, update_threshold
 from .experiment import Experiment
 from .fcs import FileGroup
 from datetime import datetime
@@ -507,24 +508,81 @@ class GatingStrategy(mongoengine.Document):
                         y_threshold: float or None = None,
                         x_values: list or None = None,
                         y_values: list or None = None):
+        """
+        Edit an existing population's geometric definition (i.e. the gate polygon or threshold
+        that generates the population). The altered geometry will be applied to the parent
+        of this population resulting in new data. Populations downstream of this edit will
+        also be effected but gates will not adapt dynamically, instead the static results of
+        gating algorithms will still apply, but to a new dataset. For this reason, gates
+        should be checked (similar to the effects of moving a gate in FlowJo).
+
+        Parameters
+        ----------
+        population_name: str
+        x_threshold: float (optional)
+            Required for threshold geometries
+        y_threshold: float (optional)
+        Required for 2D threshold geometries
+        x_values: list
+            Required for Polygon geometries
+        y_values
+            Required for Polygon geometries
+        Returns
+        -------
+        None
+        """
         pop = self.filegroup.get_population(population_name=population_name)
+        parent = self.filegroup.load_population_df(population=pop.parent,
+                                                   transform={pop.geom.x: pop.geom.transform_x,
+                                                              pop.geom.y: pop.geom.transform_y})
         if isinstance(pop.geom, ThresholdGeom):
             assert x_threshold is not None, "For threshold geometry, please provide x_threshold"
             if pop.geom.y_threshold is not None:
                 assert y_threshold is not None, "For 2D threshold geometry, please provide y_threshold"
-            return update_threshold(population=pop,
-                                    x_threshold=x_threshold,
-                                    y_threshold=y_threshold)
-        if isinstance(pop.geom, PolygonGeom):
+            update_threshold(population=pop,
+                             parent_data=parent,
+                             x_threshold=x_threshold,
+                             y_threshold=y_threshold)
+        elif isinstance(pop.geom, PolygonGeom):
             assert x_values is not None and y_values is not None, \
                 "For polygon gate please provide x_values and y_values"
-            return update_polygon(population=pop,
-                                  x_values=x_threshold,
-                                  y_values=y_threshold)
-        pass
+            update_polygon(population=pop,
+                           parent_data=parent,
+                           x_values=x_threshold,
+                           y_values=y_threshold)
+        self._edit_downstream_effects(population_name=population_name)
 
-    def _edit_downstream_effects(self):
-        pass
+    def _edit_downstream_effects(self,
+                                 population_name: str):
+        """
+        Echos the downstream effects of an edited gate by iterating over the Population
+        dependencies and reapplying their geometries to the modified data. Should be
+        called after 'edit_population'.
+
+        Parameters
+        ----------
+        population_name: str
+
+        Returns
+        -------
+        None
+        """
+        downstream_populations = self.filegroup.list_downstream_populations(population=population_name)
+        for pop in downstream_populations:
+            pop = self.filegroup.get_population(pop)
+            parent = self.filegroup.load_population_df(population=pop.parent,
+                                                       transform={pop.geom.x: pop.geom.transform_x,
+                                                                  pop.geom.y: pop.geom.transform_y})
+            if isinstance(pop.geom, ThresholdGeom):
+                update_threshold(population=pop,
+                                 parent_data=parent,
+                                 x_threshold=pop.geom.x_threshold,
+                                 y_threshold=pop.geom.y_threshold)
+            elif isinstance(pop.geom, PolygonGeom):
+                update_polygon(population=pop,
+                               parent_data=parent,
+                               x_values=pop.geom.x_values,
+                               y_values=pop.geom.y_values)
 
     def _control_gate(self,
                       gate: Gate or ThresholdGate or PolygonGate or EllipseGate):
