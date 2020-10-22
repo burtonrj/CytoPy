@@ -1,6 +1,6 @@
 from ..flow.plotting import CreatePlot
 from ..feedback import progress_bar, vprint
-from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate
+from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, PolygonGeom
 from .experiment import Experiment
 from .fcs import FileGroup
 from datetime import datetime
@@ -500,6 +500,31 @@ class GatingStrategy(mongoengine.Document):
 
         """
         self.filegroup.print_population_tree(**kwargs)
+
+    def edit_population(self,
+                        population_name: str,
+                        x_threshold: float or None = None,
+                        y_threshold: float or None = None,
+                        x_values: list or None = None,
+                        y_values: list or None = None):
+        pop = self.filegroup.get_population(population_name=population_name)
+        if isinstance(pop.geom, ThresholdGeom):
+            assert x_threshold is not None, "For threshold geometry, please provide x_threshold"
+            if pop.geom.y_threshold is not None:
+                assert y_threshold is not None, "For 2D threshold geometry, please provide y_threshold"
+            return update_threshold(population=pop,
+                                    x_threshold=x_threshold,
+                                    y_threshold=y_threshold)
+        if isinstance(pop.geom, PolygonGeom):
+            assert x_values is not None and y_values is not None, \
+                "For polygon gate please provide x_values and y_values"
+            return update_polygon(population=pop,
+                                  x_values=x_threshold,
+                                  y_values=y_threshold)
+        pass
+
+    def _edit_downstream_effects(self):
+        pass
 
     def _control_gate(self,
                       gate: Gate or ThresholdGate or PolygonGate or EllipseGate):

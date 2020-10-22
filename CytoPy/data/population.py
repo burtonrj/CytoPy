@@ -175,7 +175,7 @@ class Population(mongoengine.EmbeddedDocument):
 
         Returns
         -------
-        list
+        List
         """
         if tag:
             return [c.cluster_id for c in self.clusters if c.tag == tag]

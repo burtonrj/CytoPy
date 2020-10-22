@@ -70,7 +70,7 @@ class CreatePlot:
                  style: str or None = "white",
                  font_scale: float or None = 1.2,
                  bw: str or float = "scott",
-                 autoscale: bool = True,
+                 autoscale: bool = False,
                  axis_ticks: bool = True):
         self.transforms = {'x': transform_x, 'y': transform_y}
         self.labels = {'x': xlabel, 'y': ylabel}
