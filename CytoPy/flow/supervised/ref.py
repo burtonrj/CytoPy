@@ -5,14 +5,14 @@ from ..variance import load_and_sample, _common_features
 import pandas as pd
 
 
-def create_reference_sample(experiment: Experiment,
-                            sample_size: int or float = 2500,
-                            sampling_method: str = "uniform",
-                            sampling_kwargs: dict or None = None,
-                            root_population='root',
-                            sample_ids: list or None = None,
-                            new_file_name: str or None = None,
-                            verbose: bool = True) -> None:
+def create_ref_sample(experiment: Experiment,
+                      sample_size: int or float = 2500,
+                      sampling_method: str = "uniform",
+                      sampling_kwargs: dict or None = None,
+                      root_population='root',
+                      sample_ids: list or None = None,
+                      new_file_name: str or None = None,
+                      verbose: bool = True) -> None:
     """
     Given some experiment and a root population that is common to all fcs file groups within this experiment, take
     a sample from each and create a new file group from the concatenation of these data. New file group will be created

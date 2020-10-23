@@ -502,23 +502,23 @@ class GatingStrategy(mongoengine.Document):
         """
         self.filegroup.print_population_tree(**kwargs)
 
-    def edit_population(self,
-                        population_name: str,
-                        x_threshold: float or None = None,
-                        y_threshold: float or None = None,
-                        x_values: list or None = None,
-                        y_values: list or None = None):
+    def edit_gate(self,
+                  gate_name: str,
+                  x_threshold: float or None = None,
+                  y_threshold: float or None = None,
+                  x_values: list or None = None,
+                  y_values: list or None = None):
         """
-        Edit an existing population's geometric definition (i.e. the gate polygon or threshold
-        that generates the population). The altered geometry will be applied to the parent
-        of this population resulting in new data. Populations downstream of this edit will
+        Edit an existing gate (i.e. the polygon or threshold shape that generates the resulting
+        populations). The altered geometry will be applied to the parent population resulting
+        this gate acts upon, resulting in new data. Populations downstream of this edit will
         also be effected but gates will not adapt dynamically, instead the static results of
         gating algorithms will still apply, but to a new dataset. For this reason, gates
         should be checked (similar to the effects of moving a gate in FlowJo).
 
         Parameters
         ----------
-        population_name: str
+        gate_name: str
         x_threshold: float (optional)
             Required for threshold geometries
         y_threshold: float (optional)
@@ -531,26 +531,32 @@ class GatingStrategy(mongoengine.Document):
         -------
         None
         """
-        pop = self.filegroup.get_population(population_name=population_name)
-        parent = self.filegroup.load_population_df(population=pop.parent,
-                                                   transform={pop.geom.x: pop.geom.transform_x,
-                                                              pop.geom.y: pop.geom.transform_y})
-        if isinstance(pop.geom, ThresholdGeom):
-            assert x_threshold is not None, "For threshold geometry, please provide x_threshold"
-            if pop.geom.y_threshold is not None:
-                assert y_threshold is not None, "For 2D threshold geometry, please provide y_threshold"
-            update_threshold(population=pop,
-                             parent_data=parent,
-                             x_threshold=x_threshold,
-                             y_threshold=y_threshold)
-        elif isinstance(pop.geom, PolygonGeom):
-            assert x_values is not None and y_values is not None, \
-                "For polygon gate please provide x_values and y_values"
-            update_polygon(population=pop,
-                           parent_data=parent,
-                           x_values=x_threshold,
-                           y_values=y_threshold)
-        self._edit_downstream_effects(population_name=population_name)
+        gate = self.get_gate(gate=gate_name)
+        err = "Cannot edit a gate that has not been applied; gate children not present in population " \
+              "tree."
+        assert all([x in self.filegroup.tree.keys() for x in [c.name for c in gate.children]]), err
+        transforms = [gate.transformations.get(x, None) for x in ["x", "y"]]
+        transforms = {k: v for k, v in zip([gate.x, gate.y], transforms) if k is not None}
+        parent = self.filegroup.load_population_df(population=gate.parent,
+                                                   transform=transforms)
+        for child in gate.children:
+            pop = self.filegroup.get_population(population_name=child.name)
+            if isinstance(pop.geom, ThresholdGeom):
+                assert x_threshold is not None, "For threshold geometry, please provide x_threshold"
+                if pop.geom.y_threshold is not None:
+                    assert y_threshold is not None, "For 2D threshold geometry, please provide y_threshold"
+                update_threshold(population=pop,
+                                 parent_data=parent,
+                                 x_threshold=x_threshold,
+                                 y_threshold=y_threshold)
+            elif isinstance(pop.geom, PolygonGeom):
+                assert x_values is not None and y_values is not None, \
+                    "For polygon gate please provide x_values and y_values"
+                update_polygon(population=pop,
+                               parent_data=parent,
+                               x_values=x_threshold,
+                               y_values=y_threshold)
+            self._edit_downstream_effects(population_name=child.name)
 
     def _edit_downstream_effects(self,
                                  population_name: str):
@@ -570,9 +576,11 @@ class GatingStrategy(mongoengine.Document):
         downstream_populations = self.filegroup.list_downstream_populations(population=population_name)
         for pop in downstream_populations:
             pop = self.filegroup.get_population(pop)
+            transforms = {k: v for k, v in zip([pop.geom.x, pop.geom.y],
+                                               [pop.geom.transform_x, pop.geom.transform_y])
+                          if k is not None}
             parent = self.filegroup.load_population_df(population=pop.parent,
-                                                       transform={pop.geom.x: pop.geom.transform_x,
-                                                                  pop.geom.y: pop.geom.transform_y})
+                                                       transform=transforms)
             if isinstance(pop.geom, ThresholdGeom):
                 update_threshold(population=pop,
                                  parent_data=parent,
