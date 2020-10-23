@@ -1,4 +1,4 @@
-from ...flow.variance import covar_euclidean_norm, scale_data
+from ...flow.variance import calculate_ref_sample, scale_data
 from string import ascii_uppercase
 import pandas as pd
 import numpy as np
@@ -14,7 +14,7 @@ def example_data_dict():
 
 def test_covar_euclidean_norm():
     data = example_data_dict()
-    ref = covar_euclidean_norm(data=data)
+    ref = calculate_ref_sample(data=data)
     assert ref == "E"
 
 

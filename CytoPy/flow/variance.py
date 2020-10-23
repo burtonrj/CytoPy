@@ -71,7 +71,7 @@ def _common_features(data: OrderedDict) -> list:
     return list(set(features[0]).intersection(*features))
 
 
-def covar_euclidean_norm(data: OrderedDict,
+def calculate_ref_sample(data: OrderedDict,
                          verbose: bool = True) -> str:
     """
 
