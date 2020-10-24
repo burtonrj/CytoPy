@@ -19,7 +19,7 @@ import pickle
 DEFAULT_METRICS = ["balanced_accuracy_score", "f1_weighted", "roc_auc_score"]
 
 
-class Classifier(mongoengine.Document):
+class CellClassifier(mongoengine.Document):
     name = mongoengine.StringField(required=True, unique=True)
     features = mongoengine.ListField(required=True)
     multi_class = mongoengine.BooleanField(default=False)
@@ -147,6 +147,8 @@ class Classifier(mongoengine.Document):
 
     def _fit(self, x: pd.DataFrame, y: np.ndarray, **kwargs):
         self.check_model_init()
+        if self.class_weights is not None:
+            self.model.fit(x, y, class_weight=self.class_weights, **kwargs)
         self.model.fit(x, y, **kwargs)
 
     def _predict(self, x: pd.DataFrame, threshold: float):
@@ -317,7 +319,7 @@ def _valid_multi_class(klass: str):
     assert klass in valid, err
 
 
-class SklearnClassifier(Classifier):
+class SklearnCellClassifier(CellClassifier):
     klass = mongoengine.StringField(required=True)
     params = mongoengine.DictField()
 
@@ -451,7 +453,7 @@ class Layer(mongoengine.EmbeddedDocument):
     kwargs = mongoengine.DictField()
 
 
-class KerasClassifier(Classifier):
+class KerasCellClassifier(CellClassifier):
     model_params = mongoengine.StringField()
     input_layer = mongoengine.EmbeddedDocumentField(Layer)
     layers = mongoengine.EmbeddedDocumentListField(Layer)
@@ -460,3 +462,22 @@ class KerasClassifier(Classifier):
     metrics = mongoengine.ListField()
     epochs = mongoengine.IntField()
     compile_kwargs = mongoengine.DictField()
+
+    def build_model(self):
+        kwargs = self.compile_kwargs or {}
+        self._model = supervised.build_keras_model(layers=self.layers,
+                                                   optimizer=self.optimizer,
+                                                   loss=self.loss,
+                                                   metrics=self.metrics,
+                                                   **kwargs)
+
+    def _predict(self,
+                 x: pd.DataFrame,
+                 threshold: float = 0.5):
+        self.check_model_init()
+        y_score = self.model.predict(x)
+        if self.multi_class:
+            y_pred = list(map(lambda yi: [int(i > threshold) for i in yi], y_score))
+        else:
+            y_pred = self.model.predict_classes(x)
+        return y_pred, y_score
