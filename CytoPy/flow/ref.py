@@ -1,7 +1,7 @@
-from ...data.experiment import Experiment
-from ...data.fcs import FileGroup
-from ...feedback import vprint
-from ..variance import load_and_sample, _common_features
+from CytoPy.data.experiment import Experiment
+from CytoPy.data.fcs import FileGroup
+from CytoPy.feedback import vprint
+from CytoPy.flow.variance import load_and_sample, _common_features
 import pandas as pd
 
 
