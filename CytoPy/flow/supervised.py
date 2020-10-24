@@ -1,10 +1,8 @@
-from ...data.supervised_classifier import SklearnClassifier, KerasClassifier
-from ...data.experiment import Experiment
-from ...data.population import Population, create_signature
-from ...data.fcs import FileGroup
-from ...feedback import vprint, progress_bar
-from ..sampling import density_dependent_downsampling, faithful_downsampling
-from ..transforms import scaler
+from CytoPy.data.experiment import Experiment
+from CytoPy.data.population import Population, create_signature
+from CytoPy.data.fcs import FileGroup
+from CytoPy.feedback import vprint, progress_bar
+from CytoPy.flow.transforms import scaler
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.model_selection import train_test_split, KFold, learning_curve
 from sklearn import metrics as skmetrics
@@ -23,24 +21,25 @@ import inspect
 import pickle
 
 
-def _build_sklearn_model(classifier: SklearnClassifier):
+def build_sklearn_model(klass: str,
+                        **params):
     """
     Initiate a SklearnClassifier object using Classes in the global environment
 
     Parameters
     ----------
-    classifier: SklearnClassifier
+    klass: str
 
     Returns
     -------
     object
     """
-    assert classifier.klass in globals().keys(), \
-        f"Module {classifier.klass} not found, have you imported it into the working environment?"
-    return globals()[classifier.klass](**classifier.params)
+    assert klass in globals().keys(), \
+        f"Module {klass} not found, have you imported it into the working environment?"
+    return globals()[klass](**params)
 
 
-def _build_keras_model(classifier: KerasClassifier):
+def build_keras_model(classifier: KerasClassifier):
     """
     Create and compile a Keras Sequential model using the given KerasClassifier object
 
@@ -67,10 +66,10 @@ def _build_keras_model(classifier: KerasClassifier):
     return model
 
 
-def _metrics(metrics: list,
-             y_true: np.array,
-             y_pred: np.array or None = None,
-             y_score: np.array or None = None) -> dict:
+def calc_metrics(metrics: list,
+                 y_true: np.array,
+                 y_pred: np.array or None = None,
+                 y_score: np.array or None = None) -> dict:
     """
     Given a list of Scikit-Learn supported metrics (https://scikit-learn.org/stable/modules/model_evaluation.html)
     return a dictionary of results after checking that the required inputs are provided.
@@ -117,9 +116,32 @@ def _metrics(metrics: list,
                 raise ValueError("Unexpected metric. Signature should contain either 'y_score' or 'y_pred'")
     return results
 
+def confusion_matrix_plots(classifier,
+                           x: pd.DataFrame,
+                           y: np.ndarray,
+                           class_labels: list,
+                           cmap: str or None = None,
+                           figsize: tuple = (10, 5),
+                           **kwargs):
+    cmap = cmap or plt.cm.Blues
+    fig, axes = plt.subplots(2, figsize=figsize)
+    titles = ["Confusion matrix, without normalisation", "Confusion matrix; normalised"]
+    for i, (title, norm) in enumerate(zip(titles, [False, True])):
+        ax = skmetrics.plot_confusion_matrix(estimator=classifier,
+                                             X=x,
+                                             y=y,
+                                             display_labels=class_labels,
+                                             cmap=cmap,
+                                             normalize=norm,
+                                             ax=axes[i],
+                                             **kwargs)
+        axes[i].set_title(title)
+    return fig
 
-def _load_population_labels(ref: FileGroup,
-                            expected_labels: list) -> list:
+
+
+def assert_population_labels(ref: FileGroup,
+                            expected_labels: list):
     """
     Given some reference FileGroup and the expected population labels, check the
     validity of the labels and return list of valid populations only.
@@ -134,38 +156,36 @@ def _load_population_labels(ref: FileGroup,
     List
     """
     assert len(ref.populations) >= 2, "Reference sample does not contain any gated populations"
-    valid_populations = list()
     for x in expected_labels:
-        if x in ref.tree.keys():
-            valid_populations.append(x)
-        else:
-            warn(f"Ref FileGroup missing expected population {x}")
-    return valid_populations
+        assert x in ref.tree.keys(), f"Ref FileGroup missing expected population {x}"
 
 
-def _check_downstream_populations(ref: FileGroup,
-                                  population_labels: list) -> None:
+def check_downstream_populations(ref: FileGroup,
+                                 root_population: str,
+                                 population_labels: list) -> None:
     """
-    Check that in the ordered list of population labels, the first label is upstream
-    of all subsequent labels
+    Check that in the ordered list of population labels, all populaitons are downstream 
+    of the given 'root' population.
 
     Parameters
     ----------
     ref: FileGroup
+    root_population: str
     population_labels: list
 
     Returns
     -------
     None
     """
-    downstream = ref.list_downstream_populations(population_labels[0])
-    assert all([x in downstream for x in population_labels[1:]]), \
+    downstream = ref.list_downstream_populations(root_population)
+    assert all([x in downstream for x in population_labels]), \
         "The first population in population_labels should be the 'root' population, with all further populations " \
         "being downstream from this 'root'. The given population_labels has one or more populations that is not " \
         "downstream from the given root."
 
 
-def _multilabel(ref: FileGroup,
+def multilabel(ref: FileGroup,
+               root_population: str,
                 population_labels: list,
                 transform: str,
                 features: list) -> (pd.DataFrame, pd.DataFrame):
@@ -186,15 +206,16 @@ def _multilabel(ref: FileGroup,
     (Pandas.DataFrame, Pandas.DataFrame)
         Root population flourescent intensity values, population affiliations (dummy matrix)
     """
-    root = ref.load_population_df(population=population_labels[0],
+    root = ref.load_population_df(population=root_population,
                                   transform=transform)
-    for pop in population_labels[1:]:
+    for pop in population_labels:
         root[pop] = 0
         root.loc[ref.get_population(pop).index, pop] = 1
-    return root[features], root[population_labels[1:]]
+    return root[features], root[population_labels]
 
 
-def _singlelabel(ref: FileGroup,
+def singlelabel(ref: FileGroup,
+                root_population: str,
                  population_labels: list,
                  transform: str,
                  features: list) -> (pd.DataFrame, np.ndarray):
@@ -216,88 +237,20 @@ def _singlelabel(ref: FileGroup,
     (Pandas.DataFrame, Numpy.Array)
         Root population flourescent intensity values, labels
     """
-    root = ref.load_population_df(population=population_labels[0],
+    root = ref.load_population_df(population=root_population,
                                   transform=transform)
     y = np.zeros(root.shape[0])
-    for i, pop in enumerate(population_labels[1:]):
+    for i, pop in enumerate(population_labels):
         pop_idx = ref.get_population(population_name=pop).index
         np.put(y, pop_idx, i + 1)
     return root[features], y
 
-
-def _class_weights(y: np.ndarray,
-                   population_labels: list,
-                   classifier: SklearnClassifier or KerasClassifier) -> dict:
-    """
-    Generate dictionary of class weights to handle class imbalance.
-
-    Parameters
-    ----------
-    y: Numpy.Array
-        Labels
-    population_labels: list
-        Ordered population labels
-    classifier: SklearnClassifier or KerasClassifier
-        Classifier object
-    Returns
-    -------
-    dict
-    """
-    assert not classifier.multi_label, "Class weights not supported for multi-label classifiers"
-    if classifier.balance == "auto-weights":
-        classes = np.arange(0, len(population_labels) - 1)
-        weights = compute_class_weight('balanced',
-                                       classes=classes,
-                                       y=y)
-        return {k: w for k, w in zip(classes, weights)}
-    elif classifier.balance_dict:
-        class_weights = {k: w for k, w in classifier.balance_dict}
-        return {i: class_weights.get(p) for i, p in enumerate(population_labels[1:])}
-    else:
-        raise ValueError("Balance should have a value 'oversample' or 'auto-weights', alternatively, "
-                         "populate balance_dict with (label, weight) pairs")
-
-
-def _downsample(X: pd.DataFrame,
-                y: np.ndarray,
-                features: list,
-                method: str,
-                **kwargs) -> (pd.DataFrame, np.ndarray):
-    """
-    Downsample feature space and labels using given method.
-
-    Parameters
-    ----------
-    X: Pandas.DataFrame
-        Feature space
-    y: Numpy.Array
-        Labels; should be shape (obs,) for multiclass classification or (obs, populations)
-        for multilabel classification
-    features: list
-        Names of the features (columns in X)
-    method: str
-        Downsample method (uniform, density or faithful)
-    kwargs
-        Additional keyword arguments passed to sampling method
-    Returns
-    -------
-    Pandas.DataFrame, Numpy.Array
-    """
-    X["y"] = y
-    valid = ['uniform', 'density', 'faithful']
-    assert method in valid, f"Downsample should have a value of: {valid}"
-    if method == "uniform":
-        frac = kwargs.get("frac", 0.5)
-        X = X.sample(frac=frac)
-    elif method == "density":
-        X = density_dependent_downsampling(data=X,
-                                           features=features,
-                                           **kwargs)
-    elif method == "faithful":
-        X = faithful_downsampling(data=X, **kwargs)
-    y = X["y"].values
-    X.drop("y", inplace=True)
-    return X, y
+def auto_weights(y: np.ndarray,
+                 population_labels: list):
+    classes = np.arange(0, len(population_labels) - 1)
+    return compute_class_weight('balanced',
+                                classes=classes,
+                                y=y)
 
 
 class CellClassifier:
@@ -465,10 +418,14 @@ class CellClassifier:
             self.print(f"Evaluating {key}ing performance....")
             y_pred, y_proba, y_score = self._predict(X, threshold=threshold)
             y_hat[results] = {"y_pred": y_pred, "y_proba": y_proba, "y_score": y_score}
-            results[key] = _metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y)
+            results[key] = calc_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y)
         if return_predictions:
             return results, return_predictions
         return results
+
+    def hyperparameter_tuning(self,
+                              params: dict
+                              method: str = "grid",):
 
     def fit_kfold(self,
                   threshold: float = 0.5,
@@ -488,9 +445,9 @@ class CellClassifier:
             y_train, y_test = self.y[train_idx], self.y[test_idx]
             self.model.fit(X_train, y_train)
             y_pred, y_proba, y_score = self._predict(X_train, threshold=threshold)
-            training_results.append(_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_train))
+            training_results.append(calc_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_train))
             y_pred, y_proba, y_score = self._predict(X_test, threshold=threshold)
-            testing_results.append(_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_test))
+            testing_results.append(calc_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_test))
         return training_results, testing_results
 
     def predict(self,
@@ -599,7 +556,7 @@ class CellClassifier:
         metrics = metrics or ["balanced_accuracy_score", "f1_weighted"]
         X, y = self.load_validation(validation_id=validation_id, parent_population=parent_population)
         y_pred, y_proba, y_score = self._predict(X, threshold=threshold)
-        results = _metrics(metrics=metrics, y_true=y, y_pred=y_pred, y_score=y_score)
+        results = calc_metrics(metrics=metrics, y_true=y, y_pred=y_pred, y_score=y_score)
         if return_predictions:
             return results, {"y_pred": y_pred, "y_proba": y_proba, "y_score": y_score}
         return results
@@ -619,3 +576,17 @@ class CellClassifier:
                                                         f"{type(self.model)}"
         else:
             self.model = load_model(filepath=path, **kwargs)
+
+
+class SklearnCellClassifier(CellClassifier):
+
+    def __init__(self,
+                 classifier: SklearnClassifier,
+                 *args,
+                 **kwargs):
+        assert isinstance(classifier, SklearnClassifier), "Expected classifier of type SklearnClassifier"
+        super().__init__(*args, **kwargs)
+
+
+class KerasCellClassifier(CellClassifier):
+    pass
