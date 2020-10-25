@@ -1,6 +1,7 @@
 from CytoPy.data.fcs import FileGroup
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn import metrics as skmetrics
+from xgboost import XGBClassifier
 from sklearn.discriminant_analysis import *
 from sklearn.neighbors import *
 from sklearn.ensemble import *
@@ -26,7 +27,8 @@ def build_sklearn_model(klass: str,
     object
     """
     assert klass in globals().keys(), \
-        f"Module {klass} not found, have you imported it into the working environment?"
+        f"Module {klass} not found, is this a Scikit-Learn (or like) classifier? It might " \
+        f"not currently be supported. See the docs for details."
     return globals()[klass](**params)
 
 
@@ -102,6 +104,12 @@ def calc_metrics(metrics: list,
             f = getattr(skmetrics, "f1_score")
             assert y_pred is not None, "For F1 score predictions must be provided;`y_pred` is None"
             results[m] = f(y_true=y_true, y_pred=y_pred, average=avg)
+        elif m == "roc_auc_score":
+            f = getattr(skmetrics, m)
+            results[m] = f(y_true=y_true,
+                           y_score=y_score,
+                           multi_class="ovo",
+                           average="macro")
         else:
             f = getattr(skmetrics, m)
             if "y_score" in inspect.signature(f).parameters.keys():
@@ -139,7 +147,7 @@ def confusion_matrix_plots(classifier,
 
 
 def assert_population_labels(ref: FileGroup,
-                            expected_labels: list):
+                             expected_labels: list):
     """
     Given some reference FileGroup and the expected population labels, check the
     validity of the labels and return list of valid populations only.
@@ -184,9 +192,9 @@ def check_downstream_populations(ref: FileGroup,
 
 def multilabel(ref: FileGroup,
                root_population: str,
-                population_labels: list,
-                transform: str,
-                features: list) -> (pd.DataFrame, pd.DataFrame):
+               population_labels: list,
+               transform: str,
+               features: list) -> (pd.DataFrame, pd.DataFrame):
     """
     Load the root population DataFrame from the reference FileGroup (assumed to be the first
     population in 'population_labels'). Then iterate over the remaining population creating a
@@ -214,9 +222,9 @@ def multilabel(ref: FileGroup,
 
 def singlelabel(ref: FileGroup,
                 root_population: str,
-                 population_labels: list,
-                 transform: str,
-                 features: list) -> (pd.DataFrame, np.ndarray):
+                population_labels: list,
+                transform: str,
+                features: list) -> (pd.DataFrame, np.ndarray):
     """
     Load the root population DataFrame from the reference FileGroup (assumed to be the first
     population in 'population_labels'). Then iterate over the remaining population creating a
@@ -225,6 +233,7 @@ def singlelabel(ref: FileGroup,
 
     Parameters
     ----------
+    root_population
     ref: FileGroup
     population_labels: list
     transform: str
@@ -237,16 +246,18 @@ def singlelabel(ref: FileGroup,
     """
     root = ref.load_population_df(population=root_population,
                                   transform=transform)
-    y = np.zeros(root.shape[0])
+    root["label"] = 0
     for i, pop in enumerate(population_labels):
         pop_idx = ref.get_population(population_name=pop).index
-        np.put(y, pop_idx, i + 1)
+        root.loc[pop_idx, "label"] = i + 1
+    y = root["label"].values
+    root.drop("label", axis=1, inplace=True)
     return root[features], y
 
 
-def auto_weights(y: np.ndarray,
-                 population_labels: list):
-    classes = np.arange(0, len(population_labels) - 1)
-    return compute_class_weight('balanced',
-                                classes=classes,
-                                y=y)
+def auto_weights(y: np.ndarray):
+    classes = np.unique(y)
+    weights = compute_class_weight('balanced',
+                                   classes=classes,
+                                   y=y)
+    return {i: w for i, w in enumerate(weights)}

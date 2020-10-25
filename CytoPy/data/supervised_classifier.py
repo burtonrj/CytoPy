@@ -7,7 +7,7 @@ from .population import Population, create_signature
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import train_test_split, KFold, learning_curve, \
     BaseCrossValidator, GridSearchCV, RandomizedSearchCV
-from mongoengine.base.datastructures import BaseDict
+from inspect import signature
 from matplotlib.axes import Axes
 from warnings import warn
 import matplotlib.pyplot as plt
@@ -26,11 +26,11 @@ class CellClassifier(mongoengine.Document):
     target_populations = mongoengine.ListField(required=True)
     transform = mongoengine.StringField(default="logicle")
     scale = mongoengine.StringField(choices=["standard", "norm"])
-    scale_kwargs = mongoengine.ListField()
-    balance = mongoengine.StringField()
-    balance_dict = mongoengine.ListField()
+    scale_kwargs = mongoengine.DictField()
+    oversample = mongoengine.BooleanField(default=False)
+    class_weights = mongoengine.DictField()
     downsample = mongoengine.StringField(choices=['uniform', 'density', 'faithful'])
-    downsample_kwargs = mongoengine.ListField()
+    downsample_kwargs = mongoengine.DictField()
     population_prefix = mongoengine.StringField(default="sml")
 
     meta = {"allow_inheritance": True}
@@ -38,7 +38,6 @@ class CellClassifier(mongoengine.Document):
     def __init__(self, *args, **values):
         self.verbose = values.pop("verbose", True)
         self.print = vprint(self.verbose)
-        self.class_weights = None
         self._model = None
         self.x, self.y = None, None
         super().__init__(*args, **values)
@@ -88,10 +87,11 @@ class CellClassifier(mongoengine.Document):
         else:
             warn("For the majority of classifiers it is recommended to scale the data (exception being tree-based "
                  "algorithms)")
-        self._balance(populations=self.target_populations)
         if self.downsample:
             self.print("Down-sampling...")
             self._downsample(x=self.x, y=self.y)
+        if self.oversample:
+            self.x, self.y = RandomOverSampler(random_state=42).fit_resample(self.X, self.y)
         self.print('Ready for training!')
 
     def _scale_data(self, data: pd.DataFrame):
@@ -102,27 +102,10 @@ class CellClassifier(mongoengine.Document):
                                      **kwargs)
         return data
 
-    def _balance(self,
-                 populations: list or None = None):
-        populations = populations or self.target_populations
-        if not self.balance or not self.balance_dict:
-            return
-        if self.multi_class:
-            if self.balance != "oversample":
-                warn("Class weights not supported for multi-label classifiers")
-                return
-        if self.balance == "oversample":
-            self.print("Correcting imbalance with oversampling...")
-            self.X, self.y = RandomOverSampler(random_state=42).fit_resample(self.X, self.y)
-        elif self.balance == "auto-weights":
-            self.print("Setting up class weights...")
-            self.class_weights = supervised.auto_weights(y=self.y,
-                                                         population_labels=populations)
-        else:
-            err = "Balance should have a value 'oversample' or 'auto-weights', alternatively, " \
-                  "populate balance_dict with (label, weight) pairs"
-            assert isinstance(self.balance_dict, dict) or isinstance(self.balance_dict, BaseDict), err
-            self.class_weights = {i: self.balance_dict.get(p) for i, p in enumerate(populations)}
+    def auto_class_weights(self):
+        self.check_data_init()
+        assert not self.multi_class, "Class weights not supported for multi-class classifiers"
+        self.class_weights = supervised.auto_weights(y=self.y)
 
     def _downsample(self,
                     x: pd.DataFrame,
@@ -168,7 +151,7 @@ class CellClassifier(mongoengine.Document):
         train_test_split_kwargs = train_test_split_kwargs or {}
         fit_kwargs = fit_kwargs or {}
         self.print("Spliting data into training and testing sets....")
-        x_train, x_test, y_train, y_test = train_test_split(self.X,
+        x_train, x_test, y_train, y_test = train_test_split(self.x,
                                                             self.y,
                                                             test_size=test_frac,
                                                             **train_test_split_kwargs)
@@ -179,13 +162,14 @@ class CellClassifier(mongoengine.Document):
         for key, (X, y) in zip(["train", "test"], [[x_train, y_train], [x_test, y_test]]):
             self.print(f"Evaluating {key}ing performance....")
             y_pred, y_score = self._predict(X, threshold=threshold)
-            y_hat[results] = {"y_pred": y_pred, "y_score": y_score}
+            y_hat[key] = {"y_pred": y_pred, "y_score": y_score}
             results[key] = supervised.calc_metrics(metrics=metrics,
                                                    y_pred=y_pred,
                                                    y_score=y_score,
                                                    y_true=y)
+        self.print("==========================================")
         if return_predictions:
-            return results, return_predictions
+            return results, y_hat
         return results
 
     def fit_cv(self,
@@ -216,6 +200,9 @@ class CellClassifier(mongoengine.Document):
                                                            y_score=y_score,
                                                            y_true=y_test))
         return training_results, testing_results
+
+    def fit(self, **kwargs):
+        self._fit(x=self.x, y=self.y, **kwargs)
 
     def _add_unclassified_population(self,
                                      x: pd.DataFrame,
@@ -248,9 +235,9 @@ class CellClassifier(mongoengine.Document):
                                               target=target)
         for i, pop in enumerate(self.target_populations):
             if self.multi_class:
-                idx = x.index.values[np.where(y_pred[:, i] == 1)[0]]
+                idx = x.index.values[np.where(y_pred[:, i + 1] == 1)[0]]
             else:
-                idx = x.index.values[np.where(y_pred == i)[0]]
+                idx = x.index.values[np.where(y_pred == i + 1)[0]]
             target.add_population(Population(population_name=f"{self.population_prefix}_{pop}",
                                              index=idx,
                                              n=len(idx),
@@ -325,7 +312,7 @@ class SklearnCellClassifier(CellClassifier):
 
     def __init__(self, *args, **values):
         assert "klass" in values.keys(), "klass is required"
-        multi_class = values.get("multi_class", True)
+        multi_class = values.get("multi_class", False)
         if multi_class:
             _valid_multi_class(values.get("klass"))
         super().__init__(*args, **values)
@@ -333,6 +320,9 @@ class SklearnCellClassifier(CellClassifier):
     def build_model(self):
         params = self.params or {}
         self._model = supervised.build_sklearn_model(klass=self.klass, **params)
+        if self.class_weights:
+            err = "Class weights defined yet the specified model does not support this"
+            assert "sample_weight" in signature(self.model.fit).parameters.keys(), err
 
     def _predict(self,
                  x: pd.DataFrame,
@@ -351,11 +341,10 @@ class SklearnCellClassifier(CellClassifier):
     def _fit(self, x: pd.DataFrame, y: np.ndarray, **kwargs):
         self.check_model_init()
         if self.class_weights is not None:
-            if "class_weight" not in self.model.get_params().keys():
-                warn("Class weights not supported, continuing without weighting classes")
-                self.model.fit(x, y, **kwargs)
-            else:
-                self.model.fit(x, y, class_weight=self.class_weights, **kwargs)
+            err = "Class weights defined yet the specified model does not support this"
+            assert "sample_weight" in signature(self.model.fit).parameters.keys(), err
+            sample_weight = np.array([self.class_weights.get(i) for i in y])
+            self.model.fit(x, y, sample_weight=sample_weight, **kwargs)
         else:
             self.model.fit(x, y, **kwargs)
 
@@ -389,7 +378,7 @@ class SklearnCellClassifier(CellClassifier):
                             train_sizes: np.array or None = None,
                             **kwargs):
         self.check_model_init()
-        x, y = self.X, self.y
+        x, y = self.x, self.y
         if validation_id is not None:
             assert all([x is not None for x in [experiment, root_population]]), \
                 "For plotting learning curve for validation, must provide validaiton ID, expeirment " \
