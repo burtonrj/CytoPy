@@ -127,7 +127,7 @@ class NormalisedName(mongoengine.EmbeddedDocument):
     Defines a standardised name for a channel or marker and provides method for testing if a channel/marker
     should be associated to standard
 
-    Parameters
+    Attributes
     ----------
     standard: str, required
         the "standard" name i.e. the nomenclature we used for a channel/marker in this panel
@@ -161,6 +161,7 @@ class NormalisedName(mongoengine.EmbeddedDocument):
         if self.case_sensitive:
             if re.search(self.regex_str, x):
                 return self.standard
+            return None
         if re.search(self.regex_str, x, re.IGNORECASE):
             return self.standard
         if self.permutations:

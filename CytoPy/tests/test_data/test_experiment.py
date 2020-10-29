@@ -1,6 +1,4 @@
-from ...data.experiment import check_excel_template, \
-    _check_duplication, Panel, _data_dir_append_leading_char, \
-    Experiment, FileGroup
+from ...data import experiment
 from ...tests import assets
 import pandas as pd
 import pytest
@@ -10,16 +8,16 @@ import os
 
 @pytest.fixture()
 def example_experiment():
-    exp = Experiment(experiment_id="test",
-                     data_directory=f"{os.getcwd()}/test_data",
-                     panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx")
+    exp = experiment.Experiment(experiment_id="test",
+                                data_directory=f"{os.getcwd()}/test_data",
+                                panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx")
     exp.save()
     yield exp
     exp.delete(delete_panel=True)
 
 
 def test_check_excel_template():
-    mappings, nomenclature = check_excel_template(f"{assets.__path__._path[0]}/test_panel.xlsx")
+    mappings, nomenclature = experiment.check_excel_template(f"{assets.__path__._path[0]}/test_panel.xlsx")
     assert isinstance(mappings, pd.DataFrame)
     assert isinstance(nomenclature, pd.DataFrame)
 
@@ -27,9 +25,25 @@ def test_check_excel_template():
 def test_check_duplicates():
     x = ["Marker1", "Marker1", "Marker2", "Marker3"]
     with pytest.warns(UserWarning) as warn:
-        y = _check_duplication(x)
+        y = experiment._check_duplication(x)
     assert str(warn.list[0].message) == "Duplicate channel/markers identified: ['Marker1']"
     assert y
+
+
+@pytest.mark.parametrize("query,expected,regex,permutations,case",
+                         [("CD-45 RA", "test", r"^CD[\-\s]*45[\-\s]*RA$", "CD--45RA", False),
+                          ("CD--45RA", "test", r"^CD[\-\s]*45[\-\s]*RA$", "CD--45RA", False),
+                          ("Cd-45 ra", None, r"^CD[\-\s]*45[\-\s]*RA$", "CD--45RA", True),
+                          ("Cd-45 ra", "test", r"^CD[\-\s]*45[\-\s]*RA$", "CD--45RA", False),
+                          ("45RA", "test", r"^CD[\-\s]*45[\-\s]*RA$", "45RA", False),
+                          ("CD4", None, r"^CD[\-\s]*45[\-\s]*RA$", "CD--45RA", False)])
+def test_query_normalised_name(query, expected, regex, permutations, case):
+    test_standard = experiment.NormalisedName(standard="test",
+                                              regex_str=regex,
+                                              permutations=permutations,
+                                              case_sensitive=case)
+    result = test_standard.query(query)
+    assert result == expected
 
 
 def test_panel_create_from_excel():
