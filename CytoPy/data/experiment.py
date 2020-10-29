@@ -335,7 +335,7 @@ class Panel(mongoengine.Document):
     will standardise data upon input; when an fcs file is created in the database, it will be associated to
     an experiment and the channel/marker definitions in the fcs file will be mapped to the associated panel.
 
-    Parameters
+    Attributes
     -----------
     panel_name: str, required
         unique identifier for the panel
@@ -471,9 +471,12 @@ def _data_dir_append_leading_char(path: str):
 
 class Experiment(mongoengine.Document):
     """
-    Document representation of Flow Cytometry experiment
+    Container for Cytometry experiment. The correct way to generate and load these objects is using the
+    Project.add_experiment method (see CytoPy.data.project.Project). This object provides access
+    to all experiment-wide functionality. New files can be added to an experiment using the
+    add_new_sample method.
 
-    Parameters
+    Attributes
     -----------
     experiment_id: str, required
         Unique identifier for experiment
@@ -610,30 +613,6 @@ class Experiment(mongoengine.Document):
             if sample_id == 'all' or f.primary_id == sample_id:
                 f.populations = []
                 f.save()
-
-    def delete_gating_templates(self,
-                                template_name: str) -> None:
-        """
-        Remove association and delete gating template. If template_name is 'all',
-        then all associated gating templates will be deleted and removed
-
-        Parameters
-        ----------
-        template_name: str
-            Name of template to remove; if 'all', then all associated gating templates will be deleted and removed
-
-        Returns
-        --------
-        None
-        """
-        for g in self.gating_templates:
-            if template_name == 'all' or g.template_name == template_name:
-                g.delete()
-        if template_name == 'all':
-            self.gating_templates = []
-        else:
-            self.gating_templates = [g for g in self.gating_templates if g.template_name != template_name]
-        self.save()
 
     def sample_exists(self, sample_id: str) -> bool:
         """

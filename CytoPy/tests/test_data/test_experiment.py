@@ -64,6 +64,7 @@ def test_query_normalised_name_list():
     for x in ["hla dr", "hla-dr", "HLA-dr"]:
         assert experiment._query_normalised_list(x, ref=ref) == "HLA-DR"
 
+
 def test_panel_create_from_excel():
     test = experiment.Panel(panel_name="Test Panel")
     test.create_from_excel(f"{assets.__path__._path[0]}/test_panel.xlsx")
@@ -79,9 +80,9 @@ def test_panel_create_from_excel():
 
 def test_data_dir_append_leading_char():
     assert experiment._data_dir_append_leading_char("C:\\some\\path\\") == "C:\\some\path\\"
-    assert _data_dir_append_leading_char("C:\\some\\path") == "C:\\some\path\\"
-    assert _data_dir_append_leading_char("/some/path/") == "/some/path/"
-    assert _data_dir_append_leading_char("/some/path") == "/some/path/"
+    assert experiment._data_dir_append_leading_char("C:\\some\\path") == "C:\\some\path\\"
+    assert experiment._data_dir_append_leading_char("/some/path/") == "/some/path/"
+    assert experiment._data_dir_append_leading_char("/some/path") == "/some/path/"
 
 
 def test_exp_init(example_experiment):
@@ -103,8 +104,8 @@ def test_delete(example_experiment):
                                       compensate=False)
     example_experiment.save()
     example_experiment.delete()
-    assert len(Experiment.objects()) == 0
-    assert len(FileGroup.objects()) == 0
+    assert len(experiment.Experiment.objects()) == 0
+    assert len(experiment.FileGroup.objects()) == 0
 
 
 def test_exp_update_data_dir(example_experiment):
