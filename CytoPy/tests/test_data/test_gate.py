@@ -292,10 +292,6 @@ def test_threshold_2d():
     assert len(np.intersect1d(x_neg, y_neg)) == results.get("--").shape[0]
 
 
-def norm(x):
-    return list(map(lambda i: (i - min(x)) / (max(x) - min(x)), x))
-
-
 def test_smoothed_peak_finding():
     n1 = np.random.normal(loc=0.2, scale=1, size=500)
     n2 = np.random.normal(loc=2.5, scale=0.2, size=250)
