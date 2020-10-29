@@ -1,6 +1,4 @@
-from ...data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ChildThreshold, ChildPolygon, \
-    Population, threshold_1d, threshold_2d, smoothed_peak_finding, find_local_minima, \
-    find_inflection_point
+from ...data import gate
 from ...data.population import create_signature
 from ...data.geometry import ThresholdGeom, PolygonGeom, create_polygon, create_convex_hull
 from scipy.spatial.distance import euclidean
@@ -11,38 +9,39 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import pytest
+
 np.random.seed(42)
 
 
-@pytest.mark.parametrize("klass,method", [(Gate, "manual"),
-                                          (ThresholdGate, "density"),
-                                          (PolygonGate, "manual"),
-                                          (EllipseGate, "GaussianMixture")])
+@pytest.mark.parametrize("klass,method", [(gate.Gate, "manual"),
+                                          (gate.ThresholdGate, "density"),
+                                          (gate.PolygonGate, "manual"),
+                                          (gate.EllipseGate, "GaussianMixture")])
 def test_gate_init(klass, method):
-    gate = klass(gate_name="test",
-                 parent="test parent",
-                 x="X",
-                 y="Y",
-                 method=method,
-                 dim_reduction=dict(method="UMAP", kwargs={"n_neighbours": 100}))
-    assert gate.gate_name == "test"
-    assert gate.parent == "test parent"
-    assert gate.x == "X"
-    assert gate.y == "Y"
-    assert gate.method == method
-    assert gate.dim_reduction.get("method") == "UMAP"
-    assert gate.dim_reduction.get("kwargs").get("n_neighbours") == 100
+    g = klass(gate_name="test",
+              parent="test parent",
+              x="X",
+              y="Y",
+              method=method,
+              dim_reduction=dict(method="UMAP", kwargs={"n_neighbours": 100}))
+    assert g.gate_name == "test"
+    assert g.parent == "test parent"
+    assert g.x == "X"
+    assert g.y == "Y"
+    assert g.method == method
+    assert g.dim_reduction.get("method") == "UMAP"
+    assert g.dim_reduction.get("kwargs").get("n_neighbours") == 100
 
 
 def test_transform_none():
-    gate = Gate(gate_name="test",
-                parent="test parent",
-                x="X",
-                y="Y",
-                method="manual")
+    g = gate.Gate(gate_name="test",
+                  parent="test parent",
+                  x="X",
+                  y="Y",
+                  method="manual")
     data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
                          "Y": np.random.normal(1, scale=0.5, size=1000)})
-    transformed = gate._transform(data)
+    transformed = g._transform(data)
     assert isinstance(transformed, pd.DataFrame)
     assert transformed.shape[0] == 1000
     assert transformed.shape[1] == 2
@@ -52,15 +51,15 @@ def test_transform_none():
 
 
 def test_transform_x():
-    gate = Gate(gate_name="test",
-                parent="test parent",
-                x="X",
-                y="Y",
-                method="manual",
-                transformations={"x": "logicle"})
+    g = gate.Gate(gate_name="test",
+                  parent="test parent",
+                  x="X",
+                  y="Y",
+                  method="manual",
+                  transformations={"x": "logicle"})
     data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
                          "Y": np.random.normal(1, scale=0.5, size=1000)})
-    transformed = gate._transform(data)
+    transformed = g._transform(data)
     assert isinstance(transformed, pd.DataFrame)
     assert transformed.shape[0] == 1000
     assert transformed.shape[1] == 2
@@ -71,16 +70,16 @@ def test_transform_x():
 
 
 def test_transform_xy():
-    gate = Gate(gate_name="test",
-                parent="test parent",
-                x="X",
-                y="Y",
-                method="manual",
-                transformations={"x": "logicle",
-                                 "y": "logicle"})
+    g = gate.Gate(gate_name="test",
+                  parent="test parent",
+                  x="X",
+                  y="Y",
+                  method="manual",
+                  transformations={"x": "logicle",
+                                   "y": "logicle"})
     data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
                          "Y": np.random.normal(1, scale=0.5, size=1000)})
-    transformed = gate._transform(data)
+    transformed = g._transform(data)
     assert isinstance(transformed, pd.DataFrame)
     assert transformed.shape[0] == 1000
     assert transformed.shape[1] == 2
@@ -95,15 +94,15 @@ def test_transform_xy():
                                     {"method": "faithful"},
                                     {"method": "density"}])
 def test_downsample(kwargs):
-    gate = Gate(gate_name="test",
-                parent="test parent",
-                x="X",
-                y="Y",
-                method="manual",
-                sampling=kwargs)
+    g = gate.Gate(gate_name="test",
+                  parent="test parent",
+                  x="X",
+                  y="Y",
+                  method="manual",
+                  sampling=kwargs)
     data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
                          "Y": np.random.normal(1, scale=0.5, size=1000)})
-    sample = gate._downsample(data=data)
+    sample = g._downsample(data=data)
     if kwargs.get("method") is None:
         assert sample is None
     else:
@@ -116,24 +115,24 @@ def test_upsample():
                               centers=3,
                               random_state=42)
     data = pd.DataFrame(data, columns=["X", "Y"])
-    gate = Gate(gate_name="test",
-                parent="test parent",
-                x="X",
-                y="Y",
-                method="manual",
-                sampling={"method": "uniform",
-                          "frac": 0.5})
-    sample = gate._downsample(data=data)
+    g = gate.Gate(gate_name="test",
+                  parent="test parent",
+                  x="X",
+                  y="Y",
+                  method="manual",
+                  sampling={"method": "uniform",
+                            "frac": 0.5})
+    sample = g._downsample(data=data)
     sample_labels = labels[sample.index.values]
     pops = list()
     for x in np.unique(sample_labels):
         idx = sample.index.values[np.where(sample_labels == x)[0]]
-        pops.append(Population(population_name=f"Pop_{x}",
-                               parent="root",
-                               index=idx[:498]))
-    pops = gate._upsample(data=data, sample=sample, populations=pops)
+        pops.append(gate.Population(population_name=f"Pop_{x}",
+                                    parent="root",
+                                    index=idx[:498]))
+    pops = g._upsample(data=data, sample=sample, populations=pops)
     assert isinstance(pops, list)
-    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p, gate.Population) for p in pops])
     assert all([len(p.index) == 1000 for p in pops])
     for x in np.unique(labels):
         p = [i for i in pops if i.population_name == f"Pop_{x}"][0]
@@ -141,33 +140,33 @@ def test_upsample():
 
 
 def test_dim_reduction():
-    gate = Gate(gate_name="test",
-                parent="test parent",
-                x="X",
-                y="Y",
-                method="manual",
-                dim_reduction={"method": "UMAP",
-                               "n_neighbors": 100})
+    g = gate.Gate(gate_name="test",
+                  parent="test parent",
+                  x="X",
+                  y="Y",
+                  method="manual",
+                  dim_reduction={"method": "UMAP",
+                                 "n_neighbors": 100})
     data = pd.DataFrame({"X": np.random.normal(1, 0.5, 1000),
                          "Y": np.random.normal(1, 0.5, 1000),
                          "Z": np.random.normal(1, 0.5, 1000),
                          "W": np.random.normal(1, 0.5, 1000)})
-    data = gate._dim_reduction(data=data)
-    assert gate.x == "UMAP1"
-    assert gate.y == "UMAP2"
+    data = g._dim_reduction(data=data)
+    assert g.x == "UMAP1"
+    assert g.y == "UMAP2"
     assert data.shape == (1000, 6)
     assert all([f"UMAP{i + 1}" in data.columns for i in range(2)])
 
 
 @pytest.mark.parametrize("d", ["++", "--", "+-", "+++", "+ -"])
 def test_threshold_add_child_invalid_1d(d):
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              method="manual",
-                              x="X")
-    child = ChildThreshold(name="test child",
-                           definition=d,
-                           geom=ThresholdGeom(x="X", x_threshold=0.56, y_threshold=0.75))
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   method="manual",
+                                   x="X")
+    child = gate.ChildThreshold(name="test child",
+                                definition=d,
+                                geom=ThresholdGeom(x="X", x_threshold=0.56, y_threshold=0.75))
     with pytest.raises(AssertionError) as err:
         threshold.add_child(child)
     assert str(err.value) == "Invalid child definition, should be either '+' or '-'"
@@ -175,29 +174,29 @@ def test_threshold_add_child_invalid_1d(d):
 
 @pytest.mark.parametrize("d", ["+", "-", "+--", "+++", "+ -"])
 def test_threshold_add_child_invalid_2d(d):
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              x="X",
-                              y="Y",
-                              method="manual")
-    child = ChildThreshold(name="test child",
-                           definition=d,
-                           geom=ThresholdGeom(x_threshold=0.56, y_threshold=0.75))
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   x="X",
+                                   y="Y",
+                                   method="manual")
+    child = gate.ChildThreshold(name="test child",
+                                definition=d,
+                                geom=ThresholdGeom(x_threshold=0.56, y_threshold=0.75))
     with pytest.raises(AssertionError) as err:
         threshold.add_child(child)
     assert str(err.value) == "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
 
 
 def test_threshold_add_child():
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              x="X",
-                              y="Y",
-                              method="manual",
-                              transformations={"x": "logicle"})
-    child = ChildThreshold(name="test child",
-                           definition="++",
-                           geom=ThresholdGeom(x_threshold=0.56, y_threshold=0.75))
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   x="X",
+                                   y="Y",
+                                   method="manual",
+                                   transformations={"x": "logicle"})
+    child = gate.ChildThreshold(name="test child",
+                                definition="++",
+                                geom=ThresholdGeom(x_threshold=0.56, y_threshold=0.75))
     threshold.add_child(child)
     assert len(threshold.children)
     assert threshold.children[0].geom.x == threshold.x
@@ -207,27 +206,27 @@ def test_threshold_add_child():
 
 
 def test_threshold_match_children_1d():
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              x="X",
-                              method="density")
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   x="X",
+                                   method="density")
     data = np.random.normal(loc=1., scale=1.5, size=1000)
-    threshold.add_child(ChildThreshold(name="positive",
-                                       definition="+",
-                                       geom=ThresholdGeom(x_threshold=0.5)))
-    threshold.add_child(ChildThreshold(name="negative",
-                                       definition="-",
-                                       geom=ThresholdGeom(x_threshold=0.5)))
-    pos = Population(population_name="p1",
-                     parent="root",
-                     definition="+",
-                     geom=ThresholdGeom(x_threshold=0.6),
-                     index=data[np.where(data >= 0.6)])
-    neg = Population(population_name="p2",
-                     parent="root",
-                     definition="-",
-                     geom=ThresholdGeom(x_threshold=0.6),
-                     index=data[np.where(data >= 0.6)])
+    threshold.add_child(gate.ChildThreshold(name="positive",
+                                            definition="+",
+                                            geom=ThresholdGeom(x_threshold=0.5)))
+    threshold.add_child(gate.ChildThreshold(name="negative",
+                                            definition="-",
+                                            geom=ThresholdGeom(x_threshold=0.5)))
+    pos = gate.Population(population_name="p1",
+                          parent="root",
+                          definition="+",
+                          geom=ThresholdGeom(x_threshold=0.6),
+                          index=data[np.where(data >= 0.6)])
+    neg = gate.Population(population_name="p2",
+                          parent="root",
+                          definition="-",
+                          geom=ThresholdGeom(x_threshold=0.6),
+                          index=data[np.where(data >= 0.6)])
     pops = threshold._match_to_children([neg, pos])
     pos = [p for p in pops if p.definition == "+"][0]
     assert pos.population_name == "positive"
@@ -236,30 +235,30 @@ def test_threshold_match_children_1d():
 
 
 def test_threshold_match_children_2d():
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              x="X",
-                              y="Y",
-                              method="density")
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   x="X",
+                                   y="Y",
+                                   method="density")
     x = np.random.normal(loc=1., scale=1.5, size=1000)
     y = np.random.normal(loc=1., scale=1.5, size=1000)
     data = pd.DataFrame({"X": x, "Y": y})
-    threshold.add_child(ChildThreshold(name="positive",
-                                       definition="++,+-",
-                                       geom=ThresholdGeom(x_threshold=0.5)))
-    threshold.add_child(ChildThreshold(name="negative",
-                                       definition="--,-+",
-                                       geom=ThresholdGeom(x_threshold=0.5)))
-    pos = Population(population_name="p1",
-                     parent="root",
-                     definition="++",
-                     geom=ThresholdGeom(x_threshold=0.6),
-                     index=data[data.X >= 0.6].index.values)
-    neg = Population(population_name="p2",
-                     parent="root",
-                     definition="--,-+",
-                     geom=ThresholdGeom(x_threshold=0.6),
-                     index=data[data.X < 0.6].index.values)
+    threshold.add_child(gate.ChildThreshold(name="positive",
+                                            definition="++,+-",
+                                            geom=ThresholdGeom(x_threshold=0.5)))
+    threshold.add_child(gate.ChildThreshold(name="negative",
+                                            definition="--,-+",
+                                            geom=ThresholdGeom(x_threshold=0.5)))
+    pos = gate.Population(population_name="p1",
+                          parent="root",
+                          definition="++",
+                          geom=ThresholdGeom(x_threshold=0.6),
+                          index=data[data.X >= 0.6].index.values)
+    neg = gate.Population(population_name="p2",
+                          parent="root",
+                          definition="--,-+",
+                          geom=ThresholdGeom(x_threshold=0.6),
+                          index=data[data.X < 0.6].index.values)
     pops = threshold._match_to_children([neg, pos])
     pos = [p for p in pops if p.definition == "++"][0]
     assert pos.population_name == "positive"
@@ -270,7 +269,7 @@ def test_threshold_match_children_2d():
 def test_threshold_1d():
     x = np.random.normal(loc=1., scale=1.5, size=1000)
     data = pd.DataFrame({"X": x})
-    results = threshold_1d(data=data, x="X", x_threshold=0.5)
+    results = gate.threshold_1d(data=data, x="X", x_threshold=0.5)
     assert len(results.keys()) == 2
     assert all(isinstance(df, pd.DataFrame) for df in results.values())
     assert len(np.where(x >= 0.5)[0]) == results.get("+").shape[0]
@@ -282,7 +281,7 @@ def test_threshold_2d():
     y = np.random.normal(loc=1., scale=1.5, size=1000)
     data = pd.DataFrame({"X": x,
                          "Y": y})
-    results = threshold_2d(data=data, x="X", y="Y", x_threshold=0.5, y_threshold=0.5)
+    results = gate.threshold_2d(data=data, x="X", y="Y", x_threshold=0.5, y_threshold=0.5)
     assert len(results.keys()) == 4
     assert all(isinstance(df, pd.DataFrame) for df in results.values())
     x_pos, y_pos = np.where(x >= 0.5)[0], np.where(y >= 0.5)[0]
@@ -297,30 +296,12 @@ def norm(x):
     return list(map(lambda i: (i - min(x)) / (max(x) - min(x)), x))
 
 
-def test_create_signature():
-    d = {"x": [15, 22, 80, 32],
-         "y": [55, 32, 10, 11],
-         "z": [42, 87, 91, 10]}
-    d_norm = {k: norm(x) for k, x in d.items()}
-    example = pd.DataFrame(d)
-    x = create_signature(example)
-    y = create_signature(example, summary_method=np.mean)
-    z = create_signature(example, idx=[1, 2], summary_method=np.mean)
-    assert isinstance(x, dict)
-    assert isinstance(y, dict)
-    assert isinstance(z, dict)
-    for i in ["x", "y", "z"]:
-        assert pytest.approx(x.get(i), 0.001) == np.median(d_norm.get(i))
-        assert pytest.approx(y.get(i), 0.001) == np.mean(d_norm.get(i))
-        assert pytest.approx(z.get(i), 0.001) == np.mean(np.array(d_norm.get(i))[[1, 2]])
-
-
 def test_smoothed_peak_finding():
     n1 = np.random.normal(loc=0.2, scale=1, size=500)
     n2 = np.random.normal(loc=2.5, scale=0.2, size=250)
     n3 = np.random.normal(loc=6.5, scale=0.5, size=500)
     data = np.hstack([n1, n2, n3])
-    smoothed, peaks = smoothed_peak_finding(p=data)
+    smoothed, peaks = gate.smoothed_peak_finding(p=data)
     assert isinstance(smoothed, np.ndarray)
     assert isinstance(peaks, np.ndarray)
     assert len(peaks) == 2
@@ -334,22 +315,22 @@ def test_find_local_minima():
     peak1 = np.where(y == np.max(y[np.where(x < 6)]))[0][0]
     peak2 = np.where(y == np.max(y[np.where(x > 6)]))[0][0]
     minima = x[np.where(y == np.min(y[np.where((x > 4) & (x < 7))]))[0][0]]
-    assert find_local_minima(p=y, x=x, peaks=np.array([peak1, peak2])) == minima
+    assert gate.find_local_minima(p=y, x=x, peaks=np.array([peak1, peak2])) == minima
 
 
 def test_find_inflection_point():
     np.random.seed(42)
     n1 = np.random.normal(loc=2, scale=1, size=1000)
     x, y = FFTKDE(kernel='gaussian', bw='silverman').fit(n1).evaluate()
-    inflection_point = find_inflection_point(x=x, p=y, peak_idx=np.argmax(y),
-                                             incline=False)
+    inflection_point = gate.find_inflection_point(x=x, p=y, peak_idx=int(np.argmax(y)),
+                                                  incline=False)
     plt.plot(x, y)
     plt.axvline(inflection_point, c="r")
     plt.title("Test inflection point; incline=False")
     plt.show()
     assert 3 < inflection_point < 4
-    inflection_point = find_inflection_point(x=x, p=y, peak_idx=np.argmax(y),
-                                             incline=True)
+    inflection_point = gate.find_inflection_point(x=x, p=y, peak_idx=int(np.argmax(y)),
+                                                  incline=True)
     plt.plot(x, y)
     plt.axvline(inflection_point, c="r")
     plt.title("Test inflection point; incline=True")
@@ -363,10 +344,10 @@ def test_threshold_fit_1d():
     n2 = np.random.normal(loc=2.5, scale=0.2, size=250)
     n3 = np.random.normal(loc=6.5, scale=0.5, size=500)
     data = pd.DataFrame({"X": np.hstack([n1, n2, n3])})
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              x="X",
-                              method="density")
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   x="X",
+                                   method="density")
     threshold.fit(data=data)
     assert len(threshold.children) == 2
     assert threshold.children[0].geom.x_threshold == threshold.children[1].geom.x_threshold
@@ -380,11 +361,11 @@ def test_threshold_fit_2d():
                               centers=[(1., 1.), (1., 5.), (5., 0.2)],
                               random_state=42)
     data = pd.DataFrame({"X": data[:, 0], "Y": data[:, 1]})
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              x="X",
-                              y="Y",
-                              method="density")
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   x="X",
+                                   y="Y",
+                                   method="density")
     threshold.fit(data)
     assert len(threshold.children) == 4
     assert len(set([c.geom.x_threshold for c in threshold.children])) == 1
@@ -400,16 +381,16 @@ def test_threshold_predict_1d():
     n2 = np.random.normal(loc=2.5, scale=0.2, size=250)
     n3 = np.random.normal(loc=6.5, scale=0.5, size=500)
     data = pd.DataFrame({"X": np.hstack([n1, n2, n3])})
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              x="X",
-                              method="density")
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   x="X",
+                                   method="density")
     threshold.fit(data=data)
     new_data = pd.DataFrame({"X": np.hstack([np.random.normal(loc=0.2, scale=1, size=500),
                                              np.random.normal(loc=6.5, scale=0.5, size=500)])})
     pops = threshold.predict(new_data)
     assert len(pops) == 2
-    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p, gate.Population) for p in pops])
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
     assert all([p.geom.x == threshold.x for p in pops])
     assert all([p.geom.y == threshold.y for p in pops])
@@ -430,11 +411,11 @@ def test_threshold_predict_2d():
                          centers=[(1., 1.), (1., 5.), (5., 0.2)],
                          random_state=42)
     data = pd.DataFrame({"X": data[:, 0], "Y": data[:, 1]})
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              x="X",
-                              y="Y",
-                              method="density")
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   x="X",
+                                   y="Y",
+                                   method="density")
     threshold.fit(data=data)
     new_data, _ = make_blobs(n_samples=3000,
                              n_features=2,
@@ -443,7 +424,7 @@ def test_threshold_predict_2d():
     new_data = pd.DataFrame({"X": new_data[:, 0], "Y": new_data[:, 1]})
     pops = threshold.predict(new_data)
     assert len(pops) == 4
-    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p, gate.Population) for p in pops])
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
     assert all([p.geom.x == threshold.x for p in pops])
     assert all([p.geom.y == threshold.y for p in pops])
@@ -473,10 +454,10 @@ def test_threshold_fit_predict_1d():
     n2 = np.random.normal(loc=2.5, scale=0.2, size=250)
     n3 = np.random.normal(loc=6.5, scale=0.5, size=500)
     data = pd.DataFrame({"X": np.hstack([n1, n2, n3])})
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              x="X",
-                              method="density")
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   x="X",
+                                   method="density")
     threshold.fit(data=data)
     threshold.label_children({"+": "Positive",
                               "-": "Negative"})
@@ -484,7 +465,7 @@ def test_threshold_fit_predict_1d():
                                              np.random.normal(loc=6.5, scale=0.5, size=1000)])})
     pops = threshold.fit_predict(new_data)
     assert len(pops) == 2
-    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p, gate.Population) for p in pops])
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
     assert all([p.geom.x == threshold.x for p in pops])
     assert all([p.geom.y == threshold.y for p in pops])
@@ -506,11 +487,11 @@ def test_threshold_fit_predict_2d():
                          centers=[(1., 1.), (1., 7.), (7., 2.), (7., 6.2)],
                          random_state=42)
     data = pd.DataFrame({"X": data[:, 0], "Y": data[:, 1]})
-    threshold = ThresholdGate(gate_name="test",
-                              parent="test parent",
-                              x="X",
-                              y="Y",
-                              method="density")
+    threshold = gate.ThresholdGate(gate_name="test",
+                                   parent="test parent",
+                                   x="X",
+                                   y="Y",
+                                   method="density")
     threshold.fit(data)
     threshold.label_children({"++": "Top left",
                               "--": "Other",
@@ -523,7 +504,7 @@ def test_threshold_fit_predict_2d():
     data = pd.DataFrame({"X": data[:, 0], "Y": data[:, 1]})
     pops = threshold.fit_predict(data=data)
     assert len(pops) == 2
-    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p, gate.Population) for p in pops])
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
     assert all([p.geom.x == threshold.x for p in pops])
     assert all([p.geom.y == threshold.y for p in pops])
@@ -551,20 +532,20 @@ def create_polygon_gate(klass,
 
 
 def test_polygon_add_child():
-    gate = create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans")
+    g = create_polygon_gate(klass=gate.PolygonGate, method="MiniBatchKMeans")
     data, _ = make_blobs(n_samples=3000,
                          n_features=2,
                          centers=[(1., 1.), (1., 7.), (7., 6.2)],
                          random_state=42)
-    gate.add_child(ChildPolygon(name="test",
-                                geom=PolygonGeom(x_values=np.linspace(0, 1000, 1).tolist(),
-                                                 y_values=np.linspace(0, 1000, 1).tolist())))
-    assert len(gate.children) == 1
-    assert gate.children[0].name == "test"
-    assert gate.children[0].geom.x == gate.x
-    assert gate.children[0].geom.y == gate.y
-    assert gate.children[0].geom.transform_x == gate.transformations.get("x", None)
-    assert gate.children[0].geom.transform_y == gate.transformations.get("y", None)
+    g.add_child(gate.ChildPolygon(name="test",
+                                  geom=PolygonGeom(x_values=np.linspace(0, 1000, 1).tolist(),
+                                                   y_values=np.linspace(0, 1000, 1).tolist())))
+    assert len(g.children) == 1
+    assert g.children[0].name == "test"
+    assert g.children[0].geom.x == g.x
+    assert g.children[0].geom.y == g.y
+    assert g.children[0].geom.transform_x == g.transformations.get("x", None)
+    assert g.children[0].geom.transform_y == g.transformations.get("y", None)
 
 
 def test_polygon_generate_populations():
@@ -574,20 +555,20 @@ def test_polygon_generate_populations():
                               centers=[(1., 1.), (1., 7.), (7., 6.2), (6., 1.)],
                               random_state=42)
     data = pd.DataFrame(data, columns=["X", "Y"])
-    gate = create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans")
+    g = create_polygon_gate(klass=gate.PolygonGate, method="MiniBatchKMeans")
     polys = [Polygon([(-1., -1), (-1, 10), (3, 10), (3, -1), (-1, -1)]),
              Polygon([(4, -1), (8, -1), (8, 3.8), (4, 3.8), (4, -1)]),
              Polygon([(4, 4), (4, 10), (10, 10), (10, 4), (4, 4)])]
-    pops = gate._generate_populations(data=data,
-                                      polygons=polys)
+    pops = g._generate_populations(data=data,
+                                   polygons=polys)
     assert len(pops) == 3
-    assert all([isinstance(p, Population) for p in pops])
+    assert all([isinstance(p, gate.Population) for p in pops])
     assert all([isinstance(p.geom, PolygonGeom) for p in pops])
     for p in pops:
-        assert p.geom.x == gate.x
-        assert p.geom.y == gate.y
-        assert p.geom.transform_x == gate.transformations.get("x", None)
-        assert p.geom.transform_y == gate.transformations.get("y", None)
+        assert p.geom.x == g.x
+        assert p.geom.y == g.y
+        assert p.geom.transform_x == g.transformations.get("x", None)
+        assert p.geom.transform_y == g.transformations.get("y", None)
         assert p.parent == "test parent"
     for name, n in zip(["A", "B", "C"], [2000, 1000, 1000]):
         p = [p for p in pops if p.population_name == name][0]
@@ -604,25 +585,30 @@ def test_polygon_match_to_children():
                               random_state=42)
     data_dict = [{"data": data[np.where(labels == i)],
                   "signature": create_signature(pd.DataFrame(data[np.where(labels == i)], columns=["X", "Y"])),
-                  "poly": create_polygon(*create_convex_hull(data[np.where(labels == i)][:, 0], data[np.where(labels == i)][:, 1]))}
+                  "poly": create_polygon(
+                      *create_convex_hull(data[np.where(labels == i)][:, 0], data[np.where(labels == i)][:, 1]))}
                  for i in range(5)]
-    gate = create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans")
+    g = create_polygon_gate(klass=gate.PolygonGate, method="MiniBatchKMeans")
     for i in [0, 1]:
-        gate.add_child(ChildPolygon(name=f"Child{i + 1}",
-                                    signature=data_dict[i].get("signature"),
-                                    geom=PolygonGeom(x_values=data_dict[i].get("poly").exterior.xy[0],
-                                                     y_values=data_dict[i].get("poly").exterior.xy[1])))
-    pops = gate._generate_populations(data=pd.DataFrame(data, columns=["X", "Y"]),
-                                      polygons=[x.get("poly") for x in data_dict[2:]])
-    pops = gate._match_to_children(pops)
+        g.add_child(gate.ChildPolygon(name=f"Child{i + 1}",
+                                      signature=data_dict[i].get("signature"),
+                                      geom=PolygonGeom(x_values=data_dict[i].get("poly").exterior.xy[0],
+                                                       y_values=data_dict[i].get("poly").exterior.xy[1])))
+    pops = g._generate_populations(data=pd.DataFrame(data, columns=["X", "Y"]),
+                                   polygons=[x.get("poly") for x in data_dict[2:]])
+    pops = g._match_to_children(pops)
     assert len(pops) == 2
     assert {p.population_name for p in pops} == {"Child1", "Child2"}
     assert 1800 < len([p for p in pops if p.population_name == "Child1"][0].index) < 2200
     assert 2800 < len([p for p in pops if p.population_name == "Child2"][0].index) < 4200
 
 
-@pytest.mark.parametrize("gate", [create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans", n_clusters=2),
-                                  create_polygon_gate(klass=EllipseGate, method="GaussianMixture", n_components=2)])
+@pytest.mark.parametrize("gate", [create_polygon_gate(klass=gate.PolygonGate,
+                                                      method="MiniBatchKMeans",
+                                                      n_clusters=2),
+                                  create_polygon_gate(klass=gate.EllipseGate,
+                                                      method="GaussianMixture",
+                                                      n_components=2)])
 def test_polygon_fit(gate):
     data, labels = make_blobs(n_samples=5000,
                               n_features=2,
@@ -633,7 +619,8 @@ def test_polygon_fit(gate):
     gate.fit(data=data)
     assert len(gate.children) == 2
     centroids = [create_polygon(*create_convex_hull(data.loc[np.where(labels == i)]["X"].values,
-                                                    data.loc[np.where(labels == i)]["Y"].values)).centroid.xy for i in np.unique(labels)]
+                                                    data.loc[np.where(labels == i)]["Y"].values)).centroid.xy for i in
+                 np.unique(labels)]
     child_centroids = [create_polygon(*create_convex_hull(c.geom.x_values, c.geom.y_values)).centroid.xy
                        for c in gate.children]
     for c in child_centroids:
@@ -641,8 +628,12 @@ def test_polygon_fit(gate):
         assert sum([x <= 1. for x in distances]) == 1
 
 
-@pytest.mark.parametrize("gate", [create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans", n_clusters=2),
-                                  create_polygon_gate(klass=EllipseGate, method="GaussianMixture", n_components=2)])
+@pytest.mark.parametrize("gate", [create_polygon_gate(klass=gate.PolygonGate,
+                                                      method="MiniBatchKMeans",
+                                                      n_clusters=2),
+                                  create_polygon_gate(klass=gate.EllipseGate,
+                                                      method="GaussianMixture",
+                                                      n_components=2)])
 def test_polygon_predict(gate):
     data, labels = make_blobs(n_samples=5000,
                               n_features=2,
@@ -666,8 +657,12 @@ def test_polygon_predict(gate):
     assert sum([4700 < pl < 5000 for pl in [len(p1.index), len(p2.index)]]) == 1
 
 
-@pytest.mark.parametrize("gate", [create_polygon_gate(klass=PolygonGate, method="MiniBatchKMeans", n_clusters=2),
-                                  create_polygon_gate(klass=EllipseGate, method="GaussianMixture", n_components=2)])
+@pytest.mark.parametrize("gate", [create_polygon_gate(klass=gate.PolygonGate,
+                                                      method="MiniBatchKMeans",
+                                                      n_clusters=2),
+                                  create_polygon_gate(klass=gate.EllipseGate,
+                                                      method="GaussianMixture",
+                                                      n_components=2)])
 def test_polygon_fit_predict(gate):
     data, labels = make_blobs(n_samples=5000,
                               n_features=2,

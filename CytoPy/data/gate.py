@@ -7,7 +7,6 @@ from ..flow.sampling import faithful_downsampling, density_dependent_downsamplin
 from ..flow.dim_reduction import dimensionality_reduction
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
-from multiprocessing import Pool, cpu_count
 from sklearn.cluster import *
 from sklearn.mixture import *
 from hdbscan import HDBSCAN
@@ -26,7 +25,9 @@ import mongoengine
 
 class Child(mongoengine.EmbeddedDocument):
     """
-    Base class for a gate child population
+    Base class for a gate child population. This is representative of the 'population' of cells
+    identified when a gate is first defined and will be used as a template to annotate
+    the populations identified in new data.
     """
     name = mongoengine.StringField()
     meta = {"allow_inheritance": True}
@@ -34,10 +35,14 @@ class Child(mongoengine.EmbeddedDocument):
 
 class ChildThreshold(Child):
     """
-    Child population of a Threshold gate
+    Child population of a Threshold gate. This is representative of the 'population' of cells
+    identified when a gate is first defined and will be used as a template to annotate
+    the populations identified in new data.
 
-    Parameters
+    Attributes
     -----------
+    name: str
+        Name of the child
     definition: str
         Definition of population e.g "+" or "-" for 1 dimensional gate or "++" etc for 2 dimensional gate
     geom: ThresholdGeom
@@ -67,12 +72,19 @@ class ChildThreshold(Child):
 
 class ChildPolygon(Child):
     """
-    Child population of a Polgon or Ellipse gate
+    Child population of a Polgon or Ellipse gate. This is representative of the 'population' of cells
+    identified when a gate is first defined and will be used as a template to annotate
+    the populations identified in new data.
 
-    Parameters
+    Attributes
     -----------
+    name: str
+        Name of the child
     geom: ChildPolygon
         Geometric definition for this child population
+    signature: dict
+        Average of a population feature space (median of each channel); used to match
+        children to newly identified populations for annotating
     """
     geom = mongoengine.EmbeddedDocumentField(PolygonGeom)
     signature = mongoengine.DictField()
@@ -80,7 +92,46 @@ class ChildPolygon(Child):
 
 class Gate(mongoengine.Document):
     """
-    Base class for a Gate
+    Base class for a Gate. A Gate attempts to separate single cell data in one or
+    two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
+    to example data to generate "children"; the populations of cells a user expects to
+    identify. These children are stored and then when the gate is 'fitted' to new data,
+    the resulting populations are matched to the expected children.
+
+    Attributes
+    -----------
+    gate_name: str (required)
+        Name of the gate
+    parent: str (required)
+        Parent population that this gate is applied to
+    x: str (required)
+        Name of the x-axis variable forming the one/two dimensional space this gate
+        is applied to
+    y: str (optional)
+        Name of the y-axis variable forming the two dimensional space this gate
+        is applied to
+    transformations: dict (optional)
+        Transform method to be applied to each dimension, should be a dictionary with
+        keys corresponding to each variable (e.g. "x" and/or "y") and values the
+        transform to apply (e.g. {"x": "logicle"} for logicle transform of x-axis)
+    sampling: dict (optional)
+         Options for downsampling data prior to application of gate. Should contain a
+         key/value pair for desired method e.g ({"method": "uniform"). Available methods
+         are: 'uniform', 'density' or 'faithful'. See CytoPy.flow.sampling for details. Additional
+         keyword arguments should be provided in the sampling dictionary.
+    dim_reduction: dict (optional)
+        Experimental feature. Allows for dimension reduction to be performed prior to
+        applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
+        with a key "method" and the value as any supported method in CytoPy.flow.dim_reduction.
+        Additional keyword arguments should be provided in this dictionary.
+    method: str (required)
+        Name of the underlying algorithm to use. Should have a value of: "manual", "density",
+        "quantile" or correspond to the name of an existing class in Scikit-Learn or HDBSCAN.
+        If you have a method that follows the Scikit-Learn template but isn't currently present
+        in CytoPy and you would like it to be, please contribute to the respository on GitHub
+        or contact burtonrj@cardiff.ac.uk
+    method_kwargs: dict
+        Keyword arguments for initiation of the above method.
     """
     gate_name = mongoengine.StringField(required=True)
     parent = mongoengine.StringField(required=True)
@@ -92,7 +143,6 @@ class Gate(mongoengine.Document):
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
     children = mongoengine.EmbeddedDocumentListField(Child)
-    ctrl = mongoengine.StringField()
 
     meta = {
         'db_alias': 'core',
@@ -257,9 +307,74 @@ class Gate(mongoengine.Document):
 
 class ThresholdGate(Gate):
     """
-    A ThresholdGate is for density based gating that applies one or two-dimensional gates
-    to data in the form of straight lines, parallel to the axis that fall in the area of minimum
-    density.
+    ThresholdGate inherits from Gate. A Gate attempts to separate single cell data in one or
+    two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
+    to example data to generate "children"; the populations of cells a user expects to
+    identify. These children are stored and then when the gate is 'fitted' to new data,
+    the resulting populations are matched to the expected children.
+
+    The ThresholdGate subsets data based on the properties of the estimated probability
+    density function of the underlying data. For each axis, kernel density estimation
+    (KDEpy.FFTKDE) is used to estimate the PDF and a straight line "threshold" applied
+    to the region of minimum density to separate populations.
+    This is achieved using a peak finding algorithm and a smoothing procedure, until either:
+        * Two predominant "peaks" are found and the threshold is taken as the local minima
+        between there peaks
+        * A single peak is detected and the threshold is applied as either the quantile
+        given in method_kwargs or the inflection point on the descending curve.
+
+    Alternatively the "method" can be "manual" for a static gate to be applied; user should
+    provide x_threshold and y_threshold (if two-dimensional) to "method_kwargs", or "method"
+    can be "quantile", where the threshold will be drawn at the given quantile, defined by
+    "q" in "method_kwargs".
+
+    Additional kwargs to control behaviour of ThresholdGate when method is "density"
+    can be given in method_kwargs:
+        *  kernel (default="guassian") - kernel used for KDE calculation
+        (see KDEpy.FFTKDE for avialable kernels)
+        * bw (default="silverman") - bandwidth to use for KDE calculation, can either be
+        "siilverman" or "ISJ" or a float value (see KDEpy)
+        * min_peak_threshold (default=0.05) - percentage of highest recorded peak below
+        which peaks are ignored. E.g. 0.05 would mean any peak less than 5% of the
+        highest peak would be ignored.
+        * peak_boundary (default=0.1) - bounding window around which only the highest peak
+        is considered. E.g. 0.1 would mean that peaks are assessed within a window the
+        size of peak_boundary * length of probability vector and only highest peak within
+        window is kept.
+        inflection_point_kwargs - dictionary; see CytoPy.data.gate.find_inflection_point
+        smoothed_peak_finding_kwargs - dictionary; see CytoPy.data.gate.smoothed_peak_finding
+
+    Attributes
+    -----------
+    gate_name: str (required)
+        Name of the gate
+    parent: str (required)
+        Parent population that this gate is applied to
+    x: str (required)
+        Name of the x-axis variable forming the one/two dimensional space this gate
+        is applied to
+    y: str (optional)
+        Name of the y-axis variable forming the two dimensional space this gate
+        is applied to
+    transformations: dict (optional)
+        Transform method to be applied to each dimension, should be a dictionary with
+        keys corresponding to each variable (e.g. "x" and/or "y") and values the
+        transform to apply (e.g. {"x": "logicle"} for logicle transform of x-axis)
+    sampling: dict (optional)
+         Options for downsampling data prior to application of gate. Should contain a
+         key/value pair for desired method e.g ({"method": "uniform"). Available methods
+         are: 'uniform', 'density' or 'faithful'. See CytoPy.flow.sampling for details. Additional
+         keyword arguments should be provided in the sampling dictionary.
+    dim_reduction: dict (optional)
+        Experimental feature. Allows for dimension reduction to be performed prior to
+        applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
+        with a key "method" and the value as any supported method in CytoPy.flow.dim_reduction.
+        Additional keyword arguments should be provided in this dictionary.
+    method: str (required)
+        Name of the underlying algorithm to use. Should have a value of: "manual", "density",
+        or "quantile"
+    method_kwargs: dict
+        Keyword arguments for initiation of the above method.
     """
     children = mongoengine.EmbeddedDocumentListField(ChildThreshold)
 
@@ -345,7 +460,7 @@ class ThresholdGate(Gate):
 
         Returns
         -------
-        list
+        List
         """
         labeled = list()
         for c in self.children:
@@ -430,7 +545,7 @@ class ThresholdGate(Gate):
 
         Returns
         -------
-        list
+        List
         """
         if self.method == "manual":
             return self._manual()
@@ -478,7 +593,7 @@ class ThresholdGate(Gate):
 
         Returns
         -------
-        list
+        List
         """
         thresholds = [i for i in [self.method_kwargs.get("x_threshold", None),
                                   self.method_kwargs.get("y_threshold", None)] if i is not None]
@@ -537,7 +652,7 @@ class ThresholdGate(Gate):
 
         Returns
         -------
-        list
+        List
             List of predicted Population objects, labelled according to the gates child objects
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
@@ -573,7 +688,7 @@ class ThresholdGate(Gate):
 
         Returns
         -------
-        list
+        List
             List of Population objects
         """
         assert len(self.children) > 0, "Must call 'fit' prior to predict"
@@ -607,7 +722,7 @@ class ThresholdGate(Gate):
 
         Returns
         -------
-        list
+        List
             List of Population objects
         """
         pops = list()
@@ -629,8 +744,58 @@ class ThresholdGate(Gate):
 
 class PolygonGate(Gate):
     """
-    Polygon gates generate polygon shapes that capture populations of varying shapes. These can
-    be generated by any number of clustering algorithms.
+    PolygonGate inherits from Gate. A Gate attempts to separate single cell data in one or
+    two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
+    to example data to generate "children"; the populations of cells a user expects to
+    identify. These children are stored and then when the gate is 'fitted' to new data,
+    the resulting populations are matched to the expected children.
+
+    The PolygonGate subsets data based on the results of an unsupervised learning algorithm
+    such a clustering algorithm. PolygonGate supports any clustering algorithm from the
+    Scikit-Learn machine learning library. Support is extended to any clustering library
+    that follows the Scikit-Learn template, but currently this only includes HDBSCAN.
+    Contributions to extend to other libraries are welcome. The name of the class to use
+    should be provided in "method" along with keyword arguments for initiating this class
+    in "method_kwargs".
+
+    Alternatively the "method" can be "manual" for a static gate to be applied; user should
+    provide x_values and y_values (if two-dimensional) to "method_kwargs" as two arrays,
+    this will be interpreted as the x and y coordinates of the polygon to fit to the data.
+
+    Attributes
+    -----------
+    gate_name: str (required)
+        Name of the gate
+    parent: str (required)
+        Parent population that this gate is applied to
+    x: str (required)
+        Name of the x-axis variable forming the one/two dimensional space this gate
+        is applied to
+    y: str (required)
+        Name of the y-axis variable forming the two dimensional space this gate
+        is applied to
+    transformations: dict (optional)
+        Transform method to be applied to each dimension, should be a dictionary with
+        keys corresponding to each variable (e.g. "x" and/or "y") and values the
+        transform to apply (e.g. {"x": "logicle"} for logicle transform of x-axis)
+    sampling: dict (optional)
+         Options for downsampling data prior to application of gate. Should contain a
+         key/value pair for desired method e.g ({"method": "uniform"). Available methods
+         are: 'uniform', 'density' or 'faithful'. See CytoPy.flow.sampling for details. Additional
+         keyword arguments should be provided in the sampling dictionary.
+    dim_reduction: dict (optional)
+        Experimental feature. Allows for dimension reduction to be performed prior to
+        applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
+        with a key "method" and the value as any supported method in CytoPy.flow.dim_reduction.
+        Additional keyword arguments should be provided in this dictionary.
+    method: str (required)
+        Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
+        to the name of an existing class in Scikit-Learn or HDBSCAN.
+        If you have a method that follows the Scikit-Learn template but isn't currently present
+        in CytoPy and you would like it to be, please contribute to the respository on GitHub
+        or contact burtonrj@cardiff.ac.uk
+    method_kwargs: dict
+        Keyword arguments for initiation of the above method.
     """
     children = mongoengine.EmbeddedDocumentListField(ChildPolygon)
 
@@ -652,7 +817,7 @@ class PolygonGate(Gate):
 
         Returns
         -------
-        list
+        List
             List of Population objects
         """
         pops = list()
@@ -735,7 +900,7 @@ class PolygonGate(Gate):
 
         Returns
         -------
-        list
+        List
         """
         matched_populations = list()
         for child in self.children:
@@ -772,7 +937,7 @@ class PolygonGate(Gate):
 
         Returns
         -------
-        list
+        List
             List of Shapely polygon's
         """
         if self.method == "manual":
@@ -829,7 +994,7 @@ class PolygonGate(Gate):
 
         Returns
         -------
-        list
+        List
             List of predicted Population objects, labelled according to the gates child objects
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
@@ -853,7 +1018,7 @@ class PolygonGate(Gate):
 
         Returns
         -------
-        list
+        List
             List of Population objects
         """
         data = self._transform(data=data)
@@ -867,9 +1032,52 @@ class PolygonGate(Gate):
 
 class EllipseGate(PolygonGate):
     """
-    Ellipse gates generate circular or elliptical gates and can be generated from algorithms that are
-    centroid based (like K-means) or probabilistic methods that estimate the covariance matrix of one
-    or more gaussian components such as mixture models.
+    EllipseGate inherits from PolygonGate. A Gate attempts to separate single cell data in one or
+    two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
+    to example data to generate "children"; the populations of cells a user expects to
+    identify. These children are stored and then when the gate is 'fitted' to new data,
+    the resulting populations are matched to the expected children.
+
+    The EllipseGate uses probabilistic mixture models to subset data into "populations". For
+    each component of the mixture model the covariance matrix is used to generate a confidence
+    ellipse, surrounding data and emulating a gate. EllipseGate can use any of the methods
+    from the Scikit-Learn mixture module. Keyword arguments for the initiation of a class
+    from this module can be given in "method_kwargs".
+
+    Attributes
+    -----------
+    gate_name: str (required)
+        Name of the gate
+    parent: str (required)
+        Parent population that this gate is applied to
+    x: str (required)
+        Name of the x-axis variable forming the one/two dimensional space this gate
+        is applied to
+    y: str (required)
+        Name of the y-axis variable forming the two dimensional space this gate
+        is applied to
+    transformations: dict (optional)
+        Transform method to be applied to each dimension, should be a dictionary with
+        keys corresponding to each variable (e.g. "x" and/or "y") and values the
+        transform to apply (e.g. {"x": "logicle"} for logicle transform of x-axis)
+    sampling: dict (optional)
+         Options for downsampling data prior to application of gate. Should contain a
+         key/value pair for desired method e.g ({"method": "uniform"). Available methods
+         are: 'uniform', 'density' or 'faithful'. See CytoPy.flow.sampling for details. Additional
+         keyword arguments should be provided in the sampling dictionary.
+    dim_reduction: dict (optional)
+        Experimental feature. Allows for dimension reduction to be performed prior to
+        applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
+        with a key "method" and the value as any supported method in CytoPy.flow.dim_reduction.
+        Additional keyword arguments should be provided in this dictionary.
+    method: str (required)
+        Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
+        to the name of an existing class in Scikit-Learn mixture module..
+        If you have a method that follows the Scikit-Learn template but isn't currently present
+        in CytoPy and you would like it to be, please contribute to the repository on GitHub
+        or contact burtonrj@cardiff.ac.uk
+    method_kwargs: dict
+        Keyword arguments for initiation of the above method.
     """
     children = mongoengine.EmbeddedDocumentListField(ChildPolygon)
 
