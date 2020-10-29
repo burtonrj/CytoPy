@@ -174,7 +174,7 @@ class NormalisedName(mongoengine.EmbeddedDocument):
 def _query_normalised_list(x: str or None,
                            ref: List[NormalisedName]) -> str:
     """
-    Internal static method for querying a channel/marker against a reference list of
+    Internal method for querying a channel/marker against a reference list of
     NormalisedName's
 
     Parameters
