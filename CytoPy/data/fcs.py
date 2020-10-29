@@ -197,6 +197,7 @@ class FileGroup(mongoengine.Document):
             f.create_dataset(f"mappings/{ctrl_id}/markers", data=np.array(markers, dtype='S'))
         root = self.get_population(population_name="root")
         root.set_ctrl_index(**{ctrl_id: np.arange(0, data.shape[0])})
+        self.controls.append(ctrl_id)
         self.save()
 
     def _load_populations(self):
