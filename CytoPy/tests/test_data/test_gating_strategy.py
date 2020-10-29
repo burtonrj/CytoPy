@@ -239,8 +239,8 @@ def test_apply_action_subtract(example_experiment):
     new_pop = gs.filegroup.get_population(population_name="subtract_pop2_pop4")
     pop2 = gs.filegroup.get_population(population_name="pop2")
     assert new_pop.parent == "pop1"
-    assert new_pop.n == 15995
-    assert len(new_pop.index) == 15995
+    assert new_pop.n == 14315
+    assert len(new_pop.index) == 14315
     assert isinstance(new_pop.geom, PolygonGeom)
     assert new_pop.geom.x == pop2.geom.x
     assert new_pop.geom.y == pop2.geom.y
@@ -277,7 +277,7 @@ def test_plot_gate(example_experiment):
     gs = create_gatingstrategy_and_load(example_experiment)
     gs = apply_some_gates(gs)
     plt.close("all")
-    gs.plot_gate(gate=gs.gates[0])
+    gs.plot_gate(gate=gs.gates[0].gate_name)
     plt.show()
 
 
@@ -294,7 +294,7 @@ def test_plot_gate_invalid(example_experiment):
     gs = apply_some_gates(gs)
     with pytest.raises(AssertionError) as err:
         gs.plot_gate(gate="test ellipse", y="FS Lin")
-    assert str(err.value) == "Can only override y-axis variable for ThresholdGate"
+    assert str(err.value) == "Can only override y-axis variable for Threshold geometries"
 
 
 def test_plot_backgate(example_experiment):
@@ -323,9 +323,9 @@ def test_plot_population(example_experiment):
 def test_population_stats(example_experiment):
     gs = create_gatingstrategy_and_load(example_experiment)
     gs = apply_some_gates(gs)
-    stats = gs.population_stats(population="root")
+    stats = gs.filegroup.population_stats(population="root")
     assert isinstance(stats, dict)
-    assert stats.get("name") == "root"
+    assert stats.get("population_name") == "root"
     assert stats.get("n") == 30000
     assert stats.get("prop_of_parent") == 1.0
     assert stats.get("prop_of_root") == 1.0

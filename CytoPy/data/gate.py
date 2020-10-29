@@ -124,6 +124,10 @@ class Gate(mongoengine.Document):
         applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in CytoPy.flow.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
+    ctrl: str (optional)
+        If a value is given here it should be the name of a control specimen commonly associated
+        to the samples in an Experiment. When given this signals that the gate is designed to
+        be applied to the control data not the primary data.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", "density",
         "quantile" or correspond to the name of an existing class in Scikit-Learn or HDBSCAN.
@@ -140,6 +144,7 @@ class Gate(mongoengine.Document):
     transformations = mongoengine.DictField()
     sampling = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
+    ctrl = mongoengine.StringField()
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
     children = mongoengine.EmbeddedDocumentListField(Child)
@@ -370,6 +375,10 @@ class ThresholdGate(Gate):
         applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in CytoPy.flow.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
+    ctrl: str (optional)
+        If a value is given here it should be the name of a control specimen commonly associated
+        to the samples in an Experiment. When given this signals that the gate is designed to
+        be applied to the control data not the primary data.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", "density",
         or "quantile"
@@ -788,6 +797,10 @@ class PolygonGate(Gate):
         applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in CytoPy.flow.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
+    ctrl: str (optional)
+        If a value is given here it should be the name of a control specimen commonly associated
+        to the samples in an Experiment. When given this signals that the gate is designed to
+        be applied to the control data not the primary data.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
         to the name of an existing class in Scikit-Learn or HDBSCAN.
