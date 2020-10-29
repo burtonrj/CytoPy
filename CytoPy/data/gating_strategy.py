@@ -9,6 +9,25 @@ import mongoengine
 
 
 class Action(mongoengine.EmbeddedDocument):
+    """
+    An Action represents a process applied to the gates/populations in some gating strategy
+    that is independent of the gates themselves. At the moment this includes merging populations
+    or subtracting one population from another. These actions can appear in a gating strategy
+    and will be applied to new data in an autonomous fashion.
+
+    Attributes
+    ----------
+    action_name: str
+        Name of the action
+    method: str
+        Should have a value of "merge" or "subtract"
+    left: str
+        The population to merge on or subtract from
+    right: str
+        The population to merge with or be subtracted from 'left'
+    new_population_name: str
+        Name of the new population generated from this action
+    """
     action_name = mongoengine.StringField()
     method = mongoengine.StringField(choices=["merge", "subtract"])
     left = mongoengine.StringField()
@@ -18,15 +37,19 @@ class Action(mongoengine.EmbeddedDocument):
 
 class GatingStrategy(mongoengine.Document):
     """
-    Document representation of a gating template; a gating template is a collection of gating objects
-    that can be applied to multiple fcs files or an entire experiment in bulk
+    A GatingTemplate is synonymous to what an immunologist would classically consider
+    a "gating template"; it is a collection of 'gates' (Gate objects, in the case of CytoPy)
+    that can be applied to multiple fcs files or an entire experiment in bulk. A user defines
+    a GatingTemplate using a single example from an experiment, uses the object to preview gates
+    and label child populations, and when satisfied with the performance save the GatingStrategy
+    to the database to be applied to the remaining samples in the Experiment.
 
-    Parameters
+    Attributes
     -----------
     template_name: str, required
         unique identifier for template
     gates: EmbeddedDocumentList
-        list of Gate documents; see Gate
+        list of Gate documents
     creation_date: DateTime
         date of creation
     last_edit: DateTime
@@ -161,6 +184,9 @@ class GatingStrategy(mongoengine.Document):
                    create_plot_kwargs: dict or None = None,
                    plot_gate_kwargs: dict or None = None):
         """
+        Apply a gate to the associated FileGroup. The gate must be previously defined;
+        children associated and labeled. Either a Gate object can be provided or the name
+        of an existing gate saved to this GatingStrategy.
 
         Parameters
         ----------
@@ -375,26 +401,23 @@ class GatingStrategy(mongoengine.Document):
         """
         self.filegroup.delete_populations(populations=populations)
 
-    def delete_action(self,
-                      action_name: str,
-                      remove_populations: bool = True):
-        pass
-
     def plot_gate(self,
                   gate: str,
                   create_plot_kwargs: dict or None = None,
                   **kwargs):
         """
-        Plot a gate. Give either a Gate object or the name of an existing gate in this
-        GatingStrategy
+        Plot a gate. Must provide the name of a Gate currently associated to this GatingStrategy.
+        This will plot the parent population this gate acts on along with the geometries
+        that define the child populations the gate generates.
 
         Parameters
         ----------
         gate: str or Gate or EllipseGate or ThresholdGate or PolygonGate
         create_plot_kwargs: dict
             Keyword arguments for CreatePlot object. See CytoPy.plotting.CreatePlot for details.
-        kwargs: dict
-            Keyword arguments for plot_gate call. See CytoPy.plotting.CreatePlot.plot_gate for details.
+        kwargs:
+            Keyword arguments for plot_gate call.
+            See CytoPy.plotting.CreatePlot.plot_population_geom for details.
 
         Returns
         -------
@@ -422,19 +445,24 @@ class GatingStrategy(mongoengine.Document):
                       create_plot_kwargs: dict or None = None,
                       **kwargs):
         """
+        Given some population as the backdrop (parent) and a list of one or more
+        populations that occur downstream of the parent (overlay), plot the downstream
+        populations as scatter plots over the top of the parent.
 
         Parameters
         ----------
-        parent
-        overlay
-        x
-        y
+        parent: str
+        overlay: list
+        x: str
+        y: str
         create_plot_kwargs
+            Additional keyword arguments passed to CytoPy.flow.plotting.CreatePlot
         kwargs
+            Additional keyword arguments passed to CytoPy.flow.plotting.CreatePlot.backgate
 
         Returns
         -------
-
+        Matplotlib.Axes
         """
         assert parent in self.list_populations(), "Parent population does not exist"
         assert all([x in self.list_populations() for x in overlay]), "One or more given populations could not be found"
@@ -464,20 +492,23 @@ class GatingStrategy(mongoengine.Document):
                         create_plot_kwargs: dict or None = None,
                         **kwargs):
         """
+        Plot an existing population in the associate FileGroup.
 
         Parameters
         ----------
-        population
-        x
-        y
-        transform_x
-        transform_y
-        create_plot_kwargs
+        population: str
+        x: str
+        y: str (optional)
+        transform_x: str (optional; default="logicle")
+        transform_y: str (optional; default="logicle")
+        create_plot_kwargs:
+            Additional keyword arguments passed to CytoPy.flow.plotting.CreatePlot
         kwargs
+            Additional keyword arguments passed to CytoPy.flow.plotting.CreatePlot.plot
 
         Returns
         -------
-
+        Matplotlib.Axes
         """
         assert population in self.list_populations(), f"{population} does not exist"
         data = self.filegroup.load_population_df(population=population,
@@ -491,14 +522,17 @@ class GatingStrategy(mongoengine.Document):
 
     def print_population_tree(self, **kwargs):
         """
+        Print the population tree to stdout.
+        Wraps CytoPy.data.fcs.FileGroup.print_population_tree
 
         Parameters
         ----------
         kwargs
+            See keyword arguments for CytoPy.data.fcs.FileGroup.print_population_tree
 
         Returns
         -------
-
+        None
         """
         self.filegroup.print_population_tree(**kwargs)
 
@@ -630,6 +664,21 @@ class GatingStrategy(mongoengine.Document):
         return gate.fit_predict(data=parent_data)
 
     def save(self, *args, **kwargs):
+        """
+        Save GatingStrategy and the populations generated for the associated
+        FileGroup.
+
+        Parameters
+        ----------
+        args:
+            Positional arguments for mongoengine.document.save call
+        kwargs:
+            Keyword arguments for mongoengine.document.save call
+
+        Returns
+        -------
+        None
+        """
         for g in self.gates:
             g.save()
         super().save(*args, **kwargs)
@@ -649,10 +698,12 @@ class GatingStrategy(mongoengine.Document):
 
         Parameters
         ----------
-        delete_gates
-        remove_associations
-        args
-        kwargs
+        delete_gates: bool (default=True)
+        remove_associations (default=True)
+        args:
+            Positional arguments for mongoengine.document.delete call
+        kwargs:
+            Keyword arguments for mongoengine.document.delete call
 
         Returns
         -------
