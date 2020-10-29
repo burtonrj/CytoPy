@@ -58,7 +58,7 @@ def reload_file():
     return fg
 
 
-def test_create_fcs_file(example_filegroup):
+def test_init_new_fcs_file(example_filegroup):
     fg = example_filegroup
     assert os.path.isfile(f"{os.getcwd()}/test_data/{fg.id}.hdf5")
     experiment = Project.objects(project_id="test").get().load_experiment("test experiment")
@@ -76,6 +76,20 @@ def test_create_fcs_file(example_filegroup):
     assert np.array_equal(ctrl_data.index.values, root.ctrl_index.get("test_ctrl"))
     assert primary_data.shape == (30000, 7)
     assert ctrl_data.shape == (30000, 7)
+
+
+@pytest.mark.parametrize("source,sample_size", [("primary", None),
+                                                ("primary", 1000),
+                                                ("test_ctrl", None),
+                                                ("test_ctrl", 1000)])
+def test_access_data(example_filegroup, source, sample_size):
+    fg = example_filegroup
+    df = fg.data(source, sample_size)
+    assert isinstance(df, pd.DataFrame)
+    if sample_size is not None:
+        assert df.shape == (1000, 7)
+    else:
+        assert df.shape == (30000, 7)
 
 
 def test_add_population(example_filegroup):
@@ -106,6 +120,24 @@ def test_add_population(example_filegroup):
     assert fg.tree.get("pop1").parent == fg.tree.get("root")
     assert fg.tree.get("pop2").parent == fg.tree.get("pop1")
     assert fg.tree.get("pop3").parent == fg.tree.get("pop2")
+
+
+@pytest.mark.parametrize("pop_name,n", [("pop1", 24000), ("pop2", 12000), ("pop3", 6000)])
+def test_load_population_df(example_filegroup, pop_name, n):
+    fg, populations = create_populations(filegroup=example_filegroup)
+    fg.save()
+    df = fg.load_population_df(population=pop_name, transform="logicle")
+    assert isinstance(df, pd.DataFrame)
+    assert df.shape == (n, 7)
+
+
+@pytest.mark.parametrize("pop_name,n", [("pop1", 24000), ("pop2", 12000), ("pop3", 6000)])
+def test_load_ctrl_population_df(example_filegroup, pop_name, n):
+    fg, populations = create_populations(filegroup=example_filegroup)
+    fg.save()
+    df = fg.load_ctrl_population_df(ctrl="test_ctrl", population=pop_name, transform="logicle")
+    assert isinstance(df, pd.DataFrame)
+    assert df.shape == (n, 7)
 
 
 @pytest.mark.parametrize("pop_name", ["root", "pop1", "pop2", "pop3"])
