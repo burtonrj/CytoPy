@@ -1,5 +1,4 @@
-from CytoPy.data.population import Cluster, Population, _check_overlap, _merge_index, \
-    _merge_signatures, _merge_thresholds, _merge_polygons
+from CytoPy.data import population
 from CytoPy.data.geometry import ThresholdGeom, PolygonGeom
 from shapely.geometry import Polygon as Poly
 import numpy as np
@@ -15,6 +14,23 @@ def generate_polygons():
                         y_values=[0, 5, 5, 0, 0])
     return poly1, poly2, poly3
 
+
+def test_create_signature():
+    d = {"x": [15, 22, 80, 32],
+         "y": [55, 32, 10, 11],
+         "z": [42, 87, 91, 10]}
+    d_norm = {k: norm(x) for k, x in d.items()}
+    example = pd.DataFrame(d)
+    x = create_signature(example)
+    y = create_signature(example, summary_method=np.mean)
+    z = create_signature(example, idx=[1, 2], summary_method=np.mean)
+    assert isinstance(x, dict)
+    assert isinstance(y, dict)
+    assert isinstance(z, dict)
+    for i in ["x", "y", "z"]:
+        assert pytest.approx(x.get(i), 0.001) == np.median(d_norm.get(i))
+        assert pytest.approx(y.get(i), 0.001) == np.mean(d_norm.get(i))
+        assert pytest.approx(z.get(i), 0.001) == np.mean(np.array(d_norm.get(i))[[1, 2]])
 
 def test_cluster_init():
     x = Cluster(cluster_id="test",
