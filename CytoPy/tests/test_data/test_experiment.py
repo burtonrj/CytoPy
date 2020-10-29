@@ -46,8 +46,26 @@ def test_query_normalised_name(query, expected, regex, permutations, case):
     assert result == expected
 
 
+def test_query_normalised_name_list():
+    ref = [experiment.NormalisedName(standard="CD4",
+                                     regex_str=r"^\s*CD[\-\s]*4\s*$"),
+           experiment.NormalisedName(standard="HLA-DR",
+                                     regex_str=r"^\s*HLA[\-\s]*DR\s*$"),
+           experiment.NormalisedName(standard="CD45",
+                                     regex_str=r"^\s*CD[\-\s]*45\s*$",
+                                     permutations="FITC-CD45,FITC CD45")]
+    with pytest.raises(AssertionError) as err:
+        experiment._query_normalised_list("CD8", ref=ref)
+    assert str(err.value) == f'Unable to normalise CD8; no match in linked panel'
+    for x in ["CD4", "cd4", "CD-4"]:
+        assert experiment._query_normalised_list(x, ref=ref) == "CD4"
+    for x in ["CD45", "cd45", "FITC-CD45"]:
+        assert experiment._query_normalised_list(x, ref=ref) == "CD45"
+    for x in ["hla dr", "hla-dr", "HLA-dr"]:
+        assert experiment._query_normalised_list(x, ref=ref) == "HLA-DR"
+
 def test_panel_create_from_excel():
-    test = Panel(panel_name="Test Panel")
+    test = experiment.Panel(panel_name="Test Panel")
     test.create_from_excel(f"{assets.__path__._path[0]}/test_panel.xlsx")
     assert all(x in [cm.marker for cm in test.mappings] for x in
                ["FS Lin", "SS Log", "IgG1-FITC", "IgG1-PE", "CD45-ECD", "IgG1-PC5", "IgG1-PC7"])
@@ -60,7 +78,7 @@ def test_panel_create_from_excel():
 
 
 def test_data_dir_append_leading_char():
-    assert _data_dir_append_leading_char("C:\\some\\path\\") == "C:\\some\path\\"
+    assert experiment._data_dir_append_leading_char("C:\\some\\path\\") == "C:\\some\path\\"
     assert _data_dir_append_leading_char("C:\\some\\path") == "C:\\some\path\\"
     assert _data_dir_append_leading_char("/some/path/") == "/some/path/"
     assert _data_dir_append_leading_char("/some/path") == "/some/path/"
