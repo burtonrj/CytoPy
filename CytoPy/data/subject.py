@@ -9,7 +9,7 @@ class MetaDataDictionary(mongoengine.Document):
     Helpful when exploring single cell data that has been associated to meta-data in the Explorer object;
     see flow.clustering.main.Explorer)
 
-    Parameters
+    Attributes
     -----------
     key: str
         name of meta-data (column name)
@@ -24,7 +24,7 @@ class Drug(mongoengine.EmbeddedDocument):
     """
     Document representation of drug administration. Single document instance represents one event.
 
-    Parameters
+    Attributes
     -----------
     name: str
         name of therapy/drug
@@ -44,7 +44,7 @@ class Bug(mongoengine.EmbeddedDocument):
     """
     Document representation of isolated pathogen. Single document instance represents one pathogen.
 
-    Parameters
+    Attributes
     -----------
     gram_status: str, optional
         value of organisms gram status, valid choices are  ['P+ve', 'N-ve', 'Unknown']
@@ -82,7 +82,7 @@ class Biology(mongoengine.EmbeddedDocument):
     """
     Document representation of biological test (blood pathology). Single document instance represents one test.
 
-    Parameters
+    Attributes
     -----------
     test_date: DateTime
         date that test was performed
@@ -111,7 +111,7 @@ class Subject(mongoengine.DynamicDocument):
     Document based representation of subject meta-data. Subjects are stored in a dynamic document, meaning
     new properties can be added ad-hoc.
 
-    Parameters
+    Attributes
     -----------
     subject_id: str, required
         Unique identifier for subject

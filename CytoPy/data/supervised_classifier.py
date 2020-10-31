@@ -91,7 +91,7 @@ class CellClassifier(mongoengine.Document):
             self.print("Down-sampling...")
             self._downsample(x=self.x, y=self.y)
         if self.oversample:
-            self.x, self.y = RandomOverSampler(random_state=42).fit_resample(self.X, self.y)
+            self.x, self.y = RandomOverSampler(random_state=42).fit_resample(self.x, self.y)
         self.print('Ready for training!')
 
     def _scale_data(self, data: pd.DataFrame):
@@ -417,8 +417,8 @@ class SklearnCellClassifier(CellClassifier):
                               x: pd.DataFrame or None = None,
                               y: np.ndarray or None = None,
                               **kwargs):
-        assert sum([i is None for i in [x, y]]) in [0, 2], "If you provide 'x' you must provide 'y' " \
-                                                           "and vice versa."
+        assert sum([i is None for i in [x, y]]) in [0, 2], \
+            "If you provide 'x' you must provide 'y' and vice versa."
         return supervised.confusion_matrix_plots(classifier=self.model,
                                                  x=x or self.x,
                                                  y=y or self.y,
