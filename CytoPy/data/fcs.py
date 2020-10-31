@@ -1,3 +1,33 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+The fcs module houses all functionality for the management and manipulation
+of data pertaining to a single biological specimen. This might include
+multiple cytometry files (primary staining and controls) all of which
+are housed within the FileGroup document. FileGroups should be generated
+and access through the Experiment class.
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from ..feedback import vprint
 from ..flow.tree import construct_tree
 from ..flow.transforms import apply_transform
@@ -6,13 +36,22 @@ from ..flow.sampling import uniform_downsampling
 from .geometry import create_convex_hull
 from .population import Population, merge_populations, PolygonGeom
 from warnings import warn
-from typing import List, Generator, Dict
+from typing import List, Generator
 import pandas as pd
 import numpy as np
 import mongoengine
 import anytree
 import h5py
 import os
+
+__author__ = "Ross Burton"
+__copyright__ = "Copyright 2020, CytoPy"
+__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__license__ = "MIT"
+__version__ = "1.0.0"
+__maintainer__ = "Ross Burton"
+__email__ = "burtonrj@cardiff.ac.uk"
+__status__ = "Production"
 
 
 def _column_names(df: pd.DataFrame,
