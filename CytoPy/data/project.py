@@ -7,19 +7,24 @@ import datetime
 
 class Project(mongoengine.Document):
     """
-    Document representation of Project
+    A project is the highest controlling structure of an analysis and houses
+    all the experiments, their associated FileGroups and the populations
+    contained in each FileGroup and the populations clusters.
 
-    Parameters
+    Project can be used to create new experiments and to load existing experiments
+    to interact with.
+
+    Attributes
     ----------
     project_id: str, required
         unique identifier for project
-    subjects: ListField
+    subjects: list
         List of references for associated subjects; see Subject
     start_date: DateTime
         date of creation
     owner: str, required
         user name of owner
-    fcs_experiments: ListField
+    experiments: list
         List of references for associated fcs files
     """
     project_id = mongoengine.StringField(required=True, unique=True)
