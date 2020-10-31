@@ -34,7 +34,7 @@ from .fcs import FileGroup
 from .subject import Subject
 from .read_write import FCSFile
 from .mapping import ChannelMap
-from typing import Generator, List, Dict
+from typing import Generator, List
 from collections import Counter
 from datetime import datetime
 from warnings import warn
