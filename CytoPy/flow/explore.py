@@ -14,7 +14,8 @@ import scprep
 
 class Explorer:
     """
-    Visualisation class for exploring the results of Gating, cell classification, and clustering.
+    Visualisation class for exploring the results of Gating,
+    cell classification, and clustering.
 
     Parameters
     -----------
@@ -136,6 +137,7 @@ class Explorer:
         * max - the maximum value is stored
         * min - the minimum value is stored
         * median - the median test result is generated and stored
+
         Parameters
         ----------
         test_name: str
@@ -189,6 +191,7 @@ class Explorer:
                          populations: list or None) -> list:
         """
         Generates a list of values to be used for colouring data points in plot
+
         Parameters
         ----------
         label : str
