@@ -1,3 +1,36 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+Once the single cell populations of the FileGroups of an Experiment
+have been classified, you might want to visualise and explore this
+space to better understand the phenotype of your subjects. You might
+also want to compare different classification/clustering techniques
+when identifying single cell subtypes. Whilst doing so, it is helpful
+to associate our data to experimental/clinical meta-data as to not loose
+sight of the overarching question that is at the center of our analysis.
+This functionality is provided by the Explorer class, which contains
+methods for the visual exploration of data.
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
 from ..data.subject import Subject, bugs, hmbpp_ribo, gram_status, biology
 from ..feedback import vprint, progress_bar
 from .dim_reduction import dimensionality_reduction
@@ -14,10 +47,16 @@ import scprep
 
 class Explorer:
     """
-    Visualisation class for exploring the results of Gating,
-    cell classification, and clustering.
+    Visualisation class for exploring the results of autonomous gate,
+    cell classification, and clustering though dimension reduction,
+    interactive scatter plots and customizable heatmaps.
+    Explorer is freeform and only requires that data be provided in
+    the form of a Pandas DataFrame, where the only requirement is
+    that a column named "subject_id" is present; this should be a row
+    identifier relating to a subjects unique ID, linking to their
+    Subject document in the database.
 
-    Parameters
+    Attributes
     -----------
     data: Pandas.DataFrame (optional)
         A DataFrame for visualisation. If not provided, then a path to an existing dataframe should be provided.
@@ -26,20 +65,23 @@ class Explorer:
     verbose: bool (default=True)
         Whether to provide feedback
     """
+
     def __init__(self,
                  data: pd.DataFrame or None = None,
                  path: str or None = None,
                  verbose: bool = True):
         assert data is not None or path is not None, "Must provide a Pandas DataFrame or path string to csv file"
         self.data = data or pd.read_csv(path)
-        assert "pt_id" in self.data.columns, "Please ensure that dataframe is populated with the patient ID " \
-                                             "('pt_id') prior to initialising object"
+        assert "subject_id" in self.data.columns, "Please ensure that dataframe is populated with the subject ID " \
+                                                  "('subject_id') prior to initialising object"
         self.verbose = verbose
         self.print = vprint(verbose)
 
-    def drop_data(self,
+    def mask_data(self,
                   mask: pd.DataFrame) -> None:
-        """Update contained dataframe according to a given mask.
+        """
+        Update contained dataframe according to a given mask.
+
         Parameters
         ----------
         mask : Pandas.DataFrame
@@ -54,6 +96,7 @@ class Explorer:
              path: str) -> None:
         """
         Save the contained dataframe to a new csv file
+
         Parameters
         ----------
         path : str
@@ -67,44 +110,53 @@ class Explorer:
     def load_meta(self,
                   variable: str) -> None:
         """
-        Load meta data for each patient. Must be provided with a variable that is a field with a single value
+        Load meta data for each subject. Must be provided with a variable that is a field with a single value
         NOT an embedded document. A column will be generated in the Pandas DataFrame stored in the attribute 'data'
-        that pertains to the variable given and the value will correspond to that of the patients.
+        that pertains to the variable given and the value will correspond to that of the subjects.
+
         Parameters
         ----------
         variable : str
             field name to populate data with
+
         Returns
         -------
         None
         """
         self.data[variable] = None
-        for pt_id in progress_bar(self.data.pt_id.unique(), verbose=self.verbose):
-            if pt_id is None:
+        for _id in progress_bar(self.data.subject_id.unique(),
+                                verbose=self.verbose):
+            if _id is None:
                 continue
-            p = Subject.objects(subject_id=pt_id).get()
+            p = Subject.objects(subject_id=_id).get()
             try:
-                assert type(p[variable]) != EmbeddedDocumentList, 'Chosen variable is an embedded document.'
-                self.data.loc[self.data.pt_id == pt_id, variable] = p[variable]
+                assert type(p[variable]) != EmbeddedDocumentList, \
+                    'Chosen variable is an embedded document.'
+                self.data.loc[self.data.subject_id == _id, variable] = p[variable]
             except KeyError:
-                warn(f'{pt_id} is missing meta-variable {variable}')
-                self.data.loc[self.data.pt_id == pt_id, variable] = None
+                warn(f'{_id} is missing meta-variable {variable}')
+                self.data.loc[self.data.subject_id == _id, variable] = None
 
     def load_infectious_data(self,
                              multi_org: str = 'list'):
         """
-        Load the bug data from each patient and populate 'data' accordingly. As default variables will be created as
-        follows:
-        * organism_name = If 'multi_org' equals 'list' then multiple organisms will be stored as a comma separated list
-        without duplicates, whereas if the value is 'mixed' then multiple organisms will result in a value of 'mixed'.
+        Load the bug data from each subject and populate 'data' accordingly.
+        As default variables will be created as follows:
+
+        * organism_name = If 'multi_org' equals 'list' then multiple
+          organisms will be stored as a comma separated list without
+          duplicates, whereas if the value is 'mixed' then
+          multiple organisms will result in a value of 'mixed'.
         * organism_type = value of either 'gram positive', 'gram negative', 'virus', 'mixed' or 'fungal'
-        * hmbpp = True or False based on HMBPP status (Note: it only takes one positive organism for this value to be
-        True)
-        * ribo = True or False based on Ribo status (Note: it only takes one positive organism for this value to be
-        True)
+        * hmbpp = True or False based on HMBPP status 
+          (Note: it only takes one positive organism for this value to be True)
+        * ribo = True or False based on Ribo status 
+          (Note: it only takes one positive organism for this value to be True)
+        
         Parameters
         ----------
         multi_org: str (Default value = 'list')
+        
         Returns
         -------
         None
@@ -115,24 +167,26 @@ class Explorer:
         self.data['hmbpp'] = 'Unknown'
         self.data['ribo'] = 'Unknown'
 
-        for pt_id in progress_bar(self.data.pt_id.unique()):
-            if pt_id is None:
+        for subject_id in progress_bar(self.data.subject_id.unique()):
+            if subject_id is None:
                 continue
-            p = Subject.objects(subject_id=pt_id).get()
-            self.data.loc[self.data.pt_id == pt_id, 'organism_name'] = bugs(subject=p, multi_org=multi_org)
-            self.data.loc[self.data.pt_id == pt_id, 'organism_name_short'] = bugs(subject=p, multi_org=multi_org,
-                                                                                  short_name=True)
-            self.data.loc[self.data.pt_id == pt_id, 'hmbpp'] = hmbpp_ribo(subject=p, field='hmbpp_status')
-            self.data.loc[self.data.pt_id == pt_id, 'ribo'] = hmbpp_ribo(subject=p, field='ribo_status')
-            self.data.loc[self.data.pt_id == pt_id, 'gram_status'] = gram_status(subject=p)
+            p = Subject.objects(subject_id=subject_id).get()
+            self.data.loc[self.data.subject_id == subject_id, 'organism_name'] = bugs(subject=p, multi_org=multi_org)
+            self.data.loc[self.data.subject_id == subject_id, 'organism_name_short'] = bugs(subject=p,
+                                                                                            multi_org=multi_org,
+                                                                                            short_name=True)
+            self.data.loc[self.data.subject_id == subject_id, 'hmbpp'] = hmbpp_ribo(subject=p, field='hmbpp_status')
+            self.data.loc[self.data.subject_id == subject_id, 'ribo'] = hmbpp_ribo(subject=p, field='ribo_status')
+            self.data.loc[self.data.subject_id == subject_id, 'gram_status'] = gram_status(subject=p)
 
     def load_biology_data(self,
                           test_name: str,
                           summary_method: str = 'average'):
         """
-        Load the pathology results of a given test from each patient and populate 'data' accordingly. As multiple
+        Load the pathology results of a given test from each subject and populate 'data' accordingly. As multiple
         results may exist for one particular test, a summary method should be provided, this should have a value as
         follows:
+        
         * average - the average test result is generated and stored
         * max - the maximum value is stored
         * min - the minimum value is stored
@@ -143,11 +197,12 @@ class Explorer:
         test_name: str
             Name of test to load
         summary_method: str, (Default value = 'average')
+        
         Returns
         -------
         None
         """
-        self.data[test_name] = self.data['pt_id'].apply(lambda x: biology(x, test_name, summary_method))
+        self.data[test_name] = self.data['subject_id'].apply(lambda x: biology(x, test_name, summary_method))
 
     def dimenionality_reduction(self,
                                 method: str,
@@ -158,6 +213,7 @@ class Explorer:
         """
         Performs dimensionality reduction and saves the result to the contained dataframe. Resulting embeddings
         are saved to columns named as follows: {method}_{n} where n is an integer in range 0 to n_components
+
         Parameters
         ----------
         method : str
@@ -170,6 +226,7 @@ class Explorer:
             If True, existing embeddings will be overwritten (default = False)
         kwargs :
             additional keyword arguments to pass to dim reduction algorithm (see flow.dim_reduction)
+
         Returns
         -------
         None
@@ -224,10 +281,11 @@ class Explorer:
                      dim_reduction_kwargs: dict or None = None,
                      matplotlib_kwargs: dict or None = None) -> plt.Axes:
         """
-        Generate a 2D/3D scatter plot (dimensions depends on the number of components chosen for dimensionality
+        Generate a 2D/3D scatter plot (dimensions depends on the number of components chosen for dimension
         reduction. Each data point is labelled according to the option provided to the label arguments. If a value
         is given to both primary and secondary label, the secondary label colours the background and the primary label
         colours the foreground of each datapoint.
+
         Parameters
         ----------
         label : str
@@ -260,6 +318,7 @@ class Explorer:
         -------
         matplotlib.axes
         """
+
         assert n_components in [2, 3], 'n_components must have a value of 2 or 3'
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         matplotlib_kwargs = matplotlib_kwargs or {}
@@ -284,7 +343,6 @@ class Explorer:
                                                    "Clustering object by calling 'explore'"
             size = data["cluster_size"] * scale_factor
         if n_components == 2:
-
             return scprep.plot.scatter2d(data[embedding_cols],
                                          c=plabel,
                                          ticks=False,
@@ -322,6 +380,7 @@ class Explorer:
         """
         Generate a heatmap of marker expression for either clusters or gated populations
         (indicated with 'heatmap_var' argument)
+
         Parameters
         ----------
         heatmap_var : str
@@ -342,6 +401,7 @@ class Explorer:
             figure title
         col_cluster: bool, (default=False)
             If True and clustermap is True, columns AND rows are clustered
+
         Returns
         -------
         matplotlib.axes
@@ -371,19 +431,22 @@ class Explorer:
                             figsize: tuple = (6, 6),
                             **kwargs):
         """
-        Present a breakdown of how a variable is represented in relation to a cluster/population/meta cluster
+        Present a breakdown of how a variable is represented in relation to a
+        cluster/population/meta cluster
+
         Parameters
         ----------
         x_variable : str
             either cluster, population or meta cluster
         y_variable : str
-            variable for comparison (give a value of 'patient' for patient represenation
+            variable for comparison (give a value of 'subject' for subject represenation
         discrete : bool, (default=True)
             if True, the variable is assumed to be discrete
         mask : Pandas.DataFrame, optional
             a valid Pandas DataFrame mask to subset data prior to plotting (optional)
         figsize : tuple, (default=(6,6))
             tuple defining figure size passed to matplotlib call
+
         Returns
         -------
         matplotlib.axes
@@ -394,11 +457,12 @@ class Explorer:
         assert x_variable in ["cluster_id", "meta_label", "population_label"], f'x_variable must be one of' \
                                                                                f'"cluster_id", "meta_label", ' \
                                                                                f'"population_label"'
-        if y_variable == 'patient':
-            x = d[[x_variable, 'pt_id']].groupby(x_variable)['pt_id'].nunique() / len(d.pt_id.unique()) * 100
+        if y_variable == 'subject':
+            x = d[[x_variable, 'subject_id']].groupby(x_variable)['subject_id'].nunique() / len(
+                d.subject_id.unique()) * 100
             fig, ax = plt.subplots(figsize=figsize)
             x.sort_values().plot(kind='bar', ax=ax, **kwargs)
-            ax.set_ylabel('Patient representation (%)')
+            ax.set_ylabel('subject representation (%)')
             ax.set_xlabel(x_variable)
             return ax
         if y_variable in d.columns and discrete:
@@ -436,6 +500,7 @@ class Explorer:
         Plots two-dimensions as either a scatter plot or a 2D histogram (defaults to 2D histogram if number of
         data-points exceeds 1000). This can be used for close inspection of populations in contrast to their clustering
         assignments. Particularly useful for debugging or inspecting anomalies.
+
         Parameters
         ----------
         primary_id : dict
@@ -458,6 +523,7 @@ class Explorer:
         -------
         matplotlib.axes
         """
+
         # Checks and balances
         def check_id(id_dict, data):
             e = 'Primary/Secondary ID should be a dictionary with keys: "column_name" and "value"'
