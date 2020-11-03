@@ -248,6 +248,7 @@ class GatingStrategy(mongoengine.Document):
         """
         if isinstance(gate, str):
             gate = self.get_gate(gate=gate)
+            add_to_strategy = False
         if add_to_strategy:
             assert gate.gate_name not in self.list_gates(), \
                 f"Gate with name {gate.gate_name} already exists. To continue set add_to_strategy to False"
