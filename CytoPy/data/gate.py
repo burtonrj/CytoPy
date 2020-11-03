@@ -365,9 +365,9 @@ class ThresholdGate(Gate):
     to the region of minimum density to separate populations.
     This is achieved using a peak finding algorithm and a smoothing procedure, until either:
         * Two predominant "peaks" are found and the threshold is taken as the local minima
-        between there peaks
+          between there peaks
         * A single peak is detected and the threshold is applied as either the quantile
-        given in method_kwargs or the inflection point on the descending curve.
+          given in method_kwargs or the inflection point on the descending curve.
 
     Alternatively the "method" can be "manual" for a static gate to be applied; user should
     provide x_threshold and y_threshold (if two-dimensional) to "method_kwargs", or "method"
@@ -377,18 +377,18 @@ class ThresholdGate(Gate):
     Additional kwargs to control behaviour of ThresholdGate when method is "density"
     can be given in method_kwargs:
         *  kernel (default="guassian") - kernel used for KDE calculation
-        (see KDEpy.FFTKDE for avialable kernels)
+           (see KDEpy.FFTKDE for avialable kernels)
         * bw (default="silverman") - bandwidth to use for KDE calculation, can either be
-        "siilverman" or "ISJ" or a float value (see KDEpy)
+          "siilverman" or "ISJ" or a float value (see KDEpy)
         * min_peak_threshold (default=0.05) - percentage of highest recorded peak below
-        which peaks are ignored. E.g. 0.05 would mean any peak less than 5% of the
-        highest peak would be ignored.
+          which peaks are ignored. E.g. 0.05 would mean any peak less than 5% of the
+          highest peak would be ignored.
         * peak_boundary (default=0.1) - bounding window around which only the highest peak
-        is considered. E.g. 0.1 would mean that peaks are assessed within a window the
-        size of peak_boundary * length of probability vector and only highest peak within
-        window is kept.
-        inflection_point_kwargs - dictionary; see CytoPy.data.gate.find_inflection_point
-        smoothed_peak_finding_kwargs - dictionary; see CytoPy.data.gate.smoothed_peak_finding
+          is considered. E.g. 0.1 would mean that peaks are assessed within a window the
+          size of peak_boundary * length of probability vector and only highest peak within
+          window is kept.
+        * inflection_point_kwargs - dictionary; see CytoPy.data.gate.find_inflection_point
+        * smoothed_peak_finding_kwargs - dictionary; see CytoPy.data.gate.smoothed_peak_finding
 
     Attributes
     -----------
@@ -626,6 +626,10 @@ class ThresholdGate(Gate):
                     thresholds.append(find_local_minima(p=p, x=x_grid, peaks=peaks))
                 else:
                     smoothed_peak_finding_kwargs = self.method_kwargs.get("smoothed_peak_finding_kwargs", {})
+                    smoothed_peak_finding_kwargs["min_peak_threshold"] = smoothed_peak_finding_kwargs.get("min_peak_threshold",
+                                                                                                          self.method_kwargs.get("min_peak_threshold", 0.05))
+                    smoothed_peak_finding_kwargs["peak_boundary"] = smoothed_peak_finding_kwargs.get("peak_boundary",
+                                                                                                     self.method_kwargs.get("peak_boundary", 0.1))
                     p, peaks = smoothed_peak_finding(p=p, **smoothed_peak_finding_kwargs)
                     if len(peaks) == 1:
                         thresholds.append(self._process_one_peak(d=d,
