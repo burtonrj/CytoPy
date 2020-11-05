@@ -610,7 +610,9 @@ class Experiment(mongoengine.Document):
         new_panel.create_from_excel(path=panel_definition)
         return new_panel
 
-    def update_data_directory(self, new_path: str):
+    def update_data_directory(self,
+                              new_path: str,
+                              move: bool = True):
         """
         Update the data directory associated to this experiment. This will propagate to all
         associated FileGroup's. WARNING: this function will move the existing data directory
@@ -619,6 +621,9 @@ class Experiment(mongoengine.Document):
         Parameters
         ----------
         new_path: str
+        move: bool (default=True)
+            If True, the data is assumed to be present at the old path and will be
+            moved over to the new path by CytoPy
 
         Returns
         -------
@@ -627,7 +632,8 @@ class Experiment(mongoengine.Document):
         assert os.path.isdir(new_path), "Invalid directory given for new_path"
         for file in self.fcs_files:
             file.data_directory = new_path
-            shutil.move(f"{self.data_directory}/{file.id}", f"{new_path}/{file.id}")
+            if move:
+                shutil.move(f"{self.data_directory}/{file.id}", f"{new_path}/{file.id}")
             file.save()
         self.data_directory = new_path
         shutil.move(self.data_directory, new_path)
