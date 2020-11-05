@@ -129,6 +129,7 @@ class FileGroup(mongoengine.Document):
         assert self.columns_default in ["markers", "channels"], \
             "columns_default must be one of: 'markers', 'channels'"
         super().__init__(*args, **values)
+        self.cell_meta_labels = {}
         if data is not None:
             assert not self.id, "This FileGroup has already been defined"
             assert channels is not None, "Must provide channels to create new FileGroup"
@@ -203,6 +204,7 @@ class FileGroup(mongoengine.Document):
             f.create_group("index/root")
             f.create_group("clusters")
             f.create_group("cluster/root")
+            f.create_group("cell_meta_labels")
         self.populations = [Population(population_name="root",
                                        index=np.arange(0, data.shape[0]),
                                        parent="root",
@@ -250,6 +252,9 @@ class FileGroup(mongoengine.Document):
         """
         assert self._hdf5_exists(), f"Could not locate FileGroup HDF5 record {self.h5path}"
         with h5py.File(self.h5path, "r") as f:
+            if "cell_meta_labels" in f.keys():
+                for meta in f["cell_meta_labels"].keys():
+                    self.cell_meta_labels[meta] = f[f"cell_meta_labels/{meta}"][:]
             for pop in self.populations:
                 k = f"/index/{pop.population_name}"
                 if k + "/primary" not in f.keys():
@@ -739,6 +744,9 @@ class FileGroup(mongoengine.Document):
         """
         root_n = self.get_population("root").n
         with h5py.File(self.h5path, "a") as f:
+            if "cell_meta_labels" in f.keys():
+                for meta, labels in self.cell_meta_labels.items():
+                    f.create_dataset(f'/cell_meta_labels/{meta}', data=labels)
             for p in self.populations:
                 parent_n = self.get_population(p.parent).n
                 p.prop_of_parent = p.n / parent_n
@@ -761,6 +769,10 @@ class FileGroup(mongoengine.Document):
         None
         """
         with h5py.File(self.h5path, "a") as f:
+            if "cell_meta_labels" in f.keys():
+                for meta in self.cell_meta_labels.keys():
+                    if meta in f["cell_meta_labels"]:
+                        del f[f"cell_meta_labels/{meta}"]
             for p in self.populations:
                 if p.population_name in f["index"].keys():
                     if "primary" in f[f"index/{p.population_name}"].keys():
