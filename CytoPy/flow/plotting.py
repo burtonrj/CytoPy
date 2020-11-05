@@ -47,6 +47,15 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 
+__author__ = "Ross Burton"
+__copyright__ = "Copyright 2020, CytoPy"
+__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__license__ = "MIT"
+__version__ = "1.0.0"
+__maintainer__ = "Ross Burton"
+__email__ = "burtonrj@cardiff.ac.uk"
+__status__ = "Production"
+
 
 class CreatePlot:
     """
