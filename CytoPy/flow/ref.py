@@ -1,3 +1,35 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+When creating training data for supervised classification it can be useful
+to generate a new example FileGroup by sampling many or all the FileGroups
+present in an Experiment. This can also be useful if we have suitable data
+to be modelled as after concatenation of all available events (say the data
+was all measured within the same batch). This module contains the
+create_ref_sample function for merging multiple FileGroups to form
+a new FileGroup saved to the experiment.
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from CytoPy.data.experiment import Experiment
 from CytoPy.data.fcs import FileGroup
 from CytoPy.feedback import vprint
@@ -12,12 +44,14 @@ def create_ref_sample(experiment: Experiment,
                       root_population='root',
                       sample_ids: list or None = None,
                       new_file_name: str or None = None,
-                      verbose: bool = True) -> None:
+                      verbose: bool = True,
+                      save_sample_id: bool = True) -> None:
     """
     Given some experiment and a root population that is common to all fcs file groups within this experiment, take
     a sample from each and create a new file group from the concatenation of these data. New file group will be created
     and associated to the given FileExperiment object.
     If no file name is given it will default to '{Experiment Name}_sampled_data'
+
     Parameters
     -----------
     experiment: FCSExperiment
@@ -37,6 +71,9 @@ def create_ref_sample(experiment: Experiment,
         Additional keyword arguments passed to sampling method
     verbose: bool, (default=True)
         Whether to provide feedback
+    save_sample_id: bool (default=True)
+        If True, the sample ID that each cell originates from is saved to the
+        FileGroup cell_meta_labels attribute
     Returns
     --------
     None
@@ -56,8 +93,11 @@ def create_ref_sample(experiment: Experiment,
                            transform=None,
                            **sampling_kwargs)
     features = _common_features(data)
-    data = pd.concat([x[features] for x in data.values()])
-    data = data.reset_index(drop=True)
+    sample_id_idx = []
+    if save_sample_id:
+        for _id, x in data.items():
+            sample_id_idx = sample_id_idx + [_id for _ in range(x.shape[0])]
+    data = pd.concat([x[features] for x in data.values()]).reset_index(drop=True)
     vprint_('Creating new file entry...')
     new_filegroup = FileGroup(primary_id=new_file_name,
                               data_directory=experiment.data_directory,
@@ -65,6 +105,8 @@ def create_ref_sample(experiment: Experiment,
                               channels=features,
                               markers=features)
     new_filegroup.notes = 'sampled data'
+    if save_sample_id:
+        new_filegroup.cell_meta_labels["original_filegroup"] = sample_id_idx
     vprint_('Inserting sampled data to database...')
     new_filegroup.save()
     experiment.fcs_files.append(new_filegroup)
