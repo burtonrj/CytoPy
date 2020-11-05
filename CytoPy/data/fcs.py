@@ -143,7 +143,8 @@ class FileGroup(mongoengine.Document):
                 self._load_populations()
                 self.tree = construct_tree(populations=self.populations)
             except AssertionError as err:
-                warn(f"Failed to load data for {self.primary_id} ({self.id}); data may be corrupt or missing; {str(err)}")
+                warn(f"Failed to load data for {self.primary_id} ({self.id}); "
+                     f"data may be corrupt or missing; {str(err)}")
 
     def data(self,
              source: str,

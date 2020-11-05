@@ -46,11 +46,11 @@ def _transform(data: pd.DataFrame,
     if method is None:
         return data
     if method == 'logicle':
-        return pd.DataFrame(logicle(data=data.values, channels=feature_i), columns=data.columns, index=data.index)
+        return pd.DataFrame(logicle(data=data.values, channels=feature_i, **kwargs), columns=data.columns, index=data.index)
     if method == 'hyperlog':
-        return pd.DataFrame(hyperlog(data=data.values, channels=feature_i), columns=data.columns, index=data.index)
+        return pd.DataFrame(hyperlog(data=data.values, channels=feature_i, **kwargs), columns=data.columns, index=data.index)
     if method == 'log_transform':
-        return pd.DataFrame(log_transform(npy=data.values, channels=feature_i), columns=data.columns, index=data.index)
+        return pd.DataFrame(log_transform(npy=data.values, channels=feature_i,), columns=data.columns, index=data.index)
     if method == 'asinh':
         return pd.DataFrame(asinh(data=data.values, columns=feature_i, pre_scale=pre_scale),
                             columns=data.columns, index=data.index)

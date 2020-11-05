@@ -1,5 +1,39 @@
-from ..data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, \
-    ChildPolygon, ChildThreshold, Population
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+Central to the analysis of Cytometry data is visualisation. For exploratory
+analysis and 'gating' this normally comes in the form of bi-axial plots of
+different cell surface markers or intracellular stains. This module contains
+the CreatePlot class which houses the functionality for all one and two
+dimensional plotting of cytometry data. This class interacts with Population
+objects to present the data in multiple ways. This can be as standard 2D histograms
+as is common in software like FlowJo, but also allows for plotting of Population
+geometries (the shapes that define the gates that generated a Population) or
+overlaying downstream populations for 'back-gating' purposes.
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
+
+from ..data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, Population
 from ..data.geometry import ThresholdGeom, PolygonGeom
 from ..flow.transforms import apply_transform
 from warnings import warn
@@ -18,10 +52,9 @@ class CreatePlot:
     """
     Generate 1D or 2d histograms of cell populations as identified by cytometry. Supports plotting of individual
     populations, single or multiple gates, "backgating" (plotting child populations overlaid on parent) and
-    overlaying populations from control samples on their equivalent in the primary sample. All plotting is performed
-    by accessing a Gating object.
+    overlaying populations from control samples on their equivalent in the primary sample.
 
-    Parameters
+    Attributes
     -----------
     transform_x: str (default = "logicle")
         How to transform the x-axis. Method 'plot_gate' overwrites this value with the value associated with
@@ -49,10 +82,15 @@ class CreatePlot:
         Colormap for 2D histogram
     style: str, optional (default="white")
         Plotting style (passed to seaborn.set_style)
+    autoscale: bool (default=True)
+        Allow matplotlib to calculate optimal view
+        (https://matplotlib.org/3.1.1/api/_as_gen/matplotlib.pyplot.autoscale.html)
     font_scale: float, optional (default=1.2)
         Font scale (passed to seaborn.set_context)
     bw: str or float, (default="scott")
         Bandwidth for 1D KDE (see seaborn.kdeplot)
+    axis_ticks: bool (default=True)
+        Show axis ticks with axis labels
     """
 
     def __init__(self,
@@ -70,7 +108,7 @@ class CreatePlot:
                  style: str or None = "white",
                  font_scale: float or None = 1.2,
                  bw: str or float = "scott",
-                 autoscale: bool = False,
+                 autoscale: bool = True,
                  axis_ticks: bool = True):
         self.transforms = {'x': transform_x, 'y': transform_y}
         self.labels = {'x': xlabel, 'y': ylabel}
@@ -101,7 +139,7 @@ class CreatePlot:
                 x: str,
                 **kwargs):
         """
-        Generate a 1D KDE plot
+        Generate a 1D KDE plot using Seaborn. Resulting axis assigned to self.ax
 
         Parameters
         ----------
@@ -124,7 +162,8 @@ class CreatePlot:
                 y: str,
                 **kwargs) -> None:
         """
-        Generate a 2D histogram
+        Generate a 2D histogram using Matplotlib
+        (https://matplotlib.org/3.1.1/api/_as_gen/matplotlib.pyplot.hist2d.html)
 
         Parameters
         ----------
@@ -150,7 +189,7 @@ class CreatePlot:
                          x: str,
                          y: str or None):
         """
-        Set the axis limits
+        Set the axis limits. Mutates self._ax
 
         Parameters
         ----------
@@ -180,7 +219,7 @@ class CreatePlot:
                         x: str,
                         y: str or None):
         """
-        Set plot aesthetics: title and axis labels
+        Set plot aesthetics: title and axis labels. Mutates self._ax
 
         Parameters
         ----------
@@ -191,7 +230,7 @@ class CreatePlot:
 
         Returns
         -------
-
+        None
         """
         if self.title:
             self._ax.set_title(self.title)
@@ -267,37 +306,6 @@ class CreatePlot:
         self._set_aesthetics(x=x, y=y)
         return self._ax
 
-    def plot_population_geom(self,
-                             parent: pd.DataFrame,
-                             geom: ThresholdGeom or PolygonGeom,
-                             lw: float = 2.5,
-                             line_colour: str = "#c92c2c",
-                             population_name: str or None = None,
-                             plot_kwargs: dict or None = None,
-                             legend_kwargs: dict or None = None):
-        plot_kwargs = plot_kwargs or {}
-        population_name = population_name or ""
-        self.transforms = {"x": geom.transform_x,
-                           "y": geom.transform_y}
-        self._ax = self.plot(data=parent,
-                             x=geom.x,
-                             y=geom.y,
-                             **plot_kwargs)
-        if isinstance(geom, ThresholdGeom):
-            x = geom.x_threshold
-            y = geom.y_threshold
-            self._add_threshold(x=x,
-                                y=y,
-                                lw=lw)
-            return self._ax
-        self._add_polygon(x_values=geom.x_values,
-                          y_values=geom.y_values,
-                          colour=line_colour,
-                          label=population_name,
-                          lw=lw)
-        self._set_legend(shape_n=1, **legend_kwargs)
-        return self._ax
-
     def plot_gate_children(self,
                            gate: Gate or ThresholdGate or EllipseGate or PolygonGate,
                            parent: pd.DataFrame,
@@ -324,11 +332,11 @@ class CreatePlot:
            Additional keyword arguments to pass to plot_population (generates the plot of parent population)
        legend_kwargs:
            Additional keyword arguments to pass to axis legend. Defaults:
-               * bbox_to_anchor = (0.5, 1.05)
-               * loc = "upper center"
-               * ncol = 3
-               * fancybox = True
-               * shadow = False
+           * bbox_to_anchor = (0.5, 1.05)
+           * loc = "upper center"
+           * ncol = 3
+           * fancybox = True
+           * shadow = False
        y: str (optional)
            Overrides the plotting configurations for the gate if y is missing
            and allows user to plot a two-dimensional instead of one dimensional plot.
@@ -379,9 +387,10 @@ class CreatePlot:
                               plot_kwargs: dict or None = None,
                               legend_kwargs: dict or None = None):
         """
-        This will plot the geometric shapes some list of child populations generated from a single Gate,
-        overlaid on the parent population upon which the Gate has been applied in the context of the current
-        Gating object and it's associated cytometry data.
+        This will plot the geometric shapes from the list of child populations generated from a single Gate,
+        overlaid on the parent population upon which the Gate has been applied. The parent data should be provided
+        as a Pandas DataFrame of single cell data and the Geoms of the resulting Populations in the list
+        'children'.
 
         Parameters
         ----------
@@ -494,11 +503,11 @@ class CreatePlot:
             Line width of polygon outline(s)
         legend_kwargs: dict
             Additional keyword arguments to pass to axis legend. Defaults:
-                * bbox_to_anchor = (0.5, 1.05)
-                * loc = "upper center"
-                * ncol = 3
-                * fancybox = True
-                * shadow = False
+            * bbox_to_anchor = (0.5, 1.05)
+            * loc = "upper center"
+            * ncol = 3
+            * fancybox = True
+            * shadow = False
         Returns
         -------
         Matplotlib.pyplot.axes
@@ -674,20 +683,36 @@ class CreatePlot:
         Parameters
         ----------
         parent: Pandas.DataFrame
+            Parent single cell data
         children: dict
+            Dictionary of Pandas DataFrames, where the key corresponds to the
+            population name and the value the Pandas DataFrame of single cell events
         x: str
+            X-axis variable
         y: str (optional)
+            Y-axis variable
         colours: str (defaults to Seaborn pastel palette)
+            Name of the palette to use for colouring overlaid populations
         alpha: float (default=0.75)
+            If method is 'scatter', controls transparency of markers
         size: float (default=5)
+            If method is 'scatter', controls size of markers
         method: str (default="scatter)
+            Method should be either "scatter" (default) or "kde", which controls how
+            overlaid populations will appear.
         shade: bool (default=True)
+            If method is 'kde', specifies whether to shade in the contours
         plot_kwargs: dict (optional)
             Keyword arguments passed to CreatePlot.plot
         overlay_kwargs: dict (optional)
             Keyword arguments passed to plt.scatter or seaborn.kdeplot cals
         legend_kwargs: dict (optional)
-
+            Additional keyword arguments to pass to axis legend. Defaults:
+            * bbox_to_anchor = (0.5, 1.05)
+            * loc = "upper center"
+            * ncol = 3
+            * fancybox = True
+            * shadow = False
         Returns
         -------
         Matplotlib.axes
@@ -700,6 +725,7 @@ class CreatePlot:
                              x=x,
                              y=y,
                              **plot_kwargs)
+
         for c, (child_name, df) in zip(colours, children.items()):
             if method == "kde":
                 self._overlay(data=df,
@@ -730,6 +756,23 @@ class CreatePlot:
                  method: str,
                  label: str,
                  **kwargs):
+        """
+        Plot a single population dataframe on self._ax using the given method
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        x: str
+        y: str, optional
+        method: str
+        label: str
+        kwargs:
+            Additional keyword arguments passed to self._ax.scatter or sns.kdeplot
+
+        Returns
+        -------
+        None
+        """
         assert method in ["scatter", "kde"], "Overlay method should be 'scatter' or 'kde'"
         if y is None and method == "scatter":
             warn("1-dimensional plot, defaulting to KDE overlay")
@@ -755,27 +798,47 @@ class CreatePlot:
                             label=label,
                             **kwargs)
 
-    def overlay_control(self,
-                        data: pd.DataFrame,
-                        ctrl: pd.DataFrame,
-                        x: str,
-                        y: str or None = None,
-                        colour: str = "#db4b6a",
-                        alpha: float = .75,
-                        size: float = 5,
-                        method: str = "scatter",
-                        shade: bool = True,
-                        plot_kwargs: dict or None = None,
-                        overlay_kwargs: dict or None = None):
+    def overlay_plot(self,
+                     data1: pd.DataFrame,
+                     data2: pd.DataFrame,
+                     x: str,
+                     y: str or None = None,
+                     colour: str = "#db4b6a",
+                     alpha: float = .75,
+                     size: float = 5,
+                     method: str = "scatter",
+                     shade: bool = True,
+                     plot_kwargs: dict or None = None,
+                     overlay_kwargs: dict or None = None):
+        """
+        Plot data2 overlaid a 2D histogram or 1D KDE plot of data1.
 
+        Parameters
+        ----------
+        data1: Pandas.DataFrame
+        data2: Pandas.DataFrame
+        x: str
+        y: str, optional
+        colour: str (default="#db4b6a")
+        alpha: float (default=0.75)
+        size: float (default=5.)
+        method: str (default="scatter)
+        shade: bool (default=True)
+        plot_kwargs: dict
+        overlay_kwargs: dict
+
+        Returns
+        -------
+        None
+        """
         plot_kwargs = plot_kwargs or {}
         overlay_kwargs = overlay_kwargs or {}
-        self._ax = self.plot(data=data,
+        self._ax = self.plot(data=data1,
                              x=x,
                              y=y,
                              **plot_kwargs)
         if method == "kde":
-            self._overlay(data=ctrl,
+            self._overlay(data=data2,
                           x=x,
                           y=y,
                           method=method,
@@ -783,7 +846,7 @@ class CreatePlot:
                           shade=shade,
                           **overlay_kwargs)
             return self._ax
-        self._overlay(data=ctrl,
+        self._overlay(data=data2,
                       x=x,
                       y=y,
                       method=method,
@@ -795,6 +858,18 @@ class CreatePlot:
 
     def _set_legend(self,
                     **kwargs):
+        """
+        Generate a legend for self._ax
+
+        Parameters
+        ----------
+        kwargs:
+            Keyword arguments for Matplotlib.Axes.legend
+
+        Returns
+        -------
+        None
+        """
         anchor = kwargs.get("bbox_to_anchor", (1.1, 0.95))
         loc = kwargs.get("loc", 2)
         ncol = kwargs.get("ncol", 3)
