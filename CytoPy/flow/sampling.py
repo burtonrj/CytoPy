@@ -1,3 +1,34 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+For manageable analysis sampling is unavoidable. This module contains all
+the functionality for downsampling and subsequent upsampling in CytoPy.
+CytoPy supports uniform sampling that wraps the Pandas DataFrame sample
+method. In addition we provide support for density dependent downsampling
+(adapted from SPADE; https://www.nature.com/articles/nbt.1991) and faithful
+downsampling (adapted from SamSPECTRAL; https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-11-403).
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from .neighbours import calculate_optimal_neighbours, knn
 from ..feedback import vprint
 from sklearn.neighbors import BallTree, KDTree
@@ -7,17 +38,45 @@ from warnings import warn
 import pandas as pd
 import numpy as np
 
+__author__ = "Ross Burton"
+__copyright__ = "Copyright 2020, CytoPy"
+__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__license__ = "MIT"
+__version__ = "1.0.0"
+__maintainer__ = "Ross Burton"
+__email__ = "burtonrj@cardiff.ac.uk"
+__status__ = "Production"
+
 
 def uniform_downsampling(data: pd.DataFrame,
-                         sample_size: int or float):
+                         sample_size: int or float,
+                         **kwargs):
+    """
+    Uniform downsampling. Wraps the Pandas DataFrame sample method
+    with some additional error handling for when the requested sample
+    size is invalid.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    sample_size: int or float
+        Size of sample required. If a float is given will return a sample
+        of this proportion.
+    kwargs:
+        Additional keyword arguments passed to Pandas.DataFrame.sample
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
     if isinstance(sample_size, int):
         if sample_size >= data.shape[0]:
             warn(f"Number of observations larger than requested sample size {sample_size}, "
                  f"returning complete data (n={data.shape[0]})")
             return data
-        return data.sample(n=sample_size)
+        return data.sample(n=sample_size, **kwargs)
     if isinstance(sample_size, float):
-        return data.sample(frac=sample_size)
+        return data.sample(frac=sample_size, **kwargs)
     raise ValueError("sample_size should be an int or float value")
 
 
@@ -57,6 +116,27 @@ def faithful_downsampling(data: np.array,
 
 
 def prob_downsample(local_d, target_d, outlier_d):
+    """
+    Given local, target and outlier density (as estimated by KNN) calculate
+    the probability of retaining the event. If local density is less than or
+    equal to the outlier density, returns a probability of 0 (event will be
+    discarded). If the local density is greater than the outlier density
+    but less than the target density, return a value of 1 (absolutely keep this
+    event). If the local density is greater than the target density, then
+    the probability of retention is the ratio between the target and local
+    density.
+
+    Parameters
+    ----------
+    local_d: float
+    target_d: float
+    outlier_d: float
+
+    Returns
+    -------
+    float
+        Value between 0 and 1
+    """
     if local_d <= outlier_d:
         return 0
     if outlier_d < local_d <= target_d:
