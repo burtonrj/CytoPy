@@ -2,9 +2,9 @@ import sys
 import os
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, root_dir)
-sys.path.append(f'{root_dir}/cytopy')
-sys.path.append(f'{root_dir}/cytopy/flow')
-sys.path.append(f'{root_dir}/cytopy/data')
+sys.path.append(f'{root_dir}/CytoPy')
+sys.path.append(f'{root_dir}/CytoPy/flow')
+sys.path.append(f'{root_dir}/CytoPy/data')
 # Configuration file for the Sphinx documentation builder.
 #
 # This file only contains a selection of the most common options. For a full
@@ -29,7 +29,7 @@ copyright = '2020, Ross Burton'
 author = 'Ross Burton'
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+release = '1.0.0'
 
 
 # -- General configuration ---------------------------------------------------
@@ -72,6 +72,3 @@ html_logo = 'logo.png'
 autodoc_default_options = {
     'autosummary': True,
 }
-
-
-
