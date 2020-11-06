@@ -115,7 +115,9 @@ def faithful_downsampling(data: np.array,
     return communities
 
 
-def prob_downsample(local_d, target_d, outlier_d):
+def prob_downsample(local_d: int,
+                    target_d: int,
+                    outlier_d: int):
     """
     Given local, target and outlier density (as estimated by KNN) calculate
     the probability of retaining the event. If local density is less than or
@@ -128,9 +130,9 @@ def prob_downsample(local_d, target_d, outlier_d):
 
     Parameters
     ----------
-    local_d: float
-    target_d: float
-    outlier_d: float
+    local_d: int
+    target_d: int
+    outlier_d: int
 
     Returns
     -------
@@ -151,8 +153,8 @@ def density_dependent_downsampling(data: pd.DataFrame,
                                    alpha: int = 5,
                                    distance_metric: str = "manhattan",
                                    tree_sample: float or int = 0.1,
-                                   outlier_dens: float = 1,
-                                   target_dens: float = 5,
+                                   outlier_dens: int = 1,
+                                   target_dens: int = 5,
                                    njobs: int = -1):
     """
     Perform density dependent down-sampling to remove risk of under-sampling rare populations;
@@ -174,6 +176,8 @@ def density_dependent_downsampling(data: pd.DataFrame,
     alpha: int, (default=5)
         used for estimating distance threshold between cell and nearest neighbour (default = 5 used in
         original paper)
+    distance_metric: str (default="manhattan")
+        Metric used for neighbour assignment
     tree_sample: float or int, (default=0.1)
         proportion/number of cells to sample for generation of KD tree
     outlier_dens: float, (default=1)
@@ -217,9 +221,47 @@ def density_probability_assignment(sample: pd.DataFrame,
                                    data: pd.DataFrame,
                                    distance_metric: str = "manhattan",
                                    alpha: int = 5,
-                                   outlier_dens: float = 1,
-                                   target_dens: float = 5,
+                                   outlier_dens: int = 1,
+                                   target_dens: int = 5,
                                    njobs: int = -1):
+    """
+    Generate an estimation of local density amongst single cell population
+    using the KDTree algorithm from Scikit-Learn. Using this representation
+    return the probability assignment for retention of each event using
+    prob_downsample. adapted from SPADE*
+
+    * Extracting a cellular hierarchy from high-dimensional cytometry data with SPADE
+    Peng Qiu-Erin Simonds-Sean Bendall-Kenneth Gibbs-Robert
+    Bruggner-Michael Linderman-Karen Sachs-Garry Nolan-Sylvia Plevritis - Nature Biotechnology - 2011
+
+    Parameters
+    ----------
+    sample: Pandas.DataFrame
+        Downsampled data to use for generating nearest neighbours tree graph
+    data: Pandas.DataFrame
+        Original dataframe
+    distance_metric: str (default="manhattan")
+        Metric used for neighbour assignment
+    alpha: int
+        Used for estimating distance threshold between cell and nearest neighbour (default = 5 used in
+        original paper)
+    outlier_dens: int, (default=1)
+        used to exclude cells with the lowest local densities; float value as a percentile of the
+        lowest local densities e.g. 1 (the default value) means the bottom 1% of cells with lowest local densities
+        are regarded as noise
+    target_dens: int, (default=5)
+        determines how many cells will receive a probability > 0; int value as a
+        percentile of the lowest local densities e.g. 5 (the default value)
+        means the density of bottom 5% of cells will serve as the density threshold
+        for rare cell populations
+    njobs: int (default=-1)
+        Controls how many parallel processed to run in KDTree search. Default is -1, which
+        will use all available cores.
+
+    Returns
+    -------
+    Numpy.Array
+    """
     if njobs < 0:
         njobs = cpu_count()
     tree = KDTree(sample, metric=distance_metric)
@@ -231,7 +273,7 @@ def density_probability_assignment(sample: pd.DataFrame,
     td = np.percentile(ld, q=target_dens)
     prob_f = partial(prob_downsample, target_d=td, outlier_d=od)
     with Pool(njobs) as pool:
-        prob = list(pool.map(prob_f, ld))
+        prob = np.array(list(pool.map(prob_f, ld)))
     return np.array(prob)
 
 
@@ -242,9 +284,51 @@ def upsample_density(data: pd.DataFrame,
                      tree_sample: int or float = 0.1,
                      distance_metric: str = "manhattan",
                      alpha: int = 5,
-                     outlier_dens: float = 1,
-                     target_dens: float = 5,
+                     outlier_dens: int = 1,
+                     target_dens: int = 5,
                      njobs: int = -1):
+    """
+    Perform upsampling in a density dependent manner; neighbourhoods of cells of low
+    density will have a high probability of being upsampled versus dense neighbourhoods.
+    Ignores outliers. adapted from SPADE*
+
+    * Extracting a cellular hierarchy from high-dimensional cytometry data with SPADE
+    Peng Qiu-Erin Simonds-Sean Bendall-Kenneth Gibbs-Robert
+    Bruggner-Michael Linderman-Karen Sachs-Garry Nolan-Sylvia Plevritis - Nature Biotechnology - 2011
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+        Data to sample
+    features: list (defaults to all columns)
+        Name of columns to be used as features in down-sampling algorithm
+    sample_size: int or float (default=0.1)
+        number of events to return in sample, either as an integer of fraction of original
+        sample size
+    alpha: int, (default=5)
+        used for estimating distance threshold between cell and nearest neighbour (default = 5 used in
+        original paper)
+    distance_metric: str (default="manhattan")
+        Metric used for neighbour assignment
+    upsample_factor: int (default=2)
+        Factor to upsample by (e.g. default=2 would double the observations)
+    tree_sample: float or int, (default=0.1)
+        proportion/number of cells to sample for generation of KD tree
+    outlier_dens: float, (default=1)
+        used to exclude cells with the lowest local densities; int value as a percentile of the
+        lowest local densities e.g. 1 (the default value) means the bottom 1% of cells with lowest local densities
+        are regarded as noise
+    target_dens: float, (default=5)
+        determines how many cells will survive the down-sampling process; int value as a
+        percentile of the lowest local densities e.g. 5 (the default value) means the density of bottom 5% of cells
+        will serve as the density threshold for rare cell populations
+    njobs: int (default=-1)
+        Number of jobs to run in unison when calculating weights (defaults to all available cores)
+
+    Returns
+    -------
+
+    """
     features = features or data.columns.tolist()
     tree_sample = uniform_downsampling(data=data, sample_size=tree_sample)
     prob = density_probability_assignment(sample=tree_sample[features],
