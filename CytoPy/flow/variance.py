@@ -1,3 +1,37 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+Before we perform any detailed analysis and/or classification of our
+single cell data, it is valuable to assess the inter-sample variation
+that could be arising from biological differences, but also technical
+variation introduced by batch effects. This module contains multiple functions
+for visualising univariate and multivatiate differences between
+FileGroups in the same experiment. Additionally we have the SimilarityMatrix
+class, that generates a heatmap of pairwise statistical distance's, allow
+us to group similar FileGroups.
+
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from ..data.experiment import Experiment, FileGroup
 from ..feedback import progress_bar, vprint
 from .dim_reduction import dimensionality_reduction
@@ -17,6 +51,15 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import math
+
+__author__ = "Ross Burton"
+__copyright__ = "Copyright 2020, CytoPy"
+__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__license__ = "MIT"
+__version__ = "1.0.0"
+__maintainer__ = "Ross Burton"
+__email__ = "burtonrj@cardiff.ac.uk"
+__status__ = "Production"
 
 
 def bw_optimisation(data: pd.DataFrame,
@@ -39,6 +82,7 @@ def bw_optimisation(data: pd.DataFrame,
     cv: int (default=10)
         Number of k-folds
     verbose: int (default=0)
+
     Returns
     -------
     float
@@ -87,6 +131,7 @@ def calculate_ref_sample(data: OrderedDict,
     data: dict
     verbose: bool, (default=True)
         Feedback
+
     Returns
     -------
     str
@@ -160,7 +205,7 @@ def load_and_sample(experiment: Experiment,
     sampling_method: str
     transform: str (optional)
     population: str
-    kwargs
+    kwargs:
         Additional keyword arguments for sampling method
 
     Returns
