@@ -1,3 +1,30 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+This module houses many of the utility functions for supervised
+classificaiton.
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from CytoPy.data.fcs import FileGroup
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn import metrics as skmetrics
@@ -11,6 +38,15 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import inspect
+
+__author__ = "Ross Burton"
+__copyright__ = "Copyright 2020, CytoPy"
+__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__license__ = "MIT"
+__version__ = "1.0.0"
+__maintainer__ = "Ross Burton"
+__email__ = "burtonrj@cardiff.ac.uk"
+__status__ = "Production"
 
 
 def build_sklearn_model(klass: str,
@@ -42,10 +78,14 @@ def build_keras_model(layers: list,
 
     Parameters
     ----------
-    metrics
-    loss
-    optimizer
-    layers
+    metrics: list
+        See https://keras.io/api/metrics/
+    loss: str
+        See https://keras.io/api/losses/
+    optimizer: str
+        See https://keras.io/api/optimizers/
+    layers: list
+        List of Layer objects (see https://keras.io/api/layers/)
 
     Returns
     -------
@@ -95,7 +135,8 @@ def calc_metrics(metrics: list,
          lexicographical order of the labels in y_true.
     Returns
     -------
-
+    dict
+        Dictionary of performance metrics
     """
     results = dict()
     for m in metrics:
@@ -130,18 +171,44 @@ def confusion_matrix_plots(classifier,
                            cmap: str or None = None,
                            figsize: tuple = (10, 5),
                            **kwargs):
+    """
+    Generate a figure of two heatmaps showing a confusion matrix, one normalised
+    by support one showing raw values, displaying a classifiers performance.
+    Returns Matplotlib.Figure object.
+
+    Parameters
+    ----------
+    classifier: object
+        Scikit-Learn classifier
+    x: Pandas.DataFrame
+        Feature space
+    y: Numpy.Array
+        Labels
+    class_labels: list
+        Class labels (as they should be displayed on the axis)
+    cmap: str
+        Colour scheme, defaults to Matplotlib Blues
+    figsize: tuple (default=(10,5))
+        Size of the figure
+    kwargs:
+        Additional keyword arguments passed to sklearn.metrics.plot_confusion_matrix
+
+    Returns
+    -------
+    Matplotlib.Figure
+    """
     cmap = cmap or plt.cm.Blues
     fig, axes = plt.subplots(2, figsize=figsize)
     titles = ["Confusion matrix, without normalisation", "Confusion matrix; normalised"]
     for i, (title, norm) in enumerate(zip(titles, [False, True])):
-        ax = skmetrics.plot_confusion_matrix(estimator=classifier,
-                                             X=x,
-                                             y=y,
-                                             display_labels=class_labels,
-                                             cmap=cmap,
-                                             normalize=norm,
-                                             ax=axes[i],
-                                             **kwargs)
+        skmetrics.plot_confusion_matrix(estimator=classifier,
+                                        X=x,
+                                        y=y,
+                                        display_labels=class_labels,
+                                        cmap=cmap,
+                                        normalize=norm,
+                                        ax=axes[i],
+                                        **kwargs)
         axes[i].set_title(title)
     return fig
 
@@ -256,6 +323,18 @@ def singlelabel(ref: FileGroup,
 
 
 def auto_weights(y: np.ndarray):
+    """
+    Estimate optimal weights from a list of class labels.
+
+    Parameters
+    ----------
+    y: Numpy.Array
+
+    Returns
+    -------
+    dict
+        Dictionary of class weights {label: weight}
+    """
     classes = np.unique(y)
     weights = compute_class_weight('balanced',
                                    classes=classes,
