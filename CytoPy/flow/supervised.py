@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 This module houses many of the utility functions for supervised
-classificaiton.
+classification.
 
 Copyright 2020 Ross Burton
 
