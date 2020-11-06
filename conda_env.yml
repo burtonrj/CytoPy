@@ -9,6 +9,7 @@ dependencies:
   - pip
   - pip:
       - anytree==2.8.0
+      - autodocsumm==0.2.1
       - detecta==0.0.5
       - future==0.18.2
       - graphviz==0.14
@@ -36,6 +37,8 @@ dependencies:
       - shapely==1.7.1
       - snowballstemmer==2.0.0
       - sphinx==3.2.1
+      - sphinx-theme==1.0
+      - sphinx-rtd-theme==0.4.3
       - tables==3.6.1
       - tensorflow==2.2.0
       - tqdm==4.49.0
