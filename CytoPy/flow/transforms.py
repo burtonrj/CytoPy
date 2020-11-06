@@ -1,14 +1,55 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+Cytometry data has to be transformed prior to analysis. There are multiple
+techniques for transformation of data, the most popular being the biexponential
+transform. CytoPy employs multiple methods using the FlowUtils package
+(https://github.com/whitews/FlowUtils), including the Logicle transform, a modified
+version of the biexponential transform.
+
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from flowutils.transforms import logicle, hyperlog, log_transform, asinh
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler
 import pandas as pd
 import numpy as np
 
+__author__ = "Ross Burton"
+__copyright__ = "Copyright 2020, CytoPy"
+__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__license__ = "MIT"
+__version__ = "1.0.0"
+__maintainer__ = "Ross Burton"
+__email__ = "burtonrj@cardiff.ac.uk"
+__status__ = "Production"
+
 
 def percentile_rank_transform(data: pd.DataFrame, 
                               features_to_transform: list) -> pd.DataFrame:
     """
-    Calculate percentile rank transform of data-frame. Each event is ranked as the average according to the
-    column, then divided by the total number of events and multiplied by 100 to give the percentile.
+    Calculate percentile rank transform of data-frame. Each event is
+    ranked as the average according to the column, then divided by
+    the total number of events and multiplied by 100 to give the percentile.
     
     Parameters
     -----------
@@ -29,7 +70,19 @@ def percentile_rank_transform(data: pd.DataFrame,
 
 
 def _features(data: pd.DataFrame,
-              features_to_transform):
+              features_to_transform: str):
+    """
+    Filter data to only required features, either all or just fluorochromes
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    features_to_transform: str
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
     if features_to_transform == 'all':
         return list(data.columns)
     elif features_to_transform == 'fluorochromes':
@@ -41,6 +94,33 @@ def _transform(data: pd.DataFrame,
                features: list,
                method: str or None,
                **kwargs):
+    """
+    Wrap the FlowUtils/Scikit-Learn functions for transformations and returning the transformed
+    data as a Pandas Dataframe.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+        Data to transform
+    features: list
+        Features to be included in transformation
+    method: str or None
+        Method used for transformation (if None, returns original data unchanged)
+        Available transforms:
+        * logicle
+        * hyperlog
+        * log_transform
+        * asinh
+        * percentile_rank
+        * Yeo-Johnson
+        * RobustScale
+    kwargs:
+        Additional keyword arguments passed to transform function
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
     pre_scale = kwargs.get("pre_scale", 1)
     feature_i = [list(data.columns).index(i) for i in features]
     if method is None:
@@ -69,6 +149,22 @@ def _transform(data: pd.DataFrame,
 def individual_transforms(data: pd.DataFrame,
                           transforms: dict,
                           **kwargs):
+    """
+    Given a Pandas DataFrame and a dictionary of transformations to apply, where the
+    key is the column to transform and the value the method for transformation, apply
+    transforms to each specified column.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    transforms: dict
+    kwargs:
+        Additional keyword arguments passed to transform function
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
     for feature, method in transforms.items():
         assert feature in data.columns, f"{feature} column not found for given DataFrame"
         data[feature] = _transform(data, [feature], method, **kwargs)[feature]
@@ -80,15 +176,24 @@ def apply_transform(data: pd.DataFrame,
                     transform_method: str or None = 'logicle',
                     **kwargs) -> pd.DataFrame:
     """
-    Apply a transformation to the given dataset; valid transformation methods are:
-    logicle, hyperlog, log_transform, or asinh
+    Apply a transformation to the given dataframe. The features_to_transform specified which
+    columns in the dataframe to transform. This can be given as:
+    * a string value of either 'all' or 'fluorochromes'; transform_method defines which transform
+      to apply to columns
+    * a list of columns to transform; transform_method defines which transform
+      to apply to columns
+    * alternatively, a dictionary where the key is the column name and the value is the
+      transform method to apply to this column; transform_method is ignored
     
-    
-    data: pandas dataframe
-    features_to_transform: a list of features to transform
-    transform_method: string value indicating transformation method
-    prescale: if using asinh transformaion this value is passed as the scalling argument
-    transformed pandas dataframe
+    Parameters
+    -----------
+    data: Pandas.DataFrame
+    features_to_transform: list or str or dict (default="all")
+    transform_method: str or None
+
+    Returns
+    --------
+    Pandas.DataFrame
     """
     data = data.copy()
     if isinstance(features_to_transform, dict):
