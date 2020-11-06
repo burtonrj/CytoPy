@@ -1,5 +1,5 @@
 anytree==2.8.0
-cython==0.29.21
+cython==0.29
 detecta==0.0.5
 future==0.18.2
 graphviz==0.14
@@ -15,7 +15,7 @@ matplotlib==3.3.1
 mongoengine==0.20.0
 mongomock==3.20.0
 nbconvert==6.0.4
-numpy==1.19.0
+numpy==1.19
 oauthlib==3.1.0
 pandas==1.1.2
 phate==1.0.4
