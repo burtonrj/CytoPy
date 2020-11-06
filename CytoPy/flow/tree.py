@@ -1,20 +1,61 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+CytoPy tracks the population "tree" of a FileGroup when a FileGroup
+is loaded into memory and is being analysed. This module handles the
+creation and modification of this "tree" using the anytree library.
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from ..data.population import Population
 from typing import List, Dict
 import anytree
 
+__author__ = "Ross Burton"
+__copyright__ = "Copyright 2020, CytoPy"
+__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__license__ = "MIT"
+__version__ = "1.0.0"
+__maintainer__ = "Ross Burton"
+__email__ = "burtonrj@cardiff.ac.uk"
+__status__ = "Production"
 
-def _construct_branch(tree: Dict[str, anytree.Node],
-                      population: Population):
+
+def _add_leaf(tree: Dict[str, anytree.Node],
+              population: Population):
     """
+    Add a new 'leaf' (node) to the population tree (represented by a dictionary of
+    anytree Node objects).
 
     Parameters
     ----------
-    tree
-    population
+    tree: dict
+        {population name: anytree.Node}
+    population: Population
+        Population to add to the tree
 
     Returns
     -------
-
+    dict
     """
 
     if population.parent not in tree.keys():
@@ -27,11 +68,15 @@ def _construct_branch(tree: Dict[str, anytree.Node],
 def _grow_tree(tree: Dict[str, anytree.Node],
                database_populations: List[Population]):
     """
+    Given a list of Population objects, grow the 'tree' (represented by a dictionary of
+    anytree Node objects) according to the 'parent' attribute of each population.
 
     Parameters
     ----------
-    tree
-    database_populations
+    tree: dict
+        {population name: anytree.Node}
+    database_populations: list
+        List of Populations to add to the tree
 
     Returns
     -------
@@ -42,7 +87,7 @@ def _grow_tree(tree: Dict[str, anytree.Node],
         if i >= len(database_populations):
             # Loop back around
             i = 0
-        branch = _construct_branch(tree, database_populations[i])
+        branch = _add_leaf(tree, database_populations[i])
         if branch is not None:
             tree = branch
             database_populations = [p for p in database_populations
