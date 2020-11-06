@@ -1,6 +1,6 @@
-from ...data.gating_strategy import GatingStrategy, Action
-from ...data.gate import ThresholdGate, PolygonGate, EllipseGate, PolygonGeom
-from ...data.project import Project
+from CytoPy.data.gating_strategy import GatingStrategy, Action
+from CytoPy.data.gate import ThresholdGate, PolygonGate, EllipseGate, PolygonGeom
+from CytoPy.data.project import Project
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest

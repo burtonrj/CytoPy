@@ -1,6 +1,6 @@
-from ...data.fcs import FileGroup
-from ...data.project import Project
-from ...data.population import Cluster, Population
+from CytoPy.data.fcs import FileGroup
+from CytoPy.data.project import Project
+from CytoPy.data.population import Cluster, Population
 import pandas as pd
 import numpy as np
 import pytest

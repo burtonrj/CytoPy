@@ -1,5 +1,5 @@
-from ...data import experiment
-from ...tests import assets
+from CytoPy.data import experiment
+from CytoPy.tests import assets
 import pandas as pd
 import pytest
 import shutil

@@ -551,7 +551,7 @@ class Experiment(mongoengine.Document):
             self.data_directory = _data_dir_append_leading_char(self.data_directory)
         else:
             raise ValueError("No data directory provided")
-        if not self.panel:
+        if self.panel is None:
             self.panel = self._generate_panel(panel_definition=panel_definition,
                                               panel_name=panel_name)
             self.panel.save()
@@ -902,14 +902,12 @@ class Experiment(mongoengine.Document):
         _duplicate_mappings(mappings)
         return mappings
 
-    def delete(self, delete_panel: bool = True, *args, **kwargs):
+    def delete(self, *args, **kwargs):
         """
         Delete Experiment.
 
         Parameters
         ----------
-        delete_panel: bool (default=True)
-            If True, delete associated Panel
         args: list
         kwargs: dict
 
@@ -918,8 +916,6 @@ class Experiment(mongoengine.Document):
         None
         """
         super().delete(*args, **kwargs)
-        if delete_panel:
-            self.panel.delete()
         for f in self.fcs_files:
             f.delete()
 

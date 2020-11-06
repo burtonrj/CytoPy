@@ -1,6 +1,6 @@
-from ...data import gate
-from ...data.population import create_signature
-from ...data.geometry import ThresholdGeom, PolygonGeom, create_polygon, create_convex_hull
+from CytoPy.data import gate
+from CytoPy.data.population import create_signature
+from CytoPy.data.geometry import ThresholdGeom, PolygonGeom, create_polygon, create_convex_hull
 from scipy.spatial.distance import euclidean
 from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs

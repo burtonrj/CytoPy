@@ -1,4 +1,4 @@
-from ...data.mapping import ChannelMap
+from CytoPy.data.mapping import ChannelMap
 import pytest
 
 
