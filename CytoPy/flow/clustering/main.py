@@ -142,6 +142,7 @@ def phenograph_clustering(data: pd.DataFrame,
         Modified dataframe with clustering IDs assigned to the column 'cluster_id', sparse graph
         matrix, and modularity score for communities (Q)
     """
+    _print = vprint(verbose=verbose)
     data["cluster_id"] = None
     if global_clustering:
         communities, graph, q = phenograph.cluster(data[features], **kwargs)
@@ -149,11 +150,14 @@ def phenograph_clustering(data: pd.DataFrame,
         return data, graph, q
     graphs = dict()
     q = dict()
-    for _id, df in progress_bar(data.groupby("sample_id"), verbose=verbose):
+    for _id, df in data.groupby("sample_id"):
+        _print(f"----- Clustering {_id} -----")
         communities, graph, q_ = phenograph.cluster(df[features], **kwargs)
         graphs[_id], q[_id] = graph, q_
         df["cluster_id"] = communities
         data.loc[df.index, ["cluster_id"]] = df.cluster_id
+        _print("-----------------------------")
+        _print("\n")
     return data, graphs, q
 
 
@@ -218,7 +222,7 @@ def _meta_preprocess(data: pd.DataFrame,
         Summarised dataframe
     """
     if norm_method is not None:
-        norm_method = partial(scaler, scale_method=norm_method, return_scaled=False, **kwargs)
+        norm_method = partial(scaler, scale_method=norm_method, return_scaler=False, **kwargs)
         data = data.groupby(["sample_id", "cluster_id"])[features].apply(norm_method).reset_index()
     metadata = data.groupby(["sample_id", "cluster_id"])[features].apply(summary_method).reset_index()
     metadata["meta_label"] = None
@@ -500,18 +504,17 @@ def flowsom_clustering(data: pd.DataFrame,
         data["cluster_id"] = cluster.predict()
         return data, None, None
     vprint_ = vprint(verbose)
-    for _id in data.sample_id:
+    for _id, df in data.groupby("sample_id"):
         vprint_(f"----- Clustering {_id} -----")
-        sample_data = data[data.sample_id == _id]
-        cluster = _flowsom_clustering(data=data,
+        cluster = _flowsom_clustering(data=df,
                                       features=features,
                                       verbose=verbose,
                                       meta_cluster_class=meta_cluster_class,
                                       init_kwargs=init_kwargs,
                                       training_kwargs=training_kwargs,
                                       meta_cluster_kwargs=meta_cluster_kwargs)
-        sample_data["cluster_id"] = cluster.predict()
-        data.loc[sample_data.index, ["cluster_id"]] = sample_data.cluster_id
+        df["cluster_id"] = cluster.predict()
+        data.loc[df.index, ["cluster_id"]] = df.cluster_id
     return data, None, None
 
 
@@ -537,7 +540,7 @@ def _load_data(experiment: Experiment,
     -------
     Pandas.DataFrame
     """
-    sample_ids = sample_ids or experiment.list_samples()
+    sample_ids = sample_ids or list(experiment.list_samples())
     population_data = list()
     for _id in progress_bar(sample_ids, verbose=verbose):
         fg = experiment.get_sample(sample_id=_id)
@@ -614,11 +617,13 @@ class Clustering:
         self.root_population = root_population
         self.graph = None
         self.metrics = None
+        self.print("Loading single cell data...")
         self.data = _load_data(experiment=experiment,
                                sample_ids=sample_ids,
                                transform=transform,
                                population=root_population)
         self._load_clusters()
+        self.print("Ready to cluster!")
 
     def _load_clusters(self):
         """
@@ -629,7 +634,8 @@ class Clustering:
         -------
         None
         """
-        for sample_id in progress_bar(self.experiment.list_samples(), verbose=self.verbose):
+        self.print("Loading existing clusters...")
+        for sample_id in progress_bar(list(self.experiment.list_samples()), verbose=self.verbose):
             sample = self.experiment.get_sample(sample_id)
             pop = sample.get_population(self.root_population)
             for cluster in pop.clusters:
