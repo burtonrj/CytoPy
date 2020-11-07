@@ -1,13 +1,53 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+This module houses an adaption of the consensus clustering method
+first described in https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf.
+Python implementation is adapted from Žiga Sajovic with the original source code
+found here: https://github.com/ZigaSajovic/Consensus_Clustering
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from ...feedback import progress_bar
 from itertools import combinations
 import numpy as np
 import bisect
 
+__author__ = "Ross Burton"
+__copyright__ = "Copyright 2020, CytoPy"
+__credits__ = ["Ross Burton", "Žiga Sajovic", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__license__ = "MIT"
+__version__ = "1.0.0"
+__maintainer__ = "Ross Burton"
+__email__ = "burtonrj@cardiff.ac.uk"
+__status__ = "Production"
+
 
 class ConsensusCluster:
-    """Implementation of Consensus clustering, following the paper
-      https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf
-      Code is adapted from https://github.com/ZigaSajovic/Consensus_Clustering
+    """
+    Implementation of Consensus clustering, following the paper
+    https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf
+    Code is adapted from https://github.com/ZigaSajovic/Consensus_Clustering
+
     Parameters
     ----------
     cluster :

@@ -21,6 +21,5 @@ setup(
     author='Ross Burton',
     author_email='burtonrj@cardiff.ac.uk',
     description='Python framework for data-centric autonomous cytometry analysis',
-    install_requires=open("requirements.txt").read(),
-    dependency_links=['https://github.com/jacoblevine/PhenoGraph.git#egg=PhenoGraph']
+    install_requires=open("requirements.txt").read()
 )
