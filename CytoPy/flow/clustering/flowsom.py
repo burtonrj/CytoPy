@@ -1,9 +1,48 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+Here you will find CytoPy's implementation of the FlowSOM algorithm, which
+relies on the MiniSOM library for self-organising maps. The work was
+adapted from https://github.com/Hatchin/FlowSOM for integration with CytoPy and
+the database architecture.
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from ...feedback import progress_bar, vprint
 from .consensus import ConsensusCluster
 from sklearn.preprocessing import MinMaxScaler
 from warnings import warn
 from minisom import MiniSom
 import pandas as pd
+
+__author__ = "Ross Burton"
+__copyright__ = "Copyright 2020, CytoPy"
+__credits__ = ["Ross Burton", "Žiga Sajovic", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__license__ = "MIT"
+__version__ = "1.0.0"
+__maintainer__ = "Ross Burton"
+__email__ = "burtonrj@cardiff.ac.uk"
+__status__ = "Production"
+
 
 class FlowSOM:
     """
@@ -12,8 +51,9 @@ class FlowSOM:
     of the data handling steps seen in Hatchin's original library, since these are handled by the infrastructure in
     CytoPy. The FlowSOM algorithm is implemented here in such a way that it requires only a Pandas DataFrame,
     like that typically produced when retrieving data from the CytoPy database, and gives access to methods
-    of clustering an meta-clustering. In addition to Hatchin's work, the CytoPy implementation has improved error
+    of clustering and meta-clustering. In addition to Hatchin's work, the CytoPy implementation has improved error
     handling and integrates better with the CytoPy workflow.
+
     Parameters
     ----------
     data : Pandas.DataFrame
