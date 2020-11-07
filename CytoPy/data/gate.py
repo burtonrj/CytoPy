@@ -43,7 +43,7 @@ from sklearn.cluster import *
 from sklearn.mixture import *
 from hdbscan import HDBSCAN
 from warnings import warn
-from scipy.spatial.distance import euclidean
+from scipy.spatial.distance import minkowski
 from string import ascii_uppercase
 from collections import Counter
 from typing import List, Dict
@@ -1237,7 +1237,7 @@ def _child_similarity_score(child: ChildPolygon,
                             population: Population) -> dict:
     """
     Compare a population to a ChildPolygon contained and return the similarity score.
-    The similarity score is given by: fraction area overlap * (1 - absolute euclidean distance between signatures).
+    The similarity score is given by: fraction area overlap * minkowski distance between signatures.
     This generates a score between 0 and 1, where 1 is identical populations and 0 is absolutely
     different populations.
 
@@ -1255,7 +1255,7 @@ def _child_similarity_score(child: ChildPolygon,
     common_features = set(population.signature.keys()).intersection(child.signature.keys())
     vector_signatures = np.array([[population.signature.get(i), child.signature.get(i)]
                                   for i in common_features]).T
-    dist_score = 1. - abs(euclidean(vector_signatures[:, 0], vector_signatures[:, 1]))
+    dist_score = minkowski(vector_signatures[:, 0], vector_signatures[:, 1])
     return dist_score * area
 
 

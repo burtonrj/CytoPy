@@ -93,7 +93,7 @@ class FlowSOM:
         self.meta_class = None
 
     def train(self,
-              som_dim: tuple = (250, 250),
+              som_dim: tuple = (50, 50),
               sigma: float = 1.0,
               learning_rate: float = 0.5,
               batch_size: int = 500,
@@ -121,7 +121,8 @@ class FlowSOM:
         None
         """
 
-        som = MiniSom(som_dim[0], som_dim[1],
+        som = MiniSom(som_dim[0],
+                      som_dim[1],
                       self.dims, sigma=sigma,
                       learning_rate=learning_rate,
                       neighborhood_function=self.nf,

@@ -71,7 +71,10 @@ class Explorer:
                  path: str or None = None,
                  verbose: bool = True):
         assert data is not None or path is not None, "Must provide a Pandas DataFrame or path string to csv file"
-        self.data = data or pd.read_csv(path)
+        if data is None:
+            self.data = pd.read_csv(path)
+        else:
+            self.data = data
         assert "subject_id" in self.data.columns, "Please ensure that dataframe is populated with the subject ID " \
                                                   "('subject_id') prior to initialising object"
         self.verbose = verbose
