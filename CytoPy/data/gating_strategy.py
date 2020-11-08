@@ -483,7 +483,7 @@ class GatingStrategy(mongoengine.Document):
                       x: str,
                       y: str or None = None,
                       create_plot_kwargs: dict or None = None,
-                      **kwargs):
+                      **backgate_kwargs):
         """
         Given some population as the backdrop (parent) and a list of one or more
         populations that occur downstream of the parent (overlay), plot the downstream
@@ -497,7 +497,7 @@ class GatingStrategy(mongoengine.Document):
         y: str
         create_plot_kwargs
             Additional keyword arguments passed to CytoPy.flow.plotting.CreatePlot
-        kwargs
+        backgate_kwargs
             Additional keyword arguments passed to CytoPy.flow.plotting.CreatePlot.backgate
 
         Returns
@@ -521,7 +521,7 @@ class GatingStrategy(mongoengine.Document):
                                  children=children,
                                  x=x,
                                  y=y,
-                                 **kwargs)
+                                 **backgate_kwargs)
 
     def plot_population(self,
                         population: str,
@@ -530,7 +530,7 @@ class GatingStrategy(mongoengine.Document):
                         transform_x: str or None = "logicle",
                         transform_y: str or None = "logicle",
                         create_plot_kwargs: dict or None = None,
-                        **kwargs):
+                        **plot_kwargs):
         """
         Plot an existing population in the associate FileGroup.
 
@@ -543,7 +543,7 @@ class GatingStrategy(mongoengine.Document):
         transform_y: str (optional; default="logicle")
         create_plot_kwargs:
             Additional keyword arguments passed to CytoPy.flow.plotting.CreatePlot
-        kwargs
+        plot_kwargs
             Additional keyword arguments passed to CytoPy.flow.plotting.CreatePlot.plot
 
         Returns
@@ -558,7 +558,7 @@ class GatingStrategy(mongoengine.Document):
         plotting = CreatePlot(transform_x=transform_x,
                               transform_y=transform_y,
                               **create_plot_kwargs)
-        return plotting.plot(data=data, x=x, y=y, **kwargs)
+        return plotting.plot(data=data, x=x, y=y, **plot_kwargs)
 
     def print_population_tree(self, **kwargs):
         """
