@@ -162,8 +162,7 @@ def phenograph_clustering(data: pd.DataFrame,
 
 
 def _asign_metalabels(data: pd.DataFrame,
-                      metadata: pd.DataFrame,
-                      verbose: bool):
+                      metadata: pd.DataFrame):
     """
     Given the original clustered data (data) and the meta-clustering results of
     clustering the clusters of this original data (metadata), assign the meta-cluster
@@ -174,19 +173,13 @@ def _asign_metalabels(data: pd.DataFrame,
     ----------
     data: Pandas.DataFrame
     metadata: Pandas.DataFrame
-    verbose: bool
 
     Returns
     -------
     Pandas.DataFrame
     """
-    for _id, df in progress_bar(data.groupby("sample_id"), verbose=verbose):
-        for cluster_id in df.cluster_id:
-            meta_label = metadata.loc[(metadata.sample_id == _id) &
-                                      (metadata.cluster_id == cluster_id),
-                                      ["meta_label"]]
-            data[df[df.cluster_id == cluster_id].index, ["meta_label"]] = meta_label
-    return data
+    data = data.drop("meta_label", axis=1)
+    return pd.merge(data, metadata[["sample_id", "cluster_id", "meta_label"]], on=["sample_id", "cluster_id"])
 
 
 def _meta_preprocess(data: pd.DataFrame,
@@ -223,8 +216,16 @@ def _meta_preprocess(data: pd.DataFrame,
     """
     if norm_method is not None:
         norm_method = partial(scaler, scale_method=norm_method, return_scaler=False, **kwargs)
-        data = data.groupby(["sample_id", "cluster_id"])[features].apply(norm_method).reset_index()
-    metadata = data.groupby(["sample_id", "cluster_id"])[features].apply(summary_method).reset_index()
+        data = (data.groupby(["sample_id", "cluster_id"])[features]
+                .apply(lambda x: pd.DataFrame(norm_method(x), columns=features))
+                .reset_index())
+    summary = list()
+    for _id, df in data.groupby(["sample_id", "cluster_id"]):
+        x = pd.DataFrame(df[features].apply(np.median, axis=0)).T
+        x["sample_id"] = _id[0]
+        x["cluster_id"] = _id[1]
+        summary.append(x)
+    metadata = pd.concat(summary)
     metadata["meta_label"] = None
     return metadata
 
@@ -277,9 +278,9 @@ def sklearn_metaclustering(data: pd.DataFrame,
     norm_kwargs = norm_kwargs or {}
     metadata = _meta_preprocess(data, features, summary_method, norm_method, **norm_kwargs)
     vprint_("...clustering the clusters")
-    metadata["meta_label"] = model.fit_predict(metadata[features])
+    metadata["meta_label"] = model.fit_predict(metadata[features].values)
     vprint_("...assigning meta-labels")
-    data = _asign_metalabels(data, metadata, verbose)
+    data = _asign_metalabels(data, metadata)
     vprint_("------ Complete ------")
     return data, None, None
 
@@ -325,10 +326,10 @@ def phenograph_metaclustering(data: pd.DataFrame,
     metadata = _meta_preprocess(data, features, summary_method, norm_method, **norm_kwargs)
     vprint_("...summarising clusters")
     vprint_("...clustering the clusters")
-    communities, graph, q = phenograph.cluster(data[features], **kwargs)
+    communities, graph, q = phenograph.cluster(metadata[features].values, **kwargs)
     metadata["meta_label"] = communities
     vprint_("...assigning meta-labels")
-    data = _asign_metalabels(data, metadata, verbose)
+    data = _asign_metalabels(data, metadata)
     vprint_("------ Complete ------")
     return data, graph, q
 
@@ -345,7 +346,7 @@ def consensus_metacluster(data: pd.DataFrame,
                           resample_proportion: float = 0.5,
                           **norm_kwargs):
     """
-    Meta-clustering with a the consensus clustering algorithm, as first described here:
+    Meta-clustering with the consensus clustering algorithm, as first described here:
     https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf. This function
     will summarise the clusters in 'data' (where cluster IDs should be contained in a column
     named 'cluster_id') and then 'cluster the clusters'. The optimal number of clusters is
@@ -395,7 +396,7 @@ def consensus_metacluster(data: pd.DataFrame,
                                        resample_proportion=resample_proportion)
     consensus_clust.fit(metadata[features].values)
     metadata["meta_label"] = consensus_clust.predict_data(metadata[features])
-    data = _asign_metalabels(data, metadata, verbose)
+    data = _asign_metalabels(data, metadata)
     return data, None, None
 
 
@@ -742,6 +743,41 @@ class Clustering:
                                                    norm_method=normalise,
                                                    **kwargs)
 
+    def rename_meta_clusters(self,
+                             mappings):
+        """
+        Given a dictionary of mappings, replace the current IDs stored
+        in meta_label column of the data attribute with new IDs
+
+        Parameters
+        ----------
+        mappings: dict
+            Mappings; {current ID: new ID}
+
+        Returns
+        -------
+        None
+        """
+        self.data["meta_label"].replace(mappings, inplace=True)
+
+    def _cluster_counts(self):
+        """
+        Updates the data attribute with an additional column named 'cluster_size',
+        which corresponds to the proportion of events in each cluster relative to
+        the total events from the original FileGroup
+
+        Returns
+        -------
+        None
+        """
+        updated_data = list()
+        for _id, df in self.data.groupby("sample_id"):
+            cluster_counts = df.cluster_id.value_counts().to_dict()
+            df["cluster_size"] = df["cluster_id"].apply(lambda x: cluster_counts.get(x))
+            df["cluster_size"] = df["cluster_size"] / df.shape[0]
+            updated_data.append(df)
+        self.data = pd.concat(updated_data).reset_index(drop=True)
+
     def explore(self):
         """
         Generate an Explorer object (see CytoPy.flow.explore.Explorer) using the
@@ -751,6 +787,7 @@ class Clustering:
         -------
         Explorer
         """
+        self._cluster_counts()
         data = self.data.copy()
         return Explorer(data=data)
 

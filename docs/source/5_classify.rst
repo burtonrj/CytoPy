@@ -38,7 +38,7 @@ You might ask, well how do classifiers handle the multi-class structure of popul
 
 This is clearly a very complex population tree. If we wanted a classifier to identify the populations "CD3+" and "T cells", how would we do so when there are clearly overlaps? (A cell might fall inside the CD3+ gate but then not the T cell gate). **CellClassifier** supports both multi-class and multi-label prediction (however the choice of algorithm to use may be limited for multi-label prediction, see Scikit-Learn documentation for more details: https://scikit-learn.org/stable/modules/multiclass.html).
 
-For multi-class but single label predictions (cells belong to one population and one population only), **CellClassifier** assigns a single class to each cell in the training data. For multi-label prediction, **CellClassifier** generates a dense binary matrix of shape (n_samples, n_classes). 
+For multi-class but single label predictions (cells belong to one population and one population only), **CellClassifier** assigns a single class to each cell in the training data. For multi-label prediction, **CellClassifier** generates a dense binary matrix of shape (n_samples, n_classes). When we call subsequent methods for multi-label prediction we can specify the *threshold* a class must exceed for a positive assignment (defaults to 0.5, i.e. >50% probability of positive outcome to be assigned a class).
 
 When the predicting new **Populations** for some unclassified **FileGroup** after training, **Populations** inherit from the 'root' population chosen when initiating the **CellClassifier**.
 
@@ -56,6 +56,7 @@ The **CellClassifier** object and the classes that inherit from it follow the co
 1. We create the **CellClassifier** object::
 
 	xgb = SklearnCellClassifier(name="xgb_classifier",
+				     multi_class=False,
                              	     features=features,
                              	     target_populations=populations,
                              	     klass="XGBClassifier",
@@ -91,25 +92,34 @@ Taking XGBoostClassifier as an example, training a model is simple, we can just 
 In addition to this, the **SklearnCellClassifier** class provides a few additional functions:
 
 * hyperparameter_tuning: providing a dictionary of parameters or "parameter grid" the optimal parameters will be chosen by either grid search cross-validation or random search. See specific API for details and consult the Scikit-Learn documentation for a complete guide: https://scikit-learn.org/stable/modules/grid_search.html
-* plot_learning_curve: 
+* plot_learning_curve: this method will generate a learning curve using the scikit-learn utility function sklearn.model_selection.learning_curve. This can be performed either with the training data or by providing the ID of some other previously gated *FileGroup*
+* plot_confusion_matrix: this will generate a new figure of confusion matrices represented by heatmaps. An example of such is shown below.
 
 .. image:: images/classify/confusion_holdout.png
 
 Validating
 ===========
 
-When working with a new data set it is recommended that you validate the performance of your classifier by manually classifying multiple samples and assessing the performance using *manual_validation*. This method of **CellClassifier** returns a Pandas DataFrame of classification performance compared to the already existing populations. In the example below, the samples had already been classified by manual gating::
+When working with a new data set it is recommended that you validate the performance of your classifier by manually classifying multiple samples and assessing the performance using *validate_classifier*. This method of **CellClassifier** returns a dictionary of classification performance compared to the already existing populations. In the example below, the samples had already been classified by manual gating::
 
-	validation_samples = ['254-05_pdmc_t',
-			      '325-01_pdmc_t',
-			      '326-01_pdmc_t',
-			      '332-01_pdmc_t',
-			      '338-01_pdmc_t']
+	validation_samples = ['254-05',
+			      '325-01',
+			      '326-01',
+			      '332-01',
+			      '338-01']
 
 
 	val_performance = pd.DataFrame()
-	for v in g1_validation:
-	    result = classifier.manual_validation(v, root_population='T cells')
+	for v in validation_samples:
+	    result = xgb.validate_classifier(experiment=exp,
+	    				      validation_id=v, 
+	    				      metrics=['f1_weighted',
+	    				      		'balanced_accuracy_score',
+	    					     	'precision_score',
+	    					     	'recall_score'],
+	    				      root_population='T cells',
+	    				      return_predictions=False)
+	    results = pd.DataFrame(results, index=[0])
 	    result['sample_id'] = v
 	    val_performance = pd.concat([val_performance, result])
 
@@ -117,36 +127,75 @@ The dataframe "val_performance" looks like this:
 
 .. image:: images/classify/val_performance.png
 
-The poor performance of the outlier can be investigated further by printing the "report card"::
+Note that metrics can be the name of any valid Scikit-Learn metric function, see Scikit-Learn documentation for details: https://scikit-learn.org/stable/modules/model_evaluation.html
 
-	classifier.manual_validation('325-01_pdmc_t', 
-				      print_report_card=True, 
-				      root_population='T cells')
+The poor performance of the outlier can be investigated further by passing the feature space and labels for the validation sample to *plot_confusion_matrix*::
 
+	x, y = xgb.load_validation(experiment=exp, validation_id='325-01', root_population='T cells')
+	xgb.plot_confusion_matrix(x=x, y=y)
 
 This produces the following confusion matrix, showing that the poor performance stems from misclassification of gamma delta T cells and unclassified events:
 
 .. image:: images/classify/mappings.png
 .. image:: images/classify/confusion_outlier.png
 
-Troubleshooting with backgating
-=================================
+Predicting populations and troubleshooting with backgating
+===========================================================
 
-We may want to investigate further as to how the cells classified as gamma delta T cells by XGBoost compare to those classified manually. Remeber how earlier we said that *predict* method returns a **Gating** object. We can use this **Gating** object and the *plotting.backgate* method to directly compare the "pseudo-gate" (predictions) of the XGBoost classifier with the manual gate::
+When we call the *predict* method, we provide the **Experiment** and the name of the sample (FileGroup) we want to predict populations for. The *predict* method will then use the model to predict the populations and return a modified **FileGroup** with the new populations assigned::
 
-	gates = classifier.predict('325-01_pdmc_t')
-	gates.plotting.backgate(base_population='T cells', 
-		                x='PanGD', 
-		                y='Vd2', 
-		                transforms={'x': 'logicle', 
-		                            'y': 'logicle'},
-		                poverlay=['XGBoost_gdt'], 
-		                pgeoms=['gdt'])
+	updated_filegroup = xgb.predict(experiment=exp, 
+					sample_id='325-01', 
+					root_population='T cells', 
+					return_predictions=False)
+					
+To save the results of our classifier to the **FileGroup** we would then call the *save* method on 'updated_filegroup'.
 
-"poverlay" specifies populations to 'overlay' as scatter points and "pgeoms" specifies populations to overlay as a 'polygon gate' calculated as the convex hull of the populations data points. The above gives us the following that displays how the "poor classification" is a result of this biological sample having reduced numbers of gamma delta T cells:
+We may want to investigate further as to how the cells classified as gamma delta T cells by XGBoost compare to those classified manually. Since the *predict* method returns a modfied **FileGroup**, we can use this **CreatePlot** class and inspect the populations. A particularly useful method of this class is the *backgate* method. We can use this to directly compare the "pseudo-gate" (predictions) of the XGBoost classifier with the manual gate, by overlaying both on the parent population, the 'T cells'::
+
+	from CytoPy.flow.plotting import CreatePlot
+	plotting = CreatePlot(transform_x="logicle", transform_y="logicle")
+	# We have to provide the parent population dataframe to backgate,
+	# this can be retrieved from the filegroup like so...
+	parent = updated_filegroup.load_population_df("T cells", transform=None)
+	# Notice how we set 'transform' to None. This is because plotting will 
+	# transform the data for us and we don't want to transform it twice!
+	# We do the same for the populations we want to overlay on the parent
+	children = {"gdt": updated_filegroup.load_population_df("gdt", transform=None),
+		    "XGBoost_gdt": updated_filegroup.load_population_df("XGBoost_gdt", transform=None)}
+	plotting.backgate(parent=parent,
+			  children=children,
+			  x="PanGD",
+			  y="Vd2",
+			  method={"gdt": "polygon", "XGBoost_gdt": "scatter"}
+
+The *method* specifies how to plot the overlaid populations. We have chose to plot the manual gate as a polygon and the XGBoost generated population as a scatter plot. The above gives us the following that displays how the "poor classification" is a result of this biological sample having reduced numbers of gamma delta T cells:
 
 .. image:: images/classify/back_gate.png
 
 
 Keras
 ======
+
+CytoPy extends the functionality if **CellClassifier** to deep neural networks using Keras through the **KerasCellClassifier** class. This call inherits all the functionality of **CellClassifier** but differs slightly in the way that the objects are created.
+
+The **KerasCellClassifier** requires that an optimizer (see https://keras.io/optimizers), loss function (see https://keras.io/losses) and performance metrics (see https://keras.io/metrics) be provided when initialising the object. Additional compile kwargs can be provided with the *compile_kwargs* argument.
+
+Layers of the neural network are defined with the **Layer** class. Individual layers should be defined with the name of the Keras class to user (*klass* argument; see https://keras.io/api/layers/) and the layer parameters in the argument *kwargs*.
+
+Layers are then appended to a **KerasCellClassifier** layers attribute.
+
+Keras and deep neural networks are a complex topic and we suggest further reading for a new audience. We recommend "Hands-On Machine Learning with Scikit-Learn, Keras & Tensorflow" by Aurelien Geron for further reading.
+
+Saving classifiers
+===================
+
+Once we have defined a classifier we can save it's settings to the database for future use using the *save* method. 
+
+.. Note:: Saving a CellClassifier to the database does not save the model, but saves the options and parameters used to create the model. When reloading the model, the user will have to call *build_model* again
+
+For the **SklearnCellClassifier**, the underlying Scikit-Learn model can be saved to and reloaded from disk using the *save_model* and *load_model* methods, respectively.
+
+.. Warning:: Be aware of continuity issues of saving Scikit-Learn models. Compatibility with new releases of Scikit-Learn and CytoPy are not guaranteed.
+
+
