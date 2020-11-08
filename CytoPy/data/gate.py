@@ -379,7 +379,7 @@ class ThresholdGate(Gate):
         *  kernel (default="guassian") - kernel used for KDE calculation
            (see KDEpy.FFTKDE for avialable kernels)
         * bw (default="silverman") - bandwidth to use for KDE calculation, can either be
-          "siilverman" or "ISJ" or a float value (see KDEpy)
+          "silverman" or "ISJ" or a float value (see KDEpy)
         * min_peak_threshold (default=0.05) - percentage of highest recorded peak below
           which peaks are ignored. E.g. 0.05 would mean any peak less than 5% of the
           highest peak would be ignored.
@@ -1141,7 +1141,9 @@ class EllipseGate(PolygonGate):
 
     def __init__(self, *args, **values):
         method = values.get("method", None)
-        self.conf = values.get("method_kwargs", {}).pop("conf", 0.95)
+        method_kwargs = values.get("method_kwargs", {})
+        self.conf = method_kwargs.pop("conf", 0.95)
+        assert method_kwargs.get("covariance_type", "full"), "EllipseGate only supports covariance_type of 'full'"
         valid = ["manual", "GaussianMixture", "BayesianGaussianMixture"]
         assert method in valid, f"Elliptical gating method should be one of {valid}"
         super().__init__(*args, **values)

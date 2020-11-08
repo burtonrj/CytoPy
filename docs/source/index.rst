@@ -19,7 +19,7 @@ Our accompanying `manuscript <https://www.biorxiv.org/content/10.1101/2020.04.08
     Getting Started <1_intro>
     Creating a project <2_project>
     Autonomous gating <3_gating>
-    Measuring variance <4_batch>
+    Measuring variance <4_variance>
     Supervised cell classification <5_classify>
     High-dimensional clustering <6_cluster>
     Feature extraction, selection, and description <7_features>
