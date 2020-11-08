@@ -150,10 +150,25 @@ You can access the **FileGroup** directly by accessing the *filegroup* attribute
 Actions
 ********
 
+There are some processes in the identification of cell populations that falls outside the scope of polygon or threshold gates that subset 'clusters' of cells. The **GatingStrategy** offers the **Action** class (which is embedded within the **GatingStrategy** class) and this allows a user to define merging or subtracting tasks. This **Action** is applied to a target population, *left*, in relation to some other population, *right*. The result is the generation of a new **Population**, either by subtracting the elements of *right* from *left* or by merging *left* with *right*.
 
+As an example, say we had two populations derived from our 'Live CD3+' population, we will call them 'Population A' and 'Population B'. We can create a new population by merging these two, creating a 'Population AB', using an **Action**::
+
+	from CytoPy.data.gating_strategy import Action
+	merged_ab = Action(action_name="merge_ab",
+			    method="merge",
+			    left="A",
+			    right="B",
+			    new_population_name="AB")
+	template.apply_action(action=merged_ab,
+			       add_to_strategy=True)
+
+Now when we apply this **GatingStrategy** to new data, gates will be applied in order of their parent population and once the populations "A" and "B" have been generated, this merge operation will be performed.
 	
 Applying a GatingStrategy to new data
 **************************************
+
+
 
 Types of Gates
 ###############
