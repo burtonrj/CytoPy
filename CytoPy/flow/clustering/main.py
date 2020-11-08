@@ -38,6 +38,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from ...data.experiment import Experiment
 from ...data.population import Cluster
 from ...feedback import vprint, progress_bar
+from ..feature_extraction import _fetch_subject
 from ..explore import Explorer
 from ..transforms import scaler
 from .consensus import ConsensusCluster
@@ -549,6 +550,10 @@ def _load_data(experiment: Experiment,
                                     transform=transform,
                                     label_downstream_affiliations=True)
         pop["sample_id"] = _id
+        subject = _fetch_subject(fg)
+        if subject is not None:
+            subject = subject.subject_id
+        pop["subject_id"] = subject
         population_data.append(pop)
     data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
                       for df in population_data]).reset_index(drop=True)
