@@ -480,7 +480,7 @@ class FileGroup(mongoengine.Document):
         data["population_label"] = None
         dependencies = self.list_downstream_populations(parent)
         for pop in dependencies:
-            idx = self.populations[pop].index
+            idx = self.get_population(pop).index
             data.loc[idx, 'label'] = pop
         data["population_label"].fillna(parent, inplace=True)
         return data
