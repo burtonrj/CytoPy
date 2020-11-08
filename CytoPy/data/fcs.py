@@ -375,9 +375,12 @@ class FileGroup(mongoengine.Document):
                                           **kwargs)
             feedback(f"{population.parent} estimated, resuming estimation of {population.population_name}....")
         features = [x for x in [population.geom.x, population.geom.y] if x is not None]
+        transformations = {d: transform for d, transform in zip([population.geom.x, population.geom.y],
+                                                                [population.geom.transform_x,
+                                                                 population.geom.transform_y])
+                           if d is not None}
         training_data = self.load_population_df(population=population.parent,
-                                                transform={"x": population.geom.transform_x,
-                                                           "y": population.geom.transform_y},
+                                                transform=transformations,
                                                 label_downstream_affiliations=False).copy()
         training_data["labels"] = 0
         training_data.loc[population.index]["labels"] = 1

@@ -38,6 +38,7 @@ from ..data.geometry import ThresholdGeom, PolygonGeom
 from ..flow.transforms import apply_transform
 from warnings import warn
 from typing import List, Generator, Dict
+from scipy.spatial import ConvexHull
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -679,7 +680,7 @@ class CreatePlot:
                  colours: str or None = "pastel",
                  alpha: float = .75,
                  size: float = 5,
-                 method: str = "scatter",
+                 method: str or dict = "scatter",
                  shade: bool = True,
                  plot_kwargs: dict or None = None,
                  overlay_kwargs: dict or None = None,
@@ -706,9 +707,11 @@ class CreatePlot:
             If method is 'scatter', controls transparency of markers
         size: float (default=5)
             If method is 'scatter', controls size of markers
-        method: str (default="scatter)
-            Method should be either "scatter" (default) or "kde", which controls how
-            overlaid populations will appear.
+        method: str or dict (default="scatter)
+            Method should be either "scatter" (default), "polygon", or "kde", which controls how
+            overlaid populations will appear. If a dictionary is provided, then it should
+            have keys matching that of 'children' and values being the methods to use
+            for each overlay.
         shade: bool (default=True)
             If method is 'kde', specifies whether to shade in the contours
         plot_kwargs: dict (optional)
@@ -736,7 +739,10 @@ class CreatePlot:
                              **plot_kwargs)
 
         for c, (child_name, df) in zip(colours, children.items()):
-            if method == "kde":
+            method_ = method
+            if isinstance(method, dict):
+                method_ = method.get(child_name, "scatter")
+            if method_ == "kde":
                 self._overlay(data=df,
                               x=x,
                               y=y,
@@ -745,7 +751,7 @@ class CreatePlot:
                               shade=shade,
                               label=child_name,
                               **overlay_kwargs)
-            else:
+            elif method_ == "scatter":
                 self._overlay(data=df,
                               x=x,
                               y=y,
@@ -753,6 +759,14 @@ class CreatePlot:
                               color=c,
                               s=size,
                               alpha=alpha,
+                              label=child_name,
+                              **overlay_kwargs)
+            else:
+                self._overlay(data=df,
+                              x=x,
+                              y=y,
+                              method=method,
+                              color=c,
                               label=child_name,
                               **overlay_kwargs)
         self._set_legend(shape_n=len(children), **legend_kwargs)
@@ -794,6 +808,14 @@ class CreatePlot:
                              y=data[y],
                              label=label,
                              **kwargs)
+        elif method == "polygon":
+            hull = ConvexHull(data[[x, y]].values)
+            for simplex in hull.simplices:
+                self._ax.plot(data[simplex, 0],
+                              data[simplex, 1],
+                              '-',
+                              label=label,
+                              **kwargs)
         else:
             if y is None:
                 sns.kdeplot(data=data[x],

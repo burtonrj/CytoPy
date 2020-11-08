@@ -739,7 +739,7 @@ class GatingStrategy(mongoengine.Document):
         Parameters
         ----------
         delete_gates: bool (default=True)
-        remove_associations (default=True)
+        remove_associations: (default=True)
         args:
             Positional arguments for mongoengine.document.delete call
         kwargs:
