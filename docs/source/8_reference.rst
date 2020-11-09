@@ -16,9 +16,7 @@ API Reference
     api/CytoPy.data.subject
     api/CytoPy.data.read_write
     api/CytoPy.data.supervised_classifier
-    api/CytoPy.flow.clustering.consensus
-    api/CytoPy.flow.clustering.flowsom
-    api/CytoPy.flow.clustering.main
+    api/CytoPy.flow.clustering
     api/CytoPy.flow.variance
     api/CytoPy.flow.explore
     api/CytoPy.flow.neighbours
