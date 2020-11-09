@@ -15,12 +15,12 @@ cytometry data and a clinical/experimental endpoint, we wish to find what proper
 are important for identifying a disease? What phenotypes are changing in response to a stimulus? etc). 
 The pipeline itself is centered around a MongoDB database, is built in  the Python programming language, 
 and designed with a 'low code' API, greatly 
-simplifying cytometry analysis. We can break it all down into the following steps that can be completed within minimal 
+simplifying cytometry analysis. We can break it down into the following steps that can be completed with minimal 
 code required:
 
 1. Data uploading
 2. Pre-processing
-3. Batch-effect analysis
+3. Quantifying inter-sample variation and choosing training data
 4. Supervised cell classification 
 5. High-dimensional clustering
 6. Feature extraction, selection, and description
@@ -30,6 +30,8 @@ Supervised classification being training samples, gated according to some 'gatin
 to train a classifier. Alternatively high-dimensional clustering (by PhenoGraph or FlowSOM) involves clustering 
 cells in a completely unbiased fashion. CytoPy provides access to both methodologies as we observe 
 that both have benefits and failings.
+
+CytoPy is algorithm agnostic and provides a general interface for accessing the tools provided by Scikit-Learn whilst following the terminology and signatures common to this library. If you would like to expand CytoPy and add additional methods for autonomous gating, supervised classificaiton or high dimensional clustering, please contact me at burtonrj@cardiff.ac.uk, raise an issue or make a pull request.
 
 For more details we refer you to our pre-print <a href='https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2'>manuscript</a> and software documentation. Our documentation contains 
 a detailed tutorials for each of the above steps (https://cytopy.readthedocs.io/)
@@ -45,9 +47,7 @@ For installing MongoDB the reader should refer to https://docs.mongodb.com/manua
 CytoPy assumes that the installation is local but if a remote MongoDB database is used then a host address, port and 
 authentication parameters can be provided when connecting to the database, which is handled by cytopy.data.mongo_setup.
 
-For installing Python 3 we recommend the distribution provided on <a href='https://www.python.org/downloads/'>Python.org</a> but 
- alternatively <a href='https://www.anaconda.com/'>Anaconda</a> can be used. We suggest that CytoPy be installed within an isolated 
-programming environment and suggest the environment manager <a href='https://docs.python.org/3/tutorial/venv.html'>venv.</a>
+For installing Python 3 we recommend <a href='https://www.anaconda.com/'>Anaconda</a>, which also provides a convenient environment manager <a href='https://docs.python.org/3/tutorial/venv.html'>. We suggest that you always keep CytoPy contained within its own programming environment.</a>
 
 ### Installing CytoPy
 
@@ -68,6 +68,8 @@ To install CytoPy and it's requirements, first download the source code, activat
 CytoPy is licensed under the MIT license from the Open Source Initiative. CytoPy was authored by <a href='https://www.linkedin.com/in/burtonbiomedical/'>Ross Burton</a> and the <a href='https://www.cardiff.ac.uk/people/view/78691-eberl-matthias'>Eberl Lab</a>  at <a href='https://www.cardiff.ac.uk/systems-immunity'>Cardiff University's Systems Immunity Research Institute</a>. This project is a working progress and we are eager to expand and improve its capabilities. If you would like to contribute to CytoPy please make a pull request or email us at burtonrj@cardiff.ac.uk. For news and latest developments, follow us on Twitter <a href='https://twitter.com/EberlLab'>@EberlLab</a> and <a href='https://twitter.com/burtondatasci'>@burtondatasci</a>
 
 In future releases we are currently interested in the following:
+
+* A graphical user interface to open CytoPy up to a wider audience
 
 * Incorporating data transform/normalisation procedures that mitigate or 'remove' noise as a result of batch effect. 
 Methods of interest include <a href='https://arxiv.org/pdf/1610.04181.pdf'>MMD-ResNet</a>, 
