@@ -703,13 +703,19 @@ class GatingStrategy(mongoengine.Document):
                                                         label_downstream_affiliations=False)
         return gate.fit_predict(data=parent_data)
 
-    def save(self, *args, **kwargs):
+    def save(self,
+             save_strategy: bool = True,
+             save_filegroup: bool = True,
+             *args,
+             **kwargs):
         """
         Save GatingStrategy and the populations generated for the associated
         FileGroup.
 
         Parameters
         ----------
+        save_filegroup: bool (default=True)
+        save_strategy: bool (default=True)
         args:
             Positional arguments for mongoengine.document.save call
         kwargs:
@@ -719,13 +725,15 @@ class GatingStrategy(mongoengine.Document):
         -------
         None
         """
-        for g in self.gates:
-            g.save()
-        super().save(*args, **kwargs)
-        if self.name not in self.filegroup.gating_strategy:
-            self.filegroup.gating_strategy.append(self.name)
-        if self.filegroup is not None:
-            self.filegroup.save()
+        if save_strategy:
+            for g in self.gates:
+                g.save()
+            super().save(*args, **kwargs)
+        if save_filegroup:
+            if self.name not in self.filegroup.gating_strategy:
+                self.filegroup.gating_strategy.append(self.name)
+            if self.filegroup is not None:
+                self.filegroup.save()
 
     def delete(self,
                delete_gates: bool = True,
