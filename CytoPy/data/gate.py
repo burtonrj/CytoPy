@@ -1252,13 +1252,13 @@ def _child_similarity_score(child: ChildPolygon,
     -------
     str
     """
-    assert isinstance(population.geom, PolygonGeom), "Similarity score is only for comparison of Polygon type gates"
-    area = polygon_overlap(child.geom.shape, population.geom.shape)
+    # assert isinstance(population.geom, PolygonGeom), "Similarity score is only for comparison of Polygon type gates"
+    # area = polygon_overlap(child.geom.shape, population.geom.shape)
     common_features = set(population.signature.keys()).intersection(child.signature.keys())
     vector_signatures = np.array([[population.signature.get(i), child.signature.get(i)]
                                   for i in common_features]).T
     dist_score = minkowski(vector_signatures[:, 0], vector_signatures[:, 1])
-    return dist_score * area
+    return dist_score
 
 
 def apply_threshold(data: pd.DataFrame,
