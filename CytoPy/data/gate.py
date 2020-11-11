@@ -43,7 +43,7 @@ from sklearn.cluster import *
 from sklearn.mixture import *
 from hdbscan import HDBSCAN
 from warnings import warn
-from scipy.spatial.distance import minkowski
+from scipy.spatial.distance import euclidean
 from string import ascii_uppercase
 from collections import Counter
 from typing import List, Dict
@@ -962,9 +962,9 @@ class PolygonGate(Gate):
         """
         matched_populations = list()
         for child in self.children:
-            scores = [_child_similarity_score(child=child, population=pop)
-                      for pop in new_populations]
-            matching_population = new_populations[int(np.argmax(scores))]
+            hausdorff_distances = [child.geom.shape.hausdorff_distance(pop.geom.shape)
+                                   for pop in new_populations]
+            matching_population = new_populations[int(np.argmin(hausdorff_distances))]
             matching_population.population_name = child.name
             matched_populations.append(matching_population)
         return matched_populations
@@ -1252,13 +1252,21 @@ def _child_similarity_score(child: ChildPolygon,
     -------
     str
     """
-    # assert isinstance(population.geom, PolygonGeom), "Similarity score is only for comparison of Polygon type gates"
-    # area = polygon_overlap(child.geom.shape, population.geom.shape)
+    assert isinstance(population.geom, PolygonGeom), "Similarity score is only for comparison of Polygon type gates"
+    area = polygon_overlap(child.geom.shape, population.geom.shape)
     common_features = set(population.signature.keys()).intersection(child.signature.keys())
     vector_signatures = np.array([[population.signature.get(i), child.signature.get(i)]
                                   for i in common_features]).T
-    dist_score = minkowski(vector_signatures[:, 0], vector_signatures[:, 1])
-    return dist_score
+    dist_score = euclidean(vector_signatures[:, 0], vector_signatures[:, 1])
+    return dist_score * area
+
+
+def _child_similarity_score_low_dim(child: ChildPolygon,
+                                    population: Population,
+                                    dims: list):
+    x = [child.signature.get(i) for i in dims]
+    y = [population.signature.get(i) for i in dims]
+    return euclidean(x, y)
 
 
 def apply_threshold(data: pd.DataFrame,
