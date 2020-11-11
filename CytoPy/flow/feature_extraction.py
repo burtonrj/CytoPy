@@ -157,7 +157,7 @@ def experiment_statistics(experiment: Experiment,
         if include_subject_id:
             subject = _fetch_subject(filegroup=fg)
             if subject is not None:
-                df["subject_id"] = subject.subject_id
+                df["subject_id"] = subject[0].subject_id
         data.append(df)
     return pd.concat(data)
 
@@ -229,7 +229,7 @@ def cluster_statistics(experiment: Experiment,
         if include_subject_id:
             subject = _fetch_subject(filegroup=fg)
             if subject is not None:
-                data["subject_id"] = subject.subject_id
+                data["subject_id"] = subject[0].subject_id
         all_cluster_data.append(data)
     return pd.concat(all_cluster_data)
 
