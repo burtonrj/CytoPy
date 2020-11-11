@@ -15,7 +15,7 @@ matplotlib==3.3.1
 mongoengine==0.20.0
 mongomock==3.20.0
 nbconvert==6.0.4
-numpy==1.19
+numpy>=1.19.2
 oauthlib==3.1.0
 pandas==1.1.2
 phate==1.0.4
