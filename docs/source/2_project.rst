@@ -10,7 +10,7 @@ Connecting to the database
 
 If the database is hosted locally, then connecting is simple. We use the *global_init* function at the beginning of our analysis (whether this is in a script or in a notebook). All we have to do is pass the name of our database into this function, for example this will connect to the database called "CytoPy"::
 	
-	from CytoPy.data.mongo_setup import global_init
+	from CytoPy.data.setup import global_init
 	global_init('CytoPy')
 
 If the database does not yet exist, it will automatically be generated. 
@@ -116,7 +116,7 @@ Some convenience functions for exploring the range of channel mappings and creat
 
 Once we have our template ready, we can create out **Panel** document::
 
-	from CytoPy.data.panel import Panel
+	from CytoPy.data.experiment import Panel
 	n_panel = Panel(panel_name='PD_N_Panel')
 	n_panel.create_from_excel('path/to/template.xlsx')
 	n_panel.save()
