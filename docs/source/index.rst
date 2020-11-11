@@ -9,7 +9,7 @@ CytoPy was created to address these issues. It was created with the general phil
 
 CytoPy was authored by `Ross Burton <https://www.linkedin.com/in/burtonbiomedical/>`_ and the `Eberl Lab <https://www.cardiff.ac.uk/people/view/78691-eberl-matthias>`_ at `Cardiff University Infection and Immunity Research Institute <https://www.cardiff.ac.uk/medicine/research/divisions/infection-and-immunity>`_. CytoPy is maintained on GitHub (https://github.com/burtonrj/CytoPy) and all the latest developments can be found here. This project is a working progress and we are eager to expand and improve it's capabilities. If you would like to contribute to CytoPy please make a pull request or email us at burtonrj@cardiff.ac.uk. For news and latest developments, follow us on Twitter `@EberlLab <https://twitter.com/EberlLab>`_ and `@burtondatasci <https://twitter.com/burtondatasci>`_
 
-Our accompanying `manuscript <https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2>`_ details the application of CytoPy to a novel immunophenotyping project focused on patients receiving peritoneal dialysis who were admitted on day 1 of acute peritonitis before commencing antibiotic treatment. The original peritonitis dataset can be accessed `here <>`_
+Our accompanying `manuscript <https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2>`_ details the application of CytoPy to a novel immunophenotyping project focused on patients receiving peritoneal dialysis who were admitted on day 1 of acute peritonitis before commencing antibiotic treatment. The original peritonitis dataset can be accessed `here <https://drive.google.com/file/d/1y6qL_7l2unDoUkNqlr9Xqubq5_sP1E14/view?usp=sharing>`_
 
 
 .. toctree::
