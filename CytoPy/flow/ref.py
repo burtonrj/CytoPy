@@ -35,6 +35,7 @@ from CytoPy.data.fcs import FileGroup
 from CytoPy.feedback import vprint
 from CytoPy.flow.variance import load_and_sample, _common_features
 import pandas as pd
+import numpy as np
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"
@@ -88,6 +89,7 @@ def create_ref_sample(experiment: Experiment,
     None
     """
     vprint_ = vprint(verbose)
+    sampling_kwargs = sampling_kwargs or {}
     new_file_name = new_file_name or f'{experiment.experiment_id}_sampled_data'
     assert all([s in experiment.list_samples() for s in sample_ids]), \
         'One or more samples specified do not belong to experiment'
@@ -115,7 +117,7 @@ def create_ref_sample(experiment: Experiment,
                               markers=features)
     new_filegroup.notes = 'sampled data'
     if save_sample_id:
-        new_filegroup.cell_meta_labels["original_filegroup"] = sample_id_idx
+        new_filegroup.cell_meta_labels["original_filegroup"] = np.array(sample_id_idx, dtype="U")
     vprint_('Inserting sampled data to database...')
     new_filegroup.save()
     experiment.fcs_files.append(new_filegroup)
