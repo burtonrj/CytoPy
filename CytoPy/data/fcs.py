@@ -749,7 +749,8 @@ class FileGroup(mongoengine.Document):
         with h5py.File(self.h5path, "a") as f:
             if "cell_meta_labels" in f.keys():
                 for meta, labels in self.cell_meta_labels.items():
-                    f.create_dataset(f'/cell_meta_labels/{meta}', data=labels)
+                    ascii_labels = [x.encode("ascii", "ignore") for x in labels]
+                    f.create_dataset(f'/cell_meta_labels/{meta}', data=ascii_labels)
             for p in self.populations:
                 parent_n = self.get_population(p.parent).n
                 p.prop_of_parent = p.n / parent_n
