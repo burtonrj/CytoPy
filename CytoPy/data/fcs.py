@@ -807,6 +807,18 @@ class FileGroup(mongoengine.Document):
                 "prop_of_parent": pop.n / parent.n,
                 "prop_of_root": pop.n / root.n}
 
+    def quantile_clean(self,
+                       upper: float = 0.999,
+                       lower: float = 0.001):
+        df = self.data(source="primary")
+        for x in df.columns:
+            df = df[(df[x] >= df[x].quantile(lower)) & (df[x] <= df[x].quantile(upper))]
+        clean_pop = Population(population_name="root_clean",
+                               index=df.index.values,
+                               parent="root",
+                               n=df.shape[0])
+        self.add_population(clean_pop)
+
     def save(self, *args, **kwargs):
         # Calculate meta and save indexes to disk
         if self.populations:
