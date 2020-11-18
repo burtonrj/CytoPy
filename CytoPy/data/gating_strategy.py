@@ -32,6 +32,7 @@ from ..flow.plotting import CreatePlot
 from ..feedback import progress_bar, vprint
 from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, \
     PolygonGeom, update_polygon, update_threshold
+from ..flow.gate_search import hyperparameter_gate
 from .experiment import Experiment
 from .fcs import FileGroup
 from datetime import datetime
@@ -101,6 +102,7 @@ class GatingStrategy(mongoengine.Document):
     name = mongoengine.StringField(required=True, unique=True)
     gates = mongoengine.ListField(mongoengine.ReferenceField(Gate, reverse_delete_rule=mongoengine.PULL))
     actions = mongoengine.EmbeddedDocumentListField(Action)
+    hyperparameter_search = mongoengine.DictField()
     creation_date = mongoengine.DateTimeField(default=datetime.now)
     last_edit = mongoengine.DateTimeField(default=datetime.now)
     flags = mongoengine.StringField(required=False)
@@ -215,6 +217,73 @@ class GatingStrategy(mongoengine.Document):
                                        parent=parent_data,
                                        **plot_gate_kwargs)
 
+    def add_hyperparameter_grid(self,
+                                gate_name: str,
+                                params: dict,
+                                cost: str or None = None,
+                                multiprocess: int or None = -1):
+        """
+        Add a hyperparameter grid to search which applying the given gate to new data.
+        This hyperparameter grid should correspond to valid hyperparameters for the
+        corresponding gate. Invalid parameters will be ignored. Choice of the cost
+        parameter to be minimised is dependent on the type of gate:
+        * ThresholdGate:
+            - "manhattan" (default): optimal parameters are those that result in the population whom's signature
+              is of minimal distance to the original data used to define the gate. The manhattan distance is used
+              as the distance metric.
+            - "euclidean": optimal parameters are those that result in the population whom's signature
+              is of minimal distance to the original data used to define the gate. The euclidean distance is used
+              as the distance metric.
+            - "threshold_dist": optimal parameters are those that result in the threshold
+               whom's distance to the original threshold defined are smallest
+        * PolygonGate & EllipseGate:
+            - "hausdorff" (optional): parameters chosen that minimise the hausdorff distance
+              between the polygon generated from new data and the original polgon gate created
+              when the gate was defined
+            - "manhattan" (default): optimal parameters are those that result in the population whom's signature
+              is of minimal distance to the original data used to define the gate. The manhattan distance is used
+              as the distance metric.
+            - "euclidean": optimal parameters are those that result in the population whom's signature
+              is of minimal distance to the original data used to define the gate. The euclidean distance is used
+              as the distance metric.
+
+        Parameters
+        ----------
+        gate_name: str
+            Gate to define hyperparameter grid for
+        params: dict
+            Grid of hyperparameters to be searched
+        cost: str
+            What to be minimised to choose optimal hyperparameters
+        multiprocess: int, optional (default=-1)
+            If an integer value is provided, then this represents the number of cores to use for multiprocessing
+            when searching the hyperparameter space. Defaults to -1 which will use all available cores. WARNING:
+            some algorithms are taxing in terms of memory usage, therefore if you suspect that computing resources
+            will not handle multiprocessing for the given gating method, set this value to None to indicate
+            that multiprocessing should not be used.
+        Returns
+        -------
+        None
+        """
+        assert gate_name in self.list_gates(), f"{gate_name} is not a valid gate"
+        if isinstance(self.get_gate(gate_name), ThresholdGate):
+            cost = cost or "manhattan"
+            valid_metrics = ["manhattan", "threshold_dist", "euclidean"]
+            err = f"For threshold gate 'cost' should either be one of {valid_metrics}"
+            assert cost in valid_metrics, err
+        if isinstance(self.get_gate(gate_name), PolygonGate) or isinstance(self.get_gate(gate_name), EllipseGate):
+            cost = cost or "hausdorff"
+            valid_metrics = ["hausdorff", "manhattan", "euclidean"]
+            err = f"For threshold gate 'cost' should either be one of {valid_metrics}"
+            assert cost in valid_metrics, err
+        err = "'params' must be a dictionary with each key corresponding to a valid " \
+              "hyperparameter and each value a list of parameter values"
+        assert isinstance(params, dict), err
+        assert all([isinstance(x, list) for x in params.values()]), err
+        self.hyperparameter_search[gate_name] = {"grid": params,
+                                                 "cost": cost,
+                                                 "multiprocess": multiprocess}
+
     def apply_gate(self,
                    gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate,
                    plot: bool = True,
@@ -257,7 +326,15 @@ class GatingStrategy(mongoengine.Document):
         parent_data = self.filegroup.load_population_df(population=gate.parent,
                                                         transform=None,
                                                         label_downstream_affiliations=False)
-        if gate.ctrl is None:
+        if gate.gate_name in self.hyperparameter_search.keys():
+            populations = hyperparameter_gate(gate=gate,
+                                              grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
+                                              cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
+                                              parent=parent_data,
+                                              multiprocess=self.hyperparameter_search.get(gate.gate_name).get(
+                                                  "multiprocess"),
+                                              verbose=self.verbose)
+        elif gate.ctrl is None:
             populations = gate.fit_predict(data=parent_data)
         else:
             populations = self._control_gate(gate=gate)
@@ -772,3 +849,4 @@ class GatingStrategy(mongoengine.Document):
                     f.delete_populations(populations=populations)
                     f.save()
         self.print(f"{self.name} successfully deleted.")
+
