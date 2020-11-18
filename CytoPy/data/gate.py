@@ -71,6 +71,7 @@ class Child(mongoengine.EmbeddedDocument):
     the populations identified in new data.
     """
     name = mongoengine.StringField()
+    signature = mongoengine.DictField()
     meta = {"allow_inheritance": True}
 
 
@@ -88,6 +89,9 @@ class ChildThreshold(Child):
         Definition of population e.g "+" or "-" for 1 dimensional gate or "++" etc for 2 dimensional gate
     geom: ThresholdGeom
         Geometric definition for this child population
+    signature: dict
+        Average of a population feature space (median of each channel); used to match
+        children to newly identified populations for annotating
     """
     definition = mongoengine.StringField()
     geom = mongoengine.EmbeddedDocumentField(ThresholdGeom)
@@ -128,7 +132,6 @@ class ChildPolygon(Child):
         children to newly identified populations for annotating
     """
     geom = mongoengine.EmbeddedDocumentField(PolygonGeom)
-    signature = mongoengine.DictField()
 
 
 class Gate(mongoengine.Document):
@@ -678,18 +681,18 @@ class ThresholdGate(Gate):
                                         "'predict' to apply static thresholds to new data. If you want to " \
                                         "reset the gate and call 'fit' again, first call 'reset_gate'"
         thresholds = self._fit(data=data)
-        dims = [i for i in [self.x, self.y] if i is not None]
-        if len(dims) == 1:
-            for definition in ["+", "-"]:
-                self.add_child(ChildThreshold(name=definition,
-                                              definition=definition,
-                                              geom=ThresholdGeom(x_threshold=thresholds[0])))
-        else:
-            for definition in ["++", "--", "-+", "+-"]:
-                self.add_child(ChildThreshold(name=definition,
-                                              definition=definition,
-                                              geom=ThresholdGeom(x_threshold=thresholds[0],
-                                                                 y_threshold=thresholds[1])))
+        y_threshold = None
+        if len(thresholds) > 1:
+            y_threshold = thresholds[1]
+        data = apply_threshold(data=data,
+                               x=self.x, x_threshold=thresholds[0],
+                               y=self.y, y_threshold=y_threshold)
+        for definition, df in data.items():
+            self.add_child(ChildThreshold(name=definition,
+                                          definition=definition,
+                                          signature=create_signature(data=df),
+                                          geom=ThresholdGeom(x_threshold=thresholds[0],
+                                                             y_threshold=y_threshold)))
         return None
 
     def fit_predict(self,
