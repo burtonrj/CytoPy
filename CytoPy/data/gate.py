@@ -951,8 +951,8 @@ class PolygonGate(Gate):
         """
         Given a list of newly create Populations, match the Populations to the gates children and
         return list of Populations with correct population names. Populations are matched to children
-        based on a comparison of their signatures and the % overlap between their geometries.
-        Similarity score = fraction area overlap * absolute euclidean distance between signatures.
+        based on minimising the hausdorff distance between the set of polygon coordinates defining
+        the gate as it was originally created and the newly generated gate fitted to new data.
 
         Parameters
         -----------
@@ -1242,7 +1242,7 @@ def _child_similarity_score(child: ChildPolygon,
                             population: Population) -> dict:
     """
     Compare a population to a ChildPolygon contained and return the similarity score.
-    The similarity score is given by: fraction area overlap * minkowski distance between signatures.
+    The similarity score is given by: fraction area overlap * euclidean distance between signatures.
     This generates a score between 0 and 1, where 1 is identical populations and 0 is absolutely
     different populations.
 
