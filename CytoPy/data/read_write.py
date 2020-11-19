@@ -235,7 +235,8 @@ def _get_channel_mappings(fluoro_dict: dict) -> list:
         List of dict obj with keys 'channel' and 'marker'. Use to map fluorochrome channels to
     corresponding marker
     """
-    fm = [x for k, x in fluoro_dict.items()]
+    fm = [(int(k), x) for k, x in fluoro_dict.items()]
+    fm = [x[1] for x in sorted(fm, key=lambda x: x[0])]
     mappings = []
     for fm_ in fm:
         channel = fm_['PnN'].replace('_', '-')
@@ -323,4 +324,3 @@ class FCSFile:
         comp_data = self.event_data[:, channel_idx]
         comp_data = np.linalg.solve(self.spill.values.T, comp_data.T).T
         self.event_data[:, channel_idx] = comp_data
-
