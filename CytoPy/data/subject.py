@@ -138,7 +138,7 @@ class Biology(mongoengine.EmbeddedDocument):
     test_category: str
         category of test
     """
-    test_date = mongoengine.DateTimeField(required=False)
+    test_datetime = mongoengine.DateTimeField(required=False)
     test = mongoengine.StringField(required=False)
     result = mongoengine.FloatField(required=False)
     unit = mongoengine.StringField(required=False)
