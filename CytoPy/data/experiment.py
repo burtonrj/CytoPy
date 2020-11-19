@@ -769,7 +769,7 @@ class Experiment(mongoengine.Document):
 
     def add_new_sample(self,
                        sample_id: str,
-                       primary_path: str,
+                       primary_path: str or FCSFile,
                        controls_path: dict or None = None,
                        subject_id: str or None = None,
                        comp_matrix: str or None = None,
@@ -787,12 +787,12 @@ class Experiment(mongoengine.Document):
             Primary ID for identification of sample (FileGroup.primary_id)
         subject_id: str, optional
             ID for patient to associate sample too
-        primary_path: dict
-            Dictionary of file name and relative path to file for those files to be treated as "primary"
-            files i.e. they are 'fully' stained and should not be treated as controls
+        primary_path: str or FCSFile
+            The path to the primary file or FCSFile object of primary file
         controls_path: dict
             Dictionary of control ID and relative path to file for those files to be treated as "control"
-            files e.g. they are 'FMO' or 'isotype' controls
+            files e.g. they are 'FMO' or 'isotype' controls. Alternatively the value can be an FCSFile
+            object containing the respective control file
         comp_matrix: str, optional
             Path to csv file for spillover matrix for compensation calculation; if not supplied
             the matrix linked within the fcs file will be used, if not present will present an error
@@ -818,7 +818,11 @@ class Experiment(mongoengine.Document):
         feedback = vprint(verbose)
         assert not self.sample_exists(sample_id), f'A file group with id {sample_id} already exists'
         feedback("Creating new FileGroup...")
-        fcs_file = FCSFile(filepath=primary_path, comp_matrix=comp_matrix)
+        if isinstance(str, primary_path):
+            fcs_file = FCSFile(filepath=primary_path, comp_matrix=comp_matrix)
+        else:
+            fcs_file = primary_path
+
         if compensate:
             feedback("Compensating primary file...")
             fcs_file.compensate()
@@ -831,6 +835,7 @@ class Experiment(mongoengine.Document):
             del fcs_file
             gc.collect()
             return
+
         filegrp = FileGroup(primary_id=sample_id,
                             data_directory=self.data_directory,
                             compensated=compensate,
@@ -841,7 +846,10 @@ class Experiment(mongoengine.Document):
                             markers=[x.get("marker") for x in mappings])
         for ctrl_id, path in controls_path.items():
             feedback(f"Adding control file {ctrl_id}...")
-            fcs_file = FCSFile(filepath=path, comp_matrix=comp_matrix)
+            if isinstance(path, str):
+                fcs_file = FCSFile(filepath=path, comp_matrix=comp_matrix)
+            else:
+                fcs_file = path
             if compensate:
                 feedback("Compensating...")
                 fcs_file.compensate()
