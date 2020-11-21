@@ -220,8 +220,7 @@ class GatingStrategy(mongoengine.Document):
     def add_hyperparameter_grid(self,
                                 gate_name: str,
                                 params: dict,
-                                cost: str or None = None,
-                                multiprocess: int or None = -1):
+                                cost: str or None = None):
         """
         Add a hyperparameter grid to search which applying the given gate to new data.
         This hyperparameter grid should correspond to valid hyperparameters for the
@@ -255,12 +254,7 @@ class GatingStrategy(mongoengine.Document):
             Grid of hyperparameters to be searched
         cost: str
             What to be minimised to choose optimal hyperparameters
-        multiprocess: int, optional (default=-1)
-            If an integer value is provided, then this represents the number of cores to use for multiprocessing
-            when searching the hyperparameter space. Defaults to -1 which will use all available cores. WARNING:
-            some algorithms are taxing in terms of memory usage, therefore if you suspect that computing resources
-            will not handle multiprocessing for the given gating method, set this value to None to indicate
-            that multiprocessing should not be used.
+
         Returns
         -------
         None
@@ -281,13 +275,12 @@ class GatingStrategy(mongoengine.Document):
         assert isinstance(params, dict), err
         assert all([isinstance(x, list) for x in params.values()]), err
         self.hyperparameter_search[gate_name] = {"grid": params,
-                                                 "cost": cost,
-                                                 "multiprocess": multiprocess}
+                                                 "cost": cost}
 
     def apply_gate(self,
                    gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate,
                    plot: bool = True,
-                   print_stats: bool = True,
+                   verbose: bool = True,
                    add_to_strategy: bool = True,
                    create_plot_kwargs: dict or None = None,
                    plot_gate_kwargs: dict or None = None):
@@ -302,8 +295,8 @@ class GatingStrategy(mongoengine.Document):
             Name of an existing Gate or a Gate object
         plot: bool (default=True)
             If True, returns a Matplotlib.Axes object of plotted gate
-        print_stats: bool (default=True)
-            If True, print gating statistics to stdout
+        verbose: bool (default=True)
+            If True, print gating statistics to stdout and provide feedback
         add_to_strategy: bool (default=True)
             If True, append the Gate to the GatingStrategy
         create_plot_kwargs: dict (optional)
@@ -331,16 +324,14 @@ class GatingStrategy(mongoengine.Document):
                                               grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
                                               cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
                                               parent=parent_data,
-                                              multiprocess=self.hyperparameter_search.get(gate.gate_name).get(
-                                                  "multiprocess"),
-                                              verbose=self.verbose)
+                                              verbose=verbose)
         elif gate.ctrl is None:
             populations = gate.fit_predict(data=parent_data)
         else:
             populations = self._control_gate(gate=gate)
         for p in populations:
             self.filegroup.add_population(population=p)
-        if print_stats:
+        if verbose:
             print(f"----- {gate.gate_name} -----")
             parent_n = parent_data.shape[0]
             print(f"Parent ({gate.parent}) n: {parent_n}")
@@ -387,10 +378,12 @@ class GatingStrategy(mongoengine.Document):
                 i = 0
             gate = gates_to_apply[i]
             if gate.parent in self.list_populations():
+                if self.filegroup.population_stats(gate.parent).get("n") <= 3:
+                    raise ValueError(f"Insufficient events in parent population {gate.parent}")
                 feedback(f"------ Applying {gate.gate_name} ------")
                 self.apply_gate(gate=gate,
                                 plot=False,
-                                print_stats=verbose,
+                                verbose=verbose,
                                 add_to_strategy=False)
                 feedback("----------------------------------------")
                 gates_to_apply = [g for g in gates_to_apply if g.gate_name != gate.gate_name]

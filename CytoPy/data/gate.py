@@ -769,7 +769,7 @@ class ThresholdGate(Gate):
                               x_threshold: float,
                               y_threshold: float or None) -> list:
         """
-        Generate populations from a standard dictionary of dataframes that have had thesholds applied.
+        Generate populations from a standard dictionary of dataframes that have had thresholds applied.
 
         Parameters
         ----------

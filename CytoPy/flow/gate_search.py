@@ -8,6 +8,21 @@ import pandas as pd
 import numpy as np
 
 
+def signature_to_vector(signature: dict):
+    """
+    Convert a signature (dictionary of average parameters) to Numpy array
+
+    Parameters
+    ----------
+    signature: dict
+
+    Returns
+    -------
+    Numpy.Array
+    """
+    return np.array([v for v in signature.values()])
+
+
 def cost_func(target: ChildPolygon or ChildThreshold,
               populations: list,
               method: str):
@@ -30,13 +45,15 @@ def cost_func(target: ChildPolygon or ChildThreshold,
     -------
     Population
     """
-    assert all([hasattr(x, "signature") for x in target]), "Invalid child populations for manhattan dist; " \
-                                                           "requires 'signature' attribute"
-    search_space = np.array([[x for x in pops if x.population_name == target.name]
-                            for pops in populations]).flatten()
+    search_space = [[x for x in pops if x.population_name == target.name]
+                    for pops in populations]
+    search_space = [x for sl in search_space for x in sl]
     if method in ["euclidean", "manhattan"]:
+        assert hasattr(target, "signature"), "Invalid child populations for manhattan or euclidean dist; " \
+                                             "requires 'signature' attribute"
         f = {"euclidean": euclidean, "manhattan": cityblock}.get(method, cityblock)
-        idx = np.argmin([f(target.signature, p.signature) for p in search_space])
+        idx = np.argmin([f(signature_to_vector(target.signature),
+                           signature_to_vector(p.signature)) for p in search_space])
         return search_space[int(idx)]
     if method == "threshold_dist":
         if target.geom.y_threshold:
@@ -61,7 +78,7 @@ def fit_gate(updated_params: dict,
     """
     Update the Gate method parameters and fit to the given data, predicting matching
     Populations that are returned as a list
-
+children
     Parameters
     ----------
     updated_params: dict
@@ -104,17 +121,15 @@ def optimal_populations(population_grid: list,
     List
         List of optimal Populations (in same order as gate Children)
     """
-    with Pool(cpu_count()) as pool:
-        f = partial(cost_func, populations=population_grid, method=cost)
-        return list(pool.map(f, gate.children))
+    f = partial(cost_func, populations=population_grid, method=cost)
+    return list(map(f, gate.children))
 
 
 def hyperparameter_gate(gate: ThresholdGate or PolygonGate or EllipseGate,
                         grid: dict,
                         cost: str,
                         parent: pd.DataFrame,
-                        verbose: bool = True,
-                        multiprocess: int or None = -1) -> list:
+                        verbose: bool = True) -> list:
     """
     Fit a Gate to some parent data whilst searching the hyperparameter space (grid)
     for the optimal 'fit' as defined by minimising some cost (e.g. the distance between the
@@ -154,12 +169,6 @@ def hyperparameter_gate(gate: ThresholdGate or PolygonGate or EllipseGate,
         Parent data that the gate is 'fitted' too
     verbose: bool (default=True)
         Whether to provide feedback to stdout
-    multiprocess: int, optional (default=-1)
-        If an integer value is provided, then this represents the number of cores to use for multiprocessing
-        when searching the hyperparameter space. Defaults to -1 which will use all available cores. WARNING:
-        some algorithms are taxing in terms of memory usage, therefore if you suspect that computing resources
-        will not handle multiprocessing for the given gating method, set this value to None to indicate
-        that multiprocessing should not be used.
 
     Returns
     -------
@@ -168,7 +177,7 @@ def hyperparameter_gate(gate: ThresholdGate or PolygonGate or EllipseGate,
     """
     feedback = vprint(verbose)
     feedback(f"----- Hyperparameter optimisation: {gate.gate_name} -----")
-    original_kwargs = gate.method_kwargs.to_python()
+    original_kwargs = gate.method_kwargs.copy()
 
     for k, v in original_kwargs.items():
         if k in grid.keys():
@@ -181,20 +190,13 @@ def hyperparameter_gate(gate: ThresholdGate or PolygonGate or EllipseGate,
 
     fitter = partial(fit_gate, gate=gate, data=parent)
     feedback("Fitting gates across parameter grid...")
-    if multiprocess is not None:
-        if multiprocess < 0:
-            multiprocess = cpu_count()
-        with Pool(multiprocess) as pool:
-            populations = progress_bar(pool.imap(fitter, grid),
-                                       verbose=verbose,
-                                       total=len(grid))
-    else:
-        populations = list()
-        for params in progress_bar(grid, verbose=verbose, total=len(grid)):
-            populations.append(fitter(params))
+    populations = list()
+    for params in progress_bar(grid, verbose=verbose, total=len(grid)):
+        populations.append(fitter(params))
     feedback("Matching optimal populations...")
     pops = optimal_populations(population_grid=populations,
                                gate=gate,
                                cost=cost)
+    gate.method_kwargs = original_kwargs
     feedback(f"------------------ complete ------------------")
     return pops
