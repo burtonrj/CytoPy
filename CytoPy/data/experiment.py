@@ -818,7 +818,7 @@ class Experiment(mongoengine.Document):
         feedback = vprint(verbose)
         assert not self.sample_exists(sample_id), f'A file group with id {sample_id} already exists'
         feedback("Creating new FileGroup...")
-        if isinstance(str, primary_path):
+        if isinstance(primary_path, str):
             fcs_file = FCSFile(filepath=primary_path, comp_matrix=comp_matrix)
         else:
             fcs_file = primary_path
