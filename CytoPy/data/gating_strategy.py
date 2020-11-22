@@ -703,7 +703,7 @@ class GatingStrategy(mongoengine.Document):
         Required for 2D threshold geometries
         x_values: list
             Required for Polygon geometries
-        y_values
+        y_values: list
             Required for Polygon geometries
         Returns
         -------
@@ -732,8 +732,8 @@ class GatingStrategy(mongoengine.Document):
                     "For polygon gate please provide x_values and y_values"
                 update_polygon(population=pop,
                                parent_data=parent,
-                               x_values=x_threshold,
-                               y_values=y_threshold)
+                               x_values=x_values,
+                               y_values=y_values)
             self._edit_downstream_effects(population_name=child.name)
 
     def _edit_downstream_effects(self,

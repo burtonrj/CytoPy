@@ -2,8 +2,8 @@ from ..data.gate import PolygonGate, ThresholdGate, EllipseGate, ChildPolygon, C
 from ..feedback import vprint, progress_bar
 from sklearn.model_selection import ParameterGrid
 from scipy.spatial.distance import euclidean, cityblock
-from multiprocessing import Pool, cpu_count
 from functools import partial
+from warnings import warn
 import pandas as pd
 import numpy as np
 
@@ -21,6 +21,23 @@ def signature_to_vector(signature: dict):
     Numpy.Array
     """
     return np.array([v for v in signature.values()])
+
+
+def remove_null_populations(population_grid):
+    """
+    Remove populations with less than 4 events
+
+    Parameters
+    ----------
+    population_grid: list
+
+    Returns
+    -------
+    List
+    """
+    updated_grid = [[p for p in pops if p.n >= 3] for pops in population_grid]
+    updated_grid = [x for x in updated_grid if len(x) > 0]
+    return updated_grid
 
 
 def cost_func(target: ChildPolygon or ChildThreshold,
@@ -48,6 +65,9 @@ def cost_func(target: ChildPolygon or ChildThreshold,
     search_space = [[x for x in pops if x.population_name == target.name]
                     for pops in populations]
     search_space = [x for sl in search_space for x in sl]
+    if len(search_space) == 0:
+        warn(f"No populations generated for target population {target.name}")
+        return None
     if method in ["euclidean", "manhattan"]:
         assert hasattr(target, "signature"), "Invalid child populations for manhattan or euclidean dist; " \
                                              "requires 'signature' attribute"
@@ -189,9 +209,10 @@ def hyperparameter_gate(gate: ThresholdGate or PolygonGate or EllipseGate,
     for params in progress_bar(grid, verbose=verbose, total=len(grid)):
         populations.append(fitter(params))
     feedback("Matching optimal populations...")
+    populations = remove_null_populations(population_grid=populations)
     pops = optimal_populations(population_grid=populations,
                                gate=gate,
                                cost=cost)
     gate.method_kwargs = original_kwargs
     feedback(f"------------------ complete ------------------")
-    return pops
+    return [p for p in pops if p is not None]
