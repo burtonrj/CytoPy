@@ -36,6 +36,7 @@ from ..flow.gate_search import hyperparameter_gate
 from .experiment import Experiment
 from .fcs import FileGroup
 from datetime import datetime
+import pandas as pd
 import mongoengine
 
 __author__ = "Ross Burton"
@@ -73,6 +74,32 @@ class Action(mongoengine.EmbeddedDocument):
     left = mongoengine.StringField()
     right = mongoengine.StringField()
     new_population_name = mongoengine.StringField()
+
+
+def gate_stats(gate: Gate,
+               populations: list,
+               parent_data: pd.DataFrame):
+    """
+    Print the statistics of populations generated from a Gate
+
+    Parameters
+    ----------
+    gate: Gate
+    populations: list
+        List of populations generated from fit_predict method of a Gate
+    parent_data: Pandas.DataFrame
+        Parent data that the gate is applied to
+
+    Returns
+    -------
+    None
+    """
+    print(f"----- {gate.gate_name} -----")
+    parent_n = parent_data.shape[0]
+    print(f"Parent ({gate.parent}) n: {parent_n}")
+    for p in populations:
+        print(f"...child {p.population_name} n: {p.n}; {p.n / parent_n * 100}% of parent")
+    print("------------------------")
 
 
 class GatingStrategy(mongoengine.Document):
@@ -283,7 +310,9 @@ class GatingStrategy(mongoengine.Document):
                    verbose: bool = True,
                    add_to_strategy: bool = True,
                    create_plot_kwargs: dict or None = None,
-                   plot_gate_kwargs: dict or None = None):
+                   plot_gate_kwargs: dict or None = None,
+                   hyperparam_search: bool = True,
+                   overwrite_method_kwargs: dict or None = None):
         """
         Apply a gate to the associated FileGroup. The gate must be previously defined;
         children associated and labeled. Either a Gate object can be provided or the name
@@ -303,7 +332,13 @@ class GatingStrategy(mongoengine.Document):
             Additional arguments passed to CreatePlot
         plot_gate_kwargs: dict (optional)
             Additional arguments passed to plot_gate call of CreatePlot
-
+        hyperparam_search: bool (default=True)
+            If True and hyperparameter grid has been defined for the chosen gate,
+            then hyperparameter search is performed to find the optimal fit for the
+            newly encountered data.
+        overwrite_method_kwargs: dict, optional
+            If a dictionary is provided (and hyperparameter search isn't defined for this gate)
+            then method parameters are overwritten with these new parameters.
         Returns
         -------
         Matplotlib.Axes or None
@@ -319,7 +354,10 @@ class GatingStrategy(mongoengine.Document):
         parent_data = self.filegroup.load_population_df(population=gate.parent,
                                                         transform=None,
                                                         label_downstream_affiliations=False)
-        if gate.gate_name in self.hyperparameter_search.keys():
+        original_method_kwargs = gate.method_kwargs.copy()
+        if overwrite_method_kwargs is not None:
+            gate.method_kwargs = overwrite_method_kwargs
+        if gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search:
             populations = hyperparameter_gate(gate=gate,
                                               grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
                                               cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
@@ -332,12 +370,7 @@ class GatingStrategy(mongoengine.Document):
         for p in populations:
             self.filegroup.add_population(population=p)
         if verbose:
-            print(f"----- {gate.gate_name} -----")
-            parent_n = parent_data.shape[0]
-            print(f"Parent ({gate.parent}) n: {parent_n}")
-            for p in populations:
-                print(f"...child {p.population_name} n: {p.n}; {p.n / parent_n * 100}% of parent")
-            print("------------------------")
+            gate_stats(gate=gate, parent_data=parent_data, populations=populations)
         if add_to_strategy:
             self.gates.append(gate)
         if plot:
@@ -345,6 +378,7 @@ class GatingStrategy(mongoengine.Document):
             return plot.plot_population_geoms(parent=parent_data,
                                               children=populations,
                                               **plot_gate_kwargs)
+        gate.method_kwargs = original_method_kwargs
         return None
 
     def apply_all(self,

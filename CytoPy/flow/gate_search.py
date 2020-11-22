@@ -178,12 +178,7 @@ def hyperparameter_gate(gate: ThresholdGate or PolygonGate or EllipseGate,
     feedback = vprint(verbose)
     feedback(f"----- Hyperparameter optimisation: {gate.gate_name} -----")
     original_kwargs = gate.method_kwargs.copy()
-
-    for k, v in original_kwargs.items():
-        if k in grid.keys():
-            grid[k].append(v)
-        else:
-            grid[k] = [v]
+    grid = grid.copy()
 
     grid = ParameterGrid(grid)
     feedback(f"Grid space: {len(grid)}")
