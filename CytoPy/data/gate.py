@@ -1603,5 +1603,7 @@ def update_polygon(population: Population,
                               x=population.geom.x,
                               y=population.geom.y,
                               poly=poly)
+    population.geom.x_values = x_values
+    population.geom.y_values = y_values
     population.index = new_data.index.values
     _reset_population(population)
