@@ -31,10 +31,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import numpy as np
 import pandas as pd
 from multiprocessing import Pool, cpu_count
+from warnings import warn
 from functools import partial
 from matplotlib.patches import Ellipse
 from scipy import linalg, stats
-from scipy.spatial.qhull import ConvexHull
+from scipy.spatial.qhull import ConvexHull, QhullError
 from shapely.geometry import Polygon, Point
 import mongoengine
 
@@ -284,9 +285,13 @@ def create_convex_hull(x_values: np.array,
     Numpy.array, Numpy.array
     """
     xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
-    hull = ConvexHull(xy)
-    x = [float(i) for i in xy[hull.vertices, 0]]
-    y = [float(i) for i in xy[hull.vertices, 1]]
+    try:
+        hull = ConvexHull(xy)
+        x = [float(i) for i in xy[hull.vertices, 0]]
+        y = [float(i) for i in xy[hull.vertices, 1]]
+    except QhullError:
+        warn("ConvexHull generated QhullError; cannot generate geometry")
+        x, y = [], []
     return x, y
 
 
