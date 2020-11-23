@@ -8,7 +8,8 @@ import pandas as pd
 import numpy as np
 
 
-def signature_to_vector(signature: dict):
+def signature_to_vector(signature: dict,
+                        filter: list):
     """
     Convert a signature (dictionary of average parameters) to Numpy array
 
@@ -20,7 +21,26 @@ def signature_to_vector(signature: dict):
     -------
     Numpy.Array
     """
-    return np.array([v for v in signature.values()])
+    return np.array([v for k, v in signature.items() if k in filter])
+
+
+def common_features(target_signature: dict,
+                    pop_signature: dict):
+    return list(set(target_signature.keys()).intersection(pop_signature.keys()))
+
+
+def signature_distance(method: str,
+                       search_space: list,
+                       target: ChildPolygon or ChildThreshold):
+    assert hasattr(target, "signature"), "Invalid child populations for manhattan or euclidean dist; " \
+                                         "requires 'signature' attribute"
+    f = {"euclidean": euclidean, "manhattan": cityblock}.get(method, cityblock)
+    idx = np.argmin([f(signature_to_vector(target.signature,
+                                           filter=common_features(target.signature, p.signature)),
+                       signature_to_vector(p.signature,
+                                           filter=common_features(target.signature, p.signature)))
+                     for p in search_space])
+    return search_space[int(idx)]
 
 
 def remove_null_populations(population_grid):
@@ -69,12 +89,7 @@ def cost_func(target: ChildPolygon or ChildThreshold,
         warn(f"No populations generated for target population {target.name}")
         return None
     if method in ["euclidean", "manhattan"]:
-        assert hasattr(target, "signature"), "Invalid child populations for manhattan or euclidean dist; " \
-                                             "requires 'signature' attribute"
-        f = {"euclidean": euclidean, "manhattan": cityblock}.get(method, cityblock)
-        idx = np.argmin([f(signature_to_vector(target.signature),
-                           signature_to_vector(p.signature)) for p in search_space])
-        return search_space[int(idx)]
+        return signature_distance(method=method, search_space=search_space, target=target)
     if method == "threshold_dist":
         if target.geom.y_threshold:
             idx = np.argmin([abs(target.geom.x_threshold - p.geom.x_threshold) +

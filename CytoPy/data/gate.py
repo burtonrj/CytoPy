@@ -1007,9 +1007,11 @@ class PolygonGate(Gate):
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         labels = self.model.fit_predict(data[[self.x, self.y]])
-        return [create_polygon(*create_convex_hull(x_values=data.iloc[np.where(labels == i)][self.x].values,
-                                                   y_values=data.iloc[np.where(labels == i)][self.y].values))
-                for i in np.unique(labels)]
+        hulls = [create_convex_hull(x_values=data.iloc[np.where(labels == i)][self.x].values,
+                                    y_values=data.iloc[np.where(labels == i)][self.y].values)
+                 for i in np.unique(labels)]
+        hulls = [x for x in hulls if len(x[0]) > 0]
+        return [create_polygon(*x) for x in hulls]
 
     def fit(self,
             data: pd.DataFrame) -> None:
@@ -1262,14 +1264,6 @@ def _child_similarity_score(child: ChildPolygon,
                                   for i in common_features]).T
     dist_score = euclidean(vector_signatures[:, 0], vector_signatures[:, 1])
     return dist_score * area
-
-
-def _child_similarity_score_low_dim(child: ChildPolygon,
-                                    population: Population,
-                                    dims: list):
-    x = [child.signature.get(i) for i in dims]
-    y = [population.signature.get(i) for i in dims]
-    return euclidean(x, y)
 
 
 def apply_threshold(data: pd.DataFrame,
