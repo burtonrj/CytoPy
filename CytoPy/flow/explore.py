@@ -330,7 +330,8 @@ class Explorer:
                                      features=features,
                                      n_components=n_components,
                                      **dim_reduction_kwargs)
-        embedding_cols = [f'{dim_reduction_method}_{i}' for i in range(n_components)]
+        embedding_cols = [f'{dim_reduction_method}{i+1}' for i in range(n_components)]
+
         # Label and plotting
         assert label in self.data.columns, f'{label} is not a valid entry, valid labels include: ' \
                                            f'{self.data.columns.tolist()}'
