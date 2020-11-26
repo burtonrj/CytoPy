@@ -179,8 +179,7 @@ class Population(mongoengine.EmbeddedDocument):
         None
         """
         _id, tag = cluster.cluster_id, cluster.tag
-        err = f"Cluster already exists with id: {_id}; tag: {tag}"
-        assert not any([x.cluster_id == _id and x.tag == tag for x in self.clusters]), err
+        self.clusters = [c for c in self.clusters if (c.tag == tag and c.cluster_id == _id)]
         self.clusters.append(cluster)
 
     def delete_cluster(self,

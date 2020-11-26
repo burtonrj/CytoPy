@@ -266,8 +266,8 @@ class FileGroup(mongoengine.Document):
                         pop.set_ctrl_index(**{c: f[k + f"/{c}"][:]})
                 k = f"/clusters/{pop.population_name}"
                 for c in pop.clusters:
-                    if c.cluster_id not in f[k].keys():
-                        warn(f"Cluster index missing for {c.cluster_id} in population {pop.population_name}!")
+                    if f"{c.cluster_id}_{c.tag}" not in f[k].keys():
+                        warn(f"Cluster index missing for {c.cluster_id}; tag {c.tag} in population {pop.population_name}!")
                     else:
                         c.index = f[k + f"/{c.cluster_id}"][:]
 
@@ -760,7 +760,7 @@ class FileGroup(mongoengine.Document):
                     f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
                 for cluster in p.clusters:
                     cluster.prop_of_events = cluster.n / p.n
-                    f.create_dataset(f'/clusters/{p.population_name}/{cluster.cluster_id}',
+                    f.create_dataset(f'/clusters/{p.population_name}/{cluster.cluster_id}_{cluster.tag}',
                                      data=cluster.index)
 
     def _hdf_reset_population_data(self):

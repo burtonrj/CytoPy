@@ -67,7 +67,7 @@ def _fetch_subject(filegroup: FileGroup):
     if len(subject) != 1:
         warn("Requested sample is not associated to a Subject")
         return None
-    return subject
+    return subject[0]
 
 
 def _fetch_subject_meta(sample_id: str,

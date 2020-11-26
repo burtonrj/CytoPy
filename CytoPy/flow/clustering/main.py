@@ -628,10 +628,10 @@ class Clustering:
                                sample_ids=sample_ids,
                                transform=transform,
                                population=root_population)
-        self._load_clusters()
+        self._load_clusters(sample_ids)
         self.print("Ready to cluster!")
 
-    def _load_clusters(self):
+    def _load_clusters(self, sample_ids: list):
         """
         Search the associated Experiment for existing clusters with the same clustering tag.
         If found, populates the relevant rows of 'cluster_id' and 'meta_label' in self.data.
@@ -641,14 +641,14 @@ class Clustering:
         None
         """
         self.print("Loading existing clusters...")
-        for sample_id in progress_bar(list(self.experiment.list_samples()), verbose=self.verbose):
+        for sample_id in progress_bar(sample_ids, verbose=self.verbose):
             sample = self.experiment.get_sample(sample_id)
             pop = sample.get_population(self.root_population)
             for cluster in pop.clusters:
                 if cluster.tag != self.tag:
                     continue
                 idx = self.data[(self.data.sample_id == sample_id) &
-                                (self.data.original_index.isin(cluster.index))]
+                                (self.data.original_index.isin(cluster.index))].index.values
                 self.data.loc[idx, ["cluster_id"]] = cluster.cluster_id
                 self.data.loc[idx, ["meta_label"]] = cluster.meta_label
 
@@ -805,16 +805,16 @@ class Clustering:
         -------
         None
         """
-        for sample_id in self.data.sample_id:
+        for sample_id in self.data.sample_id.unique():
             sample_df = self.data[self.data.sample_id == sample_id]
             fg = self.experiment.get_sample(sample_id)
             root = fg.get_population(self.root_population)
-            for cluster_id in sample_df.cluster_id:
+            for cluster_id in sample_df.cluster_id.unique():
                 idx = sample_df[sample_df.cluster_id == cluster_id].original_index.values
-                root.add_cluster(Cluster(cluster_id=cluster_id,
-                                         meta_label=sample_df[sample_df.cluster_id == cluster_id].meta_label.values[0],
-                                         n=len(idx),
+                root.add_cluster(Cluster(cluster_id=str(cluster_id),
+                                         meta_label=str(sample_df[sample_df.cluster_id == cluster_id].meta_label.values[0]),
+                                         n=int(len(idx)),
                                          index=idx,
-                                         prop_of_events=len(idx) / sample_df.shape[0],
-                                         tag=self.tag))
+                                         prop_of_events=float(len(idx) / sample_df.shape[0]),
+                                         tag=str(self.tag)))
             fg.save()
