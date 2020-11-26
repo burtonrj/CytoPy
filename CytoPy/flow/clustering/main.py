@@ -83,7 +83,7 @@ def sklearn_clustering(data: pd.DataFrame,
     ----------
     data: Pandas.DataFrame
     features: list
-        Columns to peform clustering on
+        Columns to perform clustering on
     verbose: bool
         If True, provides a progress bar when global_clustering is False
     method: str
@@ -96,7 +96,7 @@ def sklearn_clustering(data: pd.DataFrame,
 
     Returns
     -------
-    Pandas.DataFrame, None, None
+    Pandas.DataFrame and None and None
         Modified dataframe with clustering IDs assigned to the column 'cluster_id'
     """
     assert method in globals().keys(), \
@@ -106,7 +106,7 @@ def sklearn_clustering(data: pd.DataFrame,
         data["cluster_id"] = model.fit_predict(data[features])
         return data, None, None
     for _id, df in progress_bar(data.groupby("sample_id"), verbose=verbose):
-        data.loc[df.index, ["cluster_id"]] = model.fit_predict(data[features])
+        data.loc[df.index, ["cluster_id"]] = model.fit_predict(df[features])
     return data, None, None
 
 
@@ -185,8 +185,8 @@ def _asign_metalabels(data: pd.DataFrame,
 
 def _meta_preprocess(data: pd.DataFrame,
                      features: list,
-                     summary_method: callable,
-                     norm_method: str or None,
+                     summary_method: str = "median",
+                     norm_method: str or None = "norm",
                      **kwargs):
     """
     Summarise the features of the dataframe by grouping on the cluster_id. The summary
@@ -202,10 +202,9 @@ def _meta_preprocess(data: pd.DataFrame,
         Clustered data with columns for sample_id and cluster_id
     features: list
         Columns clustering is performed on
-    summary_method: callable
-        Function to apply to each sample_id/cluster_id group to summarise the
-        clusters for meta-clustering
-    norm_method: str or None
+    summary_method: str (default="median")
+        How to summarise the clusters for meta-clustering
+    norm_method: str or None (default="norm")
         If provided, method used to normalise data prior to summarising
     kwargs:
         Additional keyword arguments passed to CytoPy.flow.transform.scaler
@@ -222,7 +221,10 @@ def _meta_preprocess(data: pd.DataFrame,
                 .reset_index())
     summary = list()
     for _id, df in data.groupby(["sample_id", "cluster_id"]):
-        x = pd.DataFrame(df[features].apply(np.median, axis=0)).T
+        f = np.median
+        if summary_method == "mean":
+            f = np.mean
+        x = pd.DataFrame(df[features].apply(f, axis=0)).T
         x["sample_id"] = _id[0]
         x["cluster_id"] = _id[1]
         summary.append(x)
@@ -234,7 +236,7 @@ def _meta_preprocess(data: pd.DataFrame,
 def sklearn_metaclustering(data: pd.DataFrame,
                            features: list,
                            method: str,
-                           summary_method: callable = np.median,
+                           summary_method: str = "median",
                            norm_method: str or None = "norm",
                            norm_kwargs: dict or None = None,
                            verbose: bool = True,
@@ -252,10 +254,9 @@ def sklearn_metaclustering(data: pd.DataFrame,
         Columns clustering is performed on
     method: str
         Name of a valid Scikit-learn cluster or mixture class, or 'HDBSCAN'
-    summary_method: callable
-        Function to apply to each sample_id/cluster_id group to summarise the
-        clusters for meta-clustering
-    norm_method: str or None
+    summary_method: str (default="median")
+        How to summarise the clusters for meta-clustering
+    norm_method: str or None (default="norm")
         If provided, method used to normalise data prior to summarising
     norm_kwargs: dict, optional
         Additional keyword arguments passed to CytoPy.flow.transform.scaler
@@ -266,7 +267,7 @@ def sklearn_metaclustering(data: pd.DataFrame,
 
     Returns
     -------
-    Pandas.DataFrame, None, None
+    Pandas.DataFrame and None and None
         Updated dataframe with a new column named 'meta_label' with the meta-clustering
         associations
     """
@@ -289,7 +290,7 @@ def sklearn_metaclustering(data: pd.DataFrame,
 def phenograph_metaclustering(data: pd.DataFrame,
                               features: list,
                               verbose: bool = True,
-                              summary_method: callable = np.median,
+                              summary_method: str = "median",
                               norm_method: str or None = "norm",
                               norm_kwargs: dict or None = None,
                               **kwargs):
@@ -303,9 +304,8 @@ def phenograph_metaclustering(data: pd.DataFrame,
         Clustered data with columns for sample_id and cluster_id
     features: list
         Columns clustering is performed on
-    summary_method: callable
-        Function to apply to each sample_id/cluster_id group to summarise the
-        clusters for meta-clustering
+    summary_method: str (default="median")
+        How to summarise the clusters for meta-clustering
     norm_method: str or None
         If provided, method used to normalise data prior to summarising
     norm_kwargs: dict, optional
@@ -520,11 +520,11 @@ def flowsom_clustering(data: pd.DataFrame,
     return data, None, None
 
 
-def _load_data(experiment: Experiment,
-               population: str,
-               transform: str = "logicle",
-               sample_ids: list or None = None,
-               verbose: bool = True):
+def load_data(experiment: Experiment,
+              population: str,
+              transform: str = "logicle",
+              sample_ids: list or None = None,
+              verbose: bool = True):
     """
     Load Population from samples in the given Experiment and generate a
     standard clustering dataframe that contains the columns 'sample_id',
@@ -624,10 +624,10 @@ class Clustering:
         self.graph = None
         self.metrics = None
         self.print("Loading single cell data...")
-        self.data = _load_data(experiment=experiment,
-                               sample_ids=sample_ids,
-                               transform=transform,
-                               population=root_population)
+        self.data = load_data(experiment=experiment,
+                              sample_ids=sample_ids,
+                              transform=transform,
+                              population=root_population)
         self._load_clusters(sample_ids)
         self.print("Ready to cluster!")
 
