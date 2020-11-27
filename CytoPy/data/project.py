@@ -236,6 +236,8 @@ class Project(mongoengine.Document):
             samples = e.list_samples()
             for s in samples:
                 e.remove_sample(s)
+            if e.panel:
+                e.panel.delete()
             e.delete()
         for p in self.subjects:
             p.delete()

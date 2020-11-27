@@ -203,7 +203,7 @@ class FileGroup(mongoengine.Document):
             f.create_group("index")
             f.create_group("index/root")
             f.create_group("clusters")
-            f.create_group("cluster/root")
+            f.create_group("clusters/root")
             f.create_group("cell_meta_labels")
         self.populations = [Population(population_name="root",
                                        index=np.arange(0, data.shape[0]),
@@ -269,7 +269,7 @@ class FileGroup(mongoengine.Document):
                     if f"{c.cluster_id}_{c.tag}" not in f[k].keys():
                         warn(f"Cluster index missing for {c.cluster_id}; tag {c.tag} in population {pop.population_name}!")
                     else:
-                        c.index = f[k + f"/{c.cluster_id}"][:]
+                        c.index = f[k + f"/{c.cluster_id}_{c.tag}"][:]
 
     def add_population(self,
                        population: Population):

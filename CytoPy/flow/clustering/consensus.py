@@ -151,8 +151,7 @@ class ConsensusCluster:
         self.Ak = np.zeros(self.K_-self.L_)
         for i, m in enumerate(Mk):
             hist, bins = np.histogram(m.ravel(), density=True)
-            self.Ak[i] = np.sum(h*(b-a)
-                             for b, a, h in zip(bins[1:], bins[:-1], np.cumsum(hist)))
+            self.Ak[i] = np.sum(h*(b-a) for b, a, h in zip(bins[1:], bins[:-1], np.cumsum(hist)))
         # fits differences between areas under CDFs
         self.deltaK = np.array([(Ab-Aa)/Aa if i > 2 else Aa
                                 for Ab, Aa, i in zip(self.Ak[1:], self.Ak[:-1], range(self.L_, self.K_-1))])
