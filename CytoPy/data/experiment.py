@@ -533,7 +533,7 @@ class Experiment(mongoengine.Document):
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
     data_directory = mongoengine.StringField(required=True)
-    panel = mongoengine.ReferenceField(Panel, reverse_delete_rule=4)
+    panel = mongoengine.ReferenceField(Panel, reverse_delete_rule=mongoengine.NULLIFY)
     fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.PULL))
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
@@ -552,9 +552,14 @@ class Experiment(mongoengine.Document):
         else:
             raise ValueError("No data directory provided")
         if self.panel is None:
-            self.panel = self._generate_panel(panel_definition=panel_definition,
-                                              panel_name=panel_name)
-            self.panel.save()
+            if self.id:
+                warn("This Experiment was previously defined yet the associated Panel has been removed. A new "
+                     "panel definition must be provided or a reference to an existing panel given by calling "
+                     "'generate_panel' method. This should be done prior to executing any additional code.")
+            else:
+                self.panel = self.generate_panel(panel_definition=panel_definition,
+                                                 panel_name=panel_name)
+                self.panel.save()
 
     @staticmethod
     def _check_panel(panel_name: str or None,
@@ -583,9 +588,9 @@ class Experiment(mongoengine.Document):
         else:
             assert len(Panel.objects(panel_name=panel_name)) > 0, "Invalid panel name, panel does not exist"
 
-    def _generate_panel(self,
-                        panel_definition: str or None,
-                        panel_name: str or None):
+    def generate_panel(self,
+                       panel_definition: str or None,
+                       panel_name: str or None):
         """
         Associate a panel to this Experiment, either by fetching an existing panel using the
         given panel name or by generating a new panel using the panel definition provided (path to a valid template).

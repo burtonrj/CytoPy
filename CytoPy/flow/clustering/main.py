@@ -339,10 +339,10 @@ def consensus_metacluster(data: pd.DataFrame,
                           features: list,
                           cluster_class: object,
                           verbose: bool = True,
-                          summary_method: callable = np.median,
+                          summary_method: str = "median",
                           norm_method: str or None = "norm",
                           smallest_cluster_n: int = 5,
-                          largest_cluster_n: int = 50,
+                          largest_cluster_n: int = 15,
                           n_resamples: int = 10,
                           resample_proportion: float = 0.5,
                           **norm_kwargs):
@@ -361,18 +361,17 @@ def consensus_metacluster(data: pd.DataFrame,
         Clustered data with columns for sample_id and cluster_id
     features: list
         Columns clustering is performed on
-    summary_method: callable
-        Function to apply to each sample_id/cluster_id group to summarise the
-        clusters for meta-clustering
+    summary_method: str (default="median")
+        How to summarise the clusters for meta-clustering
     cluster_class: object
         Scikit-learn (or alike) object with the method 'fit_predict'.
     verbose: bool (default=True)
         Whether to provide feedback to stdout
-    norm_method: str or None
+    norm_method: str or None (default="norm")
         If provided, method used to normalise data prior to summarising
     smallest_cluster_n: int (default=5)
         Minimum number of clusters to search for in consensus clustering
-    largest_cluster_n: int (default=50)
+    largest_cluster_n: int (default=15)
         Maximum number of clusters to search for in consensus clustering
     n_resamples: int (default=10)
         Number of resampling rounds in consensus clustering
@@ -389,6 +388,10 @@ def consensus_metacluster(data: pd.DataFrame,
     """
     vprint_ = vprint(verbose)
     metadata = _meta_preprocess(data, features, summary_method, norm_method, **norm_kwargs)
+    assert (metadata.shape[0] * resample_proportion) > largest_cluster_n, \
+        f"Maximum number of meta clusters (largest_cluster_n) is currently set to {largest_cluster_n} but there are " \
+        f"only {metadata.shape[0] * resample_proportion} clusters to cluster in each sample. Either decrease " \
+        f"largest_cluster_n or increase resample_proportion."
     vprint_("----- Consensus meta-clustering ------")
     consensus_clust = ConsensusCluster(cluster=cluster_class,
                                        smallest_cluster_n=smallest_cluster_n,
@@ -492,7 +495,7 @@ def flowsom_clustering(data: pd.DataFrame,
 
     Returns
     -------
-    Pandas.DataFrame, None, None
+    Pandas.DataFrame and None and None
         Modified dataframe with clustering IDs assigned to the column 'cluster_id'
     """
     if global_clustering:
@@ -524,11 +527,15 @@ def load_data(experiment: Experiment,
               population: str,
               transform: str = "logicle",
               sample_ids: list or None = None,
-              verbose: bool = True):
+              verbose: bool = True,
+              ctrl: str or None = None):
     """
     Load Population from samples in the given Experiment and generate a
     standard clustering dataframe that contains the columns 'sample_id',
-    'cluster_id' and 'meta_label'.
+    'cluster_id' and 'meta_label'. If a value of 'ctrl' is given, then
+    load_data will attempt to obtain data from the corresponding control
+    file as opposed to primary stains.
+
 
     Parameters
     ----------
@@ -537,6 +544,7 @@ def load_data(experiment: Experiment,
     transform: str
     sample_ids: list, optional
     verbose: bool (default=True)
+    ctrl: str, optional
 
     Returns
     -------
@@ -546,9 +554,14 @@ def load_data(experiment: Experiment,
     population_data = list()
     for _id in progress_bar(sample_ids, verbose=verbose):
         fg = experiment.get_sample(sample_id=_id)
-        pop = fg.load_population_df(population=population,
-                                    transform=transform,
-                                    label_downstream_affiliations=True)
+        if ctrl is None:
+            pop = fg.load_population_df(population=population,
+                                        transform=transform,
+                                        label_downstream_affiliations=True)
+        else:
+            pop = fg.load_ctrl_population_df(population=population,
+                                             transform=transform,
+                                             ctrl=ctrl)
         pop["sample_id"] = _id
         subject = _fetch_subject(fg)
         if subject is not None:
@@ -557,6 +570,7 @@ def load_data(experiment: Experiment,
         population_data.append(pop)
     data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
                       for df in population_data]).reset_index(drop=True)
+    data.index = list(data.index)
     data["cluster_id"] = None
     data["meta_label"] = None
     return data
@@ -606,6 +620,7 @@ class Clustering:
     verbose: bool (default=True)
         Whether to provide output to stdout
     """
+
     def __init__(self,
                  experiment: Experiment,
                  tag: str,
@@ -628,10 +643,10 @@ class Clustering:
                               sample_ids=sample_ids,
                               transform=transform,
                               population=root_population)
-        self._load_clusters(sample_ids)
+        self._load_clusters()
         self.print("Ready to cluster!")
 
-    def _load_clusters(self, sample_ids: list):
+    def _load_clusters(self):
         """
         Search the associated Experiment for existing clusters with the same clustering tag.
         If found, populates the relevant rows of 'cluster_id' and 'meta_label' in self.data.
@@ -641,16 +656,16 @@ class Clustering:
         None
         """
         self.print("Loading existing clusters...")
-        for sample_id in progress_bar(sample_ids, verbose=self.verbose):
-            sample = self.experiment.get_sample(sample_id)
-            pop = sample.get_population(self.root_population)
+        for sample_id, sample_df in progress_bar(self.data.groupby("sample_id"),
+                                                 verbose=self.verbose,
+                                                 total=len(self.data.sample_id.unique())):
+            pop = self.experiment.get_sample(sample_id).get_population(self.root_population)
             for cluster in pop.clusters:
                 if cluster.tag != self.tag:
                     continue
-                idx = self.data[(self.data.sample_id == sample_id) &
-                                (self.data.original_index.isin(cluster.index))].index.values
-                self.data.loc[idx, ["cluster_id"]] = cluster.cluster_id
-                self.data.loc[idx, ["meta_label"]] = cluster.meta_label
+                idx = sample_df[sample_df.original_index.isin(cluster.index)].index.values
+                self.data.loc[idx, "cluster_id"] = cluster.cluster_id
+                self.data.loc[idx, "meta_label"] = cluster.meta_label
 
     def _check_null(self) -> list:
         """
@@ -705,7 +720,7 @@ class Clustering:
 
     def meta_cluster(self,
                      func: callable,
-                     summary_method: callable = np.median,
+                     summary_method: str = "median",
                      normalise: str or None = "norm",
                      **kwargs):
         """
@@ -721,8 +736,8 @@ class Clustering:
         (Note: this overwrites existing values for 'graph' and 'metrics')
 
         Prior to meta-clustering, the clustered dataframe (stored in 'data') will be summarised. The summary
-        of the clusters are then clustered again to group similar clusters. The summary function can be given
-        in 'summary_method' but defaults to Numpy.median function.
+        of the clusters are then clustered again to group similar clusters. The summary method should either be
+        'median' or 'mean', averaging the observations of each cluster.
 
         The data can also be normalised prior to having the summary method applied. The normalisation method
         should be provided in 'normalise' (see CytoPy.flow.transform.scaler for valid methods)
@@ -730,7 +745,7 @@ class Clustering:
         Parameters
         ----------
         func: callable
-        summary_method: callable
+        summary_method: str (default="median")
         normalise: str (default="norm")
         kwargs:
             Additional keyword arguments passed to func
@@ -741,7 +756,6 @@ class Clustering:
         """
         features = self._check_null()
         self.data, self.graph, self.metrics = func(data=self.data,
-                                                   samples=list(self.experiment.list_samples()),
                                                    features=features,
                                                    verbose=self.verbose,
                                                    summary_method=summary_method,
@@ -749,7 +763,7 @@ class Clustering:
                                                    **kwargs)
 
     def rename_meta_clusters(self,
-                             mappings):
+                             mappings: dict):
         """
         Given a dictionary of mappings, replace the current IDs stored
         in meta_label column of the data attribute with new IDs
@@ -805,14 +819,13 @@ class Clustering:
         -------
         None
         """
-        for sample_id in self.data.sample_id.unique():
-            sample_df = self.data[self.data.sample_id == sample_id]
+        for sample_id, sample_df in self.data.groupby("sample_id"):
             fg = self.experiment.get_sample(sample_id)
             root = fg.get_population(self.root_population)
-            for cluster_id in sample_df.cluster_id.unique():
-                idx = sample_df[sample_df.cluster_id == cluster_id].original_index.values
+            for cluster_id, cluster_df in sample_df.groupby("cluster_id"):
+                idx = cluster_df.original_index.values
                 root.add_cluster(Cluster(cluster_id=str(cluster_id),
-                                         meta_label=str(sample_df[sample_df.cluster_id == cluster_id].meta_label.values[0]),
+                                         meta_label=str(cluster_df.meta_label.values[0]),
                                          n=int(len(idx)),
                                          index=idx,
                                          prop_of_events=float(len(idx) / sample_df.shape[0]),
