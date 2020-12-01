@@ -43,6 +43,10 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import scprep
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+import plotly.express as px
 
 
 class Explorer:
@@ -564,3 +568,16 @@ class Explorer:
         ax.legend(fontsize=11, bbox_to_anchor=(1.005, 1), loc=2, borderaxespad=0.,
                   markerscale=6)
         return ax
+
+    def dash_explore(self,
+                     **run_server_kwargs):
+        err = "Dash explorer requires meta_labels be present in exploration dataframe"
+        assert "meta_label" in self.data.columns, err
+        assert not self.data.meta_label.isnull().all(), err
+
+        external_stylesheets = ["https://github.com/plotly/dash-app-stylesheets/blob/master/dash-analytics-report.css"]
+        app = dash.Dash(name="DashExplorer",
+                        external_stylesheets=external_stylesheets)
+        app.layout = html.Div(children=[
+            html.H1("Meta-cluster exploration")
+        ])
