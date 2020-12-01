@@ -266,11 +266,11 @@ class Population(mongoengine.EmbeddedDocument):
         -------
         List
         """
-        cluster_id = list(map(str, cluster_id))
         err = "Provide list of cluster IDs and/or tag and/or meta_label"
         assert sum([x is not None for x in [tag, meta_label]]) > 0, err
         clusters = self.clusters
         if cluster_id:
+            cluster_id = list(map(str, cluster_id))
             clusters = [c for c in clusters if c.cluster_id in cluster_id]
         if tag:
             clusters = [c for c in clusters if c.tag in tag]

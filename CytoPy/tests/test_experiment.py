@@ -13,7 +13,7 @@ def example_experiment():
                                 panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx")
     exp.save()
     yield exp
-    exp.delete(delete_panel=True)
+    exp.delete()
 
 
 def test_check_excel_template():

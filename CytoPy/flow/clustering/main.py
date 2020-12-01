@@ -628,7 +628,8 @@ class Clustering:
                  sample_ids: list or None = None,
                  root_population: str = "root",
                  transform: str = "logicle",
-                 verbose: bool = True):
+                 verbose: bool = True,
+                 cluster_prefix: str = "cluster"):
         self.experiment = experiment
         self.verbose = verbose
         self.print = vprint(verbose)
@@ -638,6 +639,7 @@ class Clustering:
         self.root_population = root_population
         self.graph = None
         self.metrics = None
+        self.cluster_prefix = cluster_prefix
         self.print("Loading single cell data...")
         self.data = load_data(experiment=experiment,
                               sample_ids=sample_ids,
@@ -824,7 +826,7 @@ class Clustering:
             root = fg.get_population(self.root_population)
             for cluster_id, cluster_df in sample_df.groupby("cluster_id"):
                 idx = cluster_df.original_index.values
-                root.add_cluster(Cluster(cluster_id=str(cluster_id),
+                root.add_cluster(Cluster(cluster_id=f"{self.cluster_prefix}_{cluster_id}",
                                          meta_label=str(cluster_df.meta_label.values[0]),
                                          n=int(len(idx)),
                                          index=idx,

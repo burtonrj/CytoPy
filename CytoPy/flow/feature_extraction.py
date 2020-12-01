@@ -95,7 +95,7 @@ def _fetch_subject_meta(sample_id: str,
     fg = experiment.get_sample(sample_id=sample_id)
     subject = _fetch_subject(filegroup=fg)
     try:
-        return subject[0][meta_label]
+        return subject[meta_label]
     except KeyError:
         return None
 
@@ -157,7 +157,7 @@ def experiment_statistics(experiment: Experiment,
         if include_subject_id:
             subject = _fetch_subject(filegroup=fg)
             if subject is not None:
-                df["subject_id"] = subject[0].subject_id
+                df["subject_id"] = subject.subject_id
         data.append(df)
     return pd.concat(data)
 
@@ -168,11 +168,11 @@ def _population_cluster_statistics(pop: Population,
     data = defaultdict(list)
     clusters = pop.get_clusters(tag=tag, meta_label=meta_label)
     for c in clusters:
-        data["prop_of_population"] = c.prop_of_events
-        data["cluster_id"] = c.cluster_id
-        data["meta_label"] = c.meta_label
-        data["tag"] = c.tag
-        data["n"] = c.n
+        data["prop_of_population"].append(c.prop_of_events)
+        data["cluster_id"].append(c.cluster_id)
+        data["meta_label"].append(c.meta_label)
+        data["tag"].append(c.tag)
+        data["n"].append(c.n)
     data = pd.DataFrame(data)
     data["population"] = pop.population_name
     return data
@@ -229,7 +229,7 @@ def cluster_statistics(experiment: Experiment,
         if include_subject_id:
             subject = _fetch_subject(filegroup=fg)
             if subject is not None:
-                data["subject_id"] = subject[0].subject_id
+                data["subject_id"] = subject.subject_id
         all_cluster_data.append(data)
     return pd.concat(all_cluster_data)
 
