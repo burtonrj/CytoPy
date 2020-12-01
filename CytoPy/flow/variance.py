@@ -51,6 +51,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import math
+np.random.seed(42)
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"
@@ -445,7 +446,7 @@ class SimilarityMatrix:
 
     def __init__(self,
                  data: OrderedDict,
-                 reference: str or None = None,
+                 reference: str,
                  verbose: bool = True,
                  kde_kernel: str = "gaussian",
                  kde_bw: str or float = "cv",
@@ -507,7 +508,7 @@ class SimilarityMatrix:
             bw = bw_optimisation(data=df, features=features, **kwargs)
         df = df[features].copy().select_dtypes(include=['number'])
         kde = FFTKDE(kernel=self.kde_kernel, bw=bw, norm=self.kde_norm)
-        self.kde_cache[sample_id] = kde.fit(df.values).evaluate()[1]
+        self.kde_cache[sample_id] = np.exp(kde.fit(df.values).evaluate()[1])
 
     def _calc_divergence(self,
                          target_id: str,
@@ -685,6 +686,7 @@ class SimilarityMatrix:
                                df=df,
                                features=features,
                                **bw_optimisaiton_kwargs)
+
         # Generate distance matrix
         self.print("...calculating pairwise statistical distances")
         return self._pairwise_stat_dist(distance_metric=distance_metric)
