@@ -193,6 +193,7 @@ def load_and_sample(experiment: Experiment,
                     sample_ids: list or None = None,
                     sampling_method: str or None = "uniform",
                     transform: str or None = "logicle",
+                    ctrl: str or None = None,
                     **kwargs) -> OrderedDict:
     """
     Load sample data from experiment and return as a dictionary of Pandas DataFrames.
@@ -206,6 +207,7 @@ def load_and_sample(experiment: Experiment,
     sampling_method: str
     transform: str (optional)
     population: str
+    ctrl: str (optional)
     kwargs:
         Additional keyword arguments for sampling method
 
@@ -217,11 +219,16 @@ def load_and_sample(experiment: Experiment,
     files = [experiment.get_sample(s) for s in sample_ids]
     data = OrderedDict()
     for f in progress_bar(files, verbose=True):
+        if ctrl:
+            if ctrl not in f.controls:
+                warn(f"{ctrl} control missing from {f.primary_id}")
+                continue
         data[f.primary_id] = _sample_filegroup(filegroup=f,
                                                sample_size=sample_size,
                                                sampling_method=sampling_method,
                                                transform=transform,
                                                population=population,
+                                               ctrl=ctrl,
                                                **kwargs)
     return data
 
@@ -231,6 +238,7 @@ def _sample_filegroup(filegroup: FileGroup,
                       transform: str or None,
                       sample_size: int or float = 5000,
                       sampling_method: str or None = None,
+                      ctrl: str or None = None,
                       **kwargs) -> pd.DataFrame:
     """
     Given a FileGroup and the name of the desired population, load the
@@ -243,13 +251,19 @@ def _sample_filegroup(filegroup: FileGroup,
     transform: str (optional)
     sample_size: int or float (optional)
     sampling_method: str (optional)
+    ctrl: str (optional)
 
     Returns
     -------
     Pandas.DataFrame
     """
-    data = filegroup.load_population_df(population=population,
-                                        transform=transform)
+    if ctrl:
+        data = filegroup.load_ctrl_population_df(ctrl=ctrl,
+                                                 population=population,
+                                                 transform=transform)
+    else:
+        data = filegroup.load_population_df(population=population,
+                                            transform=transform)
     if sampling_method == "uniform":
         return uniform_downsampling(data=data, sample_size=sample_size)
     if sampling_method == "density":
@@ -379,7 +393,6 @@ def dim_reduction_grid(data: OrderedDict,
     fig = plt.figure(figsize=figsize)
     nrows = math.ceil(len(comparison_samples) / 3)
     reference_df = data.get(reference).copy()
-    reference_df['label'] = 'Target'
     assert all([f in reference_df.columns for f in features]), \
         f'Invalid features; valid are: {reference_df.columns}'
     reference_df, reducer = dimensionality_reduction(reference_df,
@@ -397,7 +410,6 @@ def dim_reduction_grid(data: OrderedDict,
             warn(f'Features missing from {sample_id}, skipping')
             continue
         i += 1
-        df['label'] = 'Comparison'
         ax = fig.add_subplot(nrows, 3, i)
         embeddings = reducer.transform(df[features])
         x = f'{method}1'

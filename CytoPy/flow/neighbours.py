@@ -63,9 +63,13 @@ def calculate_optimal_neighbours(x: pd.DataFrame,
     -------
     int, float
     """
-    n = np.arange(int(x.shape[0] * 0.01),
-                  int(x.shape[0] * 0.05),
-                  int(x.shape[0] * 0.01) / 2, dtype=np.int)
+    assert x.shape[0] > 5, "Less than 5 observations in data provided for fit"
+    max = 500
+    if (max - 5) > x.shape[0]:
+        max = 250
+    n = np.arange(5,
+                  max,
+                  10, dtype=np.int)
     knn = KNeighborsClassifier(**kwargs)
     grid_cv = GridSearchCV(knn, {"n_neighbors": n}, scoring=scoring, n_jobs=-1, cv=10)
     grid_cv.fit(x, y)
