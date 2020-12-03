@@ -29,9 +29,10 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from ..feedback import vprint
+from ..feedback import vprint, progress_bar
 from .fcs import FileGroup
 from .subject import Subject
+from .subject_reverse_search import fetch_subject
 from .read_write import FCSFile
 from .mapping import ChannelMap
 from typing import Generator, List
@@ -933,3 +934,85 @@ class Experiment(mongoengine.Document):
             f.delete()
 
 
+def load_clusters(pop_data: pd.DataFrame,
+                  tag: str,
+                  filegroup: FileGroup,
+                  population: str):
+    population = filegroup.get_population(population)
+    for cluster in population.clusters:
+        if cluster.tag != tag:
+            continue
+        pop_data.loc[cluster.index, "cluster_id"] = cluster.cluster_id
+        pop_data.loc[cluster.index, "meta_label"] = cluster.meta_label
+    return pop_data
+
+
+def load_subject_id(pop_data: pd.DataFrame,
+                    filegroup: FileGroup):
+    subject = fetch_subject(filegroup)
+    if subject is not None:
+        subject = subject.subject_id
+    pop_data["subject_id"] = subject
+    return pop_data
+
+
+def load_data(experiment: Experiment,
+              population: str,
+              transform: str = "logicle",
+              sample_ids: list or None = None,
+              verbose: bool = True,
+              ctrl: str or None = None,
+              include_clusters: str or None = None,
+              additional_columns: list or None = None):
+    """
+    Load Population from samples in the given Experiment and generate a
+    standard exploration dataframe that contains the columns 'sample_id',
+    'subject_id', 'cluster_id', 'meta_label' and initialises additional
+    columns with null values if specified (additional_columns).
+    If a value of 'ctrl' is given, then load_data will attempt to obtain data
+    from the corresponding control file as opposed to primary stains.
+
+
+    Parameters
+    ----------
+    experiment: Experiment
+    population: str
+    transform: str
+    sample_ids: list, optional
+    verbose: bool (default=True)
+    ctrl: str, optional
+    include_clusters: str, optional
+    additional_columns: list, optional
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
+    sample_ids = sample_ids or list(experiment.list_samples())
+    population_data = list()
+    for _id in progress_bar(sample_ids, verbose=verbose):
+        fg = experiment.get_sample(sample_id=_id)
+        if ctrl is None:
+            pop_data = fg.load_population_df(population=population,
+                                             transform=transform,
+                                             label_downstream_affiliations=True)
+        else:
+            pop_data = fg.load_ctrl_population_df(population=population,
+                                                  transform=transform,
+                                                  ctrl=ctrl)
+        pop_data["sample_id"] = _id
+        pop_data["cluster_id"] = None
+        pop_data["meta_label"] = None
+        pop_data = load_subject_id(pop_data, fg)
+        if include_clusters is not None:
+            pop_data = load_clusters(pop_data=pop_data,
+                                     tag=include_clusters,
+                                     population=population,
+                                     filegroup=fg)
+        population_data.append(pop_data)
+    data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
+                      for df in population_data]).reset_index(drop=True)
+    data.index = list(data.index)
+    for c in additional_columns:
+        data[c] = None
+    return data

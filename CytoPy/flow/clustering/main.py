@@ -35,18 +35,13 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ...data.experiment import Experiment
+from ...data.experiment import Experiment, load_data
 from ...data.population import Cluster
 from ...feedback import vprint, progress_bar
-from ..feature_extraction import _fetch_subject
 from ..explore import Explorer
 from ..transforms import scaler
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
-from multiprocessing import Pool, cpu_count
-from sklearn.cluster import *
-from sklearn.mixture import *
-from hdbscan import HDBSCAN
 from functools import partial
 from warnings import warn
 import pandas as pd
@@ -523,59 +518,6 @@ def flowsom_clustering(data: pd.DataFrame,
     return data, None, None
 
 
-def load_data(experiment: Experiment,
-              population: str,
-              transform: str = "logicle",
-              sample_ids: list or None = None,
-              verbose: bool = True,
-              ctrl: str or None = None):
-    """
-    Load Population from samples in the given Experiment and generate a
-    standard clustering dataframe that contains the columns 'sample_id',
-    'cluster_id' and 'meta_label'. If a value of 'ctrl' is given, then
-    load_data will attempt to obtain data from the corresponding control
-    file as opposed to primary stains.
-
-
-    Parameters
-    ----------
-    experiment: Experiment
-    population: str
-    transform: str
-    sample_ids: list, optional
-    verbose: bool (default=True)
-    ctrl: str, optional
-
-    Returns
-    -------
-    Pandas.DataFrame
-    """
-    sample_ids = sample_ids or list(experiment.list_samples())
-    population_data = list()
-    for _id in progress_bar(sample_ids, verbose=verbose):
-        fg = experiment.get_sample(sample_id=_id)
-        if ctrl is None:
-            pop = fg.load_population_df(population=population,
-                                        transform=transform,
-                                        label_downstream_affiliations=True)
-        else:
-            pop = fg.load_ctrl_population_df(population=population,
-                                             transform=transform,
-                                             ctrl=ctrl)
-        pop["sample_id"] = _id
-        subject = _fetch_subject(fg)
-        if subject is not None:
-            subject = subject.subject_id
-        pop["subject_id"] = subject
-        population_data.append(pop)
-    data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
-                      for df in population_data]).reset_index(drop=True)
-    data.index = list(data.index)
-    data["cluster_id"] = None
-    data["meta_label"] = None
-    return data
-
-
 class Clustering:
     """
     High-dimensional clustering offers the advantage of an unbiased approach
@@ -644,8 +586,8 @@ class Clustering:
         self.data = load_data(experiment=experiment,
                               sample_ids=sample_ids,
                               transform=transform,
-                              population=root_population)
-        self._load_clusters()
+                              population=root_population,
+                              include_clusters=self.tag)
         self.print("Ready to cluster!")
 
     def _load_clusters(self):
