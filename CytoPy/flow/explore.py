@@ -32,21 +32,56 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from ..data.subject import Subject, bugs, hmbpp_ribo, gram_status, biology
+from ..data.experiment import load_data
 from ..feedback import vprint, progress_bar
 from .dim_reduction import dimensionality_reduction
 from mongoengine.base.datastructures import EmbeddedDocumentList
 from sklearn.preprocessing import MinMaxScaler
 from warnings import warn
 from matplotlib.colors import LogNorm
+from itertools import cycle
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
 import scprep
-import dash
-import dash_core_components as dcc
-import dash_html_components as html
-import plotly.express as px
+import os
+
+META_VARS = ["meta_label",
+             "cluster_id",
+             "population_label",
+             "sample_id",
+             "subject_id",
+             "original_index"]
+
+SEQ_COLOURS = ['viridis', 'plasma', 'inferno', 'magma', 'cividis',
+               'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
+               'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
+               'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn'
+                                                           'binary', 'gist_yarg', 'gist_gray', 'gray', 'bone', 'pink',
+               'spring', 'summer', 'autumn', 'winter', 'cool', 'Wistia',
+               'hot', 'afmhot', 'gist_heat', 'copper']
+
+
+def data_loaded(func):
+    def wrapper(*args, **kwargs):
+        assert args[0].data is not None, f"Dataframe has not been initialised"
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def assert_column(column_name: str, data: pd.DataFrame):
+    assert column_name in data.columns, f"{column_name} missing from dataframe"
+
+
+def _set_palette(discrete: bool,
+                 palette: str):
+    if discrete:
+        if palette not in SEQ_COLOURS:
+            warn("Palette invalid for discrete labelling, defaulting to 'inferno'")
+            return "inferno"
+    return palette
 
 
 class Explorer:
@@ -64,28 +99,48 @@ class Explorer:
     -----------
     data: Pandas.DataFrame (optional)
         A DataFrame for visualisation. If not provided, then a path to an existing dataframe should be provided.
-    path: str (optional)
-        Path to dataframe to load and visualise
     verbose: bool (default=True)
         Whether to provide feedback
     """
 
     def __init__(self,
                  data: pd.DataFrame or None = None,
-                 path: str or None = None,
                  verbose: bool = True):
-        assert data is not None or path is not None, "Must provide a Pandas DataFrame or path string to csv file"
-        if data is None:
-            self.data = pd.read_csv(path)
-        else:
+        self.data = None
+        if data is not None:
             self.data = data
-        assert "subject_id" in self.data.columns, "Please ensure that dataframe is populated with the subject ID " \
-                                                  "('subject_id') prior to initialising object"
+        self.meta_vars = [i for i in META_VARS if i in data.columns]
         self.verbose = verbose
         self.print = vprint(verbose)
 
+    def load_from_file(self,
+                       key: str,
+                       path: str,
+                       **kwargs):
+        """
+        Load either primary data or summarised data saved to disk (specified by 'key'
+        Parameters
+        ----------
+        key
+        path
+        kwargs
+
+        Returns
+        -------
+        None
+        """
+        self.data = pd.read_csv(path, **kwargs)
+        self.meta_vars = [i for i in META_VARS if i in self.data.columns]
+
+    def load_data(self,
+                  **kwargs):
+        self.data = load_data(**kwargs)
+        self.meta_vars = [i for i in META_VARS if i in self.data.columns]
+
+    @data_loaded
     def mask_data(self,
-                  mask: pd.DataFrame) -> None:
+                  mask: pd.DataFrame,
+                  save: bool = True) -> None:
         """
         Update contained dataframe according to a given mask.
 
@@ -97,23 +152,59 @@ class Explorer:
         -------
         None
         """
+        if not save:
+            return self.data[mask]
         self.data = self.data[mask]
+        return None
 
+    @data_loaded
+    def _summarise(self,
+                   grp_keys: list,
+                   features: list,
+                   summary_method: str = "median"):
+        if summary_method == "mean":
+            return self.data.groupby(by=grp_keys)[features].mean().reset_index()
+        if summary_method == "median":
+            return self.data.groupby(by=grp_keys)[features].median().reset_index()
+        raise ValueError("Summary method should be 'median' or 'mean'")
+
+    def summarise_clusters(self,
+                           features: list,
+                           identifier: str = "sample_id",
+                           summary_method: str = "median"):
+        assert identifier in ["sample_id", "subject_id"], "identifier should be 'sample_id' or 'subject_id'"
+        return self._summarise(grp_keys=[identifier, "cluster_id"], features=features, summary_method=summary_method)
+
+    def summarise_metaclusters(self,
+                               features: list,
+                               summary_method: str = "median"):
+        return self._summarise(grp_keys=["meta_label"], features=features, summary_method=summary_method)
+
+    def summarise_populations(self,
+                              features: list,
+                              identifier: str = "sample_id",
+                              summary_method: str = "median"):
+        assert identifier in ["sample_id", "subject_id"], "identifier should be 'sample_id' or 'subject_id'"
+        return self._summarise(grp_keys=[identifier, "population_label"], features=features,
+                               summary_method=summary_method)
+
+    @data_loaded
     def save(self,
              path: str) -> None:
-        """
+        f"""
         Save the contained dataframe to a new csv file
 
         Parameters
         ----------
-        path : str
-            output path for csv file
+        path: str
+            Output path for csv file
         Returns
         -------
         None
         """
-        self.data.to_csv(path, index=False)
+        self.data.to_csv(path)
 
+    @data_loaded
     def load_meta(self,
                   variable: str) -> None:
         """
@@ -131,6 +222,7 @@ class Explorer:
         None
         """
         self.data[variable] = None
+        self.meta_vars.append(variable)
         for _id in progress_bar(self.data.subject_id.unique(),
                                 verbose=self.verbose):
             if _id is None:
@@ -144,6 +236,7 @@ class Explorer:
                 warn(f'{_id} is missing meta-variable {variable}')
                 self.data.loc[self.data.subject_id == _id, variable] = None
 
+    @data_loaded
     def load_infectious_data(self,
                              multi_org: str = 'list'):
         """
@@ -168,11 +261,14 @@ class Explorer:
         -------
         None
         """
-        self.data['organism_name'] = 'Unknown'
-        self.data['gram_status'] = 'Unknown'
-        self.data['organism_name_short'] = 'Unknown'
-        self.data['hmbpp'] = 'Unknown'
-        self.data['ribo'] = 'Unknown'
+        inf_vars = ['organism_name',
+                    'gram_status',
+                    'organism_name_short',
+                    'hmbpp',
+                    'ribo']
+        for variable in inf_vars:
+            self.meta_vars.append(variable)
+            self.data[variable] = 'Unknown'
 
         for subject_id in progress_bar(self.data.subject_id.unique()):
             if subject_id is None:
@@ -186,6 +282,7 @@ class Explorer:
             self.data.loc[self.data.subject_id == subject_id, 'ribo'] = hmbpp_ribo(subject=p, field='ribo_status')
             self.data.loc[self.data.subject_id == subject_id, 'gram_status'] = gram_status(subject=p)
 
+    @data_loaded
     def load_biology_data(self,
                           test_name: str,
                           summary_method: str = 'average'):
@@ -209,14 +306,16 @@ class Explorer:
         -------
         None
         """
+        self.meta_vars.append(test_name)
         self.data[test_name] = self.data['subject_id'].apply(lambda x: biology(x, test_name, summary_method))
 
+    @data_loaded
     def dimenionality_reduction(self,
                                 method: str,
                                 features: list,
+                                data: pd.DataFrame or None = None,
                                 n_components: int = 2,
-                                overwrite: bool = False,
-                                **kwargs) -> None:
+                                **kwargs) -> None or pd.DataFrame:
         """
         Performs dimensionality reduction and saves the result to the contained dataframe. Resulting embeddings
         are saved to columns named as follows: {method}_{n} where n is an integer in range 0 to n_components
@@ -236,19 +335,148 @@ class Explorer:
 
         Returns
         -------
-        None
+        None or Pandas.DataFrame
         """
-        embedding_cols = [f'{method}_{i}' for i in range(n_components)]
-        if all([x in self.data.columns for x in embedding_cols]) and not overwrite:
-            warn(f'Embeddings for {method} already exist, change arg "overwrite" to True to overwrite existing')
-            return
-        self.data = dimensionality_reduction(self.data,
-                                             features,
-                                             method,
-                                             n_components,
-                                             return_embeddings_only=False,
-                                             return_reducer=False,
-                                             **kwargs)
+        if data is None:
+            self.data = dimensionality_reduction(self.data,
+                                                 features,
+                                                 method,
+                                                 n_components,
+                                                 return_embeddings_only=False,
+                                                 return_reducer=False,
+                                                 **kwargs)
+            for variable in [f"{method}{i + 1}" for i in range(n_components)]:
+                if variable not in self.meta_vars:
+                    self.meta_vars.append(variable)
+            return None
+        return dimensionality_reduction(data,
+                                        features,
+                                        method,
+                                        n_components,
+                                        return_embeddings_only=False,
+                                        return_reducer=False,
+                                        **kwargs)
+
+    def _scatterplot_defaults(self,
+                              **kwargs):
+        updated_kwargs = {k: v for k, v in kwargs.items()}
+        defaults = {"edgecolor": "black",
+                    "alpha": 0.75,
+                    "linewidth": 2,
+                    "s": 10}
+        for k, v in defaults.items():
+            if k not in updated_kwargs.keys():
+                updated_kwargs[k] = v
+        return updated_kwargs
+
+    def single_cell_plot(self,
+                         label: str,
+                         features: list,
+                         discrete: bool,
+                         n_components: int = 2,
+                         method: str = "UMAP",
+                         dim_reduction_kwargs: dict or None = None,
+                         figsize: tuple = (12, 8),
+                         palette: str = "tab20",
+                         colourbar_kwargs: dict or None = None,
+                         legend_kwargs: dict or None = None,
+                         **kwargs):
+        palette = _set_palette(discrete=discrete, palette=palette)
+        colourbar_kwargs = colourbar_kwargs or {}
+        legend_kwargs = legend_kwargs or {"bbox_to_anchor": (1.15, 1)}
+        assert n_components in [2, 3], 'n_components must have a value of 2 or 3'
+        assert label in self.data.columns, f'{label} is not valid, must be an existing column in linked dataframe'
+
+        embeddings = [f"{method}{i + 1}" for i in range(n_components)]
+        if not all([x in self.data.columns for x in embeddings]):
+            dim_reduction_kwargs = dim_reduction_kwargs or {}
+            self.dimenionality_reduction(method=method,
+                                         n_components=n_components,
+                                         features=features,
+                                         **dim_reduction_kwargs)
+
+        fig, ax = plt.subplots(figsize=figsize)
+        kwargs = self._scatterplot_defaults(**kwargs)
+        if not discrete:
+            im = ax.scatter(self.data[f"{method}1"], self.data[f"{method}2"],
+                            c=self.data[label], cmap=palette, **kwargs)
+            ax.set_xlabel(f"{method}1")
+            ax.set_ylabel(f"{method}2")
+            fig.colorbar(im, ax=ax, **colourbar_kwargs)
+            return ax
+        colours = plt.get_cmap(palette)
+        for i, (l, df) in enumerate(self.data.groupby(label)):
+            ax.scatter(df[f"{method}1"], df[f"{method}2"], c=colours[i], label=l, **kwargs)
+        ax.set_xlabel(f"{method}1")
+        ax.set_ylabel(f"{method}2")
+        ax.legend(**legend_kwargs)
+        return ax
+
+    def cluster_plot(self,
+                     label: str,
+                     features: list,
+                     discrete: bool,
+                     mask: pd.DataFrame or None = None,
+                     n_components: int = 2,
+                     method: str = "UMAP",
+                     dim_reduction_kwargs: dict or None = None,
+                     scale_factor: int = 100,
+                     figsize: tuple = (12, 8),
+                     palette: str = "tab20",
+                     colourbar_kwargs: dict or None = None,
+                     legend_kwargs: dict or None = None,
+                     **kwargs):
+        palette = _set_palette(discrete=discrete, palette=palette)
+        colourbar_kwargs = colourbar_kwargs or {}
+        legend_kwargs = legend_kwargs or {"bbox_to_anchor": (1.15, 1)}
+        assert n_components in [2, 3], 'n_components must have a value of 2 or 3'
+        assert label in self.data.columns, f'{label} is not valid, must be an existing column in linked dataframe'
+        data = self.summarise_clusters(features=features, identifier="sample_id", summary_method="median")
+        data = self.dimenionality_reduction(method=method,
+                                            data=data,
+                                            n_components=n_components,
+                                            features=features,
+                                            **dim_reduction_kwargs)
+        data = self._assign_labels(data=data, label=label)
+        data["cluster_size"] = self._cluster_size()
+        fig, ax = plt.subplots(figsize=figsize)
+        kwargs = self._scatterplot_defaults(**kwargs)
+        kwargs["s"] =
+        if not discrete:
+            im = ax.scatter(self.data[f"{method}1"],
+                            self.data[f"{method}2"],
+                            c=self.data[label],
+                            cmap=palette,
+                            **kwargs)
+            ax.set_xlabel(f"{method}1")
+            ax.set_ylabel(f"{method}2")
+            fig.colorbar(im, ax=ax, **colourbar_kwargs)
+            return ax
+        colours = plt.get_cmap(palette)
+        for i, (l, df) in enumerate(self.data.groupby(label)):
+            ax.scatter(df[f"{method}1"], df[f"{method}2"], c=colours[i], label=l, **kwargs)
+        ax.set_xlabel(f"{method}1")
+        ax.set_ylabel(f"{method}2")
+        ax.legend(**legend_kwargs)
+        return ax
+
+    def _cluster_size(self):
+        return self.data.groupby("sample_id")["cluster_id"].value_counts()
+
+    def _sample_size(self):
+        return self.data.sample_id.value_counts()
+
+    def _assign_labels(self,
+                       data: pd.DataFrame,
+                       label: str):
+        for (cid, sid), df in data.groupby(["sample_id", "cluster_id"]):
+            x = self.data[(self.data["cluster_id"] == cid) & (self.data["sample_id"] == sid)]
+            assert len(x[label].unique()) == 1, "Chosen label is not unique within clusters"
+            data.loc[df.index, label] = x[label].values[0]
+        return data
+
+    def cluster_graph(self):
+        pass
 
     def _plotting_labels(self,
                          label: str,
@@ -334,7 +562,7 @@ class Explorer:
                                      features=features,
                                      n_components=n_components,
                                      **dim_reduction_kwargs)
-        embedding_cols = [f'{dim_reduction_method}{i+1}' for i in range(n_components)]
+        embedding_cols = [f'{dim_reduction_method}{i + 1}' for i in range(n_components)]
 
         # Label and plotting
         assert label in self.data.columns, f'{label} is not a valid entry, valid labels include: ' \
@@ -380,7 +608,7 @@ class Explorer:
                 clustermap: bool = False,
                 mask: pd.DataFrame or None = None,
                 normalise: bool = True,
-                summary_func: callable = np.mean,
+                summary_func: callable = np.median,
                 figsize: tuple or None = (10, 10),
                 title: str or None = None,
                 col_cluster: bool = False,
@@ -568,16 +796,3 @@ class Explorer:
         ax.legend(fontsize=11, bbox_to_anchor=(1.005, 1), loc=2, borderaxespad=0.,
                   markerscale=6)
         return ax
-
-    def dash_explore(self,
-                     **run_server_kwargs):
-        err = "Dash explorer requires meta_labels be present in exploration dataframe"
-        assert "meta_label" in self.data.columns, err
-        assert not self.data.meta_label.isnull().all(), err
-
-        external_stylesheets = ["https://github.com/plotly/dash-app-stylesheets/blob/master/dash-analytics-report.css"]
-        app = dash.Dash(name="DashExplorer",
-                        external_stylesheets=external_stylesheets)
-        app.layout = html.Div(children=[
-            html.H1("Meta-cluster exploration")
-        ])

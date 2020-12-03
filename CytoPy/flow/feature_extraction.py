@@ -29,14 +29,13 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ..data.fcs import FileGroup, population_stats, Population
+from ..data.fcs import population_stats, Population
 from ..data.experiment import Experiment
-from ..data.subject import Subject
+from ..data.subject_reverse_search import fetch_subject_meta, fetch_subject
 from collections import defaultdict
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from functools import partial
-from warnings import warn
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -49,55 +48,6 @@ __version__ = "1.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
-
-
-def _fetch_subject(filegroup: FileGroup):
-    """
-    Reverse search for Subject document using a FileGroup
-
-    Parameters
-    ----------
-    filegroup: FileGroup
-
-    Returns
-    -------
-    Subject or None
-    """
-    subject = Subject.objects(files=filegroup)
-    if len(subject) != 1:
-        warn("Requested sample is not associated to a Subject")
-        return None
-    return subject[0]
-
-
-def _fetch_subject_meta(sample_id: str,
-                        experiment: Experiment,
-                        meta_label: str):
-    """
-    Fetch the Subject document through a reverse search of
-    associated FileGroup and return the requested meta-label
-    stored in the Subject. If no Subject is found or no
-    meta-label matches the search, will return None
-
-    Parameters
-    ----------
-    experiment: Experiment
-        Experiment containing the FileGroup of interest
-    sample_id: str
-        FileGroup primary ID
-    meta_label: str
-        Meta variable to fetch
-
-    Returns
-    -------
-    Subject or None
-    """
-    fg = experiment.get_sample(sample_id=sample_id)
-    subject = _fetch_subject(filegroup=fg)
-    try:
-        return subject[meta_label]
-    except KeyError:
-        return None
 
 
 def meta_labelling(experiment: Experiment,
@@ -125,7 +75,7 @@ def meta_labelling(experiment: Experiment,
     assert "sample_id" in dataframe.columns, "Expected column 'sample_id'"
     assert all([s in experiment.list_samples() for s in dataframe["sample_id"]]), \
         "One or more sample IDs not present in given Experiment"
-    search_func = partial(_fetch_subject_meta,
+    search_func = partial(fetch_subject_meta,
                           experiment=experiment,
                           meta_label=meta_label)
     df = dataframe.copy()
@@ -155,7 +105,7 @@ def experiment_statistics(experiment: Experiment,
         df = population_stats(fg)
         df["sample_id"] = sample_id
         if include_subject_id:
-            subject = _fetch_subject(filegroup=fg)
+            subject = fetch_subject(filegroup=fg)
             if subject is not None:
                 df["subject_id"] = subject.subject_id
         data.append(df)
@@ -227,7 +177,7 @@ def cluster_statistics(experiment: Experiment,
             data = pd.concat(data)
         data["sample_id"] = fg.primary_id
         if include_subject_id:
-            subject = _fetch_subject(filegroup=fg)
+            subject = fetch_subject(filegroup=fg)
             if subject is not None:
                 data["subject_id"] = subject.subject_id
         all_cluster_data.append(data)

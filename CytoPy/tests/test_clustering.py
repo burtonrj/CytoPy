@@ -1,6 +1,5 @@
 from ..data.project import Project
 from ..flow.clustering.main import *
-from .test_gating_strategy import example_experiment
 import pytest
 import h5py
 import os

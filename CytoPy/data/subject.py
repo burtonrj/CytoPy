@@ -356,3 +356,4 @@ def biology(subject_id: str, test_name: str, method: str) -> np.float or None:
         return np.median(tests)
     return np.average(tests)
 
+
