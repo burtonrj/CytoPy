@@ -254,7 +254,8 @@ class FileGroup(mongoengine.Document):
         with h5py.File(self.h5path, "r") as f:
             if "cell_meta_labels" in f.keys():
                 for meta in f["cell_meta_labels"].keys():
-                    self.cell_meta_labels[meta] = f[f"cell_meta_labels/{meta}"][:]
+                    self.cell_meta_labels[meta] = np.array(f[f"cell_meta_labels/{meta}"][:],
+                                                           dtype="U")
             for pop in self.populations:
                 k = f"/index/{pop.population_name}"
                 if k + "/primary" not in f.keys():
@@ -338,6 +339,7 @@ class FileGroup(mongoengine.Document):
                                  population: str,
                                  verbose: bool = True,
                                  scoring: str = "balanced_accuracy",
+                                 downsample: int or float or None = 0.1,
                                  **kwargs):
         """
         Estimate a population for a control sample by training a KNearestNeighbors classifier
@@ -356,6 +358,7 @@ class FileGroup(mongoengine.Document):
             Population to estimate
         verbose: bool (default=True)
         scoring: str (default="balanced_accuracy")
+        downsample: int or float (optional)
         kwargs: dict
             Additional keyword arguments passed to initiate KNearestNeighbors object
 
@@ -383,7 +386,13 @@ class FileGroup(mongoengine.Document):
                                                 transform=transformations,
                                                 label_downstream_affiliations=False).copy()
         training_data["labels"] = 0
-        training_data.loc[population.index]["labels"] = 1
+        training_data.loc[population.index, "labels"] = 1
+        if isinstance(downsample, int):
+            training_data = pd.concat([training_data[training_data.labels == i].sample(n=downsample)
+                                       for i in range(2)])
+        if isinstance(downsample, float):
+            training_data = pd.concat([training_data[training_data.labels == i].sample(frac=downsample)
+                                       for i in range(2)])
         labels = training_data["labels"].values
         n = kwargs.get("n_neighbors", None)
         if n is None:
@@ -408,11 +417,10 @@ class FileGroup(mongoengine.Document):
         feedback(f"Predicting {population.population_name} for {ctrl} control...")
         ctrl_data = self.load_ctrl_population_df(ctrl=ctrl,
                                                  population=population.parent,
-                                                 transform={"x": population.geom.transform_x,
-                                                            "y": population.geom.transform_y},
+                                                 transform=transformations,
                                                  label_downstream_affiliations=False)
         ctrl_labels = model.predict(ctrl_data[features].values)
-        ctrl_idx = ctrl_data.index.values[np.where(ctrl_labels == 1)]
+        ctrl_idx = ctrl_data.index.values[np.where(ctrl_labels == 1)[0]]
         population.set_ctrl_index(**{ctrl: ctrl_idx})
         feedback("===============================================")
 

@@ -36,6 +36,7 @@ from CytoPy.feedback import vprint
 from CytoPy.flow.variance import load_and_sample, _common_features
 import pandas as pd
 import numpy as np
+np.random.seed(42)
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"
@@ -55,7 +56,8 @@ def create_ref_sample(experiment: Experiment,
                       sample_ids: list or None = None,
                       new_file_name: str or None = None,
                       verbose: bool = True,
-                      save_sample_id: bool = True) -> None:
+                      save_sample_id: bool = True,
+                      include_ctrls: bool = True) -> None:
     """
     Given some experiment and a root population that is common to all fcs file groups within this experiment, take
     a sample from each and create a new file group from the concatenation of these data. New file group will be created
@@ -84,12 +86,15 @@ def create_ref_sample(experiment: Experiment,
     save_sample_id: bool (default=True)
         If True, the sample ID that each cell originates from is saved to the
         FileGroup cell_meta_labels attribute
+    include_ctrls: bool (default=True)
+        If True, the control files are amalgamated and stored within the new file
     Returns
     --------
     None
     """
     vprint_ = vprint(verbose)
     sampling_kwargs = sampling_kwargs or {}
+    sample_ids = sample_ids or experiment.list_samples()
     new_file_name = new_file_name or f'{experiment.experiment_id}_sampled_data'
     assert all([s in experiment.list_samples() for s in sample_ids]), \
         'One or more samples specified do not belong to experiment'
@@ -118,9 +123,71 @@ def create_ref_sample(experiment: Experiment,
     new_filegroup.notes = 'sampled data'
     if save_sample_id:
         new_filegroup.cell_meta_labels["original_filegroup"] = np.array(sample_id_idx, dtype="U")
+    if include_ctrls:
+        ctrls = [experiment.get_sample(x).controls for x in sample_ids]
+        ctrls = list(set([c for sl in ctrls for c in sl]))
+        new_filegroup = add_ctrl_data(experiment=experiment,
+                                      sample_ids=list(sample_ids),
+                                      sampling_method=sampling_method,
+                                      sample_size=sample_size,
+                                      sampling_kwargs=sampling_kwargs,
+                                      ctrls=ctrls,
+                                      verbose=verbose,
+                                      population=root_population,
+                                      new_file=new_filegroup)
     vprint_('Inserting sampled data to database...')
     new_filegroup.save()
     experiment.fcs_files.append(new_filegroup)
     experiment.save()
     vprint_(f'Complete! New file saved to database: {new_file_name}, {new_filegroup.id}')
     vprint_('-----------------------------------------------------------------')
+
+
+def add_ctrl_data(experiment: Experiment,
+                  sample_ids: list,
+                  new_file: FileGroup,
+                  ctrls: list,
+                  verbose: bool = True,
+                  population: str = "root",
+                  sample_size: float or int = 2500,
+                  sampling_method: str = "uniform",
+                  sampling_kwargs: dict or None = None):
+    """
+    Add the amalgamation of control data for the given file IDs and add to the new file
+
+    Parameters
+    ----------
+    experiment: Experiment
+    sample_ids: list
+    new_file: FileGroup
+    ctrls: list
+    verbose: bool (default=True)
+    population: str (default="root")
+    sample_size: float or int (default=2500)
+    sampling_method: str (default="uniform")
+    sampling_kwargs: dict (optional)
+
+    Returns
+    -------
+    FileGroup
+    """
+    vprint_ = vprint(verbose)
+    vprint_("Adding control data...")
+    sampling_kwargs = sampling_kwargs or {}
+    for c in ctrls:
+        vprint_(f"...{c}...")
+        ctrl_data = load_and_sample(experiment=experiment,
+                                    population=population,
+                                    sample_ids=sample_ids,
+                                    ctrl=c,
+                                    sampling_method=sampling_method,
+                                    sample_size=sample_size,
+                                    transform=None,
+                                    **sampling_kwargs)
+        features = _common_features(ctrl_data)
+        ctrl_data = pd.concat([x[features] for x in ctrl_data.values()]).reset_index(drop=True)
+        new_file.add_ctrl_file(ctrl_id=c,
+                               data=ctrl_data.values,
+                               channels=features,
+                               markers=features)
+    return new_file
