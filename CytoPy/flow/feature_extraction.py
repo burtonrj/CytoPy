@@ -30,8 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from ..data.fcs import population_stats, Population
-from ..data.experiment import Experiment
-from ..data.subject_reverse_search import fetch_subject_meta, fetch_subject
+from ..data.experiment import Experiment, fetch_subject_meta, fetch_subject
 from collections import defaultdict
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC

@@ -36,7 +36,6 @@ from ..data.experiment import load_data
 from ..feedback import vprint, progress_bar
 from .dim_reduction import dimensionality_reduction
 from mongoengine.base.datastructures import EmbeddedDocumentList
-from sklearn.preprocessing import MinMaxScaler
 from warnings import warn
 from matplotlib.colors import LogNorm
 from itertools import cycle
@@ -44,8 +43,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
-import scprep
-import os
 
 META_VARS = ["meta_label",
              "cluster_id",
@@ -58,7 +55,7 @@ SEQ_COLOURS = ['viridis', 'plasma', 'inferno', 'magma', 'cividis',
                'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
                'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
                'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn'
-                                                           'binary', 'gist_yarg', 'gist_gray', 'gray', 'bone', 'pink',
+               'binary', 'gist_yarg', 'gist_gray', 'gray', 'bone', 'pink',
                'spring', 'summer', 'autumn', 'winter', 'cool', 'Wistia',
                'hot', 'afmhot', 'gist_heat', 'copper']
 
@@ -77,11 +74,64 @@ def assert_column(column_name: str, data: pd.DataFrame):
 
 def _set_palette(discrete: bool,
                  palette: str):
-    if discrete:
+    if not discrete:
         if palette not in SEQ_COLOURS:
             warn("Palette invalid for discrete labelling, defaulting to 'inferno'")
             return "inferno"
     return palette
+
+
+def scatterplot(data: pd.DataFrame,
+                method: str,
+                label: str,
+                discrete: bool,
+                size: str or None = None,
+                scale_factor: int = 15,
+                figsize: tuple = (10, 12),
+                palette: str = "tab20",
+                colourbar_kwargs: dict or None = None,
+                legend_kwargs: dict or None = None,
+                **kwargs):
+    fig, ax = plt.subplots(figsize=figsize)
+    colourbar_kwargs = colourbar_kwargs or {}
+    legend_kwargs = legend_kwargs or {"bbox_to_anchor": (1.15, 1.)}
+    palette = _set_palette(discrete=discrete, palette=palette)
+    if not discrete:
+        im = ax.scatter(data[f"{method}1"],
+                        data[f"{method}2"],
+                        c=data[label],
+                        cmap=palette,
+                        **kwargs)
+        ax.set_xlabel(f"{method}1")
+        ax.set_ylabel(f"{method}2")
+        fig.colorbar(im, ax=ax, **colourbar_kwargs)
+        return ax
+    colours = cycle(plt.get_cmap(palette).colors)
+    for l, df in data.groupby(label):
+        if size is not None:
+            kwargs["s"] = df[size].values * scale_factor
+        ax.scatter(df[f"{method}1"], df[f"{method}2"], color=next(colours), label=l, **kwargs)
+    ax.set_xlabel(f"{method}1")
+    ax.set_ylabel(f"{method}2")
+    ax.legend(**legend_kwargs)
+    return ax
+
+
+def _scatterplot_defaults(**kwargs):
+    updated_kwargs = {k: v for k, v in kwargs.items()}
+    defaults = {"edgecolor": "black",
+                "alpha": 0.75,
+                "linewidth": 2,
+                "s": 5}
+    for k, v in defaults.items():
+        if k not in updated_kwargs.keys():
+            updated_kwargs[k] = v
+    return updated_kwargs
+
+
+def _assert_unique_label(x):
+    assert len(x) == 1, "Chosen label is not unique within clusters"
+    return x[0]
 
 
 class Explorer:
@@ -140,7 +190,7 @@ class Explorer:
     @data_loaded
     def mask_data(self,
                   mask: pd.DataFrame,
-                  save: bool = True) -> None:
+                  save: bool = True) -> None or pd.DataFrame:
         """
         Update contained dataframe according to a given mask.
 
@@ -148,9 +198,10 @@ class Explorer:
         ----------
         mask : Pandas.DataFrame
             Valid pandas dataframe mask
+        save: bool (default=True)
         Returns
         -------
-        None
+        None or Pandas.DataFrame
         """
         if not save:
             return self.data[mask]
@@ -161,32 +212,47 @@ class Explorer:
     def _summarise(self,
                    grp_keys: list,
                    features: list,
-                   summary_method: str = "median"):
+                   summary_method: str = "median",
+                   mask: pd.DataFrame or None = None):
+        data = self.data
+        if mask is not None:
+            data = self.mask_data(mask=mask, save=False)
         if summary_method == "mean":
-            return self.data.groupby(by=grp_keys)[features].mean().reset_index()
+            return data.groupby(by=grp_keys)[features].mean().reset_index()
         if summary_method == "median":
-            return self.data.groupby(by=grp_keys)[features].median().reset_index()
+            return data.groupby(by=grp_keys)[features].median().reset_index()
         raise ValueError("Summary method should be 'median' or 'mean'")
 
     def summarise_clusters(self,
                            features: list,
                            identifier: str = "sample_id",
-                           summary_method: str = "median"):
+                           summary_method: str = "median",
+                           mask: pd.DataFrame or None = None):
         assert identifier in ["sample_id", "subject_id"], "identifier should be 'sample_id' or 'subject_id'"
-        return self._summarise(grp_keys=[identifier, "cluster_id"], features=features, summary_method=summary_method)
+        return self._summarise(grp_keys=[identifier, "cluster_id"],
+                               features=features,
+                               summary_method=summary_method,
+                               mask=mask)
 
     def summarise_metaclusters(self,
                                features: list,
-                               summary_method: str = "median"):
-        return self._summarise(grp_keys=["meta_label"], features=features, summary_method=summary_method)
+                               summary_method: str = "median",
+                               mask: pd.DataFrame or None = None):
+        return self._summarise(grp_keys=["meta_label"],
+                               features=features,
+                               summary_method=summary_method,
+                               mask=mask)
 
     def summarise_populations(self,
                               features: list,
                               identifier: str = "sample_id",
-                              summary_method: str = "median"):
+                              summary_method: str = "median",
+                              mask: pd.DataFrame or None = None):
         assert identifier in ["sample_id", "subject_id"], "identifier should be 'sample_id' or 'subject_id'"
-        return self._summarise(grp_keys=[identifier, "population_label"], features=features,
-                               summary_method=summary_method)
+        return self._summarise(grp_keys=[identifier, "population_label"],
+                               features=features,
+                               summary_method=summary_method,
+                               mask=mask)
 
     @data_loaded
     def save(self,
@@ -328,8 +394,7 @@ class Explorer:
             list of features to use for dimensionality reduction
         n_components : int, (default = 2)
             number of components to generate
-        overwrite : bool, (default = False)
-            If True, existing embeddings will be overwritten (default = False)
+        data: pd.DataFrame
         kwargs :
             additional keyword arguments to pass to dim reduction algorithm (see flow.dim_reduction)
 
@@ -357,18 +422,6 @@ class Explorer:
                                         return_reducer=False,
                                         **kwargs)
 
-    def _scatterplot_defaults(self,
-                              **kwargs):
-        updated_kwargs = {k: v for k, v in kwargs.items()}
-        defaults = {"edgecolor": "black",
-                    "alpha": 0.75,
-                    "linewidth": 2,
-                    "s": 10}
-        for k, v in defaults.items():
-            if k not in updated_kwargs.keys():
-                updated_kwargs[k] = v
-        return updated_kwargs
-
     def single_cell_plot(self,
                          label: str,
                          features: list,
@@ -381,9 +434,6 @@ class Explorer:
                          colourbar_kwargs: dict or None = None,
                          legend_kwargs: dict or None = None,
                          **kwargs):
-        palette = _set_palette(discrete=discrete, palette=palette)
-        colourbar_kwargs = colourbar_kwargs or {}
-        legend_kwargs = legend_kwargs or {"bbox_to_anchor": (1.15, 1)}
         assert n_components in [2, 3], 'n_components must have a value of 2 or 3'
         assert label in self.data.columns, f'{label} is not valid, must be an existing column in linked dataframe'
 
@@ -394,225 +444,83 @@ class Explorer:
                                          n_components=n_components,
                                          features=features,
                                          **dim_reduction_kwargs)
-
-        fig, ax = plt.subplots(figsize=figsize)
-        kwargs = self._scatterplot_defaults(**kwargs)
-        if not discrete:
-            im = ax.scatter(self.data[f"{method}1"], self.data[f"{method}2"],
-                            c=self.data[label], cmap=palette, **kwargs)
-            ax.set_xlabel(f"{method}1")
-            ax.set_ylabel(f"{method}2")
-            fig.colorbar(im, ax=ax, **colourbar_kwargs)
-            return ax
-        colours = plt.get_cmap(palette)
-        for i, (l, df) in enumerate(self.data.groupby(label)):
-            ax.scatter(df[f"{method}1"], df[f"{method}2"], c=colours[i], label=l, **kwargs)
-        ax.set_xlabel(f"{method}1")
-        ax.set_ylabel(f"{method}2")
-        ax.legend(**legend_kwargs)
-        return ax
+        kwargs = _scatterplot_defaults(**kwargs)
+        return scatterplot(data=self.data,
+                           method=method,
+                           label=label,
+                           discrete=discrete,
+                           figsize=figsize,
+                           palette=palette,
+                           colourbar_kwargs=colourbar_kwargs,
+                           legend_kwargs=legend_kwargs,
+                           **kwargs)
 
     def cluster_plot(self,
                      label: str,
                      features: list,
                      discrete: bool,
-                     mask: pd.DataFrame or None = None,
                      n_components: int = 2,
                      method: str = "UMAP",
                      dim_reduction_kwargs: dict or None = None,
-                     scale_factor: int = 100,
+                     scale_factor: int = 15,
                      figsize: tuple = (12, 8),
                      palette: str = "tab20",
                      colourbar_kwargs: dict or None = None,
                      legend_kwargs: dict or None = None,
                      **kwargs):
-        palette = _set_palette(discrete=discrete, palette=palette)
-        colourbar_kwargs = colourbar_kwargs or {}
-        legend_kwargs = legend_kwargs or {"bbox_to_anchor": (1.15, 1)}
         assert n_components in [2, 3], 'n_components must have a value of 2 or 3'
         assert label in self.data.columns, f'{label} is not valid, must be an existing column in linked dataframe'
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
         data = self.summarise_clusters(features=features, identifier="sample_id", summary_method="median")
         data = self.dimenionality_reduction(method=method,
                                             data=data,
                                             n_components=n_components,
                                             features=features,
                                             **dim_reduction_kwargs)
-        data = self._assign_labels(data=data, label=label)
-        data["cluster_size"] = self._cluster_size()
-        fig, ax = plt.subplots(figsize=figsize)
-        kwargs = self._scatterplot_defaults(**kwargs)
-        kwargs["s"] =
-        if not discrete:
-            im = ax.scatter(self.data[f"{method}1"],
-                            self.data[f"{method}2"],
-                            c=self.data[label],
-                            cmap=palette,
-                            **kwargs)
-            ax.set_xlabel(f"{method}1")
-            ax.set_ylabel(f"{method}2")
-            fig.colorbar(im, ax=ax, **colourbar_kwargs)
-            return ax
-        colours = plt.get_cmap(palette)
-        for i, (l, df) in enumerate(self.data.groupby(label)):
-            ax.scatter(df[f"{method}1"], df[f"{method}2"], c=colours[i], label=l, **kwargs)
-        ax.set_xlabel(f"{method}1")
-        ax.set_ylabel(f"{method}2")
-        ax.legend(**legend_kwargs)
-        return ax
+        self._assign_labels(data=data, label=label)
+        self.cluster_size(data)
+        kwargs = kwargs or {}
+        kwargs = _scatterplot_defaults(**kwargs)
+        return scatterplot(data=data,
+                           method=method,
+                           label=label,
+                           discrete=discrete,
+                           figsize=figsize,
+                           palette=palette,
+                           colourbar_kwargs=colourbar_kwargs,
+                           legend_kwargs=legend_kwargs,
+                           size="cluster_size",
+                           scale_factor=scale_factor,
+                           **kwargs)
 
-    def _cluster_size(self):
+    def cluster_size(self,
+                     data: pd.DataFrame):
+        lookup = self._cluster_size_lookup()
+        cluster_n = data[["sample_id", "cluster_id"]].apply(lambda x: lookup.loc[x["sample_id"], x["cluster_id"]],
+                                                            axis=1)
+        lookup = self._sample_size_lookup()
+        sample_n = data["sample_id"].apply(lambda x: lookup.loc[x])
+        data["cluster_size"] = cluster_n/sample_n*100
+
+    def _cluster_size_lookup(self):
         return self.data.groupby("sample_id")["cluster_id"].value_counts()
 
-    def _sample_size(self):
+    def _sample_size_lookup(self):
         return self.data.sample_id.value_counts()
 
-    def _assign_labels(self,
-                       data: pd.DataFrame,
-                       label: str):
-        for (cid, sid), df in data.groupby(["sample_id", "cluster_id"]):
-            x = self.data[(self.data["cluster_id"] == cid) & (self.data["sample_id"] == sid)]
-            assert len(x[label].unique()) == 1, "Chosen label is not unique within clusters"
-            data.loc[df.index, label] = x[label].values[0]
-        return data
+    def _assign_labels(self, data: pd.DataFrame, label: str):
+        lookup = self.data.groupby(["sample_id", "cluster_id"])[label].unique().apply(_assert_unique_label)
+        data[label] = data[["sample_id", "cluster_id"]].apply(lambda x: lookup.loc[x[0], x[1]], axis=1)
 
     def cluster_graph(self):
         pass
 
-    def _plotting_labels(self,
-                         label: str,
-                         populations: list or None) -> list:
-        """
-        Generates a list of values to be used for colouring data points in plot
-
-        Parameters
-        ----------
-        label : str
-            column name for values to use for colour
-        populations : list, optional
-            if label = 'population_label', a list of populations can be specified, the resulting
-            list of labels is filtered to contain only populations in this list
-        Returns
-        -------
-        List
-            list of labels
-        """
-        if label == 'population_label':
-            if populations is None:
-                return self.data[label].values
-            return list(map(lambda x: x if x in populations else 'None', self.data['population_label'].values))
-        else:
-            return list(self.data[label].values)
-
-    def scatter_plot(self,
-                     label: str,
-                     features: list,
-                     discrete: bool,
-                     populations: list or None = None,
-                     n_components: int = 2,
-                     dim_reduction_method: str = 'UMAP',
-                     mask: pd.DataFrame or None = None,
-                     scale_factor: int = 100,
-                     figsize: tuple = (12, 8),
-                     dim_reduction_kwargs: dict or None = None,
-                     matplotlib_kwargs: dict or None = None) -> plt.Axes:
-        """
-        Generate a 2D/3D scatter plot (dimensions depends on the number of components chosen for dimension
-        reduction. Each data point is labelled according to the option provided to the label arguments. If a value
-        is given to both primary and secondary label, the secondary label colours the background and the primary label
-        colours the foreground of each datapoint.
-
-        Parameters
-        ----------
-        label : str
-            option for the primary label, must be a valid column name in Explorer attribute 'data'
-            (check valid column names using Explorer.data.columns)
-        features : list
-            list of column names used as feature space for dimensionality reduction
-        discrete : bool
-            Are the labels for this plot discrete or continuous? If True, labels will be treated as
-            discrete, otherwise labels will be coloured using a gradient and a colourbar will be provided.
-        populations : list, optional
-            if label has value of 'population_label', only populations in this
-            list will be included (events with no population associated will be labelled 'None')
-        n_components : int, (default=2)
-            number of components to produce from dimensionality reduction, valid values are 2 or 3
-        dim_reduction_method :str, (default = 'UMAP')
-            method to use for dimensionality reduction, valid values are 'UMAP' or 'PHATE'
-        mask : Pandas.DataFrame, optional
-            a valid Pandas DataFrame mask to subset data prior to plotting
-        scale_factor : int, (default=100)
-            Scale factor defines the size of datapoints;
-            size = meta_scale_factor * proportion of events in cluster relative to root population
-        figsize: tuple (default=(12,8)
-            Figure size
-        dim_reduction_kwargs : dict, optional
-            additional keyword arguments to pass to dimensionality reduction algorithm
-        matplotlib_kwargs : dict, optional
-            additional keyword arguments to pass to matplotlib call
-        Returns
-        -------
-        matplotlib.axes
-        """
-
-        assert n_components in [2, 3], 'n_components must have a value of 2 or 3'
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
-        matplotlib_kwargs = matplotlib_kwargs or {}
-        # Dimensionality reduction
-        self.dimenionality_reduction(method=dim_reduction_method,
-                                     features=features,
-                                     n_components=n_components,
-                                     **dim_reduction_kwargs)
-        embedding_cols = [f'{dim_reduction_method}{i + 1}' for i in range(n_components)]
-
-        # Label and plotting
-        assert label in self.data.columns, f'{label} is not a valid entry, valid labels include: ' \
-                                           f'{self.data.columns.tolist()}'
-        plabel = self._plotting_labels(label, populations)
-        data = self.data.copy()
-        if mask is not None:
-            data = data[mask]
-            plabel = np.array(plabel)[data.index.values]
-
-        size = 10
-        if label == "cluster_id" or label == "meta_label":
-            assert "cluster_size" in data.columns, "'cluster_size' missing. Generate Explorer object from " \
-                                                   "Clustering object by calling 'explore'"
-            size = data["cluster_size"] * scale_factor
-        if n_components == 2:
-            return scprep.plot.scatter2d(data[embedding_cols],
-                                         c=plabel,
-                                         ticks=False,
-                                         label_prefix=dim_reduction_method,
-                                         s=size,
-                                         discrete=discrete,
-                                         legend_loc="lower left",
-                                         legend_anchor=(1.04, 0),
-                                         legend_title=label,
-                                         figsize=figsize,
-                                         **matplotlib_kwargs)
-        return scprep.plot.scatter3d(data[embedding_cols],
-                                     c=plabel,
-                                     ticks=False,
-                                     size=size,
-                                     label_prefix=dim_reduction_method,
-                                     discrete=discrete,
-                                     legend_loc="lower left",
-                                     legend_anchor=(1.04, 0),
-                                     legend_title=label,
-                                     figsize=figsize,
-                                     **matplotlib_kwargs)
-
-    def heatmap(self,
-                heatmap_var: str,
-                features: list,
-                clustermap: bool = False,
-                mask: pd.DataFrame or None = None,
-                normalise: bool = True,
-                summary_func: callable = np.median,
-                figsize: tuple or None = (10, 10),
-                title: str or None = None,
-                col_cluster: bool = False,
-                **kwargs):
+    def clustered_heatmap(self,
+                          heatmap_var: str,
+                          features: list,
+                          mask: pd.DataFrame or None = None,
+                          summary_method: str = "median",
+                          **kwargs):
         """
         Generate a heatmap of marker expression for either clusters or gated populations
         (indicated with 'heatmap_var' argument)
@@ -620,44 +528,38 @@ class Explorer:
         Parameters
         ----------
         heatmap_var : str
-            variable to use, either 'global clusters' or 'gated populations'
+            variable to use, either "clusters", "meta clusters", or "populations"
         features : list
             list of column names to use for generating heatmap
-        clustermap : bool, (default=False)
-            if True, rows (clusters/populations) are grouped by single linkage clustering
         mask : Pandas.DataFrame, optional
             a valid Pandas DataFrame mask to subset data prior to plotting (optional)
-        normalise : bool, (default=True)
-            if True, data is normalised prior to plotting (normalised using Sklean's MinMaxScaler function)
-        summary_func: callable (default=Numpy.mean)
-            function used to values for display in heatmap
-        figsize : tuple, (default=(10,5))
-            tuple defining figure size passed to matplotlib call
-        title: str, optional
-            figure title
-        col_cluster: bool, (default=False)
-            If True and clustermap is True, columns AND rows are clustered
-
+        summary_method: str
         Returns
         -------
         matplotlib.axes
         """
-        d = self.data.copy()
-        if mask is not None:
-            d = d[mask]
-        d = d[features + [heatmap_var]]
-        d[features] = d[features].apply(pd.to_numeric)
-        if normalise:
-            d[features] = MinMaxScaler().fit_transform(d[features])
-        d = d.groupby(by=heatmap_var)[features].apply(summary_func)
-        if clustermap:
-            ax = sns.clustermap(d, col_cluster=col_cluster, cmap='viridis', figsize=figsize, **kwargs)
-            return ax
-        fig, ax = plt.subplots(figsize=figsize)
-        ax = sns.heatmap(d, linewidth=0.5, ax=ax, cmap='viridis', **kwargs)
-        if title is not None:
-            ax.set_title(title)
-        return ax
+        if heatmap_var == "clusters":
+            data = self.summarise_clusters(identifier="sample_id",
+                                           features=features,
+                                           mask=mask,
+                                           summary_method=summary_method).set_index("cluster_id")
+        elif heatmap_var == "meta clusters":
+            data = self.summarise_metaclusters(features=features,
+                                               summary_method=summary_method,
+                                               mask=mask).set_index("meta_label")
+        elif heatmap_var == "populations":
+            data = self.summarise_populations(features=features,
+                                              identifier="sample_id",
+                                              summary_method=summary_method,
+                                              mask=mask).set_index("population_label")
+        else:
+            raise ValueError("heatmap var should be one of: 'clusters', 'meta clusters' or 'populations'")
+        data[features] = data[features].apply(pd.to_numeric)
+        kwargs = kwargs or {"col_cluster": True,
+                            "figsize": (10, 15),
+                            "standard_scale": 1,
+                            "cmap": "viridis"}
+        return sns.clustermap(data, **kwargs)
 
     def plot_representation(self,
                             x_variable: str,
@@ -687,7 +589,7 @@ class Explorer:
         -------
         matplotlib.axes
         """
-        d = self.data.copy()
+        d = self.data
         if mask is not None:
             d = self.data[mask]
         assert x_variable in ["cluster_id", "meta_label", "population_label"], f'x_variable must be one of' \
@@ -724,69 +626,87 @@ class Explorer:
     def _no_such_pop_cluster(d, _id):
         assert d.shape[0] == 0, f'unable to subset data on {_id}'
 
+    def _check_2d_plot_content(self, content: list):
+        err = "'content' should be a list of dictionaries, each with the keys 'source' and 'value' where source " \
+              "is a valid meta-variable e.g. cluster_id and 'value' the data to be plotted"
+        assert all(isinstance(x, dict) for x in content), err
+        assert all([all([i in x.keys() for i in ["source", "value"]]) for x in content]), err
+        for c in content:
+            assert c["source"] in self.meta_vars, f"{c['source']} is an invalid meta-variable"
+            assert c['value'] in self.data[c["source"]].values, \
+                f"{c['value']} not found for meta-variable {c['source']}"
+
     def plot_2d(self,
-                primary_id: dict,
                 x: str,
                 y: str,
-                secondary_id: dict or None = None,
+                content: list,
+                background_type: str = "population_label",
+                background: str or None = None,
                 xlim: tuple or None = None,
                 ylim: tuple or None = None,
-                ax: plt.Axes or None = None) -> plt.Axes:
+                ax: plt.Axes or None = None,
+                bins: str = "sqrt",
+                kde: bool = False) -> plt.Axes:
         """
-        Plots two-dimensions as either a scatter plot or a 2D histogram (defaults to 2D histogram if number of
-        data-points exceeds 1000). This can be used for close inspection of populations in contrast to their clustering
-        assignments. Particularly useful for debugging or inspecting anomalies.
 
         Parameters
         ----------
-        primary_id : dict
-            variable for selection of primary dataset to plot, e.g. if primary ID is a population name,
-            then only data-points belonging to that gated population will be displayed. Alternatively if it is the name of
-            a cluster or meta-cluster, then only data-points assigned to that cluster will be displayed.
-        secondary_id : dict, optional
-            variable for selection of secondary dataset, plotted over the top of the primary dataset for comparison
-        x : str
-            Name of variable to plot on the x-axis
-        y : str
-            Name of variable to plot on the y-axis
-        xlim : tuple, optional
-            limit the x-axis to a given range (optional)
-        ylim : tuple, optional
-            limit the y-axis to a given range (optional)
-        ax: Matplotlib.Axes (optional)
+        x
+        y
+        content
+        background_type
+        background
+        xlim
+        ylim
+        ax
+        bins
+        kde
 
         Returns
         -------
-        matplotlib.axes
+
         """
-
-        # Checks and balances
-        def check_id(id_dict, data):
-            e = 'Primary/Secondary ID should be a dictionary with keys: "column_name" and "value"'
-            assert all([x_ in id_dict.keys() for x_ in ['column_name', 'value']]), e
-            assert id_dict['column_name'] in data.columns, f'{id_dict["column_name"]} is not a valid column name'
-            assert id_dict['value'] in data[id_dict['column_name']].values, f'No such value {id_dict["value"]} in ' \
-                                                                            f'{id_dict["column_name"]}'
-
-        ax = ax or plt.subplots(figsize=(5, 5))[1]
-        check_id(primary_id, self.data)
-        if secondary_id is not None:
-            check_id(secondary_id, self.data)
+        self._check_2d_plot_content(content=content)
+        if ax is None:
+            ax = plt.subplots(figsize=(5, 5))[1]
         assert all([c in self.data.columns for c in [x, y]]), 'Invalid axis; must be an existing column in dataframe'
-
-        # Build plot
-        d = self.data[self.data[primary_id['column_name']] == primary_id['value']]
-        d2 = None
-        if secondary_id is not None:
-            d2 = self.data[self.data[secondary_id['column_name']] == secondary_id['value']]
-
-        if d.shape[0] < 1000:
-            ax.scatter(d[x], d[y], marker='o', s=1, c='b', alpha=0.8, label=primary_id['value'])
-        else:
-            ax.hist2d(d[x], d[y], bins=500, norm=LogNorm(), label=primary_id['value'])
-        if d2 is not None:
-            ax.scatter(d2[x], d2[y], marker='o', s=1, c='r', alpha=0.8, label=secondary_id['value'])
-
+        x = ["population_label", "meta_label", "cluster_id"]
+        err = f"Invalid background_type, should be one of {x}"
+        assert background_type in x, err
+        data = self.data
+        if background is not None:
+            data = data[data[background_type] == background]
+            assert data.shape[0] > 3, "Less than 3 datapoint for the chosen background"
+            if data.shape[0] < 1000:
+                ax.scatter(data[x],
+                           data[y],
+                           marker='o',
+                           s=1,
+                           c='black',
+                           alpha=0.8)
+            else:
+                bins = [np.histogram_bin_edges(data[x].values, bins=bins),
+                        np.histogram_bin_edges(data[y].values, bins=bins)]
+                ax.hist2d(data[x],
+                          data[y],
+                          bins=bins,
+                          norm=LogNorm(),
+                          cmap="jet")
+        colours = cycle(plt.get_cmap("tab20"))
+        for c in content:
+            colour = next(colours)
+            df = data[data[c["source"]] == c["value"]]
+            ax.scatter(df[x],
+                       df[y],
+                       marker='o',
+                       s=1,
+                       c=colour,
+                       alpha=0.8,
+                       label=df[f"{c['source']}: {c['value']}"])
+            if kde:
+                sns.kdeplot(df[x],
+                            df[y],
+                            color=colour)
         if xlim:
             ax.set_xlim(xlim)
         if ylim:
