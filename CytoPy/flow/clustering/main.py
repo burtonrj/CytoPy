@@ -157,8 +157,8 @@ def phenograph_clustering(data: pd.DataFrame,
     return data, graphs, q
 
 
-def _asign_metalabels(data: pd.DataFrame,
-                      metadata: pd.DataFrame):
+def _assign_metalabels(data: pd.DataFrame,
+                       metadata: pd.DataFrame):
     """
     Given the original clustered data (data) and the meta-clustering results of
     clustering the clusters of this original data (metadata), assign the meta-cluster
@@ -178,62 +178,32 @@ def _asign_metalabels(data: pd.DataFrame,
     return pd.merge(data, metadata[["sample_id", "cluster_id", "meta_label"]], on=["sample_id", "cluster_id"])
 
 
-def _meta_preprocess(data: pd.DataFrame,
-                     features: list,
-                     summary_method: str = "median",
-                     norm_method: str or None = "norm",
-                     **kwargs):
+def _summarise_clusters(data: pd.DataFrame,
+                        features: list,
+                        summary_method: str = "median"):
     """
-    Summarise the features of the dataframe by grouping on the cluster_id. The summary
-    method will be used to describe each cluster (e.g. this could be numpy.mean method
-    and would therefore return the mean of each cluster).
-
-    Optionally, data can be normalised prior to applying summary method. To do so provide a
-    valid scaling method (see CytoPy.flow.transform.scaler).
 
     Parameters
     ----------
-    data: Pandas.DataFrame
-        Clustered data with columns for sample_id and cluster_id
-    features: list
-        Columns clustering is performed on
-    summary_method: str (default="median")
-        How to summarise the clusters for meta-clustering
-    norm_method: str or None (default="norm")
-        If provided, method used to normalise data prior to summarising
-    kwargs:
-        Additional keyword arguments passed to CytoPy.flow.transform.scaler
+    data
+    features
+    summary_method
 
     Returns
     -------
-    Pandas.DataFrame
-        Summarised dataframe
+
     """
-    if norm_method is not None:
-        norm_method = partial(scaler, scale_method=norm_method, return_scaler=False, **kwargs)
-        data = (data.groupby(["sample_id", "cluster_id"])[features]
-                .apply(lambda x: pd.DataFrame(norm_method(x), columns=features))
-                .reset_index())
-    summary = list()
-    for _id, df in data.groupby(["sample_id", "cluster_id"]):
-        f = np.median
-        if summary_method == "mean":
-            f = np.mean
-        x = pd.DataFrame(df[features].apply(f, axis=0)).T
-        x["sample_id"] = _id[0]
-        x["cluster_id"] = _id[1]
-        summary.append(x)
-    metadata = pd.concat(summary)
-    metadata["meta_label"] = None
-    return metadata
+    if summary_method == "median":
+        return data.groupby(["sample_id", "cluster_id"])[features].median().reset_index()
+    if summary_method == "mean":
+        return data.groupby(["sample_id", "cluster_id"])[features].mean().reset_index()
+    raise ValueError("summary_method should be 'mean' or 'median'")
 
 
 def sklearn_metaclustering(data: pd.DataFrame,
                            features: list,
                            method: str,
                            summary_method: str = "median",
-                           norm_method: str or None = "norm",
-                           norm_kwargs: dict or None = None,
                            verbose: bool = True,
                            **kwargs):
     """
@@ -272,12 +242,11 @@ def sklearn_metaclustering(data: pd.DataFrame,
     model = globals()[method](**kwargs)
     vprint_(f"------ {method} meta-clustering ------")
     vprint_("...summarising clusters")
-    norm_kwargs = norm_kwargs or {}
-    metadata = _meta_preprocess(data, features, summary_method, norm_method, **norm_kwargs)
+    metadata = _summarise_clusters(data, features, summary_method)
     vprint_("...clustering the clusters")
     metadata["meta_label"] = model.fit_predict(metadata[features].values)
     vprint_("...assigning meta-labels")
-    data = _asign_metalabels(data, metadata)
+    data = _assign_metalabels(data, metadata)
     vprint_("------ Complete ------")
     return data, None, None
 
@@ -286,8 +255,6 @@ def phenograph_metaclustering(data: pd.DataFrame,
                               features: list,
                               verbose: bool = True,
                               summary_method: str = "median",
-                              norm_method: str or None = "norm",
-                              norm_kwargs: dict or None = None,
                               **kwargs):
     """
     Meta-clustering with a the PhenoGraph algorithm. This function
@@ -318,14 +285,13 @@ def phenograph_metaclustering(data: pd.DataFrame,
     """
     vprint_ = vprint(verbose)
     vprint_("----- Phenograph meta-clustering ------")
-    norm_kwargs = norm_kwargs or {}
-    metadata = _meta_preprocess(data, features, summary_method, norm_method, **norm_kwargs)
+    metadata = _summarise_clusters(data, features, summary_method)
     vprint_("...summarising clusters")
     vprint_("...clustering the clusters")
     communities, graph, q = phenograph.cluster(metadata[features].values, **kwargs)
     metadata["meta_label"] = communities
     vprint_("...assigning meta-labels")
-    data = _asign_metalabels(data, metadata)
+    data = _assign_metalabels(data, metadata)
     vprint_("------ Complete ------")
     return data, graph, q
 
@@ -335,12 +301,11 @@ def consensus_metacluster(data: pd.DataFrame,
                           cluster_class: object,
                           verbose: bool = True,
                           summary_method: str = "median",
-                          norm_method: str or None = "norm",
                           smallest_cluster_n: int = 5,
                           largest_cluster_n: int = 15,
                           n_resamples: int = 10,
                           resample_proportion: float = 0.5,
-                          **norm_kwargs):
+                          **kwargs):
     """
     Meta-clustering with the consensus clustering algorithm, as first described here:
     https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf. This function
@@ -362,8 +327,6 @@ def consensus_metacluster(data: pd.DataFrame,
         Scikit-learn (or alike) object with the method 'fit_predict'.
     verbose: bool (default=True)
         Whether to provide feedback to stdout
-    norm_method: str or None (default="norm")
-        If provided, method used to normalise data prior to summarising
     smallest_cluster_n: int (default=5)
         Minimum number of clusters to search for in consensus clustering
     largest_cluster_n: int (default=15)
@@ -373,8 +336,6 @@ def consensus_metacluster(data: pd.DataFrame,
     resample_proportion: float (default=0.5)
         Proportion of data to sample (with replacement) in each round of sampling
         in consensus clustering
-    norm_kwargs:
-        Additional keyword arguments passed to CytoPy.flow.transform.scaler
     Returns
     -------
     Pandas.DataFrame
@@ -382,7 +343,7 @@ def consensus_metacluster(data: pd.DataFrame,
         associations
     """
     vprint_ = vprint(verbose)
-    metadata = _meta_preprocess(data, features, summary_method, norm_method, **norm_kwargs)
+    metadata = _summarise_clusters(data, features, summary_method)
     assert (metadata.shape[0] * resample_proportion) > largest_cluster_n, \
         f"Maximum number of meta clusters (largest_cluster_n) is currently set to {largest_cluster_n} but there are " \
         f"only {metadata.shape[0] * resample_proportion} clusters to cluster in each sample. Either decrease " \
@@ -395,7 +356,7 @@ def consensus_metacluster(data: pd.DataFrame,
                                        resample_proportion=resample_proportion)
     consensus_clust.fit(metadata[features].values)
     metadata["meta_label"] = consensus_clust.predict_data(metadata[features])
-    data = _asign_metalabels(data, metadata)
+    data = _assign_metalabels(data, metadata)
     return data, None, None
 
 
@@ -665,7 +626,6 @@ class Clustering:
     def meta_cluster(self,
                      func: callable,
                      summary_method: str = "median",
-                     normalise: str or None = "norm",
                      **kwargs):
         """
         Perform meta-clustering using one of the meta-clustering functions from
@@ -703,7 +663,6 @@ class Clustering:
                                                    features=features,
                                                    verbose=self.verbose,
                                                    summary_method=summary_method,
-                                                   norm_method=normalise,
                                                    **kwargs)
 
     def rename_meta_clusters(self,
@@ -751,8 +710,7 @@ class Clustering:
         Explorer
         """
         self._cluster_counts()
-        data = self.data.copy()
-        return Explorer(data=data)
+        return Explorer(data=self.data)
 
     def save(self):
         """
