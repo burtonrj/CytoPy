@@ -39,13 +39,12 @@ from ...data.experiment import Experiment, load_data
 from ...data.population import Cluster
 from ...feedback import vprint, progress_bar
 from ..explore import Explorer
-from ..transforms import scaler
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
-from functools import partial
+from sklearn.cluster import *
+from sklearn.metrics import calinski_harabasz_score, silhouette_score, davies_bouldin_score
 from warnings import warn
 import pandas as pd
-import numpy as np
 import phenograph
 
 __author__ = "Ross Burton"
@@ -58,11 +57,20 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
+def clustering_performance(data: pd.DataFrame,
+                           labels: list):
+    print("Clustering performance...")
+    print(f"Silhouette coefficient: {silhouette_score(data.values, labels, metric='euclidean')}")
+    print(f"Calinski-Harabasz index: {calinski_harabasz_score(data.values, labels)}")
+    print(f"Davies-Bouldin index: {davies_bouldin_score(data.values, labels)}")
+
+
 def sklearn_clustering(data: pd.DataFrame,
                        features: list,
                        verbose: bool,
                        method: str,
                        global_clustering: bool = False,
+                       print_performance_metrics: bool = True,
                        **kwargs):
     """
     Perform high-dimensional clustering of single cell data using
@@ -86,6 +94,9 @@ def sklearn_clustering(data: pd.DataFrame,
     global_clustering: bool (default=False)
         Whether to cluster the whole dataframe or group on 'sample_id' and cluster
         groups
+    print_performance_metrics: bool = True
+        Print Calinski-Harabasz Index, Silhouette Coefficient, and Davies-Bouldin Index
+        (see https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation)
     kwargs:
         Additional keyword arguments passed when initialising Scikit-learn model
 
@@ -99,9 +110,13 @@ def sklearn_clustering(data: pd.DataFrame,
     model = globals()[method](**kwargs)
     if global_clustering:
         data["cluster_id"] = model.fit_predict(data[features])
+        if print_performance_metrics:
+            clustering_performance(data[features], model.labels_)
         return data, None, None
     for _id, df in progress_bar(data.groupby("sample_id"), verbose=verbose):
         data.loc[df.index, ["cluster_id"]] = model.fit_predict(df[features])
+        if print_performance_metrics:
+            clustering_performance(df[features], model.labels_)
     return data, None, None
 
 
@@ -109,6 +124,7 @@ def phenograph_clustering(data: pd.DataFrame,
                           features: list,
                           verbose: bool,
                           global_clustering: bool = False,
+                          print_performance_metrics: bool = True,
                           **kwargs):
     """
     Perform high-dimensional clustering of single cell data using the popular
@@ -129,6 +145,9 @@ def phenograph_clustering(data: pd.DataFrame,
     global_clustering: bool (default=False)
         Whether to cluster the whole dataframe or group on 'sample_id' and cluster
         groups
+    print_performance_metrics: bool = True
+        Print Calinski-Harabasz Index, Silhouette Coefficient, and Davies-Bouldin Index
+        (see https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation)
     kwargs:
         Additional keyword arguments passed when calling phenograph.cluster
 
@@ -143,6 +162,8 @@ def phenograph_clustering(data: pd.DataFrame,
     if global_clustering:
         communities, graph, q = phenograph.cluster(data[features], **kwargs)
         data["cluster_id"] = communities
+        if print_performance_metrics:
+            clustering_performance(data[features], list(communities))
         return data, graph, q
     graphs = dict()
     q = dict()
@@ -152,6 +173,8 @@ def phenograph_clustering(data: pd.DataFrame,
         graphs[_id], q[_id] = graph, q_
         df["cluster_id"] = communities
         data.loc[df.index, ["cluster_id"]] = df.cluster_id
+        if print_performance_metrics:
+            clustering_performance(df[features], list(communities))
         _print("-----------------------------")
         _print("\n")
     return data, graphs, q
@@ -205,6 +228,7 @@ def sklearn_metaclustering(data: pd.DataFrame,
                            method: str,
                            summary_method: str = "median",
                            verbose: bool = True,
+                           print_performance_metrics: bool = True,
                            **kwargs):
     """
     Meta-clustering with a Scikit-learn clustering/mixture model algorithm. This function
@@ -221,10 +245,9 @@ def sklearn_metaclustering(data: pd.DataFrame,
         Name of a valid Scikit-learn cluster or mixture class, or 'HDBSCAN'
     summary_method: str (default="median")
         How to summarise the clusters for meta-clustering
-    norm_method: str or None (default="norm")
-        If provided, method used to normalise data prior to summarising
-    norm_kwargs: dict, optional
-        Additional keyword arguments passed to CytoPy.flow.transform.scaler
+    print_performance_metrics: bool = True
+        Print Calinski-Harabasz Index, Silhouette Coefficient, and Davies-Bouldin Index
+        (see https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation)
     verbose: bool (default=True)
         Whether to provide feedback to stdout
     kwargs:
@@ -245,6 +268,8 @@ def sklearn_metaclustering(data: pd.DataFrame,
     metadata = _summarise_clusters(data, features, summary_method)
     vprint_("...clustering the clusters")
     metadata["meta_label"] = model.fit_predict(metadata[features].values)
+    if print_performance_metrics:
+        clustering_performance(metadata[features], model.labels_)
     vprint_("...assigning meta-labels")
     data = _assign_metalabels(data, metadata)
     vprint_("------ Complete ------")
@@ -255,6 +280,7 @@ def phenograph_metaclustering(data: pd.DataFrame,
                               features: list,
                               verbose: bool = True,
                               summary_method: str = "median",
+                              print_performance_metrics: bool = True,
                               **kwargs):
     """
     Meta-clustering with a the PhenoGraph algorithm. This function
@@ -268,10 +294,9 @@ def phenograph_metaclustering(data: pd.DataFrame,
         Columns clustering is performed on
     summary_method: str (default="median")
         How to summarise the clusters for meta-clustering
-    norm_method: str or None
-        If provided, method used to normalise data prior to summarising
-    norm_kwargs: dict, optional
-        Additional keyword arguments passed to CytoPy.flow.transform.scaler
+    print_performance_metrics: bool = True
+        Print Calinski-Harabasz Index, Silhouette Coefficient, and Davies-Bouldin Index
+        (see https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation)
     verbose: bool (default=True)
         Whether to provide feedback to stdout
     kwargs:
@@ -290,6 +315,8 @@ def phenograph_metaclustering(data: pd.DataFrame,
     vprint_("...clustering the clusters")
     communities, graph, q = phenograph.cluster(metadata[features].values, **kwargs)
     metadata["meta_label"] = communities
+    if print_performance_metrics:
+        clustering_performance(metadata[features], list(communities))
     vprint_("...assigning meta-labels")
     data = _assign_metalabels(data, metadata)
     vprint_("------ Complete ------")
@@ -305,6 +332,7 @@ def consensus_metacluster(data: pd.DataFrame,
                           largest_cluster_n: int = 15,
                           n_resamples: int = 10,
                           resample_proportion: float = 0.5,
+                          print_performance_metrics: bool = True,
                           **kwargs):
     """
     Meta-clustering with the consensus clustering algorithm, as first described here:
@@ -336,6 +364,11 @@ def consensus_metacluster(data: pd.DataFrame,
     resample_proportion: float (default=0.5)
         Proportion of data to sample (with replacement) in each round of sampling
         in consensus clustering
+    print_performance_metrics: bool = True
+        Print Calinski-Harabasz Index, Silhouette Coefficient, and Davies-Bouldin Index
+        (see https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation)
+    kwargs:
+        Additional keyword arguments to pass to ConsensusCluster
     Returns
     -------
     Pandas.DataFrame
@@ -353,9 +386,12 @@ def consensus_metacluster(data: pd.DataFrame,
                                        smallest_cluster_n=smallest_cluster_n,
                                        largest_cluster_n=largest_cluster_n,
                                        n_resamples=n_resamples,
-                                       resample_proportion=resample_proportion)
+                                       resample_proportion=resample_proportion,
+                                       **kwargs)
     consensus_clust.fit(metadata[features].values)
     metadata["meta_label"] = consensus_clust.predict_data(metadata[features])
+    if print_performance_metrics:
+        clustering_performance(metadata[features], consensus_clust.cluster_.labels_)
     data = _assign_metalabels(data, metadata)
     return data, None, None
 
@@ -416,7 +452,8 @@ def flowsom_clustering(data: pd.DataFrame,
                        global_clustering: bool = False,
                        init_kwargs: dict or None = None,
                        training_kwargs: dict or None = None,
-                       meta_cluster_kwargs: dict or None = None):
+                       meta_cluster_kwargs: dict or None = None,
+                       print_performance_metrics: bool = True):
     """
     Perform high-dimensional clustering of single cell data using the popular
     FlowSOM algorithm (https://pubmed.ncbi.nlm.nih.gov/25573116/). For details
@@ -448,6 +485,9 @@ def flowsom_clustering(data: pd.DataFrame,
     meta_cluster_kwargs: dict, optional
         Additional meta_cluster keyword parameters for FlowSOM
         (see CytoPy.flow.clustering.flowsom.FlowSOM.meta_cluster)
+    print_performance_metrics: bool = True
+        Print Calinski-Harabasz Index, Silhouette Coefficient, and Davies-Bouldin Index
+        (see https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation)
 
     Returns
     -------
@@ -463,6 +503,8 @@ def flowsom_clustering(data: pd.DataFrame,
                                       training_kwargs=training_kwargs,
                                       meta_cluster_kwargs=meta_cluster_kwargs)
         data["cluster_id"] = cluster.predict()
+        if print_performance_metrics:
+            clustering_performance(data[features], data["cluster_id"].values)
         return data, None, None
     vprint_ = vprint(verbose)
     for _id, df in data.groupby("sample_id"):
@@ -475,6 +517,8 @@ def flowsom_clustering(data: pd.DataFrame,
                                       training_kwargs=training_kwargs,
                                       meta_cluster_kwargs=meta_cluster_kwargs)
         df["cluster_id"] = cluster.predict()
+        if print_performance_metrics:
+            clustering_performance(df[features], df["cluster_id"].values)
         data.loc[df.index, ["cluster_id"]] = df.cluster_id
     return data, None, None
 

@@ -81,9 +81,9 @@ class CellClassifier(mongoengine.Document):
         unique
     feature: list, required
         List of markers used as input variables for classification
-    multi_class: bool (default=False)
+    multi_label: bool (default=False)
         If True, the classification problem will be treated as a
-        multi-class problem; that is, a single cell can belong to
+        multi-label problem; that is, a single cell can belong to
         multiple populations and the classifier will be trained to
         attribute multiple classes to a cell. This requires that the
         user provides a threshold for positivity which defaults to 0.5.
@@ -122,7 +122,7 @@ class CellClassifier(mongoengine.Document):
     """
     name = mongoengine.StringField(required=True, unique=True)
     features = mongoengine.ListField(required=True)
-    multi_class = mongoengine.BooleanField(default=False)
+    multi_label = mongoengine.BooleanField(default=False)
     target_populations = mongoengine.ListField(required=True)
     transform = mongoengine.StringField(default="logicle")
     scale = mongoengine.StringField(choices=["standard", "norm"])
@@ -191,7 +191,7 @@ class CellClassifier(mongoengine.Document):
                                                 root_population=root_population,
                                                 population_labels=self.target_populations)
         self.print("Creating training data...")
-        if self.multi_class:
+        if self.multi_label:
             self.x, self.y = supervised.multilabel(ref=ref,
                                                    root_population=root_population,
                                                    population_labels=self.target_populations,
@@ -246,7 +246,7 @@ class CellClassifier(mongoengine.Document):
         None
         """
         self.check_data_init()
-        assert not self.multi_class, "Class weights not supported for multi-class classifiers"
+        assert not self.multi_label, "Class weights not supported for multi-class classifiers"
         self.class_weights = supervised.auto_weights(y=self.y)
 
     def _downsample(self,
@@ -437,18 +437,21 @@ class CellClassifier(mongoengine.Document):
             List of dictionaries detailing training performance on each round
             List of dictionaries detailing testing performance on each round
         """
+        assert not self.multi_label, "Cross-validation is not supported for multi-label classification"
         metrics = metrics or DEFAULT_METRICS
         split_kwargs = split_kwargs or {}
         fit_kwargs = fit_kwargs or {}
         cross_validator = cross_validator or KFold(n_splits=10, random_state=42, shuffle=True)
         training_results = list()
         testing_results = list()
-        for train_idx, test_idx in progress_bar(cross_validator.split(self.x, **split_kwargs),
+        for train_idx, test_idx in progress_bar(cross_validator.split(X=self.x, y=self.y, **split_kwargs),
+                                                total=cross_validator.n_splits,
                                                 verbose=self.verbose):
-            x_train, x_test = self.x.values[train_idx], self.x.values[test_idx]
+            x_train, x_test = self.x.loc[train_idx], self.x.loc[test_idx]
             y_train, y_test = self.y[train_idx], self.y[test_idx]
             self._fit(x=x_train, y=y_train, **fit_kwargs)
-            y_pred, y_score = self._predict(x=x_train, threshold=threshold)
+            y_pred, y_score = self._predict(x=x_train,
+                                            threshold=threshold)
             training_results.append(supervised.calc_metrics(metrics=metrics,
                                                             y_pred=y_pred,
                                                             y_score=y_score,
@@ -556,13 +559,13 @@ class CellClassifier(mongoengine.Document):
         x = target.load_population_df(population=root_population,
                                       transform=self.transform)[self.features]
         y_pred, y_score = self._predict(x=x, threshold=threshold)
-        if not self.multi_class:
+        if not self.multi_label:
             self._add_unclassified_population(x=x,
                                               y_pred=y_pred,
                                               root_population=root_population,
                                               target=target)
         for i, pop in enumerate(self.target_populations):
-            if self.multi_class:
+            if self.multi_label:
                 idx = x.index.values[np.where(y_pred[:, i + 1] == 1)[0]]
             else:
                 idx = x.index.values[np.where(y_pred == i + 1)[0]]
@@ -601,7 +604,7 @@ class CellClassifier(mongoengine.Document):
         val = experiment.get_sample(validation_id)
         assert all([x in val.tree.keys() for x in self.target_populations]), \
             f"Validation sample should contain the following populations: {self.target_populations}"
-        if self.multi_class:
+        if self.multi_label:
             x, y = supervised.multilabel(ref=val,
                                          root_population=root_population,
                                          population_labels=self.target_populations,
@@ -819,7 +822,7 @@ class SklearnCellClassifier(CellClassifier):
             y_score = self.model.predict_proba(x[self.features])
         else:
             y_score = self.model.decision_function(x[self.features])
-        if self.multi_class:
+        if self.multi_label:
             y_pred = list(map(lambda yi: [int(i > threshold) for i in yi], y_score))
         else:
             y_pred = self.model.predict(x[self.features])
@@ -1182,7 +1185,7 @@ class KerasCellClassifier(CellClassifier):
         """
         self.check_model_init()
         y_score = self.model.predict(x)
-        if self.multi_class:
+        if self.multi_label:
             y_pred = list(map(lambda yi: [int(i > threshold) for i in yi], y_score))
         else:
             y_pred = self.model.predict_classes(x)
