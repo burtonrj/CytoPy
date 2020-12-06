@@ -1006,11 +1006,14 @@ class SklearnCellClassifier(CellClassifier):
         -------
 
         """
+        assert not sum([x is not None, y is not None]) == 1, "Cannot provide x without y and vice-versa"
+        if x is None:
+            x, y = self.x, self.y
         assert sum([i is None for i in [x, y]]) in [0, 2], \
             "If you provide 'x' you must provide 'y' and vice versa."
         return supervised.confusion_matrix_plots(classifier=self.model,
-                                                 x=x or self.x,
-                                                 y=y or self.y,
+                                                 x=x,
+                                                 y=y,
                                                  class_labels=self.target_populations,
                                                  cmap=cmap,
                                                  figsize=figsize,
