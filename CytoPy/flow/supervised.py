@@ -169,7 +169,7 @@ def confusion_matrix_plots(classifier,
                            y: np.ndarray,
                            class_labels: list,
                            cmap: str or None = None,
-                           figsize: tuple = (10, 5),
+                           figsize: tuple = (15, 8),
                            **kwargs):
     """
     Generate a figure of two heatmaps showing a confusion matrix, one normalised
@@ -198,12 +198,12 @@ def confusion_matrix_plots(classifier,
     Matplotlib.Figure
     """
     cmap = cmap or plt.cm.Blues
-    fig, axes = plt.subplots(2, figsize=figsize)
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
     titles = ["Confusion matrix, without normalisation", "Confusion matrix; normalised"]
     for i, (title, norm) in enumerate(zip(titles, [False, True])):
-        skmetrics.plot_confusion_matrix(estimator=classifier,
-                                        X=x,
-                                        y=y,
+        skmetrics.plot_confusion_matrix(classifier,
+                                        x,
+                                        y,
                                         display_labels=class_labels,
                                         cmap=cmap,
                                         normalize=norm,

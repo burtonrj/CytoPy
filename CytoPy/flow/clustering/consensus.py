@@ -31,6 +31,7 @@ from ...feedback import progress_bar
 from itertools import combinations
 import numpy as np
 import bisect
+np.random.seed(42)
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"

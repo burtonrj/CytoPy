@@ -111,12 +111,12 @@ def sklearn_clustering(data: pd.DataFrame,
     if global_clustering:
         data["cluster_id"] = model.fit_predict(data[features])
         if print_performance_metrics:
-            clustering_performance(data[features], model.labels_)
+            clustering_performance(data[features], data["cluster_id"].values)
         return data, None, None
     for _id, df in progress_bar(data.groupby("sample_id"), verbose=verbose):
         data.loc[df.index, ["cluster_id"]] = model.fit_predict(df[features])
         if print_performance_metrics:
-            clustering_performance(df[features], model.labels_)
+            clustering_performance(df[features], df["cluster_id"].values)
     return data, None, None
 
 
@@ -163,7 +163,7 @@ def phenograph_clustering(data: pd.DataFrame,
         communities, graph, q = phenograph.cluster(data[features], **kwargs)
         data["cluster_id"] = communities
         if print_performance_metrics:
-            clustering_performance(data[features], list(communities))
+            clustering_performance(data[features], data["cluster_id"].values)
         return data, graph, q
     graphs = dict()
     q = dict()
@@ -174,7 +174,7 @@ def phenograph_clustering(data: pd.DataFrame,
         df["cluster_id"] = communities
         data.loc[df.index, ["cluster_id"]] = df.cluster_id
         if print_performance_metrics:
-            clustering_performance(df[features], list(communities))
+            clustering_performance(df[features], df["cluster_id"].values)
         _print("-----------------------------")
         _print("\n")
     return data, graphs, q
@@ -269,7 +269,7 @@ def sklearn_metaclustering(data: pd.DataFrame,
     vprint_("...clustering the clusters")
     metadata["meta_label"] = model.fit_predict(metadata[features].values)
     if print_performance_metrics:
-        clustering_performance(metadata[features], model.labels_)
+        clustering_performance(metadata[features], metadata["meta_label"].values)
     vprint_("...assigning meta-labels")
     data = _assign_metalabels(data, metadata)
     vprint_("------ Complete ------")
@@ -316,7 +316,7 @@ def phenograph_metaclustering(data: pd.DataFrame,
     communities, graph, q = phenograph.cluster(metadata[features].values, **kwargs)
     metadata["meta_label"] = communities
     if print_performance_metrics:
-        clustering_performance(metadata[features], list(communities))
+        clustering_performance(metadata[features], metadata["meta_label"].values)
     vprint_("...assigning meta-labels")
     data = _assign_metalabels(data, metadata)
     vprint_("------ Complete ------")
@@ -391,7 +391,7 @@ def consensus_metacluster(data: pd.DataFrame,
     consensus_clust.fit(metadata[features].values)
     metadata["meta_label"] = consensus_clust.predict_data(metadata[features])
     if print_performance_metrics:
-        clustering_performance(metadata[features], consensus_clust.cluster_.labels_)
+        clustering_performance(metadata[features], metadata["meta_label"].values)
     data = _assign_metalabels(data, metadata)
     return data, None, None
 
