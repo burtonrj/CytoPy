@@ -850,7 +850,7 @@ class SklearnCellClassifier(CellClassifier):
         None
         """
         self.check_model_init()
-        if self.class_weights is not None:
+        if len(self.class_weights) > 0:
             if "sample_weight" in signature(self.model.fit).parameters.keys():
                 sample_weight = np.array([self.class_weights.get(i) for i in y])
                 self.model.fit(x, y, sample_weight=sample_weight, **kwargs)
@@ -949,8 +949,13 @@ class SklearnCellClassifier(CellClassifier):
         train_sizes = train_sizes or np.linspace(0.1, 1.0, 10)
         verbose = int(self.verbose)
         ax = ax or plt.subplots(figsize=(5, 5))[1]
-        train_sizes, train_scores, test_scores, _, _ = learning_curve(self.model, x, y, verbose=verbose,
-                                                                      train_sizes=train_sizes, **kwargs)
+        train_sizes, train_scores, test_scores = learning_curve(self.model,
+                                                                x,
+                                                                y,
+                                                                verbose=verbose,
+                                                                return_times=False,
+                                                                train_sizes=train_sizes,
+                                                                **kwargs)
         train_scores_mean = np.mean(train_scores, axis=1)
         train_scores_std = np.std(train_scores, axis=1)
         test_scores_mean = np.mean(test_scores, axis=1)
@@ -1297,4 +1302,3 @@ class KerasCellClassifier(CellClassifier):
         plot_kwargs = plot_kwargs or {}
         ax = ax or plt.subplots(figsize=figsize)[1]
         return pd.DataFrame(history.history).plot(ax=ax, **plot_kwargs)
-
