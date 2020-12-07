@@ -340,6 +340,7 @@ class FileGroup(mongoengine.Document):
                                  verbose: bool = True,
                                  scoring: str = "balanced_accuracy",
                                  downsample: int or float or None = 0.1,
+                                 sml_population_mappings: dict or None = None,
                                  **kwargs):
         """
         Estimate a population for a control sample by training a KNearestNeighbors classifier
@@ -377,11 +378,15 @@ class FileGroup(mongoengine.Document):
                                           scoring=scoring,
                                           **kwargs)
             feedback(f"{population.parent} estimated, resuming estimation of {population.population_name}....")
-        features = [x for x in [population.geom.x, population.geom.y] if x is not None]
-        transformations = {d: transform for d, transform in zip([population.geom.x, population.geom.y],
-                                                                [population.geom.transform_x,
-                                                                 population.geom.transform_y])
-                           if d is not None}
+        if sml_population_mappings is not None:
+            features = sml_population_mappings.get(population.population_name).get("features")
+            transformations = sml_population_mappings.get(population.population_name).get("transformations")
+        else:
+            features = [x for x in [population.geom.x, population.geom.y] if x is not None]
+            transformations = {d: transform for d, transform in zip([population.geom.x, population.geom.y],
+                                                                    [population.geom.transform_x,
+                                                                     population.geom.transform_y])
+                               if d is not None}
         training_data = self.load_population_df(population=population.parent,
                                                 transform=transformations,
                                                 label_downstream_affiliations=False).copy()
