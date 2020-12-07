@@ -29,11 +29,13 @@ from CytoPy.data.fcs import FileGroup
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn import metrics as skmetrics
 from xgboost import XGBClassifier
+from sklearn.linear_model import *
 from sklearn.discriminant_analysis import *
 from sklearn.neighbors import *
 from sklearn.ensemble import *
 from sklearn.svm import *
 from keras.models import Sequential
+from tensorflow.keras.layers import *
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np

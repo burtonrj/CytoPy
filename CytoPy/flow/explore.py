@@ -33,11 +33,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from ..data.subject import Subject, bugs, hmbpp_ribo, gram_status, biology
 from ..data.experiment import load_data
+from ..flow.descriptives import box_swarm_plot, stat_test
 from ..feedback import vprint, progress_bar
 from .dim_reduction import dimensionality_reduction
 from mongoengine.base.datastructures import EmbeddedDocumentList
 from warnings import warn
 from matplotlib.colors import LogNorm
+from matplotlib.gridspec import GridSpec
 from itertools import cycle
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -55,7 +57,7 @@ SEQ_COLOURS = ['viridis', 'plasma', 'inferno', 'magma', 'cividis',
                'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
                'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
                'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn'
-               'binary', 'gist_yarg', 'gist_gray', 'gray', 'bone', 'pink',
+                                                           'binary', 'gist_yarg', 'gist_gray', 'gray', 'bone', 'pink',
                'spring', 'summer', 'autumn', 'winter', 'cool', 'Wistia',
                'hot', 'afmhot', 'gist_heat', 'copper']
 
@@ -157,21 +159,20 @@ class Explorer:
                  data: pd.DataFrame or None = None,
                  verbose: bool = True):
         self.data = None
+        self.meta_vars = []
         if data is not None:
             self.data = data
-        self.meta_vars = [i for i in META_VARS if i in data.columns]
+            self.meta_vars = [i for i in META_VARS if i in data.columns]
         self.verbose = verbose
         self.print = vprint(verbose)
 
     def load_from_file(self,
-                       key: str,
                        path: str,
                        **kwargs):
         """
         Load either primary data or summarised data saved to disk (specified by 'key'
         Parameters
         ----------
-        key
         path
         kwargs
 
@@ -500,7 +501,8 @@ class Explorer:
                                                             axis=1)
         lookup = self._sample_size_lookup()
         sample_n = data["sample_id"].apply(lambda x: lookup.loc[x])
-        data["cluster_size"] = cluster_n/sample_n*100
+        data["sample_n"], data["cluster_n"] = sample_n, cluster_n
+        data["cluster_size"] = cluster_n / sample_n * 100
 
     def _cluster_size_lookup(self):
         return self.data.groupby("sample_id")["cluster_id"].value_counts()
@@ -560,6 +562,63 @@ class Explorer:
                             "standard_scale": 1,
                             "cmap": "viridis"}
         return sns.clustermap(data, **kwargs)
+
+    def boxplot_and_heatmap(self,
+                            group: str,
+                            features: list,
+                            summary_method: str = "median",
+                            mask: pd.DataFrame or None = None,
+                            figsize: tuple = (20, 8),
+                            stats: bool = True,
+                            boxplot_kwargs: dict or None = None,
+                            swarmplot_kwargs: dict or None = None,
+                            boxplot_palette: str or None = None,
+                            clustermap_kwargs: dict or None = None):
+        assert "meta_label" in self.meta_vars, "boxplot_and_heatmap requires meta-clustering been performed"
+        assert group in self.meta_vars, f"Invalid meta variable (group), must be one of: {self.meta_vars}"
+        # Clustermap
+        plot_df = self.summarise_metaclusters(features=features,
+                                              summary_method=summary_method,
+                                              mask=mask)
+        clustermap_kwargs = clustermap_kwargs or {"standard_scale": 1,
+                                                  "cmap": "viridis"}
+        g = sns.clustermap(data=plot_df.set_index("meta_label"),
+                           figsize=figsize,
+                           **clustermap_kwargs)
+        g.ax_heatmap.set_xlabel("")
+        g.ax_heatmap.set_ylabel("")
+        g.gs.update(left=0.05, right=0.45)
+        gs2 = GridSpec(1, 1, left=0.6)
+        ax2 = g.fig.add_subplot(gs2[0])
+        ax2.set_xticklabels(ax2.get_xticklabels(), rotation=90)
+        ax2.set_xlabel("")
+        # BoxSwarm plot
+        plot_df = self.summarise_clusters(features=features,
+                                          identifier="sample_id",
+                                          summary_method=summary_method,
+                                          mask=mask)
+        self.cluster_size(plot_df)
+        self._assign_labels(plot_df, "meta_label")
+        self._assign_labels(plot_df, group)
+        plot_df_c = plot_df.groupby(["sample_id", "meta_label", group])["cluster_n"].sum().reset_index()
+        plot_df_s = plot_df.groupby(["sample_id"])["sample_n"].sum().reset_index()
+        plot_df = plot_df_c.merge(plot_df_s, on="sample_id")
+        plot_df["cluster_size"] = plot_df["cluster_n"]/plot_df["sample_n"]
+        box_swarm_plot(plot_df=plot_df,
+                       x="meta_label",
+                       y="cluster_size",
+                       hue=group,
+                       ax=ax2,
+                       palette=boxplot_palette,
+                       boxplot_kwargs=boxplot_kwargs,
+                       swarmplot_kwargs=swarmplot_kwargs)
+        if stats:
+            stats = stat_test(plot_df,
+                              group1="meta_label",
+                              dep_var_name="cluster_size",
+                              group2=group)
+            return g, stats,
+        return g
 
     def plot_representation(self,
                             x_variable: str,
