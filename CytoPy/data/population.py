@@ -178,8 +178,6 @@ class Population(mongoengine.EmbeddedDocument):
         -------
         None
         """
-        _id, tag = cluster.cluster_id, cluster.tag
-        self.clusters = [c for c in self.clusters if sum([c.tag == tag, c.cluster_id == _id]) != 2]
         self.clusters.append(cluster)
 
     def delete_cluster(self,
@@ -269,13 +267,13 @@ class Population(mongoengine.EmbeddedDocument):
         err = "Provide list of cluster IDs and/or tag and/or meta_label"
         assert sum([x is not None for x in [tag, meta_label]]) > 0, err
         clusters = self.clusters
-        if cluster_id:
+        if cluster_id is not None:
             cluster_id = list(map(str, cluster_id))
             clusters = [c for c in clusters if c.cluster_id in cluster_id]
-        if tag:
-            clusters = [c for c in clusters if c.tag in tag]
-        if meta_label:
-            clusters = [c for c in clusters if c.meta_label in meta_label]
+        if tag is not None:
+            clusters = [c for c in clusters if c.tag == tag]
+        if meta_label is not None:
+            clusters = [c for c in clusters if c.meta_label == meta_label]
         return clusters
 
 

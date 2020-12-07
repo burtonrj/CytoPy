@@ -41,6 +41,7 @@ from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import train_test_split, KFold, learning_curve, \
     BaseCrossValidator, GridSearchCV, RandomizedSearchCV
 from keras.callbacks import History
+from keras.utils import to_categorical
 from inspect import signature
 from matplotlib.axes import Axes
 from warnings import warn
@@ -1233,8 +1234,9 @@ class KerasCellClassifier(CellClassifier):
         """
         if validation_x is not None:
             assert validation_y is not None, "validation_y cannot be None if validation_x given"
-            return self.model.fit(x, y, epochs=epochs, validation_data=(validation_x, validation_y), **kwargs)
-        return self.model.fit(x, y, epochs=epochs, **kwargs)
+            return self.model.fit(x, to_categorical(y), epochs=epochs,
+                                  validation_data=(validation_x, validation_y), **kwargs)
+        return self.model.fit(x, to_categorical(y), epochs=epochs, **kwargs)
 
     def fit(self,
             validation_frac: float or None = 0.3,

@@ -666,6 +666,14 @@ class Clustering:
                                                    features=features,
                                                    verbose=self.verbose,
                                                    **kwargs)
+        self.data["cluster_id"] = self.data["cluster_id"].apply(lambda x: f"{self.cluster_prefix}_{x}")
+
+    def reset_clusters(self):
+        self.data["cluster_id"] = None
+        self.data["meta_label"] = None
+
+    def reset_meta_clusters(self):
+        self.data["meta_label"] = None
 
     def meta_cluster(self,
                      func: callable,
@@ -768,9 +776,10 @@ class Clustering:
         for sample_id, sample_df in self.data.groupby("sample_id"):
             fg = self.experiment.get_sample(sample_id)
             root = fg.get_population(self.root_population)
+            root.delete_cluster(tag=self.tag)
             for cluster_id, cluster_df in sample_df.groupby("cluster_id"):
                 idx = cluster_df.original_index.values
-                root.add_cluster(Cluster(cluster_id=f"{self.cluster_prefix}_{cluster_id}",
+                root.add_cluster(Cluster(cluster_id=cluster_id,
                                          meta_label=str(cluster_df.meta_label.values[0]),
                                          n=int(len(idx)),
                                          index=idx,

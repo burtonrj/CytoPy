@@ -31,6 +31,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from ..data.fcs import population_stats, Population
 from ..data.experiment import Experiment, fetch_subject_meta, fetch_subject
+from ..feedback import progress_bar
 from collections import defaultdict
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
@@ -131,7 +132,8 @@ def cluster_statistics(experiment: Experiment,
                        population: str or None = None,
                        meta_label: str or None = None,
                        tag: str or None = None,
-                       include_subject_id: bool = True):
+                       include_subject_id: bool = True,
+                       sample_ids: list or None = None):
     """
     Given an Experiment and the name of a Population known
     to contain clusters from some high-dimensional clustering
@@ -144,7 +146,7 @@ def cluster_statistics(experiment: Experiment,
     ----------
     experiment: Experiment
     population: str (optional)
-        If not population is provided, will search all
+        If no population is provided, will search all
         possible populations for clusters
     meta_label: str (optional)
         If given, will filter results to include only
@@ -155,12 +157,15 @@ def cluster_statistics(experiment: Experiment,
     include_subject_id: bool (default=True)
         If True, includes a column for the subject ID in
         the resulting dataframe
+    sample_ids: list, optional
+        Samples to include, if None will include all samples
     Returns
     -------
     Pandas.DataFrame
     """
+    sample_ids = sample_ids or list(experiment.list_samples())
     all_cluster_data = list()
-    for sample_id in experiment.list_samples():
+    for sample_id in progress_bar(sample_ids, total=len(sample_ids)):
         fg = experiment.get_sample(sample_id)
         if population is not None:
             data = _population_cluster_statistics(pop=fg.get_population(population_name=population),
@@ -315,3 +320,64 @@ def l1_feature_selection(feature_space: pd.DataFrame,
     ax.ylabel('Coefficient value')
     ax.legend(bbox_to_anchor=(1, 1), loc='upper left', ncol=1)
     return ax
+
+
+def prop_of_parent(x, parent, experiment):
+    parent_n = experiment.get_sample(x["sample_id"]).get_population(parent).n
+    return x["sample_id"], x["n"] / parent_n
+
+
+def _subset_and_summarise(data: pd.DataFrame,
+                          search_terms: list,
+                          parent: str,
+                          group_var: str,
+                          experiment: Experiment):
+    subset_data = [data[data[group_var].str.contains(s, regex=False)]
+                   for s in search_terms]
+    total_n = {i: x.groupby("sample_id")["n"].sum() for i, x in zip(search_terms, subset_data)}
+    proportions = {k: v.reset_index().apply(lambda x: prop_of_parent(x,
+                                                                     parent=parent,
+                                                                     experiment=experiment),
+                                            axis=1).values
+                   for k, v in total_n.items()}
+    subsets = pd.DataFrame({subset: {sample_id: v for sample_id, v in x}
+                            for subset, x in proportions.items()})
+    return subsets
+
+
+def cluster_subsets(experiment,
+                    population,
+                    tag,
+                    search_terms,
+                    exclusion_terms: list or None):
+    exp_data = cluster_statistics(experiment=experiment,
+                                  population=population,
+                                  tag=tag,
+                                  sample_ids=[s for s in experiment.list_samples()
+                                              if "Training" not in s and "Validation" not in s])
+    if exclusion_terms is not None:
+        for e in exclusion_terms:
+            exp_data = exp_data[~exp_data.meta_label.str.contains(e)]
+    return _subset_and_summarise(data=exp_data,
+                                 search_terms=search_terms,
+                                 parent=population,
+                                 experiment=experiment,
+                                 group_var="meta_label")
+
+
+def population_subsets(experiment,
+                       population,
+                       search_terms,
+                       exclude: list or None):
+    pop_stats = experiment_statistics(experiment)
+    pop_stats = pop_stats[(~pop_stats.sample_id.str.contains("Training")) &
+                                        (~pop_stats.sample_id.str.contains("Validation")) &
+                                        (pop_stats.population_name.str.contains("XGBoost"))]
+    if exclude is not None:
+        pop_stats = pop_stats[~pop_stats.population_name.isin(exclude)]
+    return _subset_and_summarise(data=pop_stats,
+                                 parent=population,
+                                 search_terms=search_terms,
+                                 experiment=experiment,
+                                 group_var="population_name")
+
