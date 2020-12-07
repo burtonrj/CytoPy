@@ -612,11 +612,14 @@ class Explorer:
                        palette=boxplot_palette,
                        boxplot_kwargs=boxplot_kwargs,
                        swarmplot_kwargs=swarmplot_kwargs)
+        handles, labels = ax2.get_legend_handles_labels()
+        ax2.legend(handles[0:2], labels[0:2])
         if stats:
             stats = stat_test(plot_df,
                               group1="meta_label",
                               dep_var_name="cluster_size",
-                              group2=group)
+                              group2=group,
+                              wide_format=False)
             return g, stats,
         return g
 

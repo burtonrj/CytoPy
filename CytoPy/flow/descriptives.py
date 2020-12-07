@@ -1,4 +1,5 @@
 from pingouin import normality, kruskal, welch_anova, ttest, mwu
+from warnings import warn
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -99,7 +100,8 @@ def stat_test(*data,
               group2: str = "Patient type",
               data_labels: list or None = None,
               id_vars: list or None = None,
-              filter_: list or None = None):
+              filter_: list or None = None,
+              wide_format: bool = True):
     # Set defaults
     id_vars = id_vars or ["sample_id", group2]
     if data_labels is not None:
@@ -110,21 +112,26 @@ def stat_test(*data,
     stats = list()
     for df, label in zip(data, data_labels):
         # Convert to long
-        long_df = df.melt(var_name=group1,
-                          value_name=dep_var_name,
-                          id_vars=id_vars)
+        long_df = df
+        if wide_format:
+            long_df = df.melt(var_name=group1,
+                              value_name=dep_var_name,
+                              id_vars=id_vars)
         if filter_ is not None:
             long_df = long_df[long_df[group1].isin(filter_)]
         # Iterate over each subgroup e.g. population
         subgroups = list()
         for grp_id, grp in long_df.groupby(group1):
-            if len(grp[group2].unique()) < 2:
-                continue
-            grp_stats = _appropriate_stat(data=grp.dropna(), dv=dep_var_name, group=group2)
-            grp_stats['subgroup'] = grp_id
-            grp_stats["x"] = group2
-            grp_stats["y"] = dep_var_name
-            subgroups.append(grp_stats)
+            try:
+                if len(grp[group2].unique()) < 2:
+                    continue
+                grp_stats = _appropriate_stat(data=grp.dropna(), dv=dep_var_name, group=group2)
+                grp_stats['subgroup'] = grp_id
+                grp_stats["x"] = group2
+                grp_stats["y"] = dep_var_name
+                subgroups.append(grp_stats)
+            except AssertionError as e:
+                warn(f"Failed to generate stats for {grp_id}; {str(e)}")
         subgroups = pd.concat(subgroups)
         subgroups["data"] = label
         stats.append(subgroups)

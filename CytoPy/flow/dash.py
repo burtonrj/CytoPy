@@ -63,6 +63,9 @@ def bottom_plot(explorer: Explorer):
 
 
 def explorer_dashboard(explorer: Explorer,
+                       features: list,
+                       summary_method: str = "median",
+                       mask: pd.DataFrame or None = None,
                        sample_id: str or None = None,
                        **run_server_kwargs):
     children = [center_controls(explorer),
@@ -75,6 +78,9 @@ def explorer_dashboard(explorer: Explorer,
                                                             "displayed yet 'meta_label' is empty"
         children = [html.H1("Welcome to the interactive Explorer: meta clusters")] + children
         children.append(bottom_plot(explorer))
+        data = explorer.summarise_metaclusters(features=features,
+                                               summary_method=summary_method,
+                                               mask=mask)
         data = html.Div(explorer.data.to_json(orient="split"), id="data", style={"display": "none"})
         children.append(data)
     else:
