@@ -349,12 +349,12 @@ def cluster_subsets(experiment,
                     population,
                     tag,
                     search_terms,
+                    sample_ids: list or None,
                     exclusion_terms: list or None):
     exp_data = cluster_statistics(experiment=experiment,
                                   population=population,
                                   tag=tag,
-                                  sample_ids=[s for s in experiment.list_samples()
-                                              if "Training" not in s and "Validation" not in s])
+                                  sample_ids=sample_ids)
     if exclusion_terms is not None:
         for e in exclusion_terms:
             exp_data = exp_data[~exp_data.meta_label.str.contains(e)]
@@ -368,11 +368,11 @@ def cluster_subsets(experiment,
 def population_subsets(experiment,
                        population,
                        search_terms,
+                       sample_ids: list or None,
                        exclude: list or None):
     pop_stats = experiment_statistics(experiment)
-    pop_stats = pop_stats[(~pop_stats.sample_id.str.contains("Training")) &
-                                        (~pop_stats.sample_id.str.contains("Validation")) &
-                                        (pop_stats.population_name.str.contains("XGBoost"))]
+    sample_ids = sample_ids or list(experiment.list_samples())
+    pop_stats = pop_stats[pop_stats.sample_id.isin(sample_ids)]
     if exclude is not None:
         pop_stats = pop_stats[~pop_stats.population_name.isin(exclude)]
     return _subset_and_summarise(data=pop_stats,

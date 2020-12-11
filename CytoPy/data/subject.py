@@ -324,7 +324,10 @@ def hmbpp_ribo(subject: Subject, field: str) -> str:
     return 'mixed'
 
 
-def biology(subject_id: str, test_name: str, method: str) -> np.float or None:
+def biology(subject_id: str,
+            test_name: str,
+            summary_method: str = "average",
+            datetime_filter: tuple or None =  None) -> np.float or None:
     """
     Given some test name, return a summary statistic of all results for a given patient ID
 
@@ -334,7 +337,7 @@ def biology(subject_id: str, test_name: str, method: str) -> np.float or None:
         patient identifier
     test_name: str
         name of test to search for
-    method: str
+    summary_method: str
         summary statistic to use
 
     Returns
@@ -344,15 +347,18 @@ def biology(subject_id: str, test_name: str, method: str) -> np.float or None:
     """
     if subject_id is None:
         return None
-    tests = Subject.objects(patient_id=subject_id).get().patient_biology
+    tests = Subject.objects(subject_id=subject_id).get().patient_biology
     tests = [t.result for t in tests if t.test == test_name]
+
     if not tests:
         return None
-    if method == 'max':
+    if len(tests) == 1:
+        return tests[0]
+    if summary_method == 'max':
         return np.max(tests)
-    if method == 'min':
+    if summary_method == 'min':
         return np.min(tests)
-    if method == 'median':
+    if summary_method == 'median':
         return np.median(tests)
     return np.average(tests)
 

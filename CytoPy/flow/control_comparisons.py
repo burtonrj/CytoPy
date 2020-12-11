@@ -2,6 +2,7 @@ from ..feedback import progress_bar
 from ..data.experiment import Experiment
 from pingouin import normality, ttest, wilcoxon, compute_effsize
 from scipy.stats.mstats import gmean
+from warnings import warn
 import pandas as pd
 
 
@@ -121,13 +122,19 @@ def compute_ctrl_populations(experiment: Experiment,
         for pop in populations:
             for ctrl_id in ctrl_ids:
                 if pop in fg.list_populations() and ctrl_id in fg.controls:
-                    fg.estimate_ctrl_population(ctrl=ctrl_id,
-                                                population=pop,
-                                                verbose=verbose,
-                                                scoring=scoring,
-                                                downsample=downsample,
-                                                sml_population_mappings=sml_population_mappings,
-                                                **kwargs)
+                    if ctrl_id not in fg.get_population(population_name=pop).ctrl_index.keys():
+                        continue
+                    try:
+                        fg.estimate_ctrl_population(ctrl=ctrl_id,
+                                                    population=pop,
+                                                    verbose=verbose,
+                                                    scoring=scoring,
+                                                    downsample=downsample,
+                                                    sml_population_mappings=sml_population_mappings,
+                                                    **kwargs)
+                    except AssertionError as e:
+                        warn(f"Failed to identify {pop} in {ctrl_id} for {fg.primary_id}; {str(e)}")
+                        continue
         fg.save()
         print("\n")
 

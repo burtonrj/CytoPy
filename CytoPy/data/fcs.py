@@ -390,6 +390,7 @@ class FileGroup(mongoengine.Document):
         training_data = self.load_population_df(population=population.parent,
                                                 transform=transformations,
                                                 label_downstream_affiliations=False).copy()
+        assert training_data.shape[0] > 3, "Three or less events found in training data"
         training_data["labels"] = 0
         training_data.loc[population.index, "labels"] = 1
         if isinstance(downsample, int):
@@ -424,6 +425,7 @@ class FileGroup(mongoengine.Document):
                                                  population=population.parent,
                                                  transform=transformations,
                                                  label_downstream_affiliations=False)
+        assert ctrl_data.shape[0] > 3, "Three or less events found in parent data"
         ctrl_labels = model.predict(ctrl_data[features].values)
         ctrl_idx = ctrl_data.index.values[np.where(ctrl_labels == 1)[0]]
         population.set_ctrl_index(**{ctrl: ctrl_idx})

@@ -50,8 +50,7 @@ META_VARS = ["meta_label",
              "cluster_id",
              "population_label",
              "sample_id",
-             "subject_id",
-             "original_index"]
+             "subject_id"]
 
 SEQ_COLOURS = ['viridis', 'plasma', 'inferno', 'magma', 'cividis',
                'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
@@ -180,8 +179,10 @@ class Explorer:
         -------
         None
         """
-        self.data = pd.read_csv(path, **kwargs)
-        self.meta_vars = [i for i in META_VARS if i in self.data.columns]
+        data_store = pd.HDFStore(path)
+        self.data = data_store["explorer_dataframe"]
+        self.meta_vars = list(data_store["meta_vars"].values)
+        data_store.close()
 
     def load_data(self,
                   **kwargs):
@@ -259,7 +260,7 @@ class Explorer:
     def save(self,
              path: str) -> None:
         f"""
-        Save the contained dataframe to a new csv file
+        Save the contained dataframe to a new HDF5 file
 
         Parameters
         ----------
@@ -269,7 +270,10 @@ class Explorer:
         -------
         None
         """
-        self.data.to_csv(path)
+        data_store = pd.HDFStore(path)
+        data_store["explorer_dataframe"] = self.data
+        data_store["meta_vars"] = pd.Series(self.meta_vars)
+        data_store.close()
 
     @data_loaded
     def load_meta(self,
@@ -352,7 +356,8 @@ class Explorer:
     @data_loaded
     def load_biology_data(self,
                           test_name: str,
-                          summary_method: str = 'average'):
+                          summary_method: str = 'average',
+                          datetime_filter: tuple or None = None):
         """
         Load the pathology results of a given test from each subject and populate 'data' accordingly. As multiple
         results may exist for one particular test, a summary method should be provided, this should have a value as
@@ -373,8 +378,25 @@ class Explorer:
         -------
         None
         """
+        subject_ids = self.data.subject_id.unique()
+        test_results = list(map(lambda x: biology(x,
+                                                  test_name=test_name,
+                                                  summary_method=summary_method,
+                                                  datetime_filter=datetime_filter),
+                                subject_ids))
+        lookup = {sid: v for sid, v in zip(subject_ids, test_results)}
+        self.data[test_name] = self.data["subject_id"].apply(lambda x: lookup.get(x))
         self.meta_vars.append(test_name)
-        self.data[test_name] = self.data['subject_id'].apply(lambda x: biology(x, test_name, summary_method))
+
+    def apply_func_to_metavar(self,
+                              var_name: str,
+                              func: callable,
+                              **kwargs):
+        assert var_name in self.data.columns, f"Invalid variable, must be one of: {self.meta_vars}"
+        lookup = self.data[["subject_id", var_name]].drop_duplicates()
+        lookup[var_name] = lookup[var_name].apply(func, **kwargs)
+        lookup.set_index("subject_id", inplace=True)
+        self.data[var_name] = self.data["subject_id"].apply(lambda x: lookup.loc[x][var_name])
 
     @data_loaded
     def dimenionality_reduction(self,
@@ -478,7 +500,7 @@ class Explorer:
                                             n_components=n_components,
                                             features=features,
                                             **dim_reduction_kwargs)
-        self._assign_labels(data=data, label=label)
+        self.assign_labels(data=data, label=label)
         self.cluster_size(data)
         kwargs = kwargs or {}
         kwargs = _scatterplot_defaults(**kwargs)
@@ -503,6 +525,7 @@ class Explorer:
         sample_n = data["sample_id"].apply(lambda x: lookup.loc[x])
         data["sample_n"], data["cluster_n"] = sample_n, cluster_n
         data["cluster_size"] = cluster_n / sample_n * 100
+        return data
 
     def _cluster_size_lookup(self):
         return self.data.groupby("sample_id")["cluster_id"].value_counts()
@@ -510,9 +533,14 @@ class Explorer:
     def _sample_size_lookup(self):
         return self.data.sample_id.value_counts()
 
-    def _assign_labels(self, data: pd.DataFrame, label: str):
-        lookup = self.data.groupby(["sample_id", "cluster_id"])[label].unique().apply(_assert_unique_label)
-        data[label] = data[["sample_id", "cluster_id"]].apply(lambda x: lookup.loc[x[0], x[1]], axis=1)
+    def assign_labels(self,
+                      data: pd.DataFrame,
+                      label: str,
+                      identifier: str = "sample_id",
+                      lookup: pd.DataFrame or None = None):
+        if lookup is None:
+            lookup = self.data.groupby([identifier, "cluster_id"])[label].unique().apply(_assert_unique_label)
+        data[label] = data[[identifier, "cluster_id"]].apply(lambda x: lookup.loc[x[0], x[1]], axis=1)
 
     def cluster_graph(self):
         pass
@@ -538,7 +566,7 @@ class Explorer:
         summary_method: str
         Returns
         -------
-        matplotlib.axes
+        Seaborn.ClusterGrid
         """
         if heatmap_var == "clusters":
             data = self.summarise_clusters(identifier="sample_id",
@@ -598,8 +626,8 @@ class Explorer:
                                           summary_method=summary_method,
                                           mask=mask)
         self.cluster_size(plot_df)
-        self._assign_labels(plot_df, "meta_label")
-        self._assign_labels(plot_df, group)
+        self.assign_labels(plot_df, "meta_label")
+        self.assign_labels(plot_df, group)
         plot_df_c = plot_df.groupby(["sample_id", "meta_label", group])["cluster_n"].sum().reset_index()
         plot_df_s = plot_df.groupby(["sample_id"])["sample_n"].sum().reset_index()
         plot_df = plot_df_c.merge(plot_df_s, on="sample_id")
