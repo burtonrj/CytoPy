@@ -1,4 +1,4 @@
-from mongoengine.connection import connect, disconnect, _get_db
+from mongoengine.connection import connect, disconnect
 import pytest
 import shutil
 import sys
@@ -13,5 +13,6 @@ def setup():
     yield
     shutil.rmtree(f"{os.getcwd()}/test_data", ignore_errors=True)
     disconnect(alias="core")
+
 
 
