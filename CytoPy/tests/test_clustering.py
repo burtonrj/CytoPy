@@ -13,10 +13,10 @@ def dummy_data(example_experiment):
 
 def multisample_experiment(example_experiment):
     for i in range(3):
-        example_experiment.add_new_sample(sample_id=f"test sample {i+1}",
-                                          primary_path=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
-                                          controls_path={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
-                                          compensate=False)
+        example_experiment.add_fcs_files(sample_id=f"test sample {i + 1}",
+                                         primary_path=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
+                                         controls_path={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
+                                         compensate=False)
     return example_experiment
 
 

@@ -90,18 +90,18 @@ def test_exp_init(example_experiment):
 
 
 def test_exp_add_new_sample(example_experiment):
-    example_experiment.add_new_sample(sample_id="test_sample",
-                                      primary_path=f"{assets.__path__._path[0]}/test.FCS",
-                                      compensate=False)
+    example_experiment.add_fcs_files(sample_id="test_sample",
+                                     primary_path=f"{assets.__path__._path[0]}/test.FCS",
+                                     compensate=False)
     assert "test_sample" in list(example_experiment.list_samples())
     new_filegroup = example_experiment.get_sample("test_sample")
     assert os.path.isfile(f"{os.getcwd()}/test_data/{new_filegroup.id}.hdf5")
 
 
 def test_delete(example_experiment):
-    example_experiment.add_new_sample(sample_id="test_sample",
-                                      primary_path=f"{assets.__path__._path[0]}/test.FCS",
-                                      compensate=False)
+    example_experiment.add_fcs_files(sample_id="test_sample",
+                                     primary_path=f"{assets.__path__._path[0]}/test.FCS",
+                                     compensate=False)
     example_experiment.save()
     example_experiment.delete()
     assert len(experiment.Experiment.objects()) == 0
