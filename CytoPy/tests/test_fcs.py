@@ -7,55 +7,92 @@ import pytest
 import os
 
 
-@pytest.fixture
-def example_filegroup():
-    test_project = Project(project_id="test")
-    exp = test_project.add_experiment(experiment_id="test experiment",
-                                      data_directory=f"{os.getcwd()}/test_data",
-                                      panel_definition=f"{os.getcwd()}/assets/test_panel.xlsx")
-    exp.add_fcs_files(sample_id="test sample",
-                      primary_path=f"{os.getcwd()}/assets/test.FCS",
-                      controls_path={"test_ctrl": f"{os.getcwd()}/assets/test.FCS"},
-                      compensate=False)
-    yield exp.get_sample(sample_id="test sample")
-    test_project.delete()
+def create_example_population_indexes(filegroup: FileGroup,
+                                      initial_population_prop: float = 0.8,
+                                      downstream_population_prop: float = 0.5,
+                                      cluster_frac: float = 0.25,
+                                      n_populations: int = 3):
+    """
+    Create example index data for a specified number of example populations.
+
+    Parameters
+    ----------
+    filegroup: FileGroup
+    initial_population_prop: float (default=0.8)
+        Fraction of events to sample for the first population
+    downstream_population_prop: float (default=0.5)
+        Fraction of events to sample from n-1 population to form downstream population
+    cluster_frac: float (default=0.25)
+        Fraction of events to sample from primary to use as example Cluster
+    n_populations: int (default=3)
+        Total number of populations to generate (must be at least 2)
+
+    Returns
+    -------
+    List
+        List of dictionary objects with keys 'primary', 'cluster' and 'ctrl' corresponding to events for
+        primary data and "test_ctrl"
+    """
+    assert n_populations > 1, "n_populations must be equal to or greater than 2"
+    primary = filegroup.data("primary", sample_size=initial_population_prop)
+    populations = [{"primary": primary,
+                    "ctrl": filegroup.data("test_ctrl", sample_size=initial_population_prop),
+                    "cluster": primary.sample(frac=cluster_frac)}]
+    for i in range(n_populations - 1):
+        primary = populations[i + 1].get("primary").sample(frac=downstream_population_prop)
+        populations.append({"primary": primary,
+                            "ctrl": populations[i + 1].get("ctrl").sample(frac=downstream_population_prop),
+                            "cluster": primary.sample(frac=cluster_frac)})
+    return list(map(lambda x: {"primary": x["primary"].index.values,
+                               "ctrl": x["ctrl"].index.values,
+                               "cluster": x["cluster"].index.values},
+                    populations))
 
 
-def create_populations(filegroup: FileGroup):
-    p1data = filegroup.data("primary", sample_size=0.8)
-    p1ctrldata = filegroup.data("test_ctrl", sample_size=0.8)
-    p2data = p1data.sample(frac=0.5)
-    p2ctrldata = p1ctrldata.sample(frac=0.5)
-    p3data = p2data.sample(frac=0.5)
-    p3ctrldata = p2ctrldata.sample(frac=0.5)
-    populations = list()
-    for pname, parent, data, ctrldata in zip(["pop1", "pop2", "pop3"],
-                                             ["root", "pop1", "pop2"],
-                                             [p1data, p2data, p3data],
-                                             [p1ctrldata, p2ctrldata, p3ctrldata]):
+def create_example_populations(filegroup: FileGroup,
+                               initial_population_prop: float = 0.8,
+                               downstream_population_prop: float = 0.5,
+                               cluster_frac: float = 0.25,
+                               n_populations: int = 3):
+    """
+    Given a FileGroup add the given number of example populations.
+
+    Parameters
+    ----------
+    filegroup: FileGroup
+    initial_population_prop: float (default=0.8)
+        Fraction of events to sample for the first population
+    downstream_population_prop: float (default=0.5)
+        Fraction of events to sample from n-1 population to form downstream population
+    cluster_frac: float (default=0.25)
+        Fraction of events to sample from primary to use as example Cluster
+    n_populations: int (default=3)
+        Total number of populations to generate (must be at least 2)
+
+    Returns
+    -------
+    FileGroup
+    """
+    pop_idx = create_example_population_indexes(filegroup=filegroup,
+                                                initial_population_prop=initial_population_prop,
+                                                downstream_population_prop=downstream_population_prop,
+                                                cluster_frac=cluster_frac,
+                                                n_populations=n_populations)
+    for pname, parent, idx in zip([f"pop{i + 1}" for i in range(n_populations)],
+                                  ["root"] + [f"pop{i + 1}" for i in range(n_populations - 1)],
+                                  pop_idx):
         p = Population(population_name=pname,
-                       n=data.shape[0],
+                       n=len(idx.get("primary")),
                        parent=parent,
-                       index=data.index.values)
-        p.set_ctrl_index(test_ctrl=ctrldata.index.values)
-        cluster_idx = data.sample(frac=0.25).index.values
+                       index=idx.get("primary"))
+        p.set_ctrl_index(test_ctrl=idx.get("ctrl"))
         p.add_cluster(Cluster(cluster_id="test cluster",
-                              index=cluster_idx,
-                              n=len(cluster_idx),
-                              prop_of_events=len(cluster_idx) / 30000,
+                              index=idx.get("cluster"),
+                              n=len(idx.get("cluster")),
+                              prop_of_events=len(idx.get("cluster")) / 30000,
                               tag="testing"))
-        populations.append(p)
-    for p in populations:
         filegroup.add_population(population=p)
-    return filegroup, populations
-
-
-def reload_file():
-    fg = (Project.objects(project_id="test").
-          get()
-          .load_experiment("test experiment")
-          .get_sample("test sample"))
-    return fg
+    return filegroup
 
 
 def test_init_new_fcs_file(example_filegroup):
