@@ -40,6 +40,7 @@ from _warnings import warn
 import numpy as np
 import pandas as pd
 import mongoengine
+import h5py
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"

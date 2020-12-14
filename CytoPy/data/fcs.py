@@ -35,6 +35,8 @@ from ..flow.neighbours import knn, calculate_optimal_neighbours
 from ..flow.sampling import uniform_downsampling
 from .geometry import create_convex_hull
 from .population import Population, merge_populations, PolygonGeom
+from multiprocessing import Pool, cpu_count
+from functools import partial
 from warnings import warn
 from typing import List, Generator
 import pandas as pd
@@ -52,6 +54,62 @@ __version__ = "1.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+
+
+def h5_read_population(population_name: str,
+                       filepath: str) -> dict:
+    """
+    Read the population data from a H5 file of a FileGroup. If the population
+    is not found in the given H5 file, returns empty dictionary.
+
+    Parameters
+    ----------
+    population_name: str
+        Name of the population
+    filepath: str
+        Location of the H5 file
+
+    Returns
+    -------
+    dict
+        Nested dictionary of indexes for Population data:
+        {"primary": the primary events index,
+         "ctrl_index": dictionary of ctrl_id: ctrl file event indexes,
+         "cluster_index": dictionary of cluster ID & tag: cluster event indexes}
+    """
+    with h5py.File(filepath, "r") as f:
+        key = f"/index/{population_name}"
+        if key not in f.keys():
+            return {}
+        data = {"primary": f[f"{key}/primary"][:],
+                "ctrl_index": {},
+                "cluster_index": {}}
+        ctrls = [x for x in f[key].keys() if x != "primary"]
+        for c in ctrls:
+            data["ctrl_index"][c] = f[f"{key}/{c}"][:]
+        for cluster in f[f"{key}/clusters"].keys():
+            data["cluster_index"][cluster] = f[f"{key}/clusters/{cluster}"][:]
+        return data
+
+
+def h5file_exists(func: callable) -> callable:
+    """
+    Decorator that asserts the h5 file corresponding to the FileGroup exists.
+
+    Parameters
+    ----------
+    func: callable
+        Function to wrap
+
+    Returns
+    -------
+    callable
+        Wrapper function
+    """
+    def wrapper(*args, **kwargs):
+        assert os.path.isfile(args[0].h5path), f"Could not locate FileGroup HDF5 record {args[0].h5path}"
+        return func(*args, **kwargs)
+    return wrapper
 
 
 def _column_names(df: pd.DataFrame,
@@ -85,7 +143,7 @@ def _column_names(df: pd.DataFrame,
 class FileGroup(mongoengine.Document):
     """
     Document representation of a file group; a selection of related fcs files (e.g. a sample and it's associated
-    controls)
+    controls).
 
     Parameters
     ----------
@@ -141,12 +199,14 @@ class FileGroup(mongoengine.Document):
             assert self.id is not None, "FileGroup has not been previously defined. Please provide primary data."
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
             try:
-                self._load_populations()
+                self._load_cell_meta_labels()
+                self._load_population_indexes()
                 self.tree = construct_tree(populations=self.populations)
             except AssertionError as err:
                 warn(f"Failed to load data for {self.primary_id} ({self.id}); "
                      f"data may be corrupt or missing; {str(err)}")
 
+    @h5file_exists
     def data(self,
              source: str,
              sample_size: int or float or None = None) -> pd.DataFrame:
@@ -223,10 +283,13 @@ class FileGroup(mongoengine.Document):
         Parameters
         ----------
         ctrl_id: str
+            Name of the control e.g ("CD45RA FMO" or "HLA-DR isotype control"
         data: Numpy.Array
+            Single cell events data obtained for this control
         channels: list
+            List of channel names
         markers: list
-
+            List of marker names
         Returns
         -------
         None
@@ -242,35 +305,47 @@ class FileGroup(mongoengine.Document):
         self.controls.append(ctrl_id)
         self.save()
 
-    def _load_populations(self):
+    @h5file_exists
+    def _load_cell_meta_labels(self):
         """
-        Load indexes for existing populations from HDF5 file. This includes indexes for controls and clusters.
+        Load single cell meta labels from disk
 
         Returns
         -------
         None
         """
-        assert self._hdf5_exists(), f"Could not locate FileGroup HDF5 record {self.h5path}"
         with h5py.File(self.h5path, "r") as f:
             if "cell_meta_labels" in f.keys():
                 for meta in f["cell_meta_labels"].keys():
                     self.cell_meta_labels[meta] = np.array(f[f"cell_meta_labels/{meta}"][:],
                                                            dtype="U")
-            for pop in self.populations:
-                k = f"/index/{pop.population_name}"
-                if k + "/primary" not in f.keys():
-                    warn(f"Population index missing for {pop.population_name}!")
-                else:
-                    pop.index = f[k + "/primary"][:]
-                    ctrls = [x for x in f[k].keys() if x != "primary"]
-                    for c in ctrls:
-                        pop.set_ctrl_index(**{c: f[k + f"/{c}"][:]})
-                k = f"/clusters/{pop.population_name}"
-                for c in pop.clusters:
-                    if f"{c.cluster_id}_{c.tag}" not in f[k].keys():
-                        warn(f"Cluster index missing for {c.cluster_id}; tag {c.tag} in population {pop.population_name}!")
-                    else:
-                        c.index = f[k + f"/{c.cluster_id}_{c.tag}"][:]
+
+    @h5file_exists
+    def _load_population_indexes(self):
+        """
+        Load population level event index data from disk
+
+        Returns
+        -------
+        None
+        """
+        populations = [p.population_name for p in self.populations]
+        read_func = partial(h5_read_population, filepath=self.h5path)
+        with Pool(cpu_count()) as pool:
+            population_indexes = list(pool.map(read_func, populations))
+        for i, pop_idx in enumerate(population_indexes):
+            if len(pop_idx) == 0:
+                warn(f"Population {populations[i]} missing from H5 file")
+            pop = self.get_population(populations[i])
+            pop.index = pop_idx.get("primary", None)
+            for ctrl_id, ctrl_idx in pop_idx.get("ctrl_index").items():
+                pop.set_ctrl_index(**{ctrl_id: ctrl_idx})
+            for cluster in pop.clusters:
+                try:
+                    cluster.index = pop_idx["cluster_index"][f"{cluster.cluster_id}_{cluster.tag}"]
+                except KeyError:
+                    warn(f"Cluster index missing for cluster ID {cluster.cluster_id}, tag {cluster.tag} "
+                         f"in population {pop.population_name}")
 
     def add_population(self,
                        population: Population):
@@ -349,6 +424,7 @@ class FileGroup(mongoengine.Document):
         is not given, it will be estimated using grid search cross-validation and optimisation
         of the given scoring parameter. See CytoPy.flow.neighbours for further details.
 
+        If the
         Results of the population estimation will be saved to the populations ctrl_index property.
 
         Parameters
