@@ -43,6 +43,7 @@ from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from sklearn.cluster import *
 from sklearn.metrics import calinski_harabasz_score, silhouette_score, davies_bouldin_score
+from scipy.stats.mstats import gmean
 from warnings import warn
 import pandas as pd
 import phenograph
@@ -220,6 +221,8 @@ def _summarise_clusters(data: pd.DataFrame,
         return data.groupby(["sample_id", "cluster_id"])[features].median().reset_index()
     if summary_method == "mean":
         return data.groupby(["sample_id", "cluster_id"])[features].mean().reset_index()
+    if summary_method == "gmean":
+        return data.groupby(["sample_id", "cluster_id"])[features].apply(lambda x: gmean, axis=1)
     raise ValueError("summary_method should be 'mean' or 'median'")
 
 
