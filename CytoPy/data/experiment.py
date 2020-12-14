@@ -41,6 +41,7 @@ from collections import Counter
 from datetime import datetime
 from warnings import warn
 import pandas as pd
+import numpy as np
 import mongoengine
 import shutil
 import xlrd
@@ -511,6 +512,11 @@ def _data_dir_append_leading_char(path: str):
     return path
 
 
+def _compenstate(x: np.ndarray,
+                 spill_matrix: np.ndarray):
+    return np.linalg.solve(spill_matrix.T, x.T).T
+
+
 class Experiment(mongoengine.Document):
     """
     Container for Cytometry experiment. The correct way to generate and load these objects is using the
@@ -524,6 +530,8 @@ class Experiment(mongoengine.Document):
         Unique identifier for experiment
     panel: ReferenceField, required
         Panel object describing associated channel/marker pairs
+    data_directory: str
+        Address to drive for storage of single cell data
     fcs_files: ListField
         Reference field for associated files
     flags: str, optional
@@ -774,17 +782,83 @@ class Experiment(mongoengine.Document):
         filegrp.delete()
         self.save()
 
-    def add_new_sample(self,
-                       sample_id: str,
-                       primary_path: str or FCSFile,
-                       controls_path: dict or None = None,
-                       subject_id: str or None = None,
-                       comp_matrix: str or None = None,
-                       compensate: bool = True,
-                       verbose: bool = True,
-                       processing_datetime: str or None = None,
-                       collection_datetime: str or None = None,
-                       missing_error: str = "raise"):
+    def add_csv_files(self,
+                      sample_id: str,
+                      primary_path: str,
+                      mappings: list,
+                      controls_path: dict or None = None,
+                      comp_matrix: str or None = None,
+                      subject_id: str or None = None,
+                      verbose: bool = True,
+                      processing_datetime: str or None = None,
+                      collection_datetime: str or None = None,
+                      missing_error: str = "raise"):
+        processing_datetime = processing_datetime or datetime.now()
+        collection_datetime = collection_datetime or datetime.now()
+        controls_path = controls_path or {}
+        feedback = vprint(verbose)
+        assert not self.sample_exists(sample_id), f'A file group with id {sample_id} already exists'
+        feedback("Loading data from csv files...")
+        primary_data = pd.read_csv(primary_path)
+        controls = {ctrl_id: pd.read_csv(path) for ctrl_id, path in controls_path.items()}
+        compensated = False
+        if comp_matrix is not None:
+            feedback("Applying compensation...")
+            comp_matrix = pd.read_csv(comp_matrix).values
+            primary_data = _compenstate(primary_data, comp_matrix)
+            controls = {ctrl_id: _compenstate(ctrl_data, comp_matrix) for ctrl_id, ctrl_data in controls.items()}
+            compensated = True
+
+        try:
+            feedback("Checking channel/marker mappings...")
+            mappings = self._standardise_mappings(mappings,
+                                                  missing_error=missing_error)
+        except AssertionError as err:
+            warn(f"Failed to add {sample_id}: {str(err)}")
+            del primary_data
+            del controls
+            gc.collect()
+            return
+
+        filegrp = FileGroup(primary_id=sample_id,
+                            data_directory=self.data_directory,
+                            compensated=compensated,
+                            collection_datetime=collection_datetime,
+                            processing_datetime=processing_datetime,
+                            data=primary_data,
+                            channels=[x.get("channel") for x in mappings],
+                            markers=[x.get("marker") for x in mappings])
+        for ctrl_id, ctrl_data in controls.items():
+            feedback(f"Adding control file {ctrl_id}...")
+            filegrp.add_ctrl_file(data=ctrl_data,
+                                  ctrl_id=ctrl_id,
+                                  channels=[x.get("channel") for x in mappings],
+                                  markers=[x.get("marker") for x in mappings])
+        if subject_id is not None:
+            feedback(f"Associating to {subject_id} Subject...")
+            try:
+                p = Subject.objects(subject_id=subject_id).get()
+                p.files.append(filegrp)
+                p.save()
+            except mongoengine.errors.DoesNotExist:
+                warn(f'Error: no such patient {subject_id}, continuing without association.')
+        feedback(f'Successfully created {sample_id} and associated to {self.experiment_id}')
+        self.fcs_files.append(filegrp)
+        self.save()
+        del filegrp
+        gc.collect()
+
+    def add_fcs_files(self,
+                      sample_id: str,
+                      primary_path: str or FCSFile,
+                      controls_path: dict or None = None,
+                      subject_id: str or None = None,
+                      comp_matrix: str or None = None,
+                      compensate: bool = True,
+                      verbose: bool = True,
+                      processing_datetime: str or None = None,
+                      collection_datetime: str or None = None,
+                      missing_error: str = "raise"):
         """
         Add a new sample (FileGroup) to this experiment
 
@@ -833,15 +907,9 @@ class Experiment(mongoengine.Document):
         if compensate:
             feedback("Compensating primary file...")
             fcs_file.compensate()
-        try:
-            feedback("Checking channel/marker mappings...")
-            mappings = self._standardise_mappings(fcs_file.channel_mappings,
-                                                  missing_error=missing_error)
-        except AssertionError as err:
-            warn(f"Failed to add {sample_id}: {str(err)}")
-            del fcs_file
-            gc.collect()
-            return
+        feedback("Checking channel/marker mappings...")
+        mappings = self._standardise_mappings(fcs_file.channel_mappings,
+                                              missing_error=missing_error)
 
         filegrp = FileGroup(primary_id=sample_id,
                             data_directory=self.data_directory,
@@ -860,16 +928,8 @@ class Experiment(mongoengine.Document):
             if compensate:
                 feedback("Compensating...")
                 fcs_file.compensate()
-            try:
-                mappings = self._standardise_mappings(fcs_file.channel_mappings,
-                                                      missing_error=missing_error)
-            except AssertionError as err:
-                warn(f"Failed to add {sample_id}, error occured for {ctrl_id} files: {str(err)}")
-                filegrp.delete()
-                del fcs_file
-                del filegrp
-                gc.collect()
-                return
+            mappings = self._standardise_mappings(fcs_file.channel_mappings,
+                                                  missing_error=missing_error)
             filegrp.add_ctrl_file(data=fcs_file.event_data,
                                   ctrl_id=ctrl_id,
                                   channels=[x.get("channel") for x in mappings],
@@ -890,7 +950,7 @@ class Experiment(mongoengine.Document):
         gc.collect()
 
     def _standardise_mappings(self,
-                              mappings: dict,
+                              mappings: list,
                               missing_error: str):
         """
         Given some mappings (list of dictionaries with keys: channel, marker) compare the

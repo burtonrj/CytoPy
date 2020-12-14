@@ -13,10 +13,10 @@ def example_experiment():
     test_exp = test_project.add_experiment(experiment_id="test experiment",
                                            data_directory=f"{os.getcwd()}/test_data",
                                            panel_definition=f"{os.getcwd()}/CytoPy/tests/assets/test_panel.xlsx")
-    test_exp.add_new_sample(sample_id="test sample",
-                            primary_path=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
-                            controls_path={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
-                            compensate=False)
+    test_exp.add_fcs_files(sample_id="test sample",
+                           primary_path=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
+                           controls_path={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
+                           compensate=False)
     yield test_exp
     test_project.delete()
 

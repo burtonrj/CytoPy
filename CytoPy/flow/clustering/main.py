@@ -717,6 +717,9 @@ class Clustering:
                                                    summary_method=summary_method,
                                                    **kwargs)
 
+    def rename_clusters(self):
+        pass
+
     def rename_meta_clusters(self,
                              mappings: dict):
         """
