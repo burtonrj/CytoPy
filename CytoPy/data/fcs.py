@@ -120,6 +120,20 @@ def h5_read_population_primary_index(population_name: str,
 @population_in_file
 def h5_read_population_ctrl_index(population_name: str,
                                   h5file: h5py.File):
+    """
+    Given a population and an instance of a H5 file object, return a dictionary containing
+    the event indexes for control files
+
+    Parameters
+    ----------
+    population_name: str
+    h5file: h5py.File
+
+    Returns
+    -------
+    Dict
+        {ctrl_id: index}
+    """
     ctrls = [x for x in h5file[f"index/{population_name}"].keys() if x != "primary"]
     return {ctrl_id: h5file[f"index/{population_name}/{ctrl_id}"][:] for ctrl_id in ctrls}
 
@@ -127,16 +141,31 @@ def h5_read_population_ctrl_index(population_name: str,
 @population_in_file
 def h5_read_population_clusters(population_name: str,
                                 h5file: h5py.File):
+    """
+    Given a population and an instance of a H5 file object, return a dictionary containing
+    the event indexes of clusters for given population. If no clusters exist for population
+    returns empty dictionary.
+
+    Parameters
+    ----------
+    population_name: str
+    h5file: h5py.File
+
+    Returns
+    -------
+    Dict
+        {cluster ID and tag: index}
+    """
     if population_name not in h5file["clusters"].keys():
         return {}
     return {cluster_id_tag: h5file[f"/clusters/{population_name}/{cluster_id_tag}"][:]
             for cluster_id_tag in h5file[f"/clusters/{population_name}"].keys()}
 
 
-def _column_names(df: pd.DataFrame,
-                  channels: list,
-                  markers: list,
-                  preference: str = "markers"):
+def set_column_names(df: pd.DataFrame,
+                     channels: list,
+                     markers: list,
+                     preference: str = "markers"):
     """
     Given a dataframe of fcs events and lists of channels and markers, set the
     column names according to the given preference.
@@ -248,10 +277,10 @@ class FileGroup(mongoengine.Document):
             assert source in f.keys(), f"Invalid source, expected one of: {f.keys()}"
             channels = [x.decode("utf-8") for x in f[f"mappings/{source}/channels"][:]]
             markers = [x.decode("utf-8") for x in f[f"mappings/{source}/markers"][:]]
-            data = _column_names(df=pd.DataFrame(f[source][:]),
-                                 channels=channels,
-                                 markers=markers,
-                                 preference=self.columns_default)
+            data = set_column_names(df=pd.DataFrame(f[source][:]),
+                                    channels=channels,
+                                    markers=markers,
+                                    preference=self.columns_default)
         if sample_size is not None:
             return uniform_downsampling(data=data,
                                         sample_size=sample_size)

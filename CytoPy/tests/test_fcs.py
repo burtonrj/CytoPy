@@ -98,6 +98,20 @@ def create_example_populations(filegroup: FileGroup,
 
 def create_test_h5file(path: str,
                        empty: bool = False):
+    """
+    Create a H5 test file
+
+    Parameters
+    ----------
+    path: str
+        Where to create the file
+    empty: bool (default=False)
+        If True, fill with example data
+
+    Returns
+    -------
+    None
+    """
     with h5py.File(path, "w") as f:
         f.create_group("index")
         f.create_group("clusters")
@@ -150,6 +164,23 @@ def test_h5_read_population_clusters():
         assert len(x) == 2
         assert x.get("cluster1_tag1").shape[0] == 1000
         assert x.get("cluster2_tag2").shape[0] == 1000
+
+
+def test_set_column_names():
+    channels = [None, None, None, "channel1", "channel2", "channel3"]
+    markers = [f"marker{i + 1}" for i in range(6)]
+    data = pd.DataFrame([np.random.random(size=1000) for _ in range(6)]).T
+    x = set_column_names(df=data,
+                         channels=channels,
+                         markers=markers,
+                         preference="markers")
+    assert np.array_equal(x.columns.values, markers)
+    cols = ["marker1", "marker2", "marker3", "channel1", "channel2", "channel3"]
+    x = set_column_names(df=data,
+                         channels=channels,
+                         markers=markers,
+                         preference="channels")
+    assert np.array_equal(x.columns.values, cols)
 
 
 def test_init_new_fcs_file(example_filegroup):
@@ -343,7 +374,7 @@ def test_delete_clusters(example_filegroup, drop_all, drop_tag, drop_metalabel, 
         p.set_ctrl_index(test_ctrl=np.arange(0, 1000))
         cluster_idx = np.arange(0, 1000)
         for i, (tag, metalabel) in enumerate(zip(["testing 2", "testing 2", "testing 3"],
-                                             ["test meta 1", "test meta 1", "test meta 2"])):
+                                                 ["test meta 1", "test meta 1", "test meta 2"])):
             p.add_cluster(Cluster(cluster_id=f"test cluster {i}",
                                   index=cluster_idx,
                                   n=len(cluster_idx),
