@@ -1,9 +1,10 @@
-from CytoPy.data.fcs import FileGroup
+from CytoPy.data.fcs import *
 from CytoPy.data.project import Project
 from CytoPy.data.population import Cluster, Population
 import pandas as pd
 import numpy as np
 import pytest
+import h5py
 import os
 
 
@@ -93,6 +94,62 @@ def create_example_populations(filegroup: FileGroup,
                               tag="testing"))
         filegroup.add_population(population=p)
     return filegroup
+
+
+def create_test_h5file(path: str,
+                       empty: bool = False):
+    with h5py.File(path, "w") as f:
+        f.create_group("index")
+        f.create_group("clusters")
+        if empty:
+            return
+        f.create_group("index/test_pop")
+        f.create_group("clusters/test_pop")
+        f.create_dataset("index/test_pop/primary", data=np.random.random_integers(1000, size=1000))
+        f.create_dataset("index/test_pop/test_ctrl1", data=np.random.random_integers(1000, size=1000))
+        f.create_dataset("index/test_pop/test_ctrl2", data=np.random.random_integers(1000, size=1000))
+        f.create_dataset("clusters/test_pop/cluster1_tag1", data=np.random.random_integers(1000, size=1000))
+        f.create_dataset("clusters/test_pop/cluster2_tag2", data=np.random.random_integers(1000, size=1000))
+
+
+def test_h5_read_population_primary_index():
+    path = f"{os.getcwd()}/test_data/test.h5"
+    create_test_h5file(path=path, empty=True)
+    with h5py.File(path, "r") as f:
+        assert h5_read_population_primary_index("test_pop", f) is None
+    create_test_h5file(path=path, empty=False)
+    with h5py.File(path, "r") as f:
+        x = h5_read_population_primary_index("test_pop", f)
+        assert x is not None
+        assert x.shape[0] == 1000
+
+
+def test_h5_read_population_ctrl_index():
+    path = f"{os.getcwd()}/test_data/test.h5"
+    create_test_h5file(path=path, empty=True)
+    with h5py.File(path, "r") as f:
+        assert h5_read_population_ctrl_index("test_pop", f) is None
+    create_test_h5file(path=path, empty=False)
+    with h5py.File(path, "r") as f:
+        x = h5_read_population_ctrl_index("test_pop", f)
+        assert isinstance(x, dict)
+        assert len(x) == 2
+        assert x.get("test_ctrl1").shape[0] == 1000
+        assert x.get("test_ctrl2").shape[0] == 1000
+
+
+def test_h5_read_population_clusters():
+    path = f"{os.getcwd()}/test_data/test.h5"
+    create_test_h5file(path=path, empty=True)
+    with h5py.File(path, "r") as f:
+        assert h5_read_population_clusters("test_pop", f) is None
+    create_test_h5file(path=path, empty=False)
+    with h5py.File(path, "r") as f:
+        x = h5_read_population_clusters("test_pop", f)
+        assert isinstance(x, dict)
+        assert len(x) == 2
+        assert x.get("cluster1_tag1").shape[0] == 1000
+        assert x.get("cluster2_tag2").shape[0] == 1000
 
 
 def test_init_new_fcs_file(example_filegroup):

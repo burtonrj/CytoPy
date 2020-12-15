@@ -221,8 +221,6 @@ def _summarise_clusters(data: pd.DataFrame,
         return data.groupby(["sample_id", "cluster_id"])[features].median().reset_index()
     if summary_method == "mean":
         return data.groupby(["sample_id", "cluster_id"])[features].mean().reset_index()
-    if summary_method == "gmean":
-        return data.groupby(["sample_id", "cluster_id"])[features].apply(lambda x: gmean, axis=1)
     raise ValueError("summary_method should be 'mean' or 'median'")
 
 
