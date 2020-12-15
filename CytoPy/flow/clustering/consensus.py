@@ -124,7 +124,8 @@ class ConsensusCluster:
             for h in range(self.H_):  # resample H times
                 resampled_indices, resample_data = self._internal_resample(
                     data, self.resample_proportion_)
-                Mh = self.cluster_(n_clusters=k).fit_predict(resample_data)
+                self.cluster_.set_params(n_clusters=k)
+                Mh = self.cluster_.fit_predict(resample_data)
                 # find indexes of elements from same clusters with bisection
                 # on sorted array => this is more efficient than brute force search
                 id_clusts = np.argsort(Mh)
@@ -166,7 +167,8 @@ class ConsensusCluster:
             Clustering predictions
         """
         assert self.Mk is not None, "First run fit"
-        return self.cluster_(n_clusters=self.bestK).fit_predict(1-self.Mk[self.bestK-self.L_])
+        self.cluster_.set_params(n_clusters=self.bestK)
+        return self.cluster_.fit_predict(1-self.Mk[self.bestK-self.L_])
 
     def predict_data(self, data: np.array):
         """Predicts on the data, for best found cluster number
@@ -179,4 +181,5 @@ class ConsensusCluster:
             Clustering predictions
         """
         assert self.Mk is not None, "First run fit"
-        return self.cluster_(n_clusters=self.bestK).fit_predict(data)
+        self.cluster_.set_params(n_clusters=self.bestK)
+        return self.cluster_.fit_predict(data)

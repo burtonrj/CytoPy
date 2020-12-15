@@ -56,42 +56,6 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def h5_read_population(population_name: str,
-                       filepath: str) -> dict:
-    """
-    Read the population data from a H5 file of a FileGroup. If the population
-    is not found in the given H5 file, returns empty dictionary.
-
-    Parameters
-    ----------
-    population_name: str
-        Name of the population
-    filepath: str
-        Location of the H5 file
-
-    Returns
-    -------
-    dict
-        Nested dictionary of indexes for Population data:
-        {"primary": the primary events index,
-         "ctrl_index": dictionary of ctrl_id: ctrl file event indexes,
-         "cluster_index": dictionary of cluster ID & tag: cluster event indexes}
-    """
-    with h5py.File(filepath, "r") as f:
-        key = f"/index/{population_name}"
-        if key not in f.keys():
-            return {}
-        data = {"primary": f[f"{key}/primary"][:],
-                "ctrl_index": {},
-                "cluster_index": {}}
-        ctrls = [x for x in f[key].keys() if x != "primary"]
-        for c in ctrls:
-            data["ctrl_index"][c] = f[f"{key}/{c}"][:]
-        for cluster in f[f"{key}/clusters"].keys():
-            data["cluster_index"][cluster] = f[f"{key}/clusters/{cluster}"][:]
-        return data
-
-
 def h5file_exists(func: callable) -> callable:
     """
     Decorator that asserts the h5 file corresponding to the FileGroup exists.
@@ -110,6 +74,63 @@ def h5file_exists(func: callable) -> callable:
         assert os.path.isfile(args[0].h5path), f"Could not locate FileGroup HDF5 record {args[0].h5path}"
         return func(*args, **kwargs)
     return wrapper
+
+
+def population_in_file(func: callable):
+    """
+    Wrapper to test if requested population passed to the given function
+    exists in the given h5 file object
+
+    Parameters
+    ----------
+    func: callable
+        Function to wrap
+
+    Returns
+    -------
+    callable
+    """
+    def wrapper(population_name: str,
+                h5file: h5py.File):
+        if population_name not in h5file["index"].keys():
+            return None
+        return func(population_name, h5file)
+    return wrapper
+
+
+@population_in_file
+def h5_read_population_primary_index(population_name: str,
+                                     h5file: h5py.File):
+    """
+    Given a population and an instance of a H5 file object, return the
+    index of corresponding events
+
+    Parameters
+    ----------
+    population_name: str
+    h5file: h5py.File
+
+    Returns
+    -------
+    Numpy.Array
+    """
+    return h5file[f"/index/{population_name}/primary"][:]
+
+
+@population_in_file
+def h5_read_population_ctrl_index(population_name: str,
+                                  h5file: h5py.File):
+    ctrls = [x for x in h5file[f"index/{population_name}"].keys() if x != "primary"]
+    return {ctrl_id: h5file[f"index/{population_name}/{ctrl_id}"][:] for ctrl_id in ctrls}
+
+
+@population_in_file
+def h5_read_population_clusters(population_name: str,
+                                h5file: h5py.File):
+    if population_name not in h5file["clusters"].keys():
+        return {}
+    return {cluster_id_tag: h5file[f"/clusters/{population_name}/{cluster_id_tag}"][:]
+            for cluster_id_tag in h5file[f"/clusters/{population_name}"].keys()}
 
 
 def _column_names(df: pd.DataFrame,
@@ -329,23 +350,22 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
-        populations = [p.population_name for p in self.populations]
-        read_func = partial(h5_read_population, filepath=self.h5path)
-        with Pool(cpu_count()) as pool:
-            population_indexes = list(pool.map(read_func, populations))
-        for i, pop_idx in enumerate(population_indexes):
-            if len(pop_idx) == 0:
-                warn(f"Population {populations[i]} missing from H5 file")
-            pop = self.get_population(populations[i])
-            pop.index = pop_idx.get("primary", None)
-            for ctrl_id, ctrl_idx in pop_idx.get("ctrl_index").items():
-                pop.set_ctrl_index(**{ctrl_id: ctrl_idx})
-            for cluster in pop.clusters:
-                try:
-                    cluster.index = pop_idx["cluster_index"][f"{cluster.cluster_id}_{cluster.tag}"]
-                except KeyError:
-                    warn(f"Cluster index missing for cluster ID {cluster.cluster_id}, tag {cluster.tag} "
-                         f"in population {pop.population_name}")
+        with h5py.File(self.h5path, "r") as f:
+            for p in self.populations:
+                primary_index = h5_read_population_primary_index(population_name=p.population_name,
+                                                                 h5file=f)
+                if primary_index is None:
+                    continue
+                p.index = primary_index
+                p.set_ctrl_index(**h5_read_population_ctrl_index(population_name=p.population_name,
+                                                                 h5file=f))
+                cluster_idx = h5_read_population_clusters(population_name=p.population_name,
+                                                          h5file=f)
+                if len(cluster_idx) == 0:
+                    continue
+                for cluster in p.clusters:
+                    if f"{cluster.cluster_id}_{cluster.tag}" in cluster_idx.keys():
+                        cluster.index = cluster_idx[f"{cluster.cluster_id}_{cluster.tag}"]
 
     def add_population(self,
                        population: Population):
