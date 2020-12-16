@@ -35,7 +35,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ...data.experiment import Experiment, load_data
+from ...data.experiment import Experiment, load_population_data_from_experiment
 from ...data.population import Cluster
 from ...feedback import vprint, progress_bar
 from ..explore import Explorer
@@ -589,11 +589,11 @@ class Clustering:
         self.metrics = None
         self.cluster_prefix = cluster_prefix
         self.print("Loading single cell data...")
-        self.data = load_data(experiment=experiment,
-                              sample_ids=sample_ids,
-                              transform=transform,
-                              population=root_population,
-                              include_clusters=self.tag)
+        self.data = load_population_data_from_experiment(experiment=experiment,
+                                                         sample_ids=sample_ids,
+                                                         transform=transform,
+                                                         population=root_population,
+                                                         include_clusters=self.tag)
         self.print("Ready to cluster!")
 
     def _load_clusters(self):

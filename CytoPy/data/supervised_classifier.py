@@ -32,7 +32,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from ..feedback import vprint, progress_bar
-from ..flow.transforms import scaler
+from ..flow.transform import scaler
 from ..flow import supervised
 from ..flow import sampling
 from .experiment import Experiment, FileGroup

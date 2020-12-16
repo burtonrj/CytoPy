@@ -36,7 +36,7 @@ from ..data.experiment import Experiment, FileGroup
 from ..feedback import progress_bar, vprint
 from .dim_reduction import dimensionality_reduction
 from .sampling import density_dependent_downsampling, faithful_downsampling, uniform_downsampling
-from .transforms import scaler
+from .transform import scaler
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
 from scipy.spatial.distance import jensenshannon as jsd

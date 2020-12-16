@@ -201,7 +201,8 @@ def apply_transform(data: pd.DataFrame,
     if isinstance(features_to_transform, str):
         features_to_transform = _features(data, features_to_transform)
     elif isinstance(features_to_transform, list):
-        assert all([x in data.columns for x in features_to_transform]), "One or more provided features does not exist for the given dataframe"
+        assert all([x in data.columns for x in features_to_transform]), \
+            "One or more provided features does not exist for the given dataframe"
     return _transform(data=data, features=features_to_transform, method=transform_method, **kwargs)
 
 

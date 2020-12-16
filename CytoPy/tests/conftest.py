@@ -1,3 +1,6 @@
+from CytoPy.tests import assets
+from ..data.fcs import FileGroup
+from ..data.population import Population, Cluster
 from ..data.project import Project
 from ..data.experiment import Experiment, FileGroup
 from mongoengine.connection import connect, disconnect
@@ -36,12 +39,14 @@ def example_populated_experiment():
     test_project = Project(project_id="test")
     exp = test_project.add_experiment(experiment_id="test experiment",
                                       data_directory=f"{os.getcwd()}/test_data",
-                                      panel_definition=f"{os.getcwd()}/tests/assets/test_panel.xlsx")
+                                      panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx",
+                                      panel_name="test_panel")
     exp.add_fcs_files(sample_id="test sample",
-                      primary_path=f"{os.getcwd()}/tests/assets/test.FCS",
-                      controls_path={"test_ctrl": f"{os.getcwd()}/tests/assets/test.FCS"},
+                      primary=f"{assets.__path__._path[0]}/test.FCS",
+                      controls={"test_ctrl": f"{assets.__path__._path[0]}/test.FCS"},
                       compensate=False)
     yield exp
+    test_project.reload()
     test_project.delete()
 
 
@@ -68,10 +73,91 @@ def reload_filegroup(project_id: str,
     return fg
 
 
+def create_example_population_indexes(filegroup: FileGroup,
+                                      initial_population_prop: float = 0.8,
+                                      downstream_population_prop: float = 0.5,
+                                      cluster_frac: float = 0.25,
+                                      n_populations: int = 3):
+    """
+    Create example index data for a specified number of example populations.
+
+    Parameters
+    ----------
+    filegroup: FileGroup
+    initial_population_prop: float (default=0.8)
+        Fraction of events to sample for the first population
+    downstream_population_prop: float (default=0.5)
+        Fraction of events to sample from n-1 population to form downstream population
+    cluster_frac: float (default=0.25)
+        Fraction of events to sample from primary to use as example Cluster
+    n_populations: int (default=3)
+        Total number of populations to generate (must be at least 2)
+
+    Returns
+    -------
+    List
+        List of dictionary objects with keys 'primary', 'cluster' and 'ctrl' corresponding to events for
+        primary data and "test_ctrl"
+    """
+    assert n_populations > 1, "n_populations must be equal to or greater than 2"
+    primary = filegroup.data("primary", sample_size=initial_population_prop)
+    populations = [{"primary": primary,
+                    "ctrl": filegroup.data("test_ctrl", sample_size=initial_population_prop),
+                    "cluster": primary.sample(frac=cluster_frac)}]
+    for i in range(n_populations - 1):
+        primary = populations[i].get("primary").sample(frac=downstream_population_prop)
+        populations.append({"primary": primary,
+                            "ctrl": populations[i].get("ctrl").sample(frac=downstream_population_prop),
+                            "cluster": primary.sample(frac=cluster_frac)})
+    return list(map(lambda x: {"primary": x["primary"].index.values,
+                               "ctrl": x["ctrl"].index.values,
+                               "cluster": x["cluster"].index.values},
+                    populations))
 
 
+def create_example_populations(filegroup: FileGroup,
+                               initial_population_prop: float = 0.8,
+                               downstream_population_prop: float = 0.5,
+                               cluster_frac: float = 0.25,
+                               n_populations: int = 3):
+    """
+    Given a FileGroup add the given number of example populations.
 
+    Parameters
+    ----------
+    filegroup: FileGroup
+    initial_population_prop: float (default=0.8)
+        Fraction of events to sample for the first population
+    downstream_population_prop: float (default=0.5)
+        Fraction of events to sample from n-1 population to form downstream population
+    cluster_frac: float (default=0.25)
+        Fraction of events to sample from primary to use as example Cluster
+    n_populations: int (default=3)
+        Total number of populations to generate (must be at least 2)
 
-
-
-
+    Returns
+    -------
+    FileGroup
+    """
+    pop_idx = create_example_population_indexes(filegroup=filegroup,
+                                                initial_population_prop=initial_population_prop,
+                                                downstream_population_prop=downstream_population_prop,
+                                                cluster_frac=cluster_frac,
+                                                n_populations=n_populations)
+    for pname, parent, idx in zip([f"pop{i + 1}" for i in range(n_populations)],
+                                  ["root"] + [f"pop{i + 1}" for i in range(n_populations - 1)],
+                                  pop_idx):
+        p = Population(population_name=pname,
+                       n=len(idx.get("primary")),
+                       parent=parent,
+                       index=idx.get("primary"))
+        p.set_ctrl_index(test_ctrl=idx.get("ctrl"))
+        p.add_cluster(Cluster(cluster_id="test cluster",
+                              index=idx.get("cluster"),
+                              n=len(idx.get("cluster")),
+                              prop_of_events=len(idx.get("cluster")) / 30000,
+                              tag="testing",
+                              meta_label="meta testing"))
+        filegroup.add_population(population=p)
+    filegroup.save()
+    return filegroup

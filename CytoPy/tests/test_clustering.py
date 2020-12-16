@@ -14,24 +14,24 @@ def dummy_data(example_experiment):
 def multisample_experiment(example_experiment):
     for i in range(3):
         example_experiment.add_fcs_files(sample_id=f"test sample {i + 1}",
-                                         primary_path=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
-                                         controls_path={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
+                                         primary=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
+                                         controls={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
                                          compensate=False)
     return example_experiment
 
 
 def multi_sample_data(example_experiment):
-    return load_data(experiment=multisample_experiment(example_experiment),
-                     population="root",
-                     transform="logicle",
-                     verbose=True)
+    return load_population_data_from_experiment(experiment=multisample_experiment(example_experiment),
+                                                population="root",
+                                                transform="logicle",
+                                                verbose=True)
 
 
 def test_load_data(example_experiment):
-    data = load_data(experiment=multisample_experiment(example_experiment),
-                     population="root",
-                     transform="logicle",
-                     verbose=True)
+    data = load_population_data_from_experiment(experiment=multisample_experiment(example_experiment),
+                                                population="root",
+                                                transform="logicle",
+                                                verbose=True)
     assert isinstance(data, pd.DataFrame)
     assert all([x in data.columns for x in ["sample_id", "cluster_id", "meta_label", "original_index", "subject_id"]])
     assert all([all(pd.isnull(data[x])) for x in ["subject_id", "cluster_id", "meta_label"]])

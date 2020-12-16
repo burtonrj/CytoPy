@@ -31,7 +31,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ..flow.transforms import scaler
+from ..flow.transform import scaler
 from .geometry import PopulationGeometry, ThresholdGeom, PolygonGeom
 from functools import reduce
 from shapely.ops import unary_union

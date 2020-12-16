@@ -32,7 +32,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from ..data.subject import Subject, bugs, hmbpp_ribo, gram_status, biology
-from ..data.experiment import load_data
+from ..data.experiment import load_population_data_from_experiment
 from ..flow.descriptives import box_swarm_plot, stat_test
 from ..feedback import vprint, progress_bar
 from .dim_reduction import dimensionality_reduction
@@ -186,7 +186,7 @@ class Explorer:
 
     def load_data(self,
                   **kwargs):
-        self.data = load_data(**kwargs)
+        self.data = load_population_data_from_experiment(**kwargs)
         self.meta_vars = [i for i in META_VARS if i in self.data.columns]
 
     @data_loaded

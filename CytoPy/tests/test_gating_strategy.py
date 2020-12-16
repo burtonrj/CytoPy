@@ -14,8 +14,8 @@ def example_experiment():
                                            data_directory=f"{os.getcwd()}/test_data",
                                            panel_definition=f"{os.getcwd()}/CytoPy/tests/assets/test_panel.xlsx")
     test_exp.add_fcs_files(sample_id="test sample",
-                           primary_path=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
-                           controls_path={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
+                           primary=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
+                           controls={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
                            compensate=False)
     yield test_exp
     test_project.delete()
