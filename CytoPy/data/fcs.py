@@ -647,7 +647,7 @@ class FileGroup(mongoengine.Document):
         dependencies = self.list_downstream_populations(parent)
         for pop in dependencies:
             idx = self.get_population(pop).index
-            data.loc[idx, 'label'] = pop
+            data.loc[idx, 'population_label'] = pop
         data["population_label"].fillna(parent, inplace=True)
         return data
 
@@ -675,15 +675,14 @@ class FileGroup(mongoengine.Document):
             if all([p.get_ctrl(c) is not None for p in self.populations]):
                 yield c
 
-    def list_populations(self) -> iter:
+    def list_populations(self) -> list:
         """
         Yields list of population names
         Returns
         -------
         Generator
         """
-        for p in self.populations:
-            yield p.population_name
+        return [p.population_name for p in self.populations]
 
     def print_population_tree(self,
                               image: bool = False,
