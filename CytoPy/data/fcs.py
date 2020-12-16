@@ -30,13 +30,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from ..feedback import vprint
 from ..flow.tree import construct_tree
-from ..flow.transforms import apply_transform
+from ..flow.transform import apply_transform
 from ..flow.neighbours import knn, calculate_optimal_neighbours
 from ..flow.sampling import uniform_downsampling
 from .geometry import create_convex_hull
 from .population import Population, merge_populations, PolygonGeom
-from multiprocessing import Pool, cpu_count
-from functools import partial
 from warnings import warn
 from typing import List, Generator
 import pandas as pd

@@ -1,101 +1,12 @@
 from CytoPy.data.fcs import *
 from CytoPy.data.project import Project
 from CytoPy.data.population import Cluster, Population
-from .conftest import reload_filegroup
+from .conftest import reload_filegroup, create_example_populations
 import pandas as pd
 import numpy as np
 import pytest
 import h5py
 import os
-
-
-def create_example_population_indexes(filegroup: FileGroup,
-                                      initial_population_prop: float = 0.8,
-                                      downstream_population_prop: float = 0.5,
-                                      cluster_frac: float = 0.25,
-                                      n_populations: int = 3):
-    """
-    Create example index data for a specified number of example populations.
-
-    Parameters
-    ----------
-    filegroup: FileGroup
-    initial_population_prop: float (default=0.8)
-        Fraction of events to sample for the first population
-    downstream_population_prop: float (default=0.5)
-        Fraction of events to sample from n-1 population to form downstream population
-    cluster_frac: float (default=0.25)
-        Fraction of events to sample from primary to use as example Cluster
-    n_populations: int (default=3)
-        Total number of populations to generate (must be at least 2)
-
-    Returns
-    -------
-    List
-        List of dictionary objects with keys 'primary', 'cluster' and 'ctrl' corresponding to events for
-        primary data and "test_ctrl"
-    """
-    assert n_populations > 1, "n_populations must be equal to or greater than 2"
-    primary = filegroup.data("primary", sample_size=initial_population_prop)
-    populations = [{"primary": primary,
-                    "ctrl": filegroup.data("test_ctrl", sample_size=initial_population_prop),
-                    "cluster": primary.sample(frac=cluster_frac)}]
-    for i in range(n_populations - 1):
-        primary = populations[i].get("primary").sample(frac=downstream_population_prop)
-        populations.append({"primary": primary,
-                            "ctrl": populations[i].get("ctrl").sample(frac=downstream_population_prop),
-                            "cluster": primary.sample(frac=cluster_frac)})
-    return list(map(lambda x: {"primary": x["primary"].index.values,
-                               "ctrl": x["ctrl"].index.values,
-                               "cluster": x["cluster"].index.values},
-                    populations))
-
-
-def create_example_populations(filegroup: FileGroup,
-                               initial_population_prop: float = 0.8,
-                               downstream_population_prop: float = 0.5,
-                               cluster_frac: float = 0.25,
-                               n_populations: int = 3):
-    """
-    Given a FileGroup add the given number of example populations.
-
-    Parameters
-    ----------
-    filegroup: FileGroup
-    initial_population_prop: float (default=0.8)
-        Fraction of events to sample for the first population
-    downstream_population_prop: float (default=0.5)
-        Fraction of events to sample from n-1 population to form downstream population
-    cluster_frac: float (default=0.25)
-        Fraction of events to sample from primary to use as example Cluster
-    n_populations: int (default=3)
-        Total number of populations to generate (must be at least 2)
-
-    Returns
-    -------
-    FileGroup
-    """
-    pop_idx = create_example_population_indexes(filegroup=filegroup,
-                                                initial_population_prop=initial_population_prop,
-                                                downstream_population_prop=downstream_population_prop,
-                                                cluster_frac=cluster_frac,
-                                                n_populations=n_populations)
-    for pname, parent, idx in zip([f"pop{i + 1}" for i in range(n_populations)],
-                                  ["root"] + [f"pop{i + 1}" for i in range(n_populations - 1)],
-                                  pop_idx):
-        p = Population(population_name=pname,
-                       n=len(idx.get("primary")),
-                       parent=parent,
-                       index=idx.get("primary"))
-        p.set_ctrl_index(test_ctrl=idx.get("ctrl"))
-        p.add_cluster(Cluster(cluster_id="test cluster",
-                              index=idx.get("cluster"),
-                              n=len(idx.get("cluster")),
-                              prop_of_events=len(idx.get("cluster")) / 30000,
-                              tag="testing"))
-        filegroup.add_population(population=p)
-    filegroup.save()
-    return filegroup
 
 
 def create_test_h5file(path: str,

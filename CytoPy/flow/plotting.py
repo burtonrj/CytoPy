@@ -35,7 +35,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from ..data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, Population
 from ..data.geometry import ThresholdGeom, PolygonGeom
-from ..flow.transforms import apply_transform
+from ..flow.transform import apply_transform
 from warnings import warn
 from typing import List, Generator, Dict
 from scipy.spatial import ConvexHull

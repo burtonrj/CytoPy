@@ -30,7 +30,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ..flow.transforms import apply_transform
+from ..flow.transform import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
     create_convex_hull, create_polygon, polygon_overlap, ellipse_to_polygon, \
     probablistic_ellipse

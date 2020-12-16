@@ -144,7 +144,7 @@ def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
     return nomenclature, mappings
 
 
-def _check_duplication(x: list) -> bool:
+def check_duplication(x: list) -> bool:
     """
     Internal method. Given a list check for duplicates. Warning generated for duplicates.
 
@@ -214,8 +214,8 @@ class NormalisedName(mongoengine.EmbeddedDocument):
         return None
 
 
-def _query_normalised_list(x: str or None,
-                           ref: List[NormalisedName]) -> str:
+def query_normalised_list(x: str or None,
+                          ref: List[NormalisedName]) -> str:
     """
     Internal method for querying a channel/marker against a reference list of
     NormalisedName's
@@ -248,8 +248,8 @@ def _is_empty(x: str):
     return x
 
 
-def _check_pairing(channel_marker: dict,
-                   ref_mappings: List[ChannelMap]) -> bool:
+def check_pairing(channel_marker: dict,
+                  ref_mappings: List[ChannelMap]) -> bool:
     """
     Internal method. Given a channel and marker check that a valid pairing exists in the list
     of given mappings.
@@ -293,7 +293,7 @@ def _standardise(x: str or None,
     str
     """
     if x is not None:
-        return _query_normalised_list(x, ref)
+        return query_normalised_list(x, ref)
     default = [m for m in mappings if m.channel == alt or m.marker == alt][0]
     if default.channel == alt:
         return default.marker
@@ -327,7 +327,7 @@ def standardise_names(channel_marker: dict,
     return {"channel": channel, "marker": marker}
 
 
-def _duplicate_mappings(mappings: List[dict]):
+def duplicate_mappings(mappings: List[dict]):
     """
     Check for duplicates in a list of dictionaries describing channel/marker mappings.
     Raise AssertionError if duplicates found.
@@ -341,14 +341,14 @@ def _duplicate_mappings(mappings: List[dict]):
     None
     """
     channels = [x.get("channel") for x in mappings]
-    assert not _check_duplication(channels), "Duplicate channels provided"
+    assert not check_duplication(channels), "Duplicate channels provided"
     markers = [x.get("marker") for x in mappings]
-    assert not _check_duplication(markers), "Duplicate markers provided"
+    assert not check_duplication(markers), "Duplicate markers provided"
 
 
-def _missing_channels(mappings: List[dict],
-                      channels: List[NormalisedName],
-                      errors: str = "raise"):
+def missing_channels(mappings: List[dict],
+                     channels: List[NormalisedName],
+                     errors: str = "raise"):
     """
     Check a list of channel/marker dictionaries for missing channels according to
     the reference channels given.
@@ -466,30 +466,28 @@ class Panel(mongoengine.Document):
                          for k in x['channels']]
         self.mappings = [ChannelMap(channel=c, marker=m) for c, m in x['mappings']]
 
-    def get_channels(self) -> iter:
+    def list_channels(self) -> list:
         """
-        Yields list of channels associated to panel
+        List of channels associated to panel
 
         Returns
         -------
-        Generator
+        List
         """
-        for cm in self.mappings:
-            yield cm.channel
+        return [cm.channel for cm in self.mappings]
 
-    def get_markers(self) -> iter:
+    def list_markers(self) -> list:
         """
-        Yields list of channels associated to panel
+        List of channels associated to panel
 
         Returns
         -------
-        Generator
+        List
         """
-        for cm in self.mappings:
-            yield cm.marker
+        return [cm.marker for cm in self.mappings]
 
 
-def _data_dir_append_leading_char(path: str):
+def data_dir_append_leading_char(path: str):
     """
     Format a file path to handle Win and Unix OS
 
@@ -512,8 +510,8 @@ def _data_dir_append_leading_char(path: str):
     return path
 
 
-def _compenstate(x: np.ndarray,
-                 spill_matrix: np.ndarray):
+def compenstate(x: np.ndarray,
+                spill_matrix: np.ndarray):
     return np.linalg.solve(spill_matrix.T, x.T).T
 
 
@@ -558,7 +556,7 @@ class Experiment(mongoengine.Document):
         super().__init__(*args, **kwargs)
         if self.data_directory:
             assert os.path.isdir(self.data_directory), f"data directory {self.data_directory} does not exist"
-            self.data_directory = _data_dir_append_leading_char(self.data_directory)
+            self.data_directory = data_dir_append_leading_char(self.data_directory)
         else:
             raise ValueError("No data directory provided")
         if self.panel is None:
@@ -672,7 +670,7 @@ class Experiment(mongoengine.Document):
         """
         for f in self.fcs_files:
             if sample_id == 'all' or f.primary_id == sample_id:
-                f.populations = []
+                f.populations = [p for p in f.populations if p.population_name == "root"]
                 f.save()
 
     def sample_exists(self, sample_id: str) -> bool:
@@ -711,7 +709,7 @@ class Experiment(mongoengine.Document):
         return [f for f in self.fcs_files if f.primary_id == sample_id][0]
 
     def list_samples(self,
-                     valid_only: bool = True) -> Generator:
+                     valid_only: bool = True) -> list:
         """
         Generate a list IDs of file groups associated to experiment
 
@@ -722,47 +720,12 @@ class Experiment(mongoengine.Document):
 
         Returns
         --------
-        Generator
+        List
             List of IDs of file groups associated to experiment
         """
-        for f in self.fcs_files:
-            if valid_only:
-                if f.valid:
-                    yield f.primary_id
-            else:
-                yield f.primary_id
-
-    def list_invalid(self) -> Generator:
-        """
-        Generate list of sample IDs for samples that have the 'invalid' flag in their flag attribute
-
-        Returns
-        --------
-        Generator
-            List of sample IDs for invalid samples
-        """
-        for f in self.fcs_files:
-            if not f.valid():
-                yield f.primary_id
-
-    def get_sample_mid(self,
-                       sample_id: str) -> str or None:
-        """
-        Given a sample ID (for a sample belonging to this experiment) return it's mongo ObjectID as a string
-
-        Parameters
-        -----------
-        sample_id: str
-            Sample ID for sample of interest
-
-        Returns
-        --------
-        str or None
-            string value for ObjectID
-        """
-        if not self.sample_exists(sample_id):
-            return None
-        return [f for f in self.fcs_files if f.primary_id == sample_id][0].id.__str__()
+        if valid_only:
+            return [f.primary_id for f in self.fcs_files if f.valid]
+        return [f.primary_id for f in self.fcs_files]
 
     def remove_sample(self, sample_id: str):
         """
@@ -782,31 +745,66 @@ class Experiment(mongoengine.Document):
         filegrp.delete()
         self.save()
 
-    def add_csv_files(self,
-                      sample_id: str,
-                      primary_path: str,
-                      mappings: list,
-                      controls_path: dict or None = None,
-                      comp_matrix: str or None = None,
-                      subject_id: str or None = None,
-                      verbose: bool = True,
-                      processing_datetime: str or None = None,
-                      collection_datetime: str or None = None,
-                      missing_error: str = "raise"):
+    def add_dataframes(self,
+                       sample_id: str,
+                       primary_data: pd.DataFrame,
+                       mappings: list,
+                       controls: dict or None = None,
+                       comp_matrix: pd.DataFrame or None = None,
+                       subject_id: str or None = None,
+                       verbose: bool = True,
+                       processing_datetime: str or None = None,
+                       collection_datetime: str or None = None,
+                       missing_error: str = "raise"):
+        """
+        Add new single cell cytometry data to the experiment, under a new sample ID, using
+        Pandas DataFrame(s) as the input; generates a new FileGroup associated to this experiment.
+        The user must also provide the channel/marker mappings as a list of dictionary objects
+        {"channel": <channel name>, "marker": <marker name>} which should match what is expected
+        given the staining panel associated to this experiment.
+        NOTE: the order in which this dictionaries are provided is assumed to match the order
+        of the columns in the provided DataFrame(s).
+
+        Parameters
+        ----------
+        sample_id: str
+            Unique sample identifier (unique to this Experiment)
+        primary_data: Pandas.DataFrame
+            Single cell cytometry data for primary staining
+        mappings: list
+            List of dictionaries like so: {"channel": <channel name>, "marker": <marker name>}
+        controls: dict, optional
+            Dictionary of DataFrames(s) for single cell cytometry data for control staining e.g.
+            FMOs or isotype controls
+        comp_matrix: Pandas.DataFrame, optional
+            Spill over matrix for compensation (if not provided, data is assumed to be compensated previously)
+        subject_id: str, optional
+            If a string value is provided, newly generated sample will be associated to this subject
+        verbose: bool (default=True)
+            If True, progress printed to stdout
+        processing_datetime: str, optional
+            Optional processing datetime string
+        collection_datetime: str, optional
+            Optional collection datetime string
+        missing_error: str, (default="raise")
+            How to handle missing channels (channels present in the experiment staining panel but
+            absent from mappings). Should either be "raise" (raises an error) or "warn".
+
+        Returns
+        -------
+        None
+        """
         processing_datetime = processing_datetime or datetime.now()
         collection_datetime = collection_datetime or datetime.now()
-        controls_path = controls_path or {}
+        controls = controls or {}
         feedback = vprint(verbose)
         assert not self.sample_exists(sample_id), f'A file group with id {sample_id} already exists'
         feedback("Loading data from csv files...")
-        primary_data = pd.read_csv(primary_path)
-        controls = {ctrl_id: pd.read_csv(path) for ctrl_id, path in controls_path.items()}
         compensated = False
         if comp_matrix is not None:
             feedback("Applying compensation...")
-            comp_matrix = pd.read_csv(comp_matrix).values
-            primary_data = _compenstate(primary_data, comp_matrix)
-            controls = {ctrl_id: _compenstate(ctrl_data, comp_matrix) for ctrl_id, ctrl_data in controls.items()}
+            primary_data = compenstate(primary_data.values, comp_matrix.values)
+            controls = {ctrl_id: compenstate(ctrl_data, comp_matrix) for ctrl_id, ctrl_data in controls.items()}
             compensated = True
 
         try:
@@ -825,12 +823,12 @@ class Experiment(mongoengine.Document):
                             compensated=compensated,
                             collection_datetime=collection_datetime,
                             processing_datetime=processing_datetime,
-                            data=primary_data,
+                            data=primary_data.values,
                             channels=[x.get("channel") for x in mappings],
                             markers=[x.get("marker") for x in mappings])
         for ctrl_id, ctrl_data in controls.items():
             feedback(f"Adding control file {ctrl_id}...")
-            filegrp.add_ctrl_file(data=ctrl_data,
+            filegrp.add_ctrl_file(data=ctrl_data.values,
                                   ctrl_id=ctrl_id,
                                   channels=[x.get("channel") for x in mappings],
                                   markers=[x.get("marker") for x in mappings])
@@ -850,8 +848,8 @@ class Experiment(mongoengine.Document):
 
     def add_fcs_files(self,
                       sample_id: str,
-                      primary_path: str or FCSFile,
-                      controls_path: dict or None = None,
+                      primary: str or FCSFile,
+                      controls: dict or None = None,
                       subject_id: str or None = None,
                       comp_matrix: str or None = None,
                       compensate: bool = True,
@@ -860,49 +858,51 @@ class Experiment(mongoengine.Document):
                       collection_datetime: str or None = None,
                       missing_error: str = "raise"):
         """
-        Add a new sample (FileGroup) to this experiment
+        Add new single cell cytometry data to the experiment, under a new sample ID, using
+        filepath to fcs file(s) as the input; generates a new FileGroup associated to this experiment.
+        Alternatively, the user can also provide FCSFile object(s)
 
         Parameters
         ----------
         sample_id: str
-            Primary ID for identification of sample (FileGroup.primary_id)
-        subject_id: str, optional
-            ID for patient to associate sample too
-        primary_path: str or FCSFile
-            The path to the primary file or FCSFile object of primary file
-        controls_path: dict
-            Dictionary of control ID and relative path to file for those files to be treated as "control"
-            files e.g. they are 'FMO' or 'isotype' controls. Alternatively the value can be an FCSFile
-            object containing the respective control file
+            Unique sample identifier (unique to this Experiment)
+        primary: str or FCSFile
+            Single cell cytometry data for primary staining
+        controls: dict, optional
+            Dictionary of filepaths/FCSFiles for single cell cytometry data for control staining e.g.
+            FMOs or isotype controls
+        compensate: bool (default=True)
+            If True, FCSFile will be searched for spillover matrix to apply to compensate data. If
+            a spillover matrix has not been linked to the file, the filepath to a csv file containing
+            the spillover matrix should be provided to 'comp_matrix'
         comp_matrix: str, optional
-            Path to csv file for spillover matrix for compensation calculation; if not supplied
-            the matrix linked within the fcs file will be used, if not present will present an error
-        compensate: bool, (default=True)
-            Boolean value as to whether compensation should be applied before data entry (default=True)
-        verbose: bool, (default=True)
-            If True function will provide feedback in the form of print statements
-            (default=True)
-        missing_error: str (default="raise")
-            How to handle missing channels (that is, channels that appear in the associated
-            staining panel but cannot be found in the FCS data. Either "raise" to raise
-            AssertionError or "warn" to flag a UserWarning but continue execution.
+            Path to csv file containing spill over matrix for compensation
+        subject_id: str, optional
+            If a string value is provided, newly generated sample will be associated to this subject
+        verbose: bool (default=True)
+            If True, progress printed to stdout
         processing_datetime: str, optional
+            Optional processing datetime string
         collection_datetime: str, optional
+            Optional collection datetime string
+        missing_error: str, (default="raise")
+            How to handle missing channels (channels present in the experiment staining panel but
+            absent from mappings). Should either be "raise" (raises an error) or "warn".
 
         Returns
-        --------
+        -------
         None
         """
         processing_datetime = processing_datetime or datetime.now()
         collection_datetime = collection_datetime or datetime.now()
-        controls_path = controls_path or {}
+        controls = controls or {}
         feedback = vprint(verbose)
         assert not self.sample_exists(sample_id), f'A file group with id {sample_id} already exists'
         feedback("Creating new FileGroup...")
-        if isinstance(primary_path, str):
-            fcs_file = FCSFile(filepath=primary_path, comp_matrix=comp_matrix)
+        if isinstance(primary, str):
+            fcs_file = FCSFile(filepath=primary, comp_matrix=comp_matrix)
         else:
-            fcs_file = primary_path
+            fcs_file = primary
 
         if compensate:
             feedback("Compensating primary file...")
@@ -919,7 +919,7 @@ class Experiment(mongoengine.Document):
                             data=fcs_file.event_data,
                             channels=[x.get("channel") for x in mappings],
                             markers=[x.get("marker") for x in mappings])
-        for ctrl_id, path in controls_path.items():
+        for ctrl_id, path in controls.items():
             feedback(f"Adding control file {ctrl_id}...")
             if isinstance(path, str):
                 fcs_file = FCSFile(filepath=path, comp_matrix=comp_matrix)
@@ -972,9 +972,9 @@ class Experiment(mongoengine.Document):
                             mappings))
         for cm in mappings:
             err = f'The channel/marker pairing {cm} does not correspond to any defined in panel'
-            assert _check_pairing(ref_mappings=self.panel.mappings, channel_marker=cm), err
-        _missing_channels(mappings=mappings, channels=self.panel.channels, errors=missing_error)
-        _duplicate_mappings(mappings)
+            assert check_pairing(ref_mappings=self.panel.mappings, channel_marker=cm), err
+        missing_channels(mappings=mappings, channels=self.panel.channels, errors=missing_error)
+        duplicate_mappings(mappings)
         return mappings
 
     def delete(self, *args, **kwargs):
@@ -990,15 +990,31 @@ class Experiment(mongoengine.Document):
         -------
         None
         """
-        super().delete(*args, **kwargs)
         for f in self.fcs_files:
             f.delete()
+        super().delete(*args, **kwargs)
 
 
 def load_clusters(pop_data: pd.DataFrame,
                   tag: str,
                   filegroup: FileGroup,
                   population: str):
+    """
+    Given a DataFrame of population level data (where each row is a single cell), the tag for some clusters,
+    and the target FileGroup and population, populate the DataFrame with the cluster ID and meta cluster
+    label in the columns cluster_id and meta_label, respectively.
+
+    Parameters
+    ----------
+    pop_data: Pandas.DataFrame
+    tag: str
+    filegroup: FileGroup
+    population: str
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
     population = filegroup.get_population(population)
     for cluster in population.clusters:
         if cluster.tag != tag:
@@ -1010,6 +1026,19 @@ def load_clusters(pop_data: pd.DataFrame,
 
 def load_subject_id(pop_data: pd.DataFrame,
                     filegroup: FileGroup):
+    """
+    Given a FileGroup and a a DataFrame of population level data (where each row is a single cell),
+    reverse search the Subjects to populate each row with the subject ID linked to this FileGroup.
+
+    Parameters
+    ----------
+    pop_data: Pandas.DataFrame
+    filegroup: FileGroup
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
     subject = fetch_subject(filegroup)
     if subject is not None:
         subject = subject.subject_id
@@ -1017,14 +1046,14 @@ def load_subject_id(pop_data: pd.DataFrame,
     return pop_data
 
 
-def load_data(experiment: Experiment,
-              population: str,
-              transform: str = "logicle",
-              sample_ids: list or None = None,
-              verbose: bool = True,
-              ctrl: str or None = None,
-              include_clusters: str or None = None,
-              additional_columns: list or None = None):
+def load_population_data_from_experiment(experiment: Experiment,
+                                         population: str,
+                                         transform: str = "logicle",
+                                         sample_ids: list or None = None,
+                                         verbose: bool = True,
+                                         ctrl: str or None = None,
+                                         include_clusters: str or None = None,
+                                         additional_columns: list or None = None):
     """
     Load Population from samples in the given Experiment and generate a
     standard exploration dataframe that contains the columns 'sample_id',
