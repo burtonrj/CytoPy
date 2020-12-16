@@ -36,10 +36,10 @@ def example_populated_experiment():
     test_project = Project(project_id="test")
     exp = test_project.add_experiment(experiment_id="test experiment",
                                       data_directory=f"{os.getcwd()}/test_data",
-                                      panel_definition=f"{os.getcwd()}/assets/test_panel.xlsx")
+                                      panel_definition=f"{os.getcwd()}/tests/assets/test_panel.xlsx")
     exp.add_fcs_files(sample_id="test sample",
-                      primary_path=f"{os.getcwd()}/assets/test.FCS",
-                      controls_path={"test_ctrl": f"{os.getcwd()}/assets/test.FCS"},
+                      primary_path=f"{os.getcwd()}/tests/assets/test.FCS",
+                      controls_path={"test_ctrl": f"{os.getcwd()}/tests/assets/test.FCS"},
                       compensate=False)
     yield exp
     test_project.delete()
