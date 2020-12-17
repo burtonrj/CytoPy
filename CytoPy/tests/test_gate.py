@@ -1,6 +1,6 @@
 from CytoPy.data import gate
-from CytoPy.data.population import create_signature
-from CytoPy.data.geometry import ThresholdGeom, PolygonGeom, create_polygon, create_convex_hull
+from CytoPy.data.population import *
+from CytoPy.data.geometry import *
 from scipy.spatial.distance import euclidean
 from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs
@@ -11,6 +11,66 @@ import numpy as np
 import pytest
 
 np.random.seed(42)
+
+
+def test_child_init():
+    test_child = gate.Child(name="test",
+                            signature={"x": 2423, "y": 2232, "z": 4543})
+    assert test_child.name == "test"
+    assert test_child.signature.get("x") == 2423
+    assert test_child.signature.get("y") == 2232
+    assert test_child.signature.get("z") == 4543
+
+
+def test_childthreshold_init():
+    test_child = gate.ChildThreshold(name="test",
+                                     signature={"x": 2423, "y": 2232, "z": 4543},
+                                     definition="+",
+                                     geom=ThresholdGeom(x="x", y="y", x_threshold=0.5, y_threshold=0.5))
+    assert test_child.name == "test"
+    assert test_child.signature.get("x") == 2423
+    assert test_child.signature.get("y") == 2232
+    assert test_child.signature.get("z") == 4543
+    assert test_child.definition == "+"
+    assert test_child.geom.x == "x"
+    assert test_child.geom.y == "y"
+    assert test_child.geom.x_threshold == 0.5
+    assert test_child.geom.y_threshold == 0.5
+
+
+@pytest.mark.parametrize("definition,expected", [("+", True),
+                                                 ("-", False)])
+def test_childthreshold_match_definition_1d(definition, expected):
+    test_child = gate.ChildThreshold(name="test",
+                                     signature={"x": 2423, "y": 2232, "z": 4543},
+                                     definition=definition,
+                                     geom=ThresholdGeom(x="x", y="y", x_threshold=0.5, y_threshold=0.5))
+    assert test_child.match_definition("+") == expected
+
+
+@pytest.mark.parametrize("definition,expected", [("++", True),
+                                                 ("--", False),
+                                                 ("++,+-", True),
+                                                 ("--,-+", False),
+                                                 ("+-,-+,++", True)])
+def test_childthreshold_match_definition_2d(definition, expected):
+    test_child = gate.ChildThreshold(name="test",
+                                     signature={"x": 2423, "y": 2232, "z": 4543},
+                                     definition=definition,
+                                     geom=ThresholdGeom(x="x", y="y", x_threshold=0.5, y_threshold=0.5))
+    assert test_child.match_definition("++") == expected
+
+
+def test_childpolygon_init():
+    test_child = gate.ChildPolygon(name="test",
+                                   signature={"x": 2423, "y": 2232, "z": 4543},
+                                   geom=PolygonGeom(x="x", y="y"))
+    assert test_child.name == "test"
+    assert test_child.signature.get("x") == 2423
+    assert test_child.signature.get("y") == 2232
+    assert test_child.signature.get("z") == 4543
+    assert test_child.geom.x == "x"
+    assert test_child.geom.y == "y"
 
 
 @pytest.mark.parametrize("klass,method", [(gate.Gate, "manual"),
@@ -518,13 +578,13 @@ def test_threshold_fit_predict_2d():
 def create_polygon_gate(klass,
                         method: str,
                         **kwargs):
-    gate = klass(gate_name="test",
-                 parent="test parent",
-                 x="X",
-                 y="Y",
-                 method=method,
-                 method_kwargs={k: v for k, v in kwargs.items()})
-    return gate
+    g = klass(gate_name="test",
+              parent="test parent",
+              x="X",
+              y="Y",
+              method=method,
+              method_kwargs={k: v for k, v in kwargs.items()})
+    return g
 
 
 def test_polygon_add_child():

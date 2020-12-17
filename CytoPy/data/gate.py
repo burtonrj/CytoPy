@@ -32,8 +32,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from ..flow.transform import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
-    create_convex_hull, create_polygon, polygon_overlap, ellipse_to_polygon, \
-    probablistic_ellipse
+    create_convex_hull, create_polygon, ellipse_to_polygon, probablistic_ellipse
 from .population import Population, merge_multiple_populations, create_signature
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
@@ -339,6 +338,22 @@ class Gate(mongoengine.Document):
 
     def _xy_in_dataframe(self,
                          data: pd.DataFrame):
+        """
+        Assert that the x and y variables defined for this gate are present in the given
+        DataFrames columns
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+
+        Returns
+        -------
+        None
+
+        Raises
+        -------
+        AssertionError
+        """
         assert self.x in data.columns, f"{self.x} missing from given dataframe"
         if self.y:
             assert self.y in data.columns, f"{self.y} missing from given dataframe"
@@ -1238,32 +1253,6 @@ def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
                                              x_values=x,
                                              y_values=y))
     return children[0]
-
-
-def _child_similarity_score(child: ChildPolygon,
-                            population: Population) -> dict:
-    """
-    Compare a population to a ChildPolygon contained and return the similarity score.
-    The similarity score is given by: fraction area overlap * euclidean distance between signatures.
-    This generates a score between 0 and 1, where 1 is identical populations and 0 is absolutely
-    different populations.
-
-    Parameters
-    ----------
-    child: ChildPolygon
-    population: Population
-
-    Returns
-    -------
-    str
-    """
-    assert isinstance(population.geom, PolygonGeom), "Similarity score is only for comparison of Polygon type gates"
-    area = polygon_overlap(child.geom.shape, population.geom.shape)
-    common_features = set(population.signature.keys()).intersection(child.signature.keys())
-    vector_signatures = np.array([[population.signature.get(i), child.signature.get(i)]
-                                  for i in common_features]).T
-    dist_score = euclidean(vector_signatures[:, 0], vector_signatures[:, 1])
-    return dist_score * area
 
 
 def apply_threshold(data: pd.DataFrame,

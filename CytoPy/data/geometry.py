@@ -258,7 +258,7 @@ def probablistic_ellipse(covariances: np.array,
 
     Returns
     -------
-    float, float, float
+    float and float and float
         Width, Height and Angle of ellipse
     """
     eigen_val, eigen_vec = linalg.eigh(covariances)
