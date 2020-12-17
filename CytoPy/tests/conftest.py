@@ -1,5 +1,4 @@
 from CytoPy.tests import assets
-from ..data.fcs import FileGroup
 from ..data.population import Population, Cluster
 from ..data.project import Project
 from ..data.experiment import Experiment, FileGroup
