@@ -296,7 +296,7 @@ def test_add_cluster_and_save(example_experiment):
                                                   index=np.arange(0, 10),
                                                   prop_of_events=0.25,
                                                   tag="test_tag"))
-    assert "test" in [c.cluster_id for c in fg.get_population("root").get_clusters(cluster_id="test", tag="test_tag")]
+    assert "test" in [c.cluster_id for c in fg.get_population("root").get_clusters(cluster_ids="test", tag="test_tag")]
     assert "test" in [c.cluster_id for c in fg.get_population("root").get_clusters(meta_label="meta_test")]
     fg.save()
     with h5py.File(fg.h5path, "r") as f:
@@ -333,7 +333,7 @@ def test_clustering_save(example_experiment):
     for _id, df in c.data.groupby("sample_id"):
         fg = exp.get_sample(_id)
         cluster_ids = list(df.cluster_id.unique())
-        clusters = fg.get_population("root").get_clusters(cluster_id=cluster_ids, tag="test")
+        clusters = fg.get_population("root").get_clusters(cluster_ids=cluster_ids, tag="test")
         assert len(clusters) == len(cluster_ids)
         for cluster_id, cluster_df in df.groupby("cluster_id"):
             cluster = [c for c in clusters if c.cluster_id == str(cluster_id)][0]

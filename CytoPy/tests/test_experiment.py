@@ -206,7 +206,7 @@ def test_exp_remove_sample(example_populated_experiment):
 def test_add_new_sample_exists_error(example_populated_experiment):
     with pytest.raises(AssertionError) as err:
         example_populated_experiment.add_dataframes(sample_id="test sample",
-                                                    primary_path="dummy path",
+                                                    primary_data="dummy path",
                                                     mappings=[])
     assert str(err.value) == "A file group with id test sample already exists"
     with pytest.raises(AssertionError) as err:
@@ -220,7 +220,7 @@ def assert_h5_setup_correctly(filepath: str,
     assert os.path.isfile(filepath)
     with h5py.File(filepath, "r") as f:
         assert len(f["index/root/primary"][:]) == 30000
-        assert len(f["index/root/ctrl1"][:]) == 30000
+        assert len(f["index/root/test_ctrl"][:]) == 30000
         assert set([x.decode("utf-8") for x in f["mappings/primary/channels"][:]]) == set(exp.panel.list_channels())
         assert set([x.decode("utf-8") for x in f["mappings/primary/markers"][:]]) == set(exp.panel.list_markers())
 
@@ -236,7 +236,7 @@ MAPPINGS = [{"channel": "FS-Lin", "marker": "FS-Lin"},
 
 def test_exp_add_dataframes(example_populated_experiment):
     primary = pd.DataFrame(make_blobs(n_samples=30000, n_features=14, centers=8, random_state=42)[0])
-    controls = {"ctrl1": pd.DataFrame(make_blobs(n_samples=30000, n_features=14, centers=8, random_state=42)[0])}
+    controls = {"test_ctrl": pd.DataFrame(make_blobs(n_samples=30000, n_features=14, centers=8, random_state=42)[0])}
     exp = example_populated_experiment
     exp.add_dataframes(sample_id="test sample 2",
                        primary_data=primary,
@@ -250,12 +250,12 @@ def test_exp_add_dataframes(example_populated_experiment):
 
 def test_exp_add_fcs_files(example_populated_experiment):
     exp = example_populated_experiment
-    exp.add_fcs_files(sample_id="test_sample",
+    exp.add_fcs_files(sample_id="test sample 2",
                       primary=f"{assets.__path__._path[0]}/test.FCS",
-                      controls={"ctrl1": f"{assets.__path__._path[0]}/test.FCS"},
+                      controls={"test_ctrl": f"{assets.__path__._path[0]}/test.FCS"},
                       compensate=False)
-    assert "test_sample" in list(exp.list_samples())
-    new_filegroup = exp.get_sample("test_sample")
+    assert "test sample" in list(exp.list_samples())
+    new_filegroup = exp.get_sample("test sample")
     path = f"{os.getcwd()}/test_data/{new_filegroup.id}.hdf5"
     assert_h5_setup_correctly(path, exp)
 
@@ -288,14 +288,84 @@ def test_load_clusters(example_populated_experiment, pop_name):
 
 def test_load_data(example_populated_experiment):
     exp = example_populated_experiment
+    exp.add_fcs_files(sample_id="test sample 2",
+                      primary=f"{assets.__path__._path[0]}/test.FCS",
+                      controls={"test_ctrl": f"{assets.__path__._path[0]}/test.FCS"},
+                      compensate=False)
     create_example_populations(exp.get_sample("test sample"))
+    create_example_populations(exp.get_sample("test sample 2"))
     data = load_population_data_from_experiment(experiment=exp,
-                                                population="pop1")
+                                                population="pop1",
+                                                include_clusters="testing")
+    assert all([x in data.columns for x in ["sample_id", "cluster_id", "meta_label", "original_index"]])
+    assert data.shape[0] == ((30000 * 0.8) + (30000 * 0.8))
+    assert set(data["sample_id"].unique()) == {"test sample", "test sample 2"}
+    test_sample_pop1 = exp.get_sample("test sample").get_population("pop1")
+    test_sample2_pop1 = exp.get_sample("test sample 2").get_population("pop1")
+    # Check original index
+    assert np.array_equal(data[data.sample_id == "test sample"]["original_index"].values,
+                          test_sample_pop1.index)
+    assert np.array_equal(data[data.sample_id == "test sample 2"]["original_index"].values,
+                          test_sample2_pop1.index)
+    # Check clusters
+    test_sample_pop1_cluster = test_sample_pop1.get_clusters(cluster_ids=["test cluster"],
+                                                             tag="testing")[0]
+    test_sample2_pop1_cluster = test_sample_pop1.get_clusters(cluster_ids=["test cluster"],
+                                                              tag="testing")[0]
+    np.array_equal(data[(data.sample_id == "test sample") & (data.cluster_id == "test cluster")]["original_index"],
+                   test_sample_pop1_cluster.index)
+    np.array_equal(data[(data.sample_id == "test sample 2") & (data.cluster_id == "test cluster")]["original_index"],
+                   test_sample2_pop1_cluster.index)
+    # Check meta cluster labels
+    assert (data[(data.sample_id == "test sample") &
+                 (data.cluster_id == "test cluster")]["meta_label"] == "meta testing").all()
+    assert (data[(data.sample_id == "test sample 2") &
+                 (data.cluster_id == "test cluster")]["meta_label"] == "meta testing").all()
+    # Check that the population furthest from the root is populated correctly i.e. pop3
+    test_sample_pop = exp.get_sample("test sample").get_population("pop3")
+    test_sample2_pop = exp.get_sample("test sample 2").get_population("pop3")
+    assert np.array_equal(data[(data.sample_id == "test sample") &
+                               (data.population_label == "pop3")]["original_index"].sort_values().values,
+                          np.sort(test_sample_pop.index))
+    assert np.array_equal(data[(data.sample_id == "test sample 2") &
+                               (data.population_label == "pop3")]["original_index"].sort_values().values,
+                          np.sort(test_sample2_pop.index))
+    # The next population up is pop2, cells belonging to pop2 but not pop3 will be labelled
+    # in the population_label column
+    test_sample_pop = exp.get_sample("test sample").get_population("pop2")
+    idx = [x for x in test_sample_pop.index
+           if x not in exp.get_sample("test sample").get_population("pop3").index]
+    assert np.array_equal(data[(data.sample_id == "test sample") &
+                               (data.population_label == "pop2")]["original_index"].sort_values().values,
+                          np.sort(idx))
+    test_sample2_pop = exp.get_sample("test sample 2").get_population("pop2")
+    idx = [x for x in test_sample2_pop.index
+           if x not in exp.get_sample("test sample 2").get_population("pop3").index]
+    assert np.array_equal(data[(data.sample_id == "test sample 2") &
+                               (data.population_label == "pop2")]["original_index"].sort_values().values,
+                          np.sort(idx))
 
 
-def test_fetch_subject_meta():
-    pass
+def test_fetch_subject_meta(example_populated_experiment):
+    exp = example_populated_experiment
+    Subject(subject_id="test subject",
+            files=[exp.get_sample("test sample")],
+            test_var=True).save()
+    assert fetch_subject_meta(sample_id="test sample",
+                              experiment=exp,
+                              meta_label="test_var")
+    assert fetch_subject_meta(sample_id="test sample",
+                              experiment=exp,
+                              meta_label="invalid") is None
+    Subject.objects(subject_id="test subject").get().delete()
 
 
-def test_fetch_subject():
-    pass
+def test_fetch_subject(example_populated_experiment):
+    exp = example_populated_experiment
+    with pytest.warns(UserWarning) as warning:
+        assert fetch_subject(exp.get_sample("test sample")) is None
+    assert str(warning[0].message) == "Requested sample is not associated to a Subject"
+    Subject(subject_id="test subject",
+            files=[exp.get_sample("test sample")],
+            test_var=True).save()
+    assert isinstance(fetch_subject(exp.get_sample("test sample")), Subject)
