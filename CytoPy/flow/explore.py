@@ -31,7 +31,7 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from ..data.subject import Subject, bugs, hmbpp_ribo, gram_status, biology
+from ..data.subject import Subject, get_bugs, hmbpp_ribo, gram_status, biology
 from ..data.experiment import load_population_data_from_experiment
 from ..flow.descriptives import box_swarm_plot, stat_test
 from ..feedback import vprint, progress_bar
@@ -345,10 +345,10 @@ class Explorer:
             if subject_id is None:
                 continue
             p = Subject.objects(subject_id=subject_id).get()
-            self.data.loc[self.data.subject_id == subject_id, 'organism_name'] = bugs(subject=p, multi_org=multi_org)
-            self.data.loc[self.data.subject_id == subject_id, 'organism_name_short'] = bugs(subject=p,
-                                                                                            multi_org=multi_org,
-                                                                                            short_name=True)
+            self.data.loc[self.data.subject_id == subject_id, 'organism_name'] = get_bugs(subject=p, multi_org=multi_org)
+            self.data.loc[self.data.subject_id == subject_id, 'organism_name_short'] = get_bugs(subject=p,
+                                                                                                multi_org=multi_org,
+                                                                                                short_name=True)
             self.data.loc[self.data.subject_id == subject_id, 'hmbpp'] = hmbpp_ribo(subject=p, field='hmbpp_status')
             self.data.loc[self.data.subject_id == subject_id, 'ribo'] = hmbpp_ribo(subject=p, field='ribo_status')
             self.data.loc[self.data.subject_id == subject_id, 'gram_status'] = gram_status(subject=p)

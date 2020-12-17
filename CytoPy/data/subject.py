@@ -193,15 +193,6 @@ class Subject(mongoengine.DynamicDocument):
 
         WARNING: deletion of a subject will result in the automatic removal of all associated FCS data!
 
-        Parameters
-        ----------
-        signal_kwargs: optional
-            kwargs dictionary to be passed to the signal calls.
-        write_concern
-            Extra keyword arguments are passed down which will be used as options for the resultant getLastError command.
-            For example, save(..., w: 2, fsync: True) will wait until at least two servers have recorded the write and
-            will force an fsync on the primary server.
-
         Returns
         -------
         None
@@ -227,7 +218,7 @@ def gram_status(subject: Subject) -> str:
     """
     if not subject.infection_data:
         return 'Unknown'
-    orgs = [b.gram_status for b in subject.infection_data]
+    orgs = [b.gram_status for b in subject.infection_data if b.gram_status]
     if not orgs:
         return 'Unknown'
     if len(orgs) == 1:
@@ -235,7 +226,7 @@ def gram_status(subject: Subject) -> str:
     return 'Mixed'
 
 
-def bugs(subject: Subject, multi_org: str, short_name: bool = False) -> str:
+def get_bugs(subject: Subject, multi_org: str, short_name: bool = False) -> str:
     """
     Fetch the name of isolated organisms for each patient.
 
@@ -266,10 +257,22 @@ def bugs(subject: Subject, multi_org: str, short_name: bool = False) -> str:
         return orgs[0]
     if multi_org == 'list':
         return ','.join(orgs)
-    return 'mixed'
+    return 'Mixed'
 
 
-def org_type(subject: Subject) -> str:
+def _bug_type(b: Bug):
+    if not b.organism_type:
+        return None
+    if b.organism_type == 'bacteria':
+        if b.gram_status == "P+ve":
+            return "gram positive"
+        if b.gram_status == "N-ve":
+            return "gram negative"
+        return "bacteria"
+    return b.organism_type
+
+
+def get_bug_type(subject: Subject) -> str:
     """
     Parse all infectious isolates for each patient and return the organism type isolated, one of either:
     'gram positive', 'gram negative', 'virus', 'mixed' or 'fungal'
@@ -283,15 +286,8 @@ def org_type(subject: Subject) -> str:
     str
         common organism type isolated for patient
     """
-
-    def bug_type(b: Bug):
-        if not b.organism_type:
-            return 'Unknown'
-        if b.organism_type == 'bacteria':
-            return b.gram_status
-        return b.organism_type
-
-    bugs = list(set(map(bug_type, subject.infection_data)))
+    bugs = list(set(map(_bug_type, subject.infection_data)))
+    bugs = [b for b in bugs if b]
     if len(bugs) == 0:
         return 'Unknown'
     if len(bugs) == 1:
