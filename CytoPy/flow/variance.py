@@ -36,7 +36,7 @@ from ..data.experiment import Experiment, FileGroup
 from ..feedback import progress_bar, vprint
 from .dim_reduction import dimensionality_reduction
 from .sampling import density_dependent_downsampling, faithful_downsampling, uniform_downsampling
-from .transform import scaler
+from .transform import apply_transform
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
 from scipy.spatial.distance import jensenshannon as jsd
@@ -179,11 +179,10 @@ def scale_data(data: OrderedDict,
     """
     scaled = OrderedDict()
     for k, df in data.items():
-        scaled[k] = pd.DataFrame(scaler(data=df.values,
-                                        scale_method=method,
-                                        return_scaler=False,
-                                        **kwargs),
-                                 columns=df.columns)
+        scaled[k] = apply_transform(data=df,
+                                    features_to_transform="all",
+                                    transform_method=method,
+                                    **kwargs)
     return scaled
 
 

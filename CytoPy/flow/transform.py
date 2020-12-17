@@ -30,7 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from flowutils.transforms import logicle, hyperlog, log_transform, asinh
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler, QuantileTransformer
 import pandas as pd
 import numpy as np
 
@@ -109,11 +109,17 @@ def _transform(data: pd.DataFrame,
         Available transforms:
         * logicle
         * hyperlog
-        * log_transform
+        * log
+        * log2
+        * log10
         * asinh
         * percentile_rank
         * Yeo-Johnson
+        * Box-Cox
         * RobustScale
+        * MinMaxScale
+        * Standard
+        * Quantile
     kwargs:
         Additional keyword arguments passed to transform function
 
@@ -121,29 +127,50 @@ def _transform(data: pd.DataFrame,
     -------
     Pandas.DataFrame
     """
-    pre_scale = kwargs.get("pre_scale", 1)
+    data = data.copy()
+    pre_scale = kwargs.pop("pre_scale", 1)
     feature_i = [list(data.columns).index(i) for i in features]
     if method is None:
         return data
     if method == 'logicle':
-        return pd.DataFrame(logicle(data=data.values, channels=feature_i, **kwargs), columns=data.columns, index=data.index)
+        return pd.DataFrame(logicle(data=data.values, channels=feature_i, **kwargs),
+                            columns=data.columns, index=data.index)
     if method == 'hyperlog':
-        return pd.DataFrame(hyperlog(data=data.values, channels=feature_i, **kwargs), columns=data.columns, index=data.index)
-    if method == 'log_transform':
-        return pd.DataFrame(log_transform(npy=data.values, channels=feature_i,), columns=data.columns, index=data.index)
+        return pd.DataFrame(hyperlog(data=data.values, channels=feature_i, **kwargs),
+                            columns=data.columns, index=data.index)
+    if method == 'log':
+        return pd.DataFrame(log_transform(npy=data.values, channels=feature_i,),
+                            columns=data.columns, index=data.index)
+    if method == 'log2':
+        data[features] = data[features].apply(np.log2, axis=1)
+        return data
+    if method == "log10":
+        data[features] = data[features].apply(np.log10, axis=1)
+        return data
     if method == 'asinh':
         return pd.DataFrame(asinh(data=data.values, columns=feature_i, pre_scale=pre_scale),
                             columns=data.columns, index=data.index)
     if method == 'percentile rank':
         return percentile_rank_transform(data, features)
     if method == 'Yeo-Johnson':
-        data, _ = scaler(data, scale_method='power', method='yeo-johnson')
+        data[features] = PowerTransformer(method="yeo-johnson", **kwargs).fit_transform(data[features])
+        return data
+    if method == "Box-Cox":
+        data[features] = PowerTransformer(method="box-cox", **kwargs).fit_transform(data[features])
         return data
     if method == 'RobustScale':
-        data, _ = scaler(data, scale_method='robust')
+        data[features] = RobustScaler(**kwargs).fit_transform(data[features])
         return data
-    raise ValueError("Error: invalid transform_method, must be one of: 'logicle', 'hyperlog', 'log_transform',"
-                     " 'asinh', 'percentile rank', 'Yeo-Johnson', 'RobustScale'")
+    if method == "MinMaxScale":
+        data[features] = MinMaxScaler(**kwargs).fit_transform(data[features])
+        return data
+    if method == "Standard":
+        data[features] = StandardScaler(**kwargs).fit_transform(data[features])
+        return data
+    if method == "Qunatile":
+        data[features] = QuantileTransformer(**kwargs).fit_transform(data[features])
+        return data
+    raise ValueError("Error: invalid transform_method, see docs for available transforms")
 
 
 def individual_transforms(data: pd.DataFrame,
@@ -205,43 +232,3 @@ def apply_transform(data: pd.DataFrame,
             "One or more provided features does not exist for the given dataframe"
     return _transform(data=data, features=features_to_transform, method=transform_method, **kwargs)
 
-
-def scaler(data: np.array,
-           scale_method: str,
-           return_scaler: bool = True,
-           **kwargs) -> np.array and object or np.array:
-    """
-    Wrapper for Sklearn transformation methods
-
-    Parameters
-    -----------
-    data: Numpy.array
-        data to transform; expects a numpy array
-    scale_method: str
-        type of transformation to perform, can be one of: 'standard', 'norm', 'power' or 'robust'
-    return_scaler: bool (default=True)
-        if True, Scaler object returned with data
-    kwargs:
-        additional keyword arguments that can be passed to sklearn function
-
-    Returns
-    --------
-    (Numpy.array, callable) or Numpy.array
-        transformed data and sklearn transformer object
-    """
-    if len(data) == 0:
-        return data
-    if scale_method == 'standard':
-        preprocessor = StandardScaler(**kwargs).fit(data)
-    elif scale_method == 'norm':
-        preprocessor = MinMaxScaler(**kwargs).fit(data)
-    elif scale_method == 'power':
-        preprocessor = PowerTransformer(**kwargs).fit(data)
-    elif scale_method == 'robust':
-        preprocessor = RobustScaler(**kwargs).fit(data)
-    else:
-        raise ValueError('Method should be one of the following: [standard, norm, power, robust]')
-    data = preprocessor.transform(data)
-    if not return_scaler:
-        return data
-    return data, preprocessor
