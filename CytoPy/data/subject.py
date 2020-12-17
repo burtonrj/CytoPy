@@ -322,8 +322,7 @@ def hmbpp_ribo(subject: Subject, field: str) -> str:
 
 def biology(subject_id: str,
             test_name: str,
-            summary_method: str = "average",
-            datetime_filter: tuple or None =  None) -> np.float or None:
+            summary_method: str = "average") -> np.float or None:
     """
     Given some test name, return a summary statistic of all results for a given patient ID
 

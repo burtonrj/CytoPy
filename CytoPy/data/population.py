@@ -31,7 +31,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ..flow.transform import scaler
+from ..flow.transform import apply_transform
 from .geometry import PopulationGeometry, ThresholdGeom, PolygonGeom
 from functools import reduce
 from shapely.ops import unary_union
@@ -506,9 +506,7 @@ def create_signature(data: pd.DataFrame,
     if data.shape[0] == 0:
         warn("Cannot generate signature for empty dataframe")
         return {}
-    data = pd.DataFrame(scaler(data=data.values, scale_method="norm", return_scaler=False),
-                        columns=data.columns,
-                        index=data.index)
+    data = apply_transform(data, features_to_transform="all", transform_method="Standard")
     if idx is None:
         idx = data.index.values
     # ToDo this should be more robust

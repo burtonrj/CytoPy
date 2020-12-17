@@ -32,7 +32,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from ..feedback import vprint, progress_bar
-from ..flow.transform import scaler
+from ..flow.transform import apply_transform
 from ..flow import supervised
 from ..flow import sampling
 from .experiment import Experiment, FileGroup
@@ -230,10 +230,9 @@ class CellClassifier(mongoengine.Document):
         Pandas.DataFrame
         """
         kwargs = self.scale_kwargs or {}
-        data[self.features] = scaler(data,
-                                     return_scaler=False,
-                                     scale_method=self.scale,
-                                     **kwargs)
+        data[self.features] = apply_transform(data[self.features],
+                                              transform_method=self.scale,
+                                              **kwargs)
         return data
 
     def auto_class_weights(self):
