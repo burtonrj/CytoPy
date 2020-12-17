@@ -297,7 +297,7 @@ def test_add_cluster_and_save(example_experiment):
                                                   prop_of_events=0.25,
                                                   tag="test_tag"))
     assert "test" in [c.cluster_id for c in fg.get_population("root").get_clusters(cluster_ids="test", tag="test_tag")]
-    assert "test" in [c.cluster_id for c in fg.get_population("root").get_clusters(meta_label="meta_test")]
+    assert "test" in [c.cluster_id for c in fg.get_population("root").get_clusters(meta_labels="meta_test")]
     fg.save()
     with h5py.File(fg.h5path, "r") as f:
         assert "root" in f["clusters"].keys()

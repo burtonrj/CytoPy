@@ -116,7 +116,7 @@ def _population_cluster_statistics(pop: Population,
                                    meta_label: str or None,
                                    tag: str or None):
     data = defaultdict(list)
-    clusters = pop.get_clusters(tag=tag, meta_label=meta_label)
+    clusters = pop.get_clusters(tag=tag, meta_labels=meta_label)
     for c in clusters:
         data["prop_of_population"].append(c.prop_of_events)
         data["cluster_id"].append(c.cluster_id)
