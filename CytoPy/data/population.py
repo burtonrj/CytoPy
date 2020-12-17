@@ -249,7 +249,7 @@ class Population(mongoengine.EmbeddedDocument):
             return [c.cluster_id for c in self.clusters]
 
     def get_clusters(self,
-                     cluster_id: list or None = None,
+                     cluster_ids: list or None = None,
                      tag: str or None = None,
                      meta_label: str or None = None) -> List[Cluster]:
         """
@@ -257,7 +257,7 @@ class Population(mongoengine.EmbeddedDocument):
 
         Parameters
         ----------
-        cluster_id: list
+        cluster_ids: list
         tag: str
         meta_label: str
 
@@ -265,12 +265,14 @@ class Population(mongoengine.EmbeddedDocument):
         -------
         List
         """
-        err = "Provide list of cluster IDs and/or tag and/or meta_label"
-        assert sum([x is not None for x in [tag, meta_label]]) > 0, err
+        assert isinstance(cluster_ids, list), "cluster_ids should be a list of strings"
+        if cluster_ids is None:
+            err = "Provide list of cluster IDs and/or tag and/or meta_label"
+            assert sum([x is not None for x in [tag, meta_label]]) > 0, err
         clusters = self.clusters
-        if cluster_id is not None:
-            cluster_id = list(map(str, cluster_id))
-            clusters = [c for c in clusters if c.cluster_id in cluster_id]
+        if cluster_ids is not None:
+            cluster_ids = list(map(str, cluster_ids))
+            clusters = [c for c in clusters if c.cluster_id in cluster_ids]
         if tag is not None:
             clusters = [c for c in clusters if c.tag == tag]
         if meta_label is not None:

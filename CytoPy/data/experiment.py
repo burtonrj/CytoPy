@@ -977,12 +977,17 @@ class Experiment(mongoengine.Document):
         duplicate_mappings(mappings)
         return mappings
 
-    def delete(self, *args, **kwargs):
+    def delete(self,
+               delete_panel: bool = True,
+               *args,
+               **kwargs):
         """
         Delete Experiment.
 
         Parameters
         ----------
+        delete_panel: bool (default=True)
+            Delete associated panel. Check that other experiments do not depend on the same panel!
         args: list
         kwargs: dict
 
@@ -990,6 +995,8 @@ class Experiment(mongoengine.Document):
         -------
         None
         """
+        if delete_panel:
+            self.panel.delete()
         for f in self.fcs_files:
             f.delete()
         super().delete(*args, **kwargs)
@@ -1051,7 +1058,6 @@ def load_population_data_from_experiment(experiment: Experiment,
                                          transform: str = "logicle",
                                          sample_ids: list or None = None,
                                          verbose: bool = True,
-                                         ctrl: str or None = None,
                                          include_clusters: str or None = None,
                                          additional_columns: list or None = None):
     """
@@ -1059,8 +1065,6 @@ def load_population_data_from_experiment(experiment: Experiment,
     standard exploration dataframe that contains the columns 'sample_id',
     'subject_id', 'cluster_id', 'meta_label' and initialises additional
     columns with null values if specified (additional_columns).
-    If a value of 'ctrl' is given, then load_data will attempt to obtain data
-    from the corresponding control file as opposed to primary stains.
 
 
     Parameters
@@ -1070,7 +1074,6 @@ def load_population_data_from_experiment(experiment: Experiment,
     transform: str
     sample_ids: list, optional
     verbose: bool (default=True)
-    ctrl: str, optional
     include_clusters: str, optional
     additional_columns: list, optional
 
@@ -1083,14 +1086,10 @@ def load_population_data_from_experiment(experiment: Experiment,
     population_data = list()
     for _id in progress_bar(sample_ids, verbose=verbose):
         fg = experiment.get_sample(sample_id=_id)
-        if ctrl is None:
-            pop_data = fg.load_population_df(population=population,
-                                             transform=transform,
-                                             label_downstream_affiliations=True)
-        else:
-            pop_data = fg.load_ctrl_population_df(population=population,
-                                                  transform=transform,
-                                                  ctrl=ctrl)
+        pop_data = fg.load_population_df(population=population,
+                                         transform=transform,
+                                         label_downstream_affiliations=True)
+
         pop_data["sample_id"] = _id
         pop_data["cluster_id"] = None
         pop_data["meta_label"] = None
@@ -1100,6 +1099,54 @@ def load_population_data_from_experiment(experiment: Experiment,
                                      tag=include_clusters,
                                      population=population,
                                      filegroup=fg)
+        population_data.append(pop_data)
+    data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
+                      for df in population_data]).reset_index(drop=True)
+    data.index = list(data.index)
+    for c in additional_columns:
+        data[c] = None
+    return data
+
+
+def load_control_population_from_experiment(experiment: Experiment,
+                                            population: str,
+                                            ctrl: str,
+                                            transform: str = "logicle",
+                                            sample_ids: list or None = None,
+                                            verbose: bool = True,
+                                            additional_columns: list or None = None):
+    """
+    Load Population from a given control from samples in the given Experiment and generate a
+    standard exploration dataframe that contains the columns 'sample_id',
+    'subject_id', and initialises additional columns with null values if specified (additional_columns).
+
+
+    Parameters
+    ----------
+    experiment: Experiment
+    population: str
+    ctrl: str,
+    transform: str
+    sample_ids: list, optional
+    verbose: bool (default=True)
+    additional_columns: list, optional
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
+    additional_columns = additional_columns or list()
+    sample_ids = sample_ids or list(experiment.list_samples())
+    population_data = list()
+    for _id in progress_bar(sample_ids, verbose=verbose):
+        fg = experiment.get_sample(sample_id=_id)
+        pop_data = fg.load_ctrl_population_df(population=population,
+                                              transform=transform,
+                                              ctrl=ctrl)
+        pop_data["sample_id"] = _id
+        pop_data["cluster_id"] = None
+        pop_data["meta_label"] = None
+        pop_data = load_subject_id(pop_data, fg)
         population_data.append(pop_data)
     data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
                       for df in population_data]).reset_index(drop=True)
