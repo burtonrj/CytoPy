@@ -249,7 +249,7 @@ class GatingStrategy(mongoengine.Document):
                                 params: dict,
                                 cost: str or None = None):
         """
-        Add a hyperparameter grid to search which applying the given gate to new data.
+        Add a hyperparameter grid to search when applying the given gate to new data.
         This hyperparameter grid should correspond to valid hyperparameters for the
         corresponding gate. Invalid parameters will be ignored. Choice of the cost
         parameter to be minimised is dependent on the type of gate:
@@ -701,9 +701,9 @@ class GatingStrategy(mongoengine.Document):
             Required for threshold geometries
         y_threshold: float (optional)
         Required for 2D threshold geometries
-        x_values: list
+        x_values: List
             Required for Polygon geometries
-        y_values: list
+        y_values: List
             Required for Polygon geometries
         Returns
         -------
@@ -832,6 +832,7 @@ class GatingStrategy(mongoengine.Document):
         if save_strategy:
             for g in self.gates:
                 g.save()
+            self.last_edit = datetime.now()
             super().save(*args, **kwargs)
         if save_filegroup:
             if self.name not in self.filegroup.gating_strategy:

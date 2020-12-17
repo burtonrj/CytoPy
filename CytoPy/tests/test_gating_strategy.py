@@ -4,26 +4,11 @@ from CytoPy.data.project import Project
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
-import os
 
 
-@pytest.fixture
-def example_experiment():
-    test_project = Project(project_id="test")
-    test_exp = test_project.add_experiment(experiment_id="test experiment",
-                                           data_directory=f"{os.getcwd()}/test_data",
-                                           panel_definition=f"{os.getcwd()}/CytoPy/tests/assets/test_panel.xlsx")
-    test_exp.add_fcs_files(sample_id="test sample",
-                           primary=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
-                           controls={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
-                           compensate=False)
-    yield test_exp
-    test_project.delete()
-
-
-def create_gatingstrategy_and_load(example_experiment):
+def create_gatingstrategy_and_load(example_populated_experiment):
     gs = GatingStrategy(name="test")
-    gs.load_data(experiment=example_experiment,
+    gs.load_data(experiment=example_populated_experiment,
                  sample_id="test sample")
     return gs
 
@@ -93,8 +78,8 @@ def apply_some_gates(gs: GatingStrategy):
     return gs
 
 
-def test_load_data(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_load_data(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     assert gs.filegroup is not None
     assert isinstance(gs.filegroup.data("primary"), pd.DataFrame)
     assert isinstance(gs.filegroup.data("test_ctrl"), pd.DataFrame)
@@ -105,8 +90,8 @@ def test_load_data(example_experiment):
                          [(create_threshold_gate, 4),
                           (create_poly_gate, 1),
                           (create_ellipse_gate, 2)])
-def test_preview_gate(example_experiment, gate, child_n):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_preview_gate(example_populated_experiment, gate, child_n):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gate = gate()
     gs.preview_gate(gate)
     assert len(gate.children) == child_n
@@ -117,8 +102,8 @@ def test_preview_gate(example_experiment, gate, child_n):
                          [(create_threshold_gate, ["root", "Top right", "Top left", "Bottom populations"]),
                           (create_poly_gate, ["root", "Big pop"]),
                           (create_ellipse_gate, ["root", "Big pop", "Little pop"])])
-def test_apply_gate(example_experiment, gate, populations):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_apply_gate(example_populated_experiment, gate, populations):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gate = gate()
     gate.fit(data=gs.filegroup.load_population_df(population=gate.parent,
                                                   transform=None,
@@ -135,8 +120,7 @@ def test_apply_gate(example_experiment, gate, populations):
     else:
         gate.label_children({"A": "Big pop"})
     gs.apply_gate(gate=gate,
-                  plot=True,
-                  print_stats=True)
+                  plot=True)
     plt.show()
     assert set(gs.list_populations()) == set(populations)
     not_root = [p for p in gs.filegroup.populations if p.population_name != "root"]
@@ -145,6 +129,45 @@ def test_apply_gate(example_experiment, gate, populations):
     biggest_pop = [p for p in not_root
                    if p.population_name == "Top right" or p.population_name == "Big pop"][0]
     assert all([len(p.index) <= len(biggest_pop.index) for p in not_root])
+
+
+def test_add_hyperparameter_grid_invalid_gate(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
+    with pytest.raises(AssertionError) as err:
+        gs.add_hyperparameter_grid("invalid",
+                                   params={})
+    assert str(err.value) == "invalid is not a valid gate"
+
+
+def test_add_hyperparameter_grid_threshold(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
+    gate = create_threshold_gate()
+    gate.fit(data=gs.filegroup.load_population_df(population=gate.parent,
+                                                  transform=None,
+                                                  label_downstream_affiliations=False))
+    gate.label_children(labels={"++": "Top right",
+                                "-+": "Top left",
+                                "--": "Bottom populations",
+                                "+-": "Bottom populations"})
+    gs.apply_gate(gate)
+    gs.add_hyperparameter_grid(gate_name=gate.gate_name,
+                               params={"min_peak_threshold": [0.01, 0.1]})
+    assert gs.hyperparameter_search.get(gate.gate_name).get("grid").get("min_peak_threshold") == [0.01, 0.1]
+
+
+def test_add_hyperparameter_grid_ellipse(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
+    gate = create_ellipse_gate()
+    gate.fit(data=gs.filegroup.load_population_df(population=gate.parent,
+                                                  transform=None,
+                                                  label_downstream_affiliations=False))
+    pops = sorted([(c.name, c.geom.x_values) for c in gate.children], key=lambda x: x[1])
+    gate.label_children({pops[0][0]: "Little pop",
+                         pops[1][0]: "Big pop"})
+    gs.apply_gate(gate)
+    gs.add_hyperparameter_grid(gate_name=gate.gate_name,
+                               params={"n_components": [2, 3, 4]})
+    assert gs.hyperparameter_search.get(gate.gate_name).get("grid").get("n_components") == [2, 3, 4]
 
 
 def assert_expected_gated_pops(gs: GatingStrategy):
@@ -170,8 +193,8 @@ def assert_expected_gated_pops(gs: GatingStrategy):
     assert gs.filegroup.get_population("pop2").n > gs.filegroup.get_population("pop4").n
 
 
-def test_apply_downstream(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_apply_downstream(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     assert_expected_gated_pops(gs)
 
@@ -194,16 +217,16 @@ def test_apply_downstream(example_experiment):
                                   method="invalid method",
                                   left="pop4",
                                   right="invalid"), "Accepted methods are: merge, subtract")])
-def test_apply_action_errors(example_experiment, action, err):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_apply_action_errors(example_populated_experiment, action, err):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     with pytest.raises(AssertionError) as e:
         gs.apply_action(action=action)
     assert str(e.value) == err
 
 
-def test_apply_action_merge(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_apply_action_merge(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     action = Action(action_name="test merge",
                     method="merge",
@@ -226,8 +249,8 @@ def test_apply_action_merge(example_experiment):
     assert all([x in gs.filegroup.tree.keys() for x in ["merge_pop3_pop4", "pop3", "pop4"]])
 
 
-def test_apply_action_subtract(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_apply_action_subtract(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     action = Action(action_name="test subtract",
                     method="subtract",
@@ -249,8 +272,8 @@ def test_apply_action_subtract(example_experiment):
     assert all([x in gs.filegroup.tree.keys() for x in ["subtract_pop2_pop4", "pop3", "pop4"]])
 
 
-def test_apply_all(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_apply_all(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     with pytest.raises(AssertionError) as err:
         gs.apply_all()
     assert str(err.value) == "No gates to apply"
@@ -266,39 +289,39 @@ def test_apply_all(example_experiment):
                              "presented in the population tree"
 
 
-def test_delete_gate(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_delete_gate(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     gs.delete_gate("test ellipse")
     assert "test ellipse" not in [g.gate_name for g in gs.gates]
 
 
-def test_plot_gate(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_plot_gate(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     plt.close("all")
     gs.plot_gate(gate=gs.gates[0].gate_name)
     plt.show()
 
 
-def test_plot_gate_by_name(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_plot_gate_by_name(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     plt.close("all")
     gs.plot_gate(gate="test threshold", create_plot_kwargs={"title": "test threshold"})
     plt.show()
 
 
-def test_plot_gate_invalid(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_plot_gate_invalid(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     with pytest.raises(AssertionError) as err:
         gs.plot_gate(gate="test ellipse", y="FS Lin")
     assert str(err.value) == "Can only override y-axis variable for Threshold geometries"
 
 
-def test_plot_backgate(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_plot_backgate(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     plt.close("all")
     gs.plot_backgate(parent="root",
@@ -310,8 +333,8 @@ def test_plot_backgate(example_experiment):
     plt.show()
 
 
-def test_plot_population(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_plot_population(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     plt.close("all")
     gs.plot_population(population="pop1",
@@ -320,8 +343,8 @@ def test_plot_population(example_experiment):
     plt.show()
 
 
-def test_population_stats(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_population_stats(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     stats = gs.filegroup.population_stats(population="root")
     assert isinstance(stats, dict)
@@ -331,8 +354,8 @@ def test_population_stats(example_experiment):
     assert stats.get("prop_of_root") == 1.0
 
 
-def test_save(example_experiment):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_save(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     gs.save()
     gs = GatingStrategy.objects(name="test")
