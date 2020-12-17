@@ -65,7 +65,7 @@ def filter_fcs_files(fcs_dir: str,
         Will ignore any directories with this name
     Returns
     --------
-    list
+    List
         list of fcs file paths
     """
     fcs_files = []
@@ -73,9 +73,9 @@ def filter_fcs_files(fcs_dir: str,
         if os.path.basename(root) == exclude_dir:
             continue
         if exclude_comps:
-            fcs = [f for f in files if f.endswith('.fcs') and f.lower().find('comp') == -1]
+            fcs = [f for f in files if f.lower().endswith('.fcs') and f.lower().find('comp') == -1]
         else:
-            fcs = [f for f in files if f.endswith('.fcs')]
+            fcs = [f for f in files if f.lower().endswith('.fcs')]
         fcs = [os.path.join(root, f) for f in fcs]
         fcs_files = fcs_files + fcs
     return fcs_files
@@ -84,7 +84,8 @@ def filter_fcs_files(fcs_dir: str,
 def get_fcs_file_paths(fcs_dir: str,
                        control_names: list,
                        ctrl_id: str,
-                       ignore_comp: bool = True) -> dict:
+                       ignore_comp: bool = True,
+                       exclude_dir: str = "DUPLICATE") -> dict:
     """
     Generate a standard dictionary object of fcs files in given directory
     Parameters
@@ -97,13 +98,15 @@ def get_fcs_file_paths(fcs_dir: str,
         global identifier for control file e.g. 'FMO' (must appear in filenames)
     ignore_comp: bool, (default=True)
         If True, files with 'compensation' in their name will be ignored (default = True)
+    exclude_dir: str (default = 'DUPLICATES')
+        Will ignore any directories with this name
     Returns
     --------
     dict
         standard dictionary of fcs files contained in target directory
     """
     file_tree = dict(primary=[], controls=[])
-    fcs_files = filter_fcs_files(fcs_dir, exclude_comps=ignore_comp)
+    fcs_files = filter_fcs_files(fcs_dir, exclude_comps=ignore_comp, exclude_dir=exclude_dir)
     ctrl_files = [f for f in fcs_files if f.find(ctrl_id) != -1]
     primary = [f for f in fcs_files if f.find(ctrl_id) == -1]
     for c_name in control_names:
