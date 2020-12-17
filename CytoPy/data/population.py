@@ -182,49 +182,45 @@ class Population(mongoengine.EmbeddedDocument):
         self.clusters.append(cluster)
 
     def delete_cluster(self,
-                       cluster_id: str or None = None,
-                       tag: str or None = None,
-                       meta_label: str or None = None):
+                       tag: str,
+                       cluster_ids: list or None = None,
+                       meta_labels: list or None = None):
         """
-        Delete cluster using either cluster ID, tag, or meta label
+        Delete one or more clusters. Must provide a tag identifier for the selection of clusters
+        to delete from. If only the tag is provided then all clusters with tag are deleted.
+        If cluster ID and/or meta label are provided, deletion is narrowed to clusters with
+        the given values.
 
         Parameters
         ----------
-        cluster_id: str
-        tag: str
-        meta_label: str
+        tag: str, required
+        cluster_ids: list, optional
+        meta_labels: list, optional
 
         Returns
         -------
         None
         """
-        err = "Must provide either cluster_id, tag or meta_label"
-        assert sum([x is not None for x in [cluster_id, tag, meta_label]]) == 1, err
-        if cluster_id:
-            self.clusters = [c for c in self.clusters if c.cluster_id != cluster_id]
-        elif tag:
-            self.clusters = [c for c in self.clusters if c.tag != tag]
-        elif meta_label:
-            self.clusters = [c for c in self.clusters if c.meta_label != meta_label]
+        to_delete = [c for c in self.clusters if c.tag == tag]
+        if cluster_ids and meta_labels is None:
+            to_delete = [c for c in to_delete if c.cluster_id in list(map(str, cluster_ids))]
+        elif meta_labels and cluster_ids is None:
+            to_delete = [c for c in to_delete if c.meta_label in list(map(str, meta_labels))]
+        elif meta_labels and cluster_ids:
+            to_delete = [c for c in to_delete
+                         if c.meta_label in list(map(str, meta_labels)) and
+                         c.cluster_id in list(map(str, cluster_ids))]
+        self.clusters = [c for c in self.clusters if c not in to_delete]
 
-    def delete_all_clusters(self,
-                            clusters: list or str = "all"):
+    def delete_all_clusters(self):
         """
-        Provide either a list of cluster IDs for deletion or give value of "all"
-        to delete all clusters.
-
-        Parameters
-        ----------
-        clusters: list or str (default="all")
+        Delete all clusters.
 
         Returns
         -------
         None
         """
-        if isinstance(clusters, list):
-            self.clusters = [c for c in self.clusters if c.cluster_id not in clusters]
-        else:
-            self.clusters = []
+        self.clusters = []
 
     def list_clusters(self,
                       tag: str or None = None,
@@ -249,42 +245,37 @@ class Population(mongoengine.EmbeddedDocument):
             return [c.cluster_id for c in self.clusters]
 
     def get_clusters(self,
+                     tag: str,
                      cluster_ids: list or None = None,
-                     tag: str or None = None,
-                     meta_label: str or None = None) -> List[Cluster]:
+                     meta_labels: str or None = None) -> List[Cluster]:
         """
-        Returns list of cluster objects by either cluster IDs, tag or meta label
+        Returns list of cluster objects corresponding to the given tag, with
+        the additional option to filter by cluster ID and/or meta label
 
         Parameters
         ----------
-        cluster_ids: list
         tag: str
-        meta_label: str
+        cluster_ids: list, optional
+        meta_labels: list, optional
 
         Returns
         -------
         List
         """
-        assert isinstance(cluster_ids, list), "cluster_ids should be a list of strings"
-        if cluster_ids is None:
-            err = "Provide list of cluster IDs and/or tag and/or meta_label"
-            assert sum([x is not None for x in [tag, meta_label]]) > 0, err
-        clusters = self.clusters
-        if cluster_ids is not None:
-            cluster_ids = list(map(str, cluster_ids))
-            clusters = [c for c in clusters if c.cluster_id in cluster_ids]
-        if tag is not None:
-            clusters = [c for c in clusters if c.tag == tag]
-        if meta_label is not None:
-            clusters = [c for c in clusters if c.meta_label == meta_label]
-        return clusters
+        search = [c for c in self.clusters if c.tag == tag]
+        if cluster_ids:
+            search = [c for c in search if c.cluster_id in list(map(str, cluster_ids))]
+        if meta_labels:
+            search = [c for c in search if c.meta_label in list(map(str, meta_labels))]
+        return search
 
 
 def _check_overlap(left: Population,
                    right: Population,
                    error: bool = True):
     """
-    Given two Population objects assuming that they have Polygon geoms (raises assertion error otherwise), checks if the population geometries overlap.
+    Given two Population objects assuming that they have Polygon geoms (raises assertion error otherwise),
+    checks if the population geometries overlap.
     If error is True, raises assertion error if the geometries do not overlap.
 
     Parameters

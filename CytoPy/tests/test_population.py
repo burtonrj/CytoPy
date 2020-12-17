@@ -68,6 +68,59 @@ def test_population_init():
     assert np.array_equal(x.ctrl_index["x"], np.array([0, 1, 2, 3, 4, 5]))
 
 
+def add_example_clusters(pop: population.Population):
+    for i in range(10):
+        pop.add_cluster(population.Cluster(cluster_id=f"cluster{i}",
+                                           meta_label=f"meta{i}",
+                                           tag="tag1"))
+    for i in range(10):
+        pop.add_cluster(population.Cluster(cluster_id=f"cluster{i}",
+                                           meta_label=f"meta{i}",
+                                           tag="tag2"))
+
+
+def test_population_add_cluster():
+    x = population.Population(population_name="test",
+                              parent="test_parent")
+    add_example_clusters(x)
+    assert len(x.clusters) == 20
+
+
+@pytest.mark.parametrize("params,n", [({"tag": "tag1"}, 10),
+                                      ({"cluster_ids": ["cluster1"],
+                                        "tag": "tag1"}, 19),
+                                      ({"cluster_ids": ["cluster1", "cluster2"],
+                                        "tag": "tag1"}, 18),
+                                      ({"cluster_ids": ["cluster1"],
+                                        "tag": "tag2",
+                                        "meta_labels": ["meta4"]}, 20),
+                                      ({"tag": "tag2",
+                                        "meta_labels": ["meta1", "meta2", "meta3", "meta10"]}, 17)])
+def test_population_delete_cluster(params, n):
+    x = population.Population(population_name="test",
+                              parent="test_parent")
+    add_example_clusters(x)
+    x.delete_cluster(**params)
+    assert len(x.clusters) == n
+
+
+@pytest.mark.parametrize("params,n", [({"tag": "tag1"}, 10),
+                                      ({"cluster_ids": ["cluster1"],
+                                        "tag": "tag1"}, 1),
+                                      ({"cluster_ids": ["cluster1", "cluster2"],
+                                        "tag": "tag1"}, 2),
+                                      ({"cluster_ids": ["cluster1"],
+                                        "tag": "tag2",
+                                        "meta_labels": ["meta4"]}, 0),
+                                      ({"tag": "tag2",
+                                        "meta_labels": ["meta1", "meta2", "meta3", "meta10"]}, 3)])
+def test_population_get_clusters(params, n):
+    x = population.Population(population_name="test",
+                              parent="test_parent")
+    add_example_clusters(x)
+    assert len(x.get_clusters(**params)) == n
+
+
 @pytest.mark.parametrize("ctrl_idx,err", [(("x", "x"), "ctrl_idx should be type numpy.array"),
                                           (("x", [0, 1, 2, 3, 4]), "ctrl_idx should be type numpy.array")])
 def test_population_ctrl_idx_error(ctrl_idx, err):
