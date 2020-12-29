@@ -1,7 +1,7 @@
 from ..feedback import progress_bar
 from .transform import apply_transform
-from scipy.optimize import curve_fit
 from warnings import warn
+from lmfit import Model
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -141,14 +141,32 @@ def five_param_logit(x: np.ndarray,
     return max_ + (n / d)
 
 
-def assert_fitted(func):
+def assert_fitted(method):
+    """
+    Given a function method of AssayTools, inspect the self argument to access
+    standard curves and check that the curve has been fitted. Raises assertion error if
+    condition is not met.
+
+    Parameters
+    ----------
+    method: callable
+
+    Returns
+    -------
+    callable
+        Original method
+
+    Raises
+    ------
+    AssertionError
+    """
     def wrapper(*args, **kwargs):
         assert len(args[0].standard_curves) != 0, "Standard curves have not been computed; call 'fit' prior to " \
                                                   "additional functions"
         if "analyte" in kwargs.keys():
             assert kwargs.get("analyte") in args[0].standard_curves.keys(), \
                 f"Standard curve not detected for {kwargs.get('analyte')}; call 'fit' prior to additional functions"
-        return func(*args, **kwargs)
+        return method(*args, **kwargs)
 
     return wrapper
 
@@ -227,6 +245,22 @@ def r_squared(err: np.ndarray,
 
 
 def _fitting_functions(func: str):
+    """
+    Mapper that translates common name of function to function
+
+    Parameters
+    ----------
+    func: str
+
+    Returns
+    -------
+    callable
+
+    Raises
+    ------
+    AssertionError
+        Raises error if function name is unrecognised
+    """
     funcs = {"linear": linear,
              "poly2": poly2,
              "poly3": poly3,
@@ -329,6 +363,18 @@ class AssayTools:
     def _prepare_standards_data(self,
                                 analyte: str,
                                 transform: str or None = None):
+        """
+        Prepare the standard concentration data for a given analyte using the raw data.
+
+        Parameters
+        ----------
+        analyte: str
+        transform: str, optional
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         standards = self.raw[self.raw.Sample.isin(self.standards)][["Sample", analyte]].copy()
         standard_concs = self.concentrations[self.concentrations.analyte == analyte].copy()
         standard_concs = standard_concs[self.standards].melt(var_name="Sample", value_name="conc")
@@ -343,6 +389,7 @@ class AssayTools:
              func: callable,
              transform: str or None,
              analyte: str,
+             starting_params: dict or None = None,
              **kwargs):
         """
         Fit the standard curve function for a single analyte.
@@ -360,6 +407,7 @@ class AssayTools:
         None
         """
         data = self._prepare_standards_data(analyte=analyte, transform=transform)
+        # model = Model(func)
         params, covar_matrix = curve_fit(func, data[analyte].values, data["conc"].values, **kwargs)
         err = residuals(func,
                         x=data[analyte].values,
@@ -427,6 +475,19 @@ class AssayTools:
 
     def _predict(self,
                  analyte: str):
+        """
+        Under the assumption of an existing standard curve, predict the concentration of the
+        desired analyte (which must be present as a variable in raw data) using the standard curve.
+        Results are stored as a numpy array in predictions.
+
+        Parameters
+        ----------
+        analyte: str
+
+        Returns
+        -------
+        None
+        """
         x = self.raw[~self.raw.Sample.isin(self.standards)][[analyte]]
         transform = self.standard_curves[analyte].get("transform")
         if transform:
@@ -442,6 +503,24 @@ class AssayTools:
     @assert_fitted
     def predict(self,
                 analyte: str or None = None):
+        """
+        Under the assumption of an existing standard curve, predict the concentration of the
+        desired analyte (which must be present as a variable in raw data) using the standard curve.
+        Results are stored as a numpy array in predictions.
+
+        Parameters
+        ----------
+        analyte
+
+        Returns
+        -------
+
+        Raises
+        ------
+        AssertionError
+            If standard curve has not been calculated will raise an error.
+
+        """
         if isinstance(analyte, str):
             self._predict(analyte)
         else:
@@ -451,13 +530,33 @@ class AssayTools:
     def fit_predict(self,
                     func: callable or str,
                     transform: str or None = None,
-                    analyte: str or None = None):
-        self.fit(func=func, transform=transform, analyte=analyte)
-        self.predict(analyte=analyte)
+                    analyte: str or None = None,
+                    **kwargs):
+        """
+        Calculate standard curve for the chosen analyte (see fit method for details) and predict
+        (see predict method for details) concentrations. Predictions are stored to predictions attribute.
 
-    def plot_intensity(self,
-                       transform: str = "norm"):
-        pass
+        Parameters
+        ----------
+        func: str or callable
+            One of the following string values should be provided: "linear", "poly2", "poly3", "4pl" or "5pl"
+            (where 4pl and 5pl are four and five parameter logistic functions, respectively). Alternatively,
+            a custom function can be provided
+        transform: str, optional
+            If provided, should be a valid transform as supported by CytoPy.flow.transforms and will be applied
+            to the dependent variable (standard measurements) and the independent variable (standard concentrations)
+            prior to fitting the function
+        analyte: str, optional
+            The analyte to calculate the standard curve for. If not given, all analytes will be fitted in sequence.
+        kwargs:
+            Additional keyword arguments to pass to scipy.optimise.curve_fit function
+
+        Returns
+        -------
+        None
+        """
+        self.fit(func=func, transform=transform, analyte=analyte, **kwargs)
+        self.predict(analyte=analyte)
 
     @staticmethod
     def _inverse_log(analyte: str,
@@ -467,6 +566,25 @@ class AssayTools:
                      lower_bound: np.ndarray,
                      upper_bound: np.ndarray,
                      transform: str):
+        """
+        Given an analyte that has had some log transform applied apply the inverse to
+        return values on a linear scale
+
+        Parameters
+        ----------
+        analyte: str
+        xx: Numpy.Array
+
+        yhat
+        data
+        lower_bound
+        upper_bound
+        transform
+
+        Returns
+        -------
+
+        """
         inverse_log = {"log": lambda x: np.e ** x,
                        "log2": lambda x: 2 ** x,
                        "log10": lambda x: 10 ** x}
@@ -552,4 +670,8 @@ class AssayTools:
     @assert_fitted
     def statistics(self,
                    factor: str):
+        pass
+
+    @assert_fitted
+    def heatmap(self):
         pass
