@@ -1,6 +1,7 @@
 from ..feedback import progress_bar
 from .transform import apply_transform
 from warnings import warn
+from scipy.optimize import curve_fit
 from lmfit import Model
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -199,51 +200,6 @@ def subtract_background(data: pd.DataFrame,
     return data
 
 
-def residuals(func: callable,
-              x: np.ndarray,
-              y: np.ndarray,
-              params: np.ndarray):
-    """
-    Calculate the residuals for a given function and parameters
-
-    Parameters
-    ----------
-    func: callable
-        Function to be fit
-    x: Numpy.Array
-        Dependent variable
-    y: Numpy.Array
-        Independent variable
-    params: Numpy.Array
-        Parameters to fit
-
-    Returns
-    -------
-    Numpy.Array
-    """
-    return y - func(x, *params)
-
-
-def r_squared(err: np.ndarray,
-              y: np.ndarray):
-    """
-    Given the residuals (error) around some given function and the
-    independent variable, y, return the R-squared value
-
-    Parameters
-    ----------
-    err: Numpy.Array
-    y: Numpy.Array
-
-    Returns
-    -------
-    float
-    """
-    ss_res = np.sum(err ** 2)
-    ss_total = np.sum((y - np.mean(y)) ** 2)
-    return 1 - (ss_res / ss_total)
-
-
 def _fitting_functions(func: str):
     """
     Mapper that translates common name of function to function
@@ -270,11 +226,18 @@ def _fitting_functions(func: str):
     return funcs.get(func)
 
 
-INIT_PARAMS = {"linear": None,
-               "poly2": None,
-               "poly3": None,
-               "4pl": [0, 10000, 0.5, 1],
-               "5pl": [0, 10000, 0.5, 1, 0.5]}
+INIT_PARAMS = {"linear": {},
+               "poly2": {},
+               "poly3": {},
+               "4pl": dict(min_=0,
+                           max_=10000,
+                           inflection_point=0.5,
+                           coef=1),
+               "5pl": dict(min_=0,
+                           max_=10000,
+                           inflection_point=0.5,
+                           coef=1,
+                           asymmetry_factor=0.5)}
 
 
 class AssayTools:
@@ -389,7 +352,7 @@ class AssayTools:
              func: callable,
              transform: str or None,
              analyte: str,
-             starting_params: dict or None = None,
+             starting_params: dict,
              **kwargs):
         """
         Fit the standard curve function for a single analyte.
@@ -406,43 +369,41 @@ class AssayTools:
         -------
         None
         """
-        data = self._prepare_standards_data(analyte=analyte, transform=transform)
-        # model = Model(func)
-        params, covar_matrix = curve_fit(func, data[analyte].values, data["conc"].values, **kwargs)
-        err = residuals(func,
-                        x=data[analyte].values,
-                        y=data["conc"].values,
-                        params=params)
-        self.standard_curves[analyte] = {"params": params,
-                                         "transform": transform,
+        standards = self._prepare_standards_data(analyte=analyte, transform=transform)
+        model = Model(func)
+        params = model.make_params(**starting_params)
+        self.standard_curves[analyte] = {"transform": transform,
                                          "function": func,
-                                         "residuals": err,
-                                         "r_squared": r_squared(err=err, y=data["conc"].values),
-                                         "sigma": np.sqrt(np.diagonal(covar_matrix))}
+                                         "model_result": model.fit(standards["conc"].values,
+                                                                   params=params,
+                                                                   x=standards[analyte].values,
+                                                                   **kwargs)}
 
     def fit(self,
             func: callable or str,
             transform: str or None = None,
             analyte: str or None = None,
+            starting_params: dict or None = None,
             **kwargs):
         """
         Fit a function to generate one ore more standard curves. The standard curves
-        are generated using SciPy's curve_fit function, which uses least squares regression.
-        The results of each standard curve, one for each analyte, are stored in a dictionary
-        in the standard_curves attribute. The curves are stored like so:
+        are generated using the lmfit library (https://lmfit.github.io/), which uses least squares regression.
+        For the chosen function a Model is created, initialised with some starting parameters. The resulting
+        fit generates a ModelResult object which is stored in the standard_curves attribute, which is a
+        dictionary where the key corresponds to the analyte and the value a nested dictionary like so:
 
-        {"params": the estimated parameters for optimal fit,
-         "transform": transformation applied prior to fitting,
+        {"transform": transformation applied prior to fitting,
          "function": function used to generate standard curve,
-         "residuals": residuals for fitted function,
-         "r_squared": r-squared value for fitted function",
-         "sigma": rough approximation of the error for the estimated parameters}
+         "model_result": ModelResult object}
+
+         For more details regarding a ModelResult object, see the lmfit documentation here:
+         See https://lmfit.github.io/lmfit-py/model.html?highlight=modelresult#the-modelresult-class
 
         If the function fails to estimate the optimal parameters, indicated by a RuntimeError,
         you can try modifying the starting parameters. By default the parameters from
-        CytoPy.flow.ext_tools.INIT_PARAMS are used but can be overwritten by passing an array of
-        values as the 'p0' parameter in kwargs. The positional order of this array should match the order of
-        parameters for the chosen function.
+        CytoPy.flow.ext_tools.INIT_PARAMS are used but can be overwritten by passing a dictionary of
+        parameter values to starting_params. Additionally you can try increasing the number of
+        evaluations by passing a value for max_nfev (usually 1000-10000 will work).
 
         Parameters
         ----------
@@ -456,6 +417,9 @@ class AssayTools:
             prior to fitting the function
         analyte: str, optional
             The analyte to calculate the standard curve for. If not given, all analytes will be fitted in sequence.
+        starting_params: dict, optional
+            Staring parameters for chosen function. If not provided, default starting values will be used
+            depending on the given function. See CytoPy.flow.ext_tools.INIT_PARAMS for specifics.
         kwargs:
             Additional keyword arguments to pass to scipy.optimise.curve_fit function
 
@@ -465,13 +429,13 @@ class AssayTools:
         """
         if isinstance(func, str):
             func = _fitting_functions(func)
-            kwargs["p0"] = kwargs.get("p0") or INIT_PARAMS.get(func)
-            kwargs["maxfev"] = kwargs.get("maxfev") or 10000
+        if starting_params is None:
+            starting_params = INIT_PARAMS.get(func, {})
         if isinstance(analyte, str):
-            self._fit(func, transform, analyte, **kwargs)
+            self._fit(func, transform, analyte, starting_params, **kwargs)
         else:
             for analyte in progress_bar(self.analytes):
-                self._fit(func, transform, analyte, **kwargs)
+                self._fit(func, transform, analyte, starting_params, **kwargs)
 
     def _predict(self,
                  analyte: str):
@@ -494,8 +458,7 @@ class AssayTools:
             x = apply_transform(x, features_to_transform=[analyte], transform_method=transform)[analyte].values
         else:
             x = x[analyte].values
-        params = self.standard_curves[analyte].get("params")
-        yhat = self.standard_curves[analyte].get("function")(x, *params)
+        yhat = self.standard_curves[analyte].get("model_result").eval(x=x)
         if np.isnan(yhat).any():
             warn("One or more predicted values are Null; will be replaced with zeros")
         self._predictions[analyte] = np.nan_to_num(yhat)
@@ -599,20 +562,16 @@ class AssayTools:
     @assert_fitted
     def plot_standard_curve(self,
                             analyte: str,
+                            sigma: float = 0.95,
                             ax: plt.Axes or None = None):
         ax = ax or plt.subplots(figsize=(8, 8))[1]
-        if analyte not in self._predictions.keys():
-            self.predict(analyte=analyte)
-
         data = self._prepare_standards_data(analyte=analyte,
                                             transform=self.standard_curves.get(analyte).get("transform"))
         xx = np.linspace(data[analyte].min() - (data[analyte].min() * 0.01),
                          data[analyte].max() + (data[analyte].max() * 0.01))
-        params = self.standard_curves.get(analyte).get("params")
-        yhat = self.standard_curves.get(analyte).get("function")(xx, *params)
-        sigma = self.standard_curves.get(analyte).get("sigma")
-        upper_bound = self.standard_curves.get(analyte).get("function")(xx, *(params + sigma))
-        lower_bound = self.standard_curves.get(analyte).get("function")(xx, *(params - sigma))
+        yhat = self.standard_curves[analyte].get("model_result").eval(x=xx)
+        conf = self.standard_curves[analyte].get("model_result").eval_uncertainty(x=xx)
+        lower_bound, upper_bound = yhat - conf, yhat + conf
         applied_transform = self.standard_curves.get(analyte).get("transform")
         if applied_transform in ["log", "log2", "log10"]:
             xx, yhat, data, lower_bound, upper_bound = self._inverse_log(analyte=analyte,
