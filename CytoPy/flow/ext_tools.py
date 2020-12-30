@@ -1,83 +1,19 @@
 from ..feedback import progress_bar
+from .descriptives import box_swarm_plot
 from .transform import apply_transform
 from warnings import warn
-from scipy.optimize import curve_fit
+from lmfit.models import LinearModel, QuadraticModel, PolynomialModel
 from lmfit import Model
+from abc import ABC
 import matplotlib.pyplot as plt
+import seaborn as sns
+import pingouin
 import pandas as pd
 import numpy as np
 
-
-def linear(x: np.ndarray,
-           coef: float,
-           bias: float):
-    """
-    Function to fit a line to data points 'x'
-
-    Parameters
-    ----------
-    x: Numpy.Array
-    coef: float
-        Slope or 'coefficient' of the 'curve' (straight line)
-    bias: float
-        Bias term (i.e the error or noise)
-
-    Returns
-    -------
-    Numpy.Array
-    """
-    return coef * x + bias
-
-
-def poly2(x: np.ndarray,
-          coef1: float,
-          coef2: float,
-          bias: float):
-    """
-    Second order polynomial function
-
-    Parameters
-    ----------
-    x: Numpy.Array
-    coef1: float
-        First coefficient or "slope"
-    coef2: float
-        Second coefficient
-    bias: float
-        Bias term (i.e the error or noise)
-
-    Returns
-    -------
-    Numpy.Array
-    """
-    return coef1 * x + coef2 * x ** 2 + bias
-
-
-def poly3(x: np.ndarray,
-          coef1: float,
-          coef2: float,
-          coef3: float,
-          bias: float):
-    """
-    Third order polynomial function i.e. a cubic function
-
-    Parameters
-    ----------
-    x: Numpy.Array
-    coef1: float
-        First coefficient or "slope steepness"
-    coef2: float
-        Second coefficient or "slope steepness"
-    coef3: float
-        Third coefficient or "slope steepness"
-    bias: float
-        Bias term (i.e the error or noise)
-
-    Returns
-    -------
-    Numpy.Array
-    """
-    return coef1 * x + coef2 * x ** 2 + coef3 * x ** 3 + bias
+INVERSE_LOG = {"log": lambda x: np.e ** x,
+               "log2": lambda x: 2 ** x,
+               "log10": lambda x: 10 ** x}
 
 
 def four_param_logit(x: np.ndarray,
@@ -116,7 +52,7 @@ def five_param_logit(x: np.ndarray,
                      coef: float,
                      asymmetry_factor: float = 1.0):
     """
-    Four parameter logistic function.
+    Five parameter logistic function.
 
     Parameters
     ----------
@@ -142,6 +78,99 @@ def five_param_logit(x: np.ndarray,
     return max_ + (n / d)
 
 
+class Logit(Model, ABC):
+    """
+    Logistic curve fitting model with either four or five parameters. Inherits from lmfit.Model.
+    When constructed user should specify whether to use four or five parameter fit by specifying
+    True or False for the 'five_parameter_fit' parameter. If 'use_default_params' is set to True, then
+    the following parameter hints will be set (name: value [lower bound, upper bound]):
+    * min_: 0 [-1e4,  1e4]
+    * max_: 1e4 [1, 1e6]
+    * inflection_point: 0.5 [1e-4, 1]
+    * coef: 1 [1e-4, 1e4]
+    * asymmetry_factor (only for five parameter fit): 0.5 [1e-4, 1]
+
+    If you feel that these default starting parameters do not reflect your dataset, then set "use_default_params"
+    to False and set parameter hints as per lmfit docs:
+    https://lmfit.github.io/lmfit-py/model.html#initializing-values-with-model-make-params
+    """
+
+    def __init__(self,
+                 five_parameter_fit: bool = True,
+                 use_default_params: bool = True,
+                 **kws):
+        func = five_param_logit
+        if not five_parameter_fit:
+            func = four_param_logit
+        super().__init__(func, **kws)
+        if use_default_params:
+            self.set_param_hint(name="min_",
+                                value=0,
+                                min=-1e4,
+                                max=1e4)
+            self.set_param_hint(name="max_",
+                                value=1e4,
+                                min=1,
+                                max=1e6)
+            self.set_param_hint(name="inflection_point",
+                                value=0.5,
+                                min=1e-4,
+                                max=1)
+            self.set_param_hint(name="coef",
+                                value=1,
+                                min=1e-4,
+                                max=1e4)
+            if five_parameter_fit:
+                self.set_param_hint(name="asymmetry_factor",
+                                    value=0.5,
+                                    min=1e-4,
+                                    max=1)
+
+
+def default_models(model: str,
+                   model_init_kwargs: dict or None = None):
+    """
+    Generates a default Model object of either Linear, Polynomial, Quadratic or Logistic function.
+
+    Parameters
+    ----------
+    model: str
+        Should be one of linear', 'quad', 'poly', or 'logit'
+    model_init_kwargs: dict, optional
+        Additional keyword arguments passed when constructing Model
+
+    Returns
+    -------
+    Model
+
+    Raises
+    -------
+    ValueError
+        If model is not one of 'linear', 'quad', 'poly', or 'logit'
+    """
+    model_init_kwargs = model_init_kwargs or {}
+    if model == "linear":
+        model = LinearModel(**model_init_kwargs)
+        model.set_param_hint(name="intercept", value=1, min=-1e9, max=1e9)
+        model.set_param_hint(name="slope", value=0.5, min=1e-9, max=1e9)
+        return model
+    if model == "quad":
+        model = QuadraticModel(**model_init_kwargs)
+        model.set_param_hint("a", value=0.5, min=1e-5, max=1e5)
+        model.set_param_hint("b", value=0.5, min=1e-5, max=1e5)
+        model.set_param_hint("c", value=0.5, min=1e-5, max=1e5)
+        return model
+    if model == "poly":
+        degree = model_init_kwargs.pop("degree", 2)
+        model = PolynomialModel(degree=degree, **model_init_kwargs)
+        for i in range(degree):
+            model.set_param_hint(name=f"c{i}", value=0.5, min=1e-9, max=1e9)
+        return model
+    if model == "logit":
+        return Logit(use_default_params=True, **model_init_kwargs)
+    raise ValueError("Invalid model, must be one of: 'linear', 'quad', 'poly', or 'logit'")
+
+
 def assert_fitted(method):
     """
     Given a function method of AssayTools, inspect the self argument to access
@@ -161,6 +190,7 @@ def assert_fitted(method):
     ------
     AssertionError
     """
+
     def wrapper(*args, **kwargs):
         assert len(args[0].standard_curves) != 0, "Standard curves have not been computed; call 'fit' prior to " \
                                                   "additional functions"
@@ -200,51 +230,18 @@ def subtract_background(data: pd.DataFrame,
     return data
 
 
-def _fitting_functions(func: str):
-    """
-    Mapper that translates common name of function to function
-
-    Parameters
-    ----------
-    func: str
-
-    Returns
-    -------
-    callable
-
-    Raises
-    ------
-    AssertionError
-        Raises error if function name is unrecognised
-    """
-    funcs = {"linear": linear,
-             "poly2": poly2,
-             "poly3": poly3,
-             "4pl": four_param_logit,
-             "5pl": five_param_logit}
-    assert func in funcs.keys(), f"{func} is an invalid function, must be one of {funcs.keys()}"
-    return funcs.get(func)
-
-
-INIT_PARAMS = {"linear": {},
-               "poly2": {},
-               "poly3": {},
-               "4pl": dict(min_=0,
-                           max_=10000,
-                           inflection_point=0.5,
-                           coef=1),
-               "5pl": dict(min_=0,
-                           max_=10000,
-                           inflection_point=0.5,
-                           coef=1,
-                           asymmetry_factor=0.5)}
-
-
 class AssayTools:
     """
     Tools for analysis of plate based assay data such as ELISAs and Luminex assays.
     Calculate standard curves, predict concentrations, transform data, as well as
     access to various plotting functions and statistical tests.
+
+    AssayTools makes heavy use of the lmfit library for fitting curves to data. We recommend the user
+    consults their documentation for more information and troubleshooting: https://lmfit.github.io/
+
+    The results of fitted curves are stored in the attribute 'predictions' as a dictionary where each key
+    is the analyte name and the value a nested dictionary containing the transform applied and the ModelResult
+    object.
 
     Attributes
     ----------
@@ -323,6 +320,17 @@ class AssayTools:
         raise ValueError("Predictions is a read-only property. Call fit_predict to fit standard curves and "
                          "popualte predictions.")
 
+    @property
+    def predictions_linear(self):
+        x = self.predictions
+        for analyte in self._predictions.keys():
+            transform = self.standard_curves.get(analyte).get("transform")
+            if transform in ["log", "log2", "log10"]:
+                x[analyte] = x[analyte].apply(INVERSE_LOG.get(transform))
+            elif transform is not None:
+                warn(f"Transform {transform} applied to analyte {analyte} does not have a supported inverse function")
+        return x
+
     def _prepare_standards_data(self,
                                 analyte: str,
                                 transform: str or None = None):
@@ -349,68 +357,79 @@ class AssayTools:
         return standards
 
     def _fit(self,
-             func: callable,
+             model: Model,
              transform: str or None,
              analyte: str,
-             starting_params: dict,
+             params: dict or None = None,
+             guess_start_params: bool = True,
              **kwargs):
         """
         Fit the standard curve function for a single analyte.
 
         Parameters
         ----------
-        func: callable
+        model: Model
         transform: str
         analyte: str
+        params: dict, optional
+            Optional starting parameters; will overwrite defaults
         kwargs:
-            Additional keyword arguments to pass to scipy.optimise.curve_fit function
+            Additional keyword arguments to pass to Model.fit call
 
         Returns
         -------
         None
         """
+        params = params or {}
         standards = self._prepare_standards_data(analyte=analyte, transform=transform)
-        model = Model(func)
-        params = model.make_params(**starting_params)
+        if guess_start_params:
+            try:
+                params = model.guess(data=standards["conc"].values,
+                                     x=standards[analyte].values)
+            except NotImplementedError:
+                params = model.make_params(**params)
+        else:
+            params = model.make_params(**params)
         self.standard_curves[analyte] = {"transform": transform,
-                                         "function": func,
                                          "model_result": model.fit(standards["conc"].values,
                                                                    params=params,
                                                                    x=standards[analyte].values,
                                                                    **kwargs)}
 
     def fit(self,
-            func: callable or str,
+            model: Model or str,
             transform: str or None = None,
             analyte: str or None = None,
             starting_params: dict or None = None,
+            guess_start_params: bool = True,
+            model_init_kwargs: dict or None = None,
             **kwargs):
         """
-        Fit a function to generate one ore more standard curves. The standard curves
+        Fit a function to generate one or more standard curves. The standard curves
         are generated using the lmfit library (https://lmfit.github.io/), which uses least squares regression.
-        For the chosen function a Model is created, initialised with some starting parameters. The resulting
-        fit generates a ModelResult object which is stored in the standard_curves attribute, which is a
+        A Model object should be provided or a string value which will load a default model for convenience.
+        If starting_params is provided, then the specified starting parameters will be used for the initial fit,
+        otherwise defaults are used.
+        The resulting fit generates a ModelResult object which is stored in the standard_curves attribute, which is a
         dictionary where the key corresponds to the analyte and the value a nested dictionary like so:
 
         {"transform": transformation applied prior to fitting,
-         "function": function used to generate standard curve,
          "model_result": ModelResult object}
 
          For more details regarding a ModelResult object, see the lmfit documentation here:
          See https://lmfit.github.io/lmfit-py/model.html?highlight=modelresult#the-modelresult-class
 
         If the function fails to estimate the optimal parameters, indicated by a RuntimeError,
-        you can try modifying the starting parameters. By default the parameters from
-        CytoPy.flow.ext_tools.INIT_PARAMS are used but can be overwritten by passing a dictionary of
-        parameter values to starting_params. Additionally you can try increasing the number of
-        evaluations by passing a value for max_nfev (usually 1000-10000 will work).
+        you can try modifying the starting parameters or increasing the number of
+        evaluations by passing a value for max_nfev (usually 1000-10000 will work) in kwargs.
 
         Parameters
         ----------
-        func: str or callable
-            One of the following string values should be provided: "linear", "poly2", "poly3", "4pl" or "5pl"
-            (where 4pl and 5pl are four and five parameter logistic functions, respectively). Alternatively,
-            a custom function can be provided
+        model: Model or str
+            A valid lmfit.Model object. Alternatively, for convenience, one of the following string values can be
+            provided: "linear", "quad", "poly" or "logit", generating a LinearModel, QuadraticModel, PolynomialModel
+            or "Logit" model. If  "logit" is used, then this will default to a five parameter logistic fit with
+            default starting parameters (see CytoPy.flow.ext_tools.Logit for details).
         transform: str, optional
             If provided, should be a valid transform as supported by CytoPy.flow.transforms and will be applied
             to the dependent variable (standard measurements) and the independent variable (standard concentrations)
@@ -419,23 +438,26 @@ class AssayTools:
             The analyte to calculate the standard curve for. If not given, all analytes will be fitted in sequence.
         starting_params: dict, optional
             Staring parameters for chosen function. If not provided, default starting values will be used
-            depending on the given function. See CytoPy.flow.ext_tools.INIT_PARAMS for specifics.
+            depending on the given model. If parameters hints have been defined this will overwrite those values.
+        guess_start_params: bool (default=True)
+            If True, will attempt to guess the optimal starting parameters
+        model_init_kwargs: dict, optional
+            Optional additional keyword arguments to pass if 'model' is of type String. Default models will be
+            initialised with the given parameters.
         kwargs:
-            Additional keyword arguments to pass to scipy.optimise.curve_fit function
+            Additional keyword arguments to pass to Model.fit call
 
         Returns
         -------
         None
         """
-        if isinstance(func, str):
-            func = _fitting_functions(func)
-        if starting_params is None:
-            starting_params = INIT_PARAMS.get(func, {})
+        if isinstance(model, str):
+            model = default_models(model=model, model_init_kwargs=model_init_kwargs)
         if isinstance(analyte, str):
-            self._fit(func, transform, analyte, starting_params, **kwargs)
+            self._fit(model, transform, analyte, starting_params, guess_start_params, **kwargs)
         else:
             for analyte in progress_bar(self.analytes):
-                self._fit(func, transform, analyte, starting_params, **kwargs)
+                self._fit(model, transform, analyte, starting_params, guess_start_params, **kwargs)
 
     def _predict(self,
                  analyte: str):
@@ -491,9 +513,12 @@ class AssayTools:
                 self._predict(analyte)
 
     def fit_predict(self,
-                    func: callable or str,
+                    model: Model or str,
                     transform: str or None = None,
                     analyte: str or None = None,
+                    starting_params: dict or None = None,
+                    guess_start_params: bool = True,
+                    model_init_kwargs: dict or None = None,
                     **kwargs):
         """
         Calculate standard curve for the chosen analyte (see fit method for details) and predict
@@ -501,16 +526,25 @@ class AssayTools:
 
         Parameters
         ----------
-        func: str or callable
-            One of the following string values should be provided: "linear", "poly2", "poly3", "4pl" or "5pl"
-            (where 4pl and 5pl are four and five parameter logistic functions, respectively). Alternatively,
-            a custom function can be provided
+        model: Model or str
+            A valid lmfit.Model object. Alternatively, for convenience, one of the following string values can be
+            provided: "linear", "quad", "poly" or "logit", generating a LinearModel, QuadraticModel, PolynomialModel
+            or "Logit" model. If  "logit" is used, then this will default to a five parameter logistic fit with
+            default starting parameters (see CytoPy.flow.ext_tools.Logit for details).
         transform: str, optional
             If provided, should be a valid transform as supported by CytoPy.flow.transforms and will be applied
             to the dependent variable (standard measurements) and the independent variable (standard concentrations)
             prior to fitting the function
         analyte: str, optional
             The analyte to calculate the standard curve for. If not given, all analytes will be fitted in sequence.
+        starting_params: dict, optional
+            Staring parameters for chosen function. If not provided, default starting values will be used
+            depending on the given model. If parameters hints have been defined this will overwrite those values.
+        guess_start_params: bool (default=True)
+            If True, will attempt to guess the optimal starting parameters
+        model_init_kwargs: dict, optional
+            Optional additional keyword arguments to pass if 'model' is of type String. Default models will be
+            initialised with the given parameters.
         kwargs:
             Additional keyword arguments to pass to scipy.optimise.curve_fit function
 
@@ -518,7 +552,13 @@ class AssayTools:
         -------
         None
         """
-        self.fit(func=func, transform=transform, analyte=analyte, **kwargs)
+        self.fit(model=model,
+                 transform=transform,
+                 analyte=analyte,
+                 starting_params=starting_params,
+                 guess_start_params=guess_start_params,
+                 model_init_kwargs=model_init_kwargs,
+                 **kwargs)
         self.predict(analyte=analyte)
 
     @staticmethod
@@ -526,8 +566,6 @@ class AssayTools:
                      xx: np.ndarray,
                      yhat: np.ndarray,
                      data: pd.DataFrame,
-                     lower_bound: np.ndarray,
-                     upper_bound: np.ndarray,
                      transform: str):
         """
         Given an analyte that has had some log transform applied apply the inverse to
@@ -537,53 +575,47 @@ class AssayTools:
         ----------
         analyte: str
         xx: Numpy.Array
-
         yhat
         data
-        lower_bound
-        upper_bound
         transform
 
         Returns
         -------
 
         """
-        inverse_log = {"log": lambda x: np.e ** x,
-                       "log2": lambda x: 2 ** x,
-                       "log10": lambda x: 10 ** x}
-        xx = list(map(inverse_log.get(transform), xx))
-        yhat = list(map(inverse_log.get(transform), yhat))
-        lower_bound = list(map(inverse_log.get(transform), lower_bound))
-        upper_bound = list(map(inverse_log.get(transform), upper_bound))
-        data[analyte] = data[analyte].apply(inverse_log.get(transform))
-        data["conc"] = data["conc"].apply(inverse_log.get(transform))
-        return xx, yhat, data, lower_bound, upper_bound
+        xx = list(map(INVERSE_LOG.get(transform), xx))
+        yhat = list(map(INVERSE_LOG.get(transform), yhat))
+        data[analyte] = data[analyte].apply(INVERSE_LOG.get(transform))
+        data["conc"] = data["conc"].apply(INVERSE_LOG.get(transform))
+        return xx, yhat, data
 
     @assert_fitted
     def plot_standard_curve(self,
                             analyte: str,
-                            sigma: float = 0.95,
+                            scatter_kwargs: dict or None = None,
+                            line_kwargs: dict or None = None,
                             ax: plt.Axes or None = None):
         ax = ax or plt.subplots(figsize=(8, 8))[1]
+        scatter_kwargs = scatter_kwargs or dict(facecolor="white",
+                                                edgecolor="k",
+                                                s=30,
+                                                alpha=1,
+                                                zorder=2)
+        line_kwargs = line_kwargs or dict(zorder=1)
         data = self._prepare_standards_data(analyte=analyte,
                                             transform=self.standard_curves.get(analyte).get("transform"))
         xx = np.linspace(data[analyte].min() - (data[analyte].min() * 0.01),
                          data[analyte].max() + (data[analyte].max() * 0.01))
         yhat = self.standard_curves[analyte].get("model_result").eval(x=xx)
-        conf = self.standard_curves[analyte].get("model_result").eval_uncertainty(x=xx)
-        lower_bound, upper_bound = yhat - conf, yhat + conf
         applied_transform = self.standard_curves.get(analyte).get("transform")
         if applied_transform in ["log", "log2", "log10"]:
-            xx, yhat, data, lower_bound, upper_bound = self._inverse_log(analyte=analyte,
-                                                                         xx=xx,
-                                                                         yhat=yhat,
-                                                                         data=data,
-                                                                         upper_bound=upper_bound,
-                                                                         lower_bound=lower_bound,
-                                                                         transform=applied_transform)
-        ax.scatter(data[analyte], data["conc"], facecolor="white", edgecolor="k", s=10, alpha=1)
-        ax.plot(xx, yhat, "black")
-        ax.fill_between(xx, lower_bound, upper_bound, color="black", alpha=0.15)
+            xx, yhat, data = self._inverse_log(analyte=analyte,
+                                               xx=xx,
+                                               yhat=yhat,
+                                               data=data,
+                                               transform=applied_transform)
+        ax.scatter(data[analyte], data["conc"], **scatter_kwargs)
+        ax.plot(xx, yhat, "black", **line_kwargs)
         base = {"log": np.e,
                 "log2": 2,
                 "log10": 10}
@@ -595,26 +627,79 @@ class AssayTools:
         return ax
 
     @assert_fitted
-    def plot_repeat_measures(self):
-        pass
-        # https://pingouin-stats.org/generated/pingouin.plot_paired.html#pingouin.plot_paired
+    def coef_var(self,
+                 analyte: str,
+                 linear_scale: bool = True):
+        x = self.predictions
+        if linear_scale:
+            x = self.predictions_linear
+        x = (x.groupby("Sample")[analyte].std()/x.groupby("Sample")[analyte].mean()).reset_index()
+        return x.sort_values(analyte)
+
+    @assert_fitted
+    def plot_repeat_measures(self,
+                             analyte: str,
+                             log_axis: bool = True,
+                             ax: plt.Axes or None = None,
+                             mask: pd.DataFrame or None = None,
+                             **kwargs):
+        ax = ax or plt.subplots(figsize=(7, 7))[1]
+        if analyte not in self.predictions.columns:
+            self.predict(analyte=analyte)
+        x = self.predictions
+        if mask is not None:
+            x = x[mask].copy()
+        if log_axis:
+            x = self.predictions_linear
+        x["Duplication index"] = x.groupby("Sample").cumcount() + 1
+        ax = pingouin.plot_paired(data=x,
+                                  dv=analyte,
+                                  within="Duplication index",
+                                  subject="Sample",
+                                  boxplot=False,
+                                  ax=ax,
+                                  colors=['grey', 'grey', 'grey'],
+                                  **kwargs)
+        if log_axis:
+            ax.set_yscale("log")
+        return ax
 
     @assert_fitted
     def plot_shift(self,
                    analyte: str,
-                   factor: str):
-        # https://pingouin-stats.org/generated/pingouin.plot_shift.html#pingouin.plot_shift
-        pass
+                   factor: str,
+                   **kwargs):
+        assert factor in self.raw.columns, "Factor is not a valid variable. You can generate meta variables with the " \
+                                           "'load_meta' function"
+        assert self.raw[factor].nunique() == 2, "Factor must be binary"
+        if analyte not in self.predictions.columns:
+            self.predict(analyte=analyte)
+        df = self.predictions
+        factor_values = df[factor].unique()
+        x = df[df[factor] == factor_values[0]][analyte].values
+        y = df[df[factor] == factor_values[1]][analyte].values
+        return pingouin.plot_shift(x, y, **kwargs)
 
     @assert_fitted
-    def corr_matrix(self):
-        pass
+    def corr_matrix(self,
+                    method="spearman",
+                    mask: pd.DataFrame or None = None,
+                    **kwargs):
+        df = self.predictions
+        if mask is not None:
+            df = df[mask].copy()
+        df = df[["Sample"] + [x for x in self._predictions.keys()]]
+        corr = df.groupby("Sample").mean().corr(method=method)
+        return sns.clustermap(data=corr, **kwargs)
 
     @assert_fitted
     def plot_box_swarm(self,
                        analyte: str,
                        factor: str):
-        pass
+        assert factor in self.raw.columns, "Factor is not a valid variable. You can generate meta variables with the " \
+                                           "'load_meta' function"
+        if analyte not in self.predictions.columns:
+            self.predict(analyte=analyte)
 
     @assert_fitted
     def volcano_plot(self,
@@ -629,8 +714,4 @@ class AssayTools:
     @assert_fitted
     def statistics(self,
                    factor: str):
-        pass
-
-    @assert_fitted
-    def heatmap(self):
         pass
