@@ -154,13 +154,14 @@ def test_fit_predict_one_analyte(load_example_data, model, transform):
     assert not example.predictions["CXCL10"].isna().any()
 
 
-def test_plot_standard_curve(load_example_data):
+@pytest.mark.parametrize("overlay_predictions", [False, True])
+def test_plot_standard_curve(load_example_data, overlay_predictions):
     example = ext_tools.AssayTools(data=load_example_data.get("data"),
                                    conc=load_example_data.get("conc"),
                                    background_id="Background0",
                                    standards=[f"Standard{i + 1}" for i in range(6)][::-1])
     example.fit_predict(model="logit", transform="log10", analyte="CXCL10")
-    example.plot_standard_curve(analyte="CXCL10")
+    example.plot_standard_curve(analyte="CXCL10", overlay_predictions=overlay_predictions)
     plt.show()
 
 

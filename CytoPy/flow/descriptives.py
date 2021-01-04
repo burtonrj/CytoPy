@@ -108,7 +108,7 @@ def stat_test(*data,
         assert len(data) == len(data_labels), "length of data does not match length of data labels"
     data_labels = data_labels or [f'data{i + 1}' for i in range(len(data))]
 
-    # Interate over each dataframe
+    # Iterate over each dataframe
     stats = list()
     for df, label in zip(data, data_labels):
         # Convert to long

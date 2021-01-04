@@ -1,3 +1,4 @@
+from ..data import subject
 from ..feedback import progress_bar
 from .descriptives import box_swarm_plot
 from .transform import apply_transform
@@ -6,6 +7,7 @@ from lmfit.models import LinearModel, QuadraticModel, PolynomialModel
 from lmfit import Model
 from abc import ABC
 import matplotlib.pyplot as plt
+import plotly.express as px
 import seaborn as sns
 import pingouin
 import pandas as pd
@@ -14,6 +16,9 @@ import numpy as np
 INVERSE_LOG = {"log": lambda x: np.e ** x,
                "log2": lambda x: 2 ** x,
                "log10": lambda x: 10 ** x}
+BASE = {"log": np.e,
+        "log2": 2,
+        "log10": 10}
 
 
 def four_param_logit(x: np.ndarray,
@@ -561,40 +566,95 @@ class AssayTools:
                  **kwargs)
         self.predict(analyte=analyte)
 
-    @staticmethod
-    def _inverse_log(analyte: str,
-                     xx: np.ndarray,
-                     yhat: np.ndarray,
-                     data: pd.DataFrame,
-                     transform: str):
+    def _inverse_log(self,
+                     *args,
+                     analyte: str):
         """
-        Given an analyte that has had some log transform applied apply the inverse to
-        return values on a linear scale
+        For one or more arrays associated to some given analyte, apply the inverse log function according to the
+        base logarithm applied to that analyte when generating its standard curve.
+
+        Parameters
+        ----------
+        args: List[Array]
+            One or more array(s)
+        analyte: str
+            Analyte in question
+        Returns
+        -------
+        List[Array]
+            List of transformed arrays
+        """
+        applied_transform = self.standard_curves.get(analyte).get("transform")
+        if applied_transform in ["log", "log2", "log10"]:
+            return [list(map(INVERSE_LOG.get(applied_transform), x)) for x in args]
+        return args
+
+    def _overlay_predictions(self,
+                             analyte: str,
+                             ax: plt.Axes,
+                             plot_kwargs: dict or None = None):
+        """
+        Given the standard curve of an analyte (ax) overlay the predicted values for this analyte
+        as scatter points.
 
         Parameters
         ----------
         analyte: str
-        xx: Numpy.Array
-        yhat
-        data
-        transform
+        ax: Matplotlib.Axes
+        plot_kwargs: dict, optional
+            Passed to Axes.scatter call (overwrites defaults)
 
         Returns
         -------
-
+        Matplotlib.Axes
         """
-        xx = list(map(INVERSE_LOG.get(transform), xx))
-        yhat = list(map(INVERSE_LOG.get(transform), yhat))
-        data[analyte] = data[analyte].apply(INVERSE_LOG.get(transform))
-        data["conc"] = data["conc"].apply(INVERSE_LOG.get(transform))
-        return xx, yhat, data
+        plot_kwargs = plot_kwargs or dict(s=25,
+                                          color="red",
+                                          zorder=3,
+                                          marker="x")
+        if analyte not in self._predictions.keys():
+            self.predict(analyte=analyte)
+        x = self.predictions[analyte].values
+        yhat = self.standard_curves[analyte].get("model_result").eval(x=x)
+        x, yhat = self._inverse_log(x, yhat, analyte=analyte)
+        ax.scatter(x, yhat, **plot_kwargs)
+        return ax
 
     @assert_fitted
     def plot_standard_curve(self,
                             analyte: str,
+                            overlay_predictions: bool = True,
                             scatter_kwargs: dict or None = None,
                             line_kwargs: dict or None = None,
+                            overlay_kwargs: dict or None = None,
                             ax: plt.Axes or None = None):
+        """
+        Plot the standard curve for an analyte. If a logarithmic transformation was applied during curve fitting
+        procedure, data will have an inverse transform applied and then plotted on the appropriate axis (i.e.
+        natural log, log2 or log10 axis).
+
+        Parameters
+        ----------
+        analyte: str
+            Analyte to plot
+        overlay_predictions: bool (default=True)
+            If True, the predicted values for samples measured for this analyte are plotted over
+            the standard curve as a scatter plot
+        scatter_kwargs: dict, optional
+            Additional keyword arguments to pass to call to Axes.scatter when plotting the values
+            for standard concentrations.
+        line_kwargs: dict, optional
+            Additional keyword arguments to pass to call to Axes.plot when plotting the standard curve
+        overlay_kwargs: dict, optional
+            Additional keyword arguments passed to Axes.scatter when plotting the predicted values for
+            sample data
+        ax: Matplotlib.Axes, optional
+            If provided, used to plot data. Otherwise an axis object will be created with figure size 8x8
+
+        Returns
+        -------
+        Matplotlib.Axes
+        """
         ax = ax or plt.subplots(figsize=(8, 8))[1]
         scatter_kwargs = scatter_kwargs or dict(facecolor="white",
                                                 edgecolor="k",
@@ -604,36 +664,45 @@ class AssayTools:
         line_kwargs = line_kwargs or dict(zorder=1)
         data = self._prepare_standards_data(analyte=analyte,
                                             transform=self.standard_curves.get(analyte).get("transform"))
-        xx = np.linspace(data[analyte].min() - (data[analyte].min() * 0.01),
-                         data[analyte].max() + (data[analyte].max() * 0.01))
-        yhat = self.standard_curves[analyte].get("model_result").eval(x=xx)
-        applied_transform = self.standard_curves.get(analyte).get("transform")
-        if applied_transform in ["log", "log2", "log10"]:
-            xx, yhat, data = self._inverse_log(analyte=analyte,
-                                               xx=xx,
-                                               yhat=yhat,
-                                               data=data,
-                                               transform=applied_transform)
-        ax.scatter(data[analyte], data["conc"], **scatter_kwargs)
-        ax.plot(xx, yhat, "black", **line_kwargs)
-        base = {"log": np.e,
-                "log2": 2,
-                "log10": 10}
-        if applied_transform in ["log", "log2", "log10"]:
-            ax.set_xscale("log", basex=base.get(applied_transform))
-            ax.set_yscale("log", basey=base.get(applied_transform))
+        xcurve = np.linspace(data[analyte].min() - (data[analyte].min() * 0.01),
+                             data[analyte].max() + (data[analyte].max() * 0.01))
+        ycurve = self.standard_curves[analyte].get("model_result").eval(x=xcurve)
+        xscatter = data[analyte].values
+        yscatter = data["conc"].values
+        xcurve, ycurve, xscatter, yscatter = self._inverse_log(xcurve, ycurve, xscatter, yscatter, analyte=analyte)
+        ax.scatter(xscatter, yscatter, **scatter_kwargs)
+        ax.plot(xcurve, ycurve, "black", **line_kwargs)
+        if self.standard_curves.get(analyte).get("transform") in ["log", "log2", "log10"]:
+            b = BASE.get(self.standard_curves.get(analyte).get("transform"))
+            ax.set_xscale("log", basex=b)
+            ax.set_yscale("log", basey=b)
         ax.set_xlabel("Response")
         ax.set_ylabel("Concentration")
+        if overlay_predictions:
+            return self._overlay_predictions(analyte=analyte, ax=ax, plot_kwargs=overlay_kwargs)
         return ax
 
     @assert_fitted
     def coef_var(self,
                  analyte: str,
                  linear_scale: bool = True):
+        """
+        Returns a Pandas DataFrame of the Coefficient of Variation for the given analyte
+
+        Parameters
+        ----------
+        analyte: str
+        linear_scale: bool (default=True)
+            If True, data will be transformed to a linear scale prior to calculating CV
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         x = self.predictions
         if linear_scale:
             x = self.predictions_linear
-        x = (x.groupby("Sample")[analyte].std()/x.groupby("Sample")[analyte].mean()).reset_index()
+        x = (x.groupby("Sample")[analyte].std() / x.groupby("Sample")[analyte].mean()).reset_index()
         return x.sort_values(analyte)
 
     @assert_fitted
@@ -643,7 +712,30 @@ class AssayTools:
                              ax: plt.Axes or None = None,
                              mask: pd.DataFrame or None = None,
                              **kwargs):
-        ax = ax or plt.subplots(figsize=(7, 7))[1]
+        """
+        Generates a point plot of repeat measures (where 'Sample' column has the same value). This can be
+        useful to see if any samples replicates differ significantly and should be addressed. The repeat values
+        are plotted on the y axis with the replicant number (as an integer) on the x-axis.
+
+        Parameters
+        ----------
+        analyte: str
+            Analyte to plot
+        log_axis: bool (default=True)
+            If True, data is assumed to have had a logarithmic transformation applied and the y-axis will
+            be a log axis
+        ax: Matplotlib.Axes, optional
+            If provided, used to plot data. Otherwise an axis object will be created with figure size 8x8
+        mask: Pandas.DataFrame, optional
+            Optional masking DataFrame to filter predictions DataFrame prior to plotting
+        kwargs:
+            Additional keyword arguments passed to pingouin.plot_paired function
+
+        Returns
+        -------
+        Matplotlib.Axes
+        """
+        ax = ax or plt.subplots(figsize=(8, 8))[1]
         if analyte not in self.predictions.columns:
             self.predict(analyte=analyte)
         x = self.predictions
@@ -661,7 +753,7 @@ class AssayTools:
                                   colors=['grey', 'grey', 'grey'],
                                   **kwargs)
         if log_axis:
-            ax.set_yscale("log")
+            ax.set_yscale("log", ybase=BASE.get(self.standard_curves.get(analyte).get("transform")))
         return ax
 
     @assert_fitted
@@ -669,6 +761,22 @@ class AssayTools:
                    analyte: str,
                    factor: str,
                    **kwargs):
+        """
+        Given some binary factor (a variable assigned using 'load_meta' for example), generate a 'shift plot'
+        for a given analyte.
+        For more information see: https://pingouin-stats.org/generated/pingouin.plot_shift.html#pingouin.plot_shift
+
+        Parameters
+        ----------
+        analyte: str
+        factor: str
+        kwargs:
+            Additional keyword arguments passed to pingouin.plot_shift call
+
+        Returns
+        -------
+        Matplotlib.Figure
+        """
         assert factor in self.raw.columns, "Factor is not a valid variable. You can generate meta variables with the " \
                                            "'load_meta' function"
         assert self.raw[factor].nunique() == 2, "Factor must be binary"
@@ -685,6 +793,24 @@ class AssayTools:
                     method="spearman",
                     mask: pd.DataFrame or None = None,
                     **kwargs):
+        """
+        Generates a clustered correlation matrix, where the value in each grid space corresponds to the correlation
+        between analytes on the axis.
+
+        Parameters
+        ----------
+        method: str (default="spearman")
+            Method for correlation calculation
+            (see https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.corr.html)
+        mask: Pandas.DataFrame, optional
+            Pandas.DataFrame used to mask predictions DataFrame prior to generating correlation matrix
+        kwargs:
+            Additional keyword arguments passed to Seaborn.clustermap call
+
+        Returns
+        -------
+        Seaborn.ClusterGrid object
+        """
         df = self.predictions
         if mask is not None:
             df = df[mask].copy()
@@ -695,23 +821,222 @@ class AssayTools:
     @assert_fitted
     def plot_box_swarm(self,
                        analyte: str,
-                       factor: str):
+                       factor: str,
+                       log_axis: bool = True,
+                       ax: plt.Axes or None = None,
+                       **kwargs):
+        """
+        Given some binary factor (a variable assigned using 'load_meta' for example), generate a box and swarm plot
+        for an analyte (y-axis), showing how this analyte differs for this factor (x-axis)
+
+        Parameters
+        ----------
+        analyte: str
+            Analyte (y-axis variable)
+        factor: str
+            Factor (x-axis variable)
+        log_axis: bool (default=True)
+            If True, data is assumed to have had a logarithmic transformation applied and the y-axis will
+            be a log axis
+        ax: Matplotlib.Axes, optional
+            If provided, used to plot data. Otherwise an axis object will be created with figure size 8x8
+        kwargs:
+            Additional keyword arguments passed to CytoPy.flow.descriptives.box_swarm_plot
+
+        Returns
+        -------
+        Matplotlib.Axes
+        """
+        ax = ax or plt.subplots(figsize=(8, 8))[1]
         assert factor in self.raw.columns, "Factor is not a valid variable. You can generate meta variables with the " \
                                            "'load_meta' function"
         if analyte not in self.predictions.columns:
             self.predict(analyte=analyte)
+        df = self.predictions
+        if log_axis:
+            df = self.predictions_linear
+        ax = box_swarm_plot(plot_df=df,
+                            x=factor,
+                            y=analyte,
+                            ax=ax,
+                            hue=factor,
+                            palette="hls",
+                            **kwargs)
+        if log_axis:
+            ax.set_yscale("log", ybase=BASE.get(self.standard_curves.get(analyte).get("transform")))
+        return ax
 
     @assert_fitted
-    def volcano_plot(self,
-                     factor: str,
-                     stat: str or None = None,
-                     eff_size: str or None = None):
-        pass
+    def plot_pval_effsize(self,
+                          factor: str,
+                          eff_size: str = "CLES",
+                          alpha: float = 0.05,
+                          correction: str = "holm",
+                          interactive: bool = True,
+                          ax: plt.Axes or None = None,
+                          **plotting_kwargs):
+        """
+        Given some binary factor (a variable assigned using 'load_meta' for example), test for a significant
+        difference between cases for every analyte currently predicted, generating a p-value for each. The test
+        used will depend on the properties of the underlying data. If the data is normally distributed, a Welch
+        T-test is used, otherwise p-values are generated from a Mann-Whitney U test.
 
-    def load_meta(self):
-        pass
+        The negative log p-values (after correction for multiple comparisons) are plotted on the y-axis and
+        some chosen effect size on the x-axis; similar to a volcano plot. Significant values will be highlighted
+        in blue by default.
 
-    @assert_fitted
+        Parameters
+        ----------
+        factor: str
+            Factor; used to separate into groups
+        eff_size: str (default="CLES")
+            Effect size (x-axis);
+            see https://pingouin-stats.org/generated/pingouin.compute_effsize.html#pingouin.compute_effsize
+        alpha: float (default=0.05)
+            Significance level
+        correction: str (default="holm")
+            Method used to correct for multiple comparisons;
+            see https://pingouin-stats.org/generated/pingouin.multicomp.html#pingouin.multicomp
+        interactive: bool (default=True)
+            If True, uses Plotly to generate an interactive plot. Hovering over individual data points
+            reveals analyte name
+        ax: Matplotlib.Axes, optional
+            If provided, used to plot data. Otherwise an axis object will be created with figure size 8x8
+        plotting_kwargs:
+            Additional keyword arguments passed to respective plotting function (Ploly.express.scatter, if
+            interactive, else Matplotlib.Axes.scatter)
+
+        Returns
+        -------
+        Matplotlib.Axes or Plotly.graph_objects.Figure
+        """
+        stats = self.statistics(factor=factor, eff_size=eff_size, alpha=alpha, correction=correction)
+        stats["-log10(p-value)"] = -np.log10(stats["Corrected p-val"])
+        if interactive:
+            fig = px.scatter(stats,
+                             x=eff_size,
+                             y="-log10(p-value)",
+                             color=f"p<={alpha}",
+                             hover_data="Analyte",
+                             **plotting_kwargs)
+            fig.update_traces(marker=dict(size=12,
+                                          line=dict(width=2,
+                                                    color="DarkSlateGrey"),
+                                          selector=dict(mode="markers")))
+            fig.add_hline(y=-np.log10(alpha),
+                          line_width=3,
+                          line_dash="dash",
+                          line_color="blue")
+            return fig
+        else:
+            ax = ax or plt.subplots(figsize=(8, 8))
+            sig, nonsig = stats[stats["Reject Null"] is True], stats[stats["Reject Null"] is False]
+            ax.scatter(sig[eff_size],
+                       sig["-log10(p-value)"],
+                       color="#51abdb",
+                       edgecolor="#3d3d3d",
+                       linewidth=3,
+                       s=25,
+                       label=f"p<={alpha}")
+            ax.scatter(nonsig[eff_size],
+                       nonsig["-log10(p-value)"],
+                       color="white",
+                       edgecolor="#3d3d3d",
+                       linewidth=3,
+                       s=25,
+                       label=f"p>{alpha}")
+            ax.axhline(y=-np.log10(alpha), color="#51abdb", linewidth=3, linestyle="dashed")
+            ax.legend(bbox_to_anchor=(1, 1.15))
+            return ax
+
     def statistics(self,
-                   factor: str):
-        pass
+                   factor: str,
+                   correction: str = "holm",
+                   alpha: float = 0.05,
+                   eff_size: str = "CLES"):
+        """
+        Generates a DataFrame of results from statistical inference testing when comparing the values of an
+        analyte for some binary factor (a variable assigned using 'load_meta' for example). The test
+        used will depend on the properties of the underlying data. If the data is normally distributed, a Welch
+        T-test is used, otherwise p-values are generated from a Mann-Whitney U test.
+
+        Parameters
+        ----------
+        factor: str
+            Factor; used to separate into groups
+        eff_size: str (default="CLES")
+            Effect size (x-axis);
+            see https://pingouin-stats.org/generated/pingouin.compute_effsize.html#pingouin.compute_effsize
+        alpha: float (default=0.05)
+            Significance level
+        correction: str (default="holm")
+            Method used to correct for multiple comparisons;
+            see https://pingouin-stats.org/generated/pingouin.multicomp.html#pingouin.multicomp
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        assert factor in self.raw.columns, "Factor is not a valid variable. You can generate meta variables with the " \
+                                           "'load_meta' function"
+        assert self.raw[factor].nunique() == 2, "Factor must be binary"
+        df = self.predictions
+        analytes = list(self._predictions.keys())
+        groupings = df.groupby(factor)
+        norm = (groupings[analytes]
+                .apply(pingouin.normality)
+                .reset_index()
+                .groupby("level_1")["normal"].all()
+                .to_dict())
+
+        stats = list()
+        for a in analytes:
+            obs = [x[1].values for x in groupings[a]]
+            if norm.get(a):
+                results = pingouin.ttest(obs[0], obs[1],
+                                         paired=False,
+                                         tail="two-sided",
+                                         correction="auto").reset_index().rename({"index": "stat_test"}, axis=1)
+            else:
+                results = pingouin.mwu(obs[0], obs[1],
+                                       tail="two-sided").reset_index().rename({"index": "stat_test"}, axis=1)
+            results[eff_size] = pingouin.compute_effsize(obs[0], obs[1], paired=False, eftype=eff_size)
+
+            results["Analyte"] = a
+            stats.append(results)
+        stats = pd.concat(stats)
+        stats["Reject Null"], stats["Corrected p-val"] = pingouin.multicomp(stats["p-val"].values,
+                                                                            alpha=alpha,
+                                                                            method=correction)
+        return stats
+
+    def load_meta(self,
+                  meta_var: str,
+                  identity_mapper: dict or None = None):
+        """
+        Load a meta-variable from associated Subjects. The 'Sample' column provided in the DataFrame
+        used to generate this AssayTools object will be assumed to contain the subject ID. If this is not
+        the case, a dictionary should be provided in 'identity_mapper', which will match the values in 'Sample'
+        to their correct sample ID prior to fetching the meta variable.
+
+        The values for the meta variable will be stored in a new column of the same name. If a Subject document
+        cannot be found for a sample or the meta variable is missing, the value will be populated as Null.
+
+        Parameters
+        ----------
+        meta_var: str
+        identity_mapper: dict
+
+        Returns
+        -------
+        None
+        """
+        identity_mapper = identity_mapper or {}
+        subjects = [subject.safe_search(identity_mapper.get(i, i)) for i in self.raw["Sample"].values]
+        meta_var_values = list()
+        for s in subjects:
+            if s is None:
+                meta_var_values.append(None)
+            else:
+                meta_var_values.append(s[meta_var])
+        self.raw[meta_var] = meta_var_values
