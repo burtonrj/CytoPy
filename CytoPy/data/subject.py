@@ -358,3 +358,8 @@ def biology(subject_id: str,
     return np.average(tests)
 
 
+def safe_search(subject_id: str):
+    try:
+        return Subject.objects(subject_id=subject_id).get()
+    except mongoengine.DoesNotExist:
+        return None
