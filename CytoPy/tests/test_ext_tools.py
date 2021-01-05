@@ -162,6 +162,8 @@ def test_plot_standard_curve(load_example_data, overlay_predictions):
                                    standards=[f"Standard{i + 1}" for i in range(6)][::-1])
     example.fit_predict(model="logit", transform="log10", analyte="CXCL10")
     example.plot_standard_curve(analyte="CXCL10", overlay_predictions=overlay_predictions)
+    example.fit_predict(model="logit", transform="log10", analyte="beta-NGF")
+    example.plot_standard_curve(analyte="beta-NGF", overlay_predictions=overlay_predictions)
     plt.show()
 
 

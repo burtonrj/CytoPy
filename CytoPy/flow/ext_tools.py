@@ -13,123 +13,155 @@ import pingouin
 import pandas as pd
 import numpy as np
 
+np.seterr(over="raise")
+
 INVERSE_LOG = {"log": lambda x: np.e ** x,
                "log2": lambda x: 2 ** x,
                "log10": lambda x: 10 ** x}
-BASE = {"log": np.e,
-        "log2": 2,
-        "log10": 10}
 
 
-def four_param_logit(x: np.ndarray,
-                     min_: float,
-                     max_: float,
-                     inflection_point: float,
-                     coef: float):
+def inverse_log(*args,
+                transform: str):
     """
-    Four parameter logistic function.
+    For one or more previously transformed array's, apply the inverse transform
+
+    Parameters
+    ----------
+    args: List[Array]
+        One or more array(s)
+    transform: str
+        Method used for transform
+    Returns
+    -------
+    List[Array]
+        List of inverse transformed arrays
+    """
+    if transform in ["log", "log2", "log10"]:
+        return [list(map(INVERSE_LOG.get(transform), x)) for x in args]
+    return args
+
+
+def generalised_hill_equation(x: np.ndarray,
+                              a: float,
+                              d: float,
+                              slope: float,
+                              inflection_point: float,
+                              symmetry: float = 1.0):
+    """
+    Five parameter logistic fit for dose-response curves. If four parameter fit is desired, symmetry should have a 
+    value of 1.0.
+
+    Paul G. Gottschalk, John R. Dunn, The five-parameter logistic: A characterization and comparison with the
+    four-parameter logistic, Analytical Biochemistry, Volume 343, Issue 1, 2005 https://doi.org/10.1016/j.ab.2005.04.035
 
     Parameters
     ----------
     x: Numpy.Array
-    min_: float
-        The minimum asymptote i.e. where the response value should be 0 for the standard concentration
-    max_: float
-        The maximum asymptote i.e. where the response value where the standard concentration is infinite
+        X-axis variable (i.e. response such as OD or MFI)
+    a: float
+        Bottom asymptote
+    d: float
+        Top asymptote
+    slope: float
+        Steepness of the curve at the inflection point
     inflection_point: float
-        Where the curvature changes direction or sign
-    coef: float
-        The coefficient or steepness of the slope
+        Inflection point as read on the x-axis (scale equivalent to dose)
+    symmetry: float
+        Degree of asymmetry
 
     Returns
     -------
     Numpy.Array
     """
-    n = (min_ - max_)
-    d = (1 + (x / inflection_point) ** coef)
-    return max_ + (n / d)
+
+    assert slope > 0, "parameter 'slope' must be greater than 0"
+    assert symmetry > 0, "parameter 'symmetry' must be greater than 0"
+    numerator = a - d
+    denominator = (1 + np.exp(slope * (np.log10(x) - inflection_point))) ** symmetry
+    return d + (numerator / denominator)
 
 
-def five_param_logit(x: np.ndarray,
-                     min_: float,
-                     max_: float,
-                     inflection_point: float,
-                     coef: float,
-                     asymmetry_factor: float = 1.0):
+class LogisticDoseCurve(Model, ABC):
     """
-    Five parameter logistic function.
+    Logistic curve fitting model with either four or five parameters using the generalised hill equation.
+    Inherits from lmfit.Model. When constructed user should specify whether to use four or five parameter fit by
+    specifying True or False for the 'five_parameter_fit' parameter. If False, the symmetry parameter is forced
+    to have a value of 1.
 
-    Parameters
-    ----------
-    x: Numpy.Array
-    min_: float
-        The minimum asymptote i.e. where the response value should be 0 for the standard concentration
-    max_: float
-        The maximum asymptote i.e. where the response value where the standard concentration is infinite
-    inflection_point: float
-        Where the curvature changes direction or sign
-    coef: float
-        The coefficient or steepness of the slope
-    asymmetry_factor: float
-        The asymmetry factor; where asymmetry_factor = 1, we have a symmetrical curve around the inflection
-        point and so we have a four parameter logistic equation
+    The response (x-axis variable) is log10 transformed. If variability in the concentration variable (y-axis)
+    is large at low and high values, consider transforming the response variable prior to calling 'fit'.
 
-    Returns
-    -------
-    Numpy.Array
-    """
-    n = (min_ - max_)
-    d = (1 + (x / inflection_point) ** coef) ** asymmetry_factor
-    return max_ + (n / d)
-
-
-class Logit(Model, ABC):
-    """
-    Logistic curve fitting model with either four or five parameters. Inherits from lmfit.Model.
-    When constructed user should specify whether to use four or five parameter fit by specifying
-    True or False for the 'five_parameter_fit' parameter. If 'use_default_params' is set to True, then
-    the following parameter hints will be set (name: value [lower bound, upper bound]):
-    * min_: 0 [-1e4,  1e4]
-    * max_: 1e4 [1, 1e6]
-    * inflection_point: 0.5 [1e-4, 1]
-    * coef: 1 [1e-4, 1e4]
-    * asymmetry_factor (only for five parameter fit): 0.5 [1e-4, 1]
-
-    If you feel that these default starting parameters do not reflect your dataset, then set "use_default_params"
-    to False and set parameter hints as per lmfit docs:
-    https://lmfit.github.io/lmfit-py/model.html#initializing-values-with-model-make-params
+    Parameter values are not constrained by default, but it is recommended to constrain parameters using parameter
+    hints (https://lmfit.github.io/lmfit-py/model.html#initializing-values-with-model-make-params). Alternatively,
+    the user can call the 'guess' method to set suitable constraints based on the dose data, and this is the
+    recommended method for those unfamiliar of this function.
     """
 
     def __init__(self,
                  five_parameter_fit: bool = True,
-                 use_default_params: bool = True,
                  **kws):
-        func = five_param_logit
+        super().__init__(generalised_hill_equation, **kws)
+        self.five_parameter_fit = five_parameter_fit
         if not five_parameter_fit:
-            func = four_param_logit
-        super().__init__(func, **kws)
-        if use_default_params:
-            self.set_param_hint(name="min_",
-                                value=0,
-                                min=-1e4,
-                                max=1e4)
-            self.set_param_hint(name="max_",
-                                value=1e4,
-                                min=1,
-                                max=1e6)
-            self.set_param_hint(name="inflection_point",
-                                value=0.5,
-                                min=1e-4,
-                                max=1)
-            self.set_param_hint(name="coef",
-                                value=1,
-                                min=1e-4,
-                                max=1e4)
-            if five_parameter_fit:
-                self.set_param_hint(name="asymmetry_factor",
-                                    value=0.5,
-                                    min=1e-4,
-                                    max=1)
+            self.set_param_hint(name="symmetry",
+                                value=1.0,
+                                min=1.0,
+                                max=1.0)
+
+    def guess(self, data: np.ndarray, **kws):
+        """
+        Generate parameters with appropriate limits based on the input response data (x). The parameter bounds
+        are chosen as such:
+        * a (the bottom asymptote) is bound between the range of the bottom 25th percentile of the concentration (data),
+        +/- u * f, where u is the median concentration and f is a float (default=0.1)
+        * d (the top asymptote) is bound between the range of the top 25th percentile of the concentration (data),
+        +/- u * f, where u is the median response value and f is a float (default=0.1)
+        * symmetry (controls the asymmetric behavior of the curve) is bound between 1e-5 and 10 unless the object
+        was initialised as a four parameter fit, in which case it's value is fixed to 1.0
+        * slope (the steepness of the curve at the inflection point) is bound between 1e-5 and n * max(data), where
+        the default value for n is 3
+        * inflection point is bound within the range of response variable (x)
+
+        Parameters
+        ----------
+        data: Numpy.Array
+            The concentrations measured e.g. standard concentrations (if required, should be transformed prior to
+            calling this function)
+        x: Numpy.Array
+            The response data to fit (e.g. OD or MFI measured for standards).
+            Raw values should be provided, log10 transform is applied prior to generating bounds.
+        f: float (default=0.1)
+            Used to control the bounds of the bottom and top asymptote (higher value will result in larger bounds)
+        n: float (default=3.0)
+            Used to control the bounds of the slope (higher value will result in larger bounds)
+
+        Returns
+        -------
+
+        """
+        assert "x" in kws.keys(), "Must provide dose data 'x' as a Numpy Array"
+        x = np.log10(kws.get("x"))
+        y = np.array(data)
+        f = kws.get("f", 0.1)
+        n = kws.get("n", 3.0)
+
+        fa = (np.median(y) * f)
+        a_start = np.min(y)
+        a_min = np.min(y[y <= np.quantile(y, 0.25)]) - fa
+        a_max = np.max(y[y <= np.quantile(y, 0.25)]) + fa
+
+        d_start = np.max(y)
+        d_min = np.min(y[y > np.quantile(y, 0.25)]) - fa
+        d_max = np.max(y[y > np.quantile(y, 0.25)]) + fa
+
+        self.set_param_hint(name="a", value=a_start, min=a_min, max=a_max)
+        self.set_param_hint(name="d", value=d_start, min=d_min, max=d_max)
+        self.set_param_hint(name="inflection_point", value=np.median(x), min=np.min(x), max=np.max(x))
+        self.set_param_hint(name="slope", value=1, min=1e-5, max=n * np.max(y))
+        if not self.five_parameter_fit:
+            self.set_param_hint(name="symmetry", value=0.5, min=1e-5, max=10)
+
+        return self.make_params()
 
 
 def default_models(model: str,
@@ -140,7 +172,7 @@ def default_models(model: str,
     Parameters
     ----------
     model: str
-        Should be one of linear', 'quad', 'poly', or 'logit'
+        Should be one of linear', 'quad', 'poly', or 'logistic'
     model_init_kwargs: dict, optional
         Additional keyword arguments passed when constructing Model
 
@@ -171,9 +203,9 @@ def default_models(model: str,
         for i in range(degree):
             model.set_param_hint(name=f"c{i}", value=0.5, min=1e-9, max=1e9)
         return model
-    if model == "logit":
-        return Logit(use_default_params=True, **model_init_kwargs)
-    raise ValueError("Invalid model, must be one of: 'linear', 'quad', 'poly', or 'logit'")
+    if model == "logistic":
+        return LogisticDoseCurve(**model_init_kwargs)
+    raise ValueError("Invalid model, must be one of: 'linear', 'quad', 'poly', or 'logistic'")
 
 
 def assert_fitted(method):
@@ -200,6 +232,8 @@ def assert_fitted(method):
         assert len(args[0].standard_curves) != 0, "Standard curves have not been computed; call 'fit' prior to " \
                                                   "additional functions"
         if "analyte" in kwargs.keys():
+            if kwargs.get("analyte") is None:
+                return method(*args, **kwargs)
             assert kwargs.get("analyte") in args[0].standard_curves.keys(), \
                 f"Standard curve not detected for {kwargs.get('analyte')}; call 'fit' prior to additional functions"
         return method(*args, **kwargs)
@@ -237,16 +271,22 @@ def subtract_background(data: pd.DataFrame,
 
 class AssayTools:
     """
-    Tools for analysis of plate based assay data such as ELISAs and Luminex assays.
-    Calculate standard curves, predict concentrations, transform data, as well as
+    Tools for analysis of plate based assay data such as ELISAs and Luminex assays. The assumption here is that
+    you have some given response e.g. optical density or MFI and you wish to predict some unknown concentration for
+    one or more analytes and one or more samples.
+
+    Calculate standard curves, predict concentrations (dose), transform data, as well as
     access to various plotting functions and statistical tests.
 
     AssayTools makes heavy use of the lmfit library for fitting curves to data. We recommend the user
     consults their documentation for more information and troubleshooting: https://lmfit.github.io/
 
-    The results of fitted curves are stored in the attribute 'predictions' as a dictionary where each key
-    is the analyte name and the value a nested dictionary containing the transform applied and the ModelResult
-    object.
+    The results of fitted curves are stored in the attribute 'predictions'. If standard concentrations have been
+    transformed when generating the standard curves, the output in predictions will be on this transformed scale.
+    To access predictions on a linear scale, access the 'predictions_linear' attribute. Note: inverse transformation
+    is only supported for log, log2, and log10 transforms, therefore 'predictions_linear' will fail if
+    some other unsupported transformation has been applied to the response variable.
+
 
     Attributes
     ----------
@@ -258,9 +298,12 @@ class AssayTools:
     analytes: list
         List of analytes being studied
     concentrations: Pandas.DataFrame
-        Concentrations corresponding to each standard control
+        Concentrations corresponding to each standard control (also known as the 'standard dose')
     standard_curves: dict
-        Fitted functions for each analyte
+        Fitted functions for each analyte. Stores a dictionary for each analyte like:
+        {"response_transform": transformation applied to the response variable (y),
+         "dose_transform": transformation applied to the dose variable (concentration; x)
+         "model_result": lmfit ModelResult object}
     """
 
     def __init__(self,
@@ -268,7 +311,8 @@ class AssayTools:
                  conc: pd.DataFrame,
                  standards: list,
                  background_id: str or None = None,
-                 analytes: list or None = None):
+                 analytes: list or None = None,
+                 nan_policy: str or float = 1e-5):
         """
         Parameters
         ----------
@@ -290,6 +334,10 @@ class AssayTools:
         analytes: list, optional
             List of analytes measured. If not given, all columns in data not equal to "Sample" or "subject_id"
             will be treated as analytes.
+        nan_policy: str or float
+            How to handle Null/NaN predictions. If a float is provided, null values will be replaced with this
+            float value prior to saving the result. If a string is provided, it should either be 'warn' or 'raise',
+            where the outcome will be a warning or a ValueError, respectively.
         """
 
         self.analytes = analytes or [x for x in data.columns if x not in ["Sample", "subject_id"]]
@@ -311,6 +359,10 @@ class AssayTools:
             self.raw = subtract_background(data=data,
                                            background_id=background_id,
                                            analytes=self.analytes)
+        if isinstance(nan_policy, str):
+            assert nan_policy in ["warn", "raise"], "nan_policy should be a float or a string of value value " \
+                                                    "'raise' or 'warn'"
+        self.nan_policy = nan_policy
 
     @property
     def predictions(self):
@@ -329,44 +381,80 @@ class AssayTools:
     def predictions_linear(self):
         x = self.predictions
         for analyte in self._predictions.keys():
-            transform = self.standard_curves.get(analyte).get("transform")
+            transform = self.standard_curves.get(analyte).get("transform_y")
             if transform in ["log", "log2", "log10"]:
-                x[analyte] = x[analyte].apply(INVERSE_LOG.get(transform))
+                try:
+                    x[analyte] = x[analyte].apply(INVERSE_LOG.get(transform))
+                except Exception as e:
+                    warn(f"Could not calculate inverse log for {analyte}; {str(e)}.")
             elif transform is not None:
-                warn(f"Transform {transform} applied to analyte {analyte} does not have a supported inverse function")
+                warn(f"Transform {transform} applied to concentrations of analyte {analyte} "
+                     f"does not have a supported inverse function")
         return x
+
+    def transform_response(self,
+                           analyte: str,
+                           transform: str):
+        """
+        Apply a transform to the recording sample response (e.g. OD or MFI) and standard response for an analyte
+        e.g. min max scaling or z-score normalisation.
+        Note, outputs from predicted response using standard curves will be transformed
+        to the given scale. If the curve fitting function being applied requires a transformed axis but the user
+        desires the output on a linear scale, the transform should be specified when fitting the standard curve
+        instead.
+
+        Returns
+        -------
+        analyte: str
+        transform: str
+            Available transformations can be found at CytoPy.flow.transforms.apply_transform
+        """
+        if analyte in self.standard_curves.keys():
+            warn("Standard curve has already been fitted for this data. Call fit again for transform to take effect.")
+        self.raw = apply_transform(self.raw, transform_method=transform, features_to_transform=[analyte])
 
     def _prepare_standards_data(self,
                                 analyte: str,
-                                transform: str or None = None):
+                                transform_x: str or None = None,
+                                transform_y: str or None = None):
         """
         Prepare the standard concentration data for a given analyte using the raw data.
 
         Parameters
         ----------
         analyte: str
-        transform: str, optional
+        transform_x: str, optional
+        transform_y: str, optional
 
         Returns
         -------
         Pandas.DataFrame
         """
-        standards = self.raw[self.raw.Sample.isin(self.standards)][["Sample", analyte]].copy()
-        standard_concs = self.concentrations[self.concentrations.analyte == analyte].copy()
-        standard_concs = standard_concs[self.standards].melt(var_name="Sample", value_name="conc")
-        standards = standards.merge(standard_concs, on="Sample")
-        if transform:
+        x = (self.raw[self.raw.Sample.isin(self.standards)][["Sample", analyte]]
+             .copy()
+             .rename({analyte: "x"}, axis=1))
+        y = (self.concentrations[self.concentrations.analyte == analyte]
+             .copy()
+             .melt(var_name="Sample", value_name="y"))
+        standards = x.merge(y, on="Sample")
+        if transform_x:
             standards = apply_transform(standards,
-                                        transform_method=transform,
-                                        features_to_transform=[analyte, "conc"])
+                                        transform_method=transform_x,
+                                        features_to_transform=["x"])
+        if transform_y:
+            standards = apply_transform(standards,
+                                        transform_method=transform_y,
+                                        features_to_transform=["y"])
         return standards
 
     def _fit(self,
              model: Model,
-             transform: str or None,
+             transform_x: str or None,
+             transform_y: str or None,
              analyte: str,
              params: dict or None = None,
              guess_start_params: bool = True,
+             guess_start_params_kwargs: dict or None = None,
              **kwargs):
         """
         Fit the standard curve function for a single analyte.
@@ -374,10 +462,15 @@ class AssayTools:
         Parameters
         ----------
         model: Model
-        transform: str
+        transform_x: str
+        transform_y: str
         analyte: str
         params: dict, optional
-            Optional starting parameters; will overwrite defaults
+            Optional starting parameters and bounds; will overwrite defaults
+        guess_start_params: bool (default=True)
+            If True, will attempt to guess optimal starting parameters using the mMdels 'guess' method
+        guess_start_params_kwargs: dict, optional
+            Additional keyword arguments passed to Models 'guess' method
         kwargs:
             Additional keyword arguments to pass to Model.fit call
 
@@ -385,17 +478,22 @@ class AssayTools:
         -------
         None
         """
+        guess_start_params_kwargs = guess_start_params_kwargs or {}
         params = params or {}
-        standards = self._prepare_standards_data(analyte=analyte, transform=transform)
+        standards = self._prepare_standards_data(analyte=analyte,
+                                                 transform_x=transform_x,
+                                                 transform_y=transform_y)
         if guess_start_params:
             try:
                 params = model.guess(data=standards["conc"].values,
-                                     x=standards[analyte].values)
+                                     x=standards[analyte].values,
+                                     **guess_start_params_kwargs)
             except NotImplementedError:
                 params = model.make_params(**params)
         else:
             params = model.make_params(**params)
-        self.standard_curves[analyte] = {"transform": transform,
+        self.standard_curves[analyte] = {"transform_x": transform_x,
+                                         "transform_y": transform_y,
                                          "model_result": model.fit(standards["conc"].values,
                                                                    params=params,
                                                                    x=standards[analyte].values,
@@ -403,10 +501,12 @@ class AssayTools:
 
     def fit(self,
             model: Model or str,
-            transform: str or None = None,
+            transform_x: str or None = None,
+            transform_y: str or None = None,
             analyte: str or None = None,
             starting_params: dict or None = None,
             guess_start_params: bool = True,
+            guess_start_params_kwargs: dict or None = None,
             model_init_kwargs: dict or None = None,
             **kwargs):
         """
@@ -414,11 +514,14 @@ class AssayTools:
         are generated using the lmfit library (https://lmfit.github.io/), which uses least squares regression.
         A Model object should be provided or a string value which will load a default model for convenience.
         If starting_params is provided, then the specified starting parameters will be used for the initial fit,
-        otherwise defaults are used.
+        otherwise defaults are used (starting_params should follow the conventions for parameter hints set out in the
+        limfit documentation).
+
         The resulting fit generates a ModelResult object which is stored in the standard_curves attribute, which is a
         dictionary where the key corresponds to the analyte and the value a nested dictionary like so:
 
-        {"transform": transformation applied prior to fitting,
+        {"transform_x": transformation applied to standards response variable (e.g. OD or MFI) prior to fitting,
+        "transform_y": transformation applied to standard concentrations prior to fitting,
          "model_result": ModelResult object}
 
          For more details regarding a ModelResult object, see the lmfit documentation here:
@@ -432,20 +535,24 @@ class AssayTools:
         ----------
         model: Model or str
             A valid lmfit.Model object. Alternatively, for convenience, one of the following string values can be
-            provided: "linear", "quad", "poly" or "logit", generating a LinearModel, QuadraticModel, PolynomialModel
+            provided: "linear", "quad", "poly" or "logistic", generating a LinearModel, QuadraticModel, PolynomialModel
             or "Logit" model. If  "logit" is used, then this will default to a five parameter logistic fit with
             default starting parameters (see CytoPy.flow.ext_tools.Logit for details).
-        transform: str, optional
+        transform_y: str, optional
             If provided, should be a valid transform as supported by CytoPy.flow.transforms and will be applied
-            to the dependent variable (standard measurements) and the independent variable (standard concentrations)
-            prior to fitting the function
+            to the standards captured concentrations
+        transform_x: str, optional
+            If provided, should be a valid transform as supported by CytoPy.flow.transforms and will be applied
+            to the standard response variable (measured outputs for standards e.g. OD or MFI)
         analyte: str, optional
             The analyte to calculate the standard curve for. If not given, all analytes will be fitted in sequence.
         starting_params: dict, optional
             Staring parameters for chosen function. If not provided, default starting values will be used
             depending on the given model. If parameters hints have been defined this will overwrite those values.
         guess_start_params: bool (default=True)
-            If True, will attempt to guess the optimal starting parameters
+            If True, will attempt to guess the optimal starting parameters by calling the chosen Models 'guess' method
+        guess_start_params_kwargs: dict, optional
+            Additional keyword arguments passed to the Models 'guess' method
         model_init_kwargs: dict, optional
             Optional additional keyword arguments to pass if 'model' is of type String. Default models will be
             initialised with the given parameters.
@@ -457,12 +564,30 @@ class AssayTools:
         None
         """
         if isinstance(model, str):
+            if model == "logistic" and transform_x is not None:
+                warn("CytoPy implementation of the generalised hill equation applies a log10 transform to the x "
+                     "variable and therefore transform_dose should be 'None' when model == 'logistic'")
+                transform_x = None
             model = default_models(model=model, model_init_kwargs=model_init_kwargs)
         if isinstance(analyte, str):
-            self._fit(model, transform, analyte, starting_params, guess_start_params, **kwargs)
+            self._fit(model=model,
+                      transform_x=transform_x,
+                      transform_y=transform_y,
+                      analyte=analyte,
+                      params=starting_params,
+                      guess_start_params=guess_start_params,
+                      guess_start_params_kwargs=guess_start_params_kwargs,
+                      **kwargs)
         else:
             for analyte in progress_bar(self.analytes):
-                self._fit(model, transform, analyte, starting_params, guess_start_params, **kwargs)
+                self._fit(model=model,
+                          transform_x=transform_x,
+                          transform_y=transform_y,
+                          analyte=analyte,
+                          params=starting_params,
+                          guess_start_params=guess_start_params,
+                          guess_start_params_kwargs=guess_start_params_kwargs,
+                          **kwargs)
 
     def _predict(self,
                  analyte: str):
@@ -479,15 +604,25 @@ class AssayTools:
         -------
         None
         """
-        x = self.raw[~self.raw.Sample.isin(self.standards)][[analyte]]
-        transform = self.standard_curves[analyte].get("transform")
-        if transform:
-            x = apply_transform(x, features_to_transform=[analyte], transform_method=transform)[analyte].values
-        else:
-            x = x[analyte].values
-        yhat = self.standard_curves[analyte].get("model_result").eval(x=x)
+        sample_response = self.raw[~self.raw.Sample.isin(self.standards)][[analyte]]
+        transform_x = self.standard_curves[analyte].get("transform_x")
+        if transform_x:
+            sample_response = apply_transform(sample_response,
+                                              transform_method=transform_x,
+                                              features_to_transform=[analyte])
+        yhat = self.standard_curves[analyte].get("model_result").eval(x=sample_response[analyte].values)
         if np.isnan(yhat).any():
-            warn("One or more predicted values are Null; will be replaced with zeros")
+            if self.nan_policy == "warn":
+                warn("One or more predicted concentrations are Null")
+            elif self.nan_policy == "raise":
+                raise ValueError("One or more predicted concentrations are Null")
+            elif isinstance(self.nan_policy, float):
+                warn(f"One or more predicted concentrations are Null; will be replaced with {self.nan_policy}")
+                yhat = np.nan_to_num(yhat, nan=self.nan_policy)
+            else:
+                raise ValueError(f"Invalid nan_policy: {self.nan_policy}, check documentation before creating "
+                                 f"AssayTools object, nan_policy must be a float or a string with value 'raise' or "
+                                 f"'warn'")
         self._predictions[analyte] = np.nan_to_num(yhat)
 
     @assert_fitted
@@ -519,10 +654,12 @@ class AssayTools:
 
     def fit_predict(self,
                     model: Model or str,
-                    transform: str or None = None,
+                    transform_x: str or None = None,
+                    transform_y: str or None = None,
                     analyte: str or None = None,
                     starting_params: dict or None = None,
                     guess_start_params: bool = True,
+                    guess_start_params_kwargs: dict or None = None,
                     model_init_kwargs: dict or None = None,
                     **kwargs):
         """
@@ -533,69 +670,54 @@ class AssayTools:
         ----------
         model: Model or str
             A valid lmfit.Model object. Alternatively, for convenience, one of the following string values can be
-            provided: "linear", "quad", "poly" or "logit", generating a LinearModel, QuadraticModel, PolynomialModel
+            provided: "linear", "quad", "poly" or "logistic", generating a LinearModel, QuadraticModel, PolynomialModel
             or "Logit" model. If  "logit" is used, then this will default to a five parameter logistic fit with
             default starting parameters (see CytoPy.flow.ext_tools.Logit for details).
-        transform: str, optional
+        transform_y: str, optional
             If provided, should be a valid transform as supported by CytoPy.flow.transforms and will be applied
-            to the dependent variable (standard measurements) and the independent variable (standard concentrations)
-            prior to fitting the function
+            to the standards captured concentrations
+        transform_x: str, optional
+            If provided, should be a valid transform as supported by CytoPy.flow.transforms and will be applied
+            to the standard response variable (measured outputs for standards e.g. OD or MFI)
         analyte: str, optional
             The analyte to calculate the standard curve for. If not given, all analytes will be fitted in sequence.
         starting_params: dict, optional
             Staring parameters for chosen function. If not provided, default starting values will be used
             depending on the given model. If parameters hints have been defined this will overwrite those values.
         guess_start_params: bool (default=True)
-            If True, will attempt to guess the optimal starting parameters
+            If True, will attempt to guess the optimal starting parameters by calling the chosen Models 'guess' method
+        guess_start_params_kwargs: dict, optional
+            Additional keyword arguments passed to the Models 'guess' method
         model_init_kwargs: dict, optional
             Optional additional keyword arguments to pass if 'model' is of type String. Default models will be
             initialised with the given parameters.
         kwargs:
-            Additional keyword arguments to pass to scipy.optimise.curve_fit function
+            Additional keyword arguments to pass to Model.fit call
 
         Returns
         -------
         None
         """
         self.fit(model=model,
-                 transform=transform,
+                 transform_x=transform_x,
+                 transform_y=transform_y,
                  analyte=analyte,
                  starting_params=starting_params,
                  guess_start_params=guess_start_params,
+                 guess_start_params_kwargs=guess_start_params_kwargs,
                  model_init_kwargs=model_init_kwargs,
                  **kwargs)
         self.predict(analyte=analyte)
 
-    def _inverse_log(self,
-                     *args,
-                     analyte: str):
-        """
-        For one or more arrays associated to some given analyte, apply the inverse log function according to the
-        base logarithm applied to that analyte when generating its standard curve.
-
-        Parameters
-        ----------
-        args: List[Array]
-            One or more array(s)
-        analyte: str
-            Analyte in question
-        Returns
-        -------
-        List[Array]
-            List of transformed arrays
-        """
-        applied_transform = self.standard_curves.get(analyte).get("transform")
-        if applied_transform in ["log", "log2", "log10"]:
-            return [list(map(INVERSE_LOG.get(applied_transform), x)) for x in args]
-        return args
-
     def _overlay_predictions(self,
                              analyte: str,
                              ax: plt.Axes,
+                             x_log_scale: bool = True,
+                             y_log_scale: bool = True,
                              plot_kwargs: dict or None = None):
         """
         Given the standard curve of an analyte (ax) overlay the predicted values for this analyte
-        as scatter points.
+        as scatter points. Mutates the given Axes object.
 
         Parameters
         ----------
@@ -606,23 +728,36 @@ class AssayTools:
 
         Returns
         -------
-        Matplotlib.Axes
+        None
         """
         plot_kwargs = plot_kwargs or dict(s=25,
                                           color="red",
                                           zorder=3,
                                           marker="x")
+
+        # Collect response data for analyte and predict concentration
         if analyte not in self._predictions.keys():
             self.predict(analyte=analyte)
-        x = self.predictions[analyte].values
+        x = apply_transform(self.predictions,
+                            features_to_transform=[analyte],
+                            transform_method=self.standard_curves.get(analyte).get("transform_x"))[analyte].values
         yhat = self.standard_curves[analyte].get("model_result").eval(x=x)
-        x, yhat = self._inverse_log(x, yhat, analyte=analyte)
+
+        # Inverse logarithmic scales prior to plotting
+        if x_log_scale:
+            x = inverse_log(x, transform=self.standard_curves.get(analyte).get("transform_x"))
+        if y_log_scale:
+            yhat = inverse_log(yhat, transform=self.standard_curves.get(analyte).get("transform_y"))
+
         ax.scatter(x, yhat, **plot_kwargs)
-        return ax
 
     @assert_fitted
     def plot_standard_curve(self,
                             analyte: str,
+                            x_log_scale: int or float or None = 10,
+                            y_log_scale: int or float or None = 10,
+                            xlabel: str = "Response",
+                            ylabel: str = "Concentration",
                             overlay_predictions: bool = True,
                             scatter_kwargs: dict or None = None,
                             line_kwargs: dict or None = None,
@@ -637,6 +772,14 @@ class AssayTools:
         ----------
         analyte: str
             Analyte to plot
+        x_log_scale: int or float, optional
+            Base of logarithmic transform to apply to x-axis (set to None, to plot on linear scale)
+        y_log_scale: int or float, optional
+            Base of logarithmic transform to apply to y-axis (set to None, to plot on linear scale)
+        xlabel: str
+            X-axis label
+        ylabel: str
+            Y-axis label
         overlay_predictions: bool (default=True)
             If True, the predicted values for samples measured for this analyte are plotted over
             the standard curve as a scatter plot
@@ -662,24 +805,41 @@ class AssayTools:
                                                 alpha=1,
                                                 zorder=2)
         line_kwargs = line_kwargs or dict(zorder=1)
-        data = self._prepare_standards_data(analyte=analyte,
-                                            transform=self.standard_curves.get(analyte).get("transform"))
-        xcurve = np.linspace(data[analyte].min() - (data[analyte].min() * 0.01),
-                             data[analyte].max() + (data[analyte].max() * 0.01))
+        standards = self._prepare_standards_data(analyte=analyte,
+                                                 transform_x=self.standard_curves.get(analyte).get("transform_x"),
+                                                 transform_y=self.standard_curves.get(analyte).get("transform_y"))
+
+        xcurve = np.linspace(standards["x"].min() - (standards["x"].min() * 0.01),
+                             standards["x"].max() + (standards["x"].max() * 0.01))
         ycurve = self.standard_curves[analyte].get("model_result").eval(x=xcurve)
-        xscatter = data[analyte].values
-        yscatter = data["conc"].values
-        xcurve, ycurve, xscatter, yscatter = self._inverse_log(xcurve, ycurve, xscatter, yscatter, analyte=analyte)
+        xscatter = standards[analyte].values
+        yscatter = standards["conc"].values
+
+        # Inverse logarithmic scales prior to plotting
+        if x_log_scale is not None:
+            xcurve, xscatter = inverse_log(xcurve, xscatter,
+                                           transform=self.standard_curves.get(analyte).get("transform_x"))
+        if y_log_scale is not None:
+            ycurve, yscatter = inverse_log(ycurve, yscatter,
+                                           transform=self.standard_curves.get(analyte).get("transform_y"))
+
         ax.scatter(xscatter, yscatter, **scatter_kwargs)
         ax.plot(xcurve, ycurve, "black", **line_kwargs)
-        if self.standard_curves.get(analyte).get("transform") in ["log", "log2", "log10"]:
-            b = BASE.get(self.standard_curves.get(analyte).get("transform"))
-            ax.set_xscale("log", basex=b)
-            ax.set_yscale("log", basey=b)
-        ax.set_xlabel("Response")
-        ax.set_ylabel("Concentration")
+
         if overlay_predictions:
-            return self._overlay_predictions(analyte=analyte, ax=ax, plot_kwargs=overlay_kwargs)
+            self._overlay_predictions(analyte=analyte,
+                                      x_log_scale=x_log_scale is not None,
+                                      y_log_scale=y_log_scale is not None,
+                                      ax=ax,
+                                      plot_kwargs=overlay_kwargs)
+
+        if x_log_scale is not None:
+            ax.set_xscale("log", base=x_log_scale)
+        if y_log_scale is not None:
+            ax.set_yscale("log", base=y_log_scale)
+
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
         return ax
 
     @assert_fitted
@@ -708,7 +868,7 @@ class AssayTools:
     @assert_fitted
     def plot_repeat_measures(self,
                              analyte: str,
-                             log_axis: bool = True,
+                             log_axis: int or float or None = 10,
                              ax: plt.Axes or None = None,
                              mask: pd.DataFrame or None = None,
                              **kwargs):
@@ -721,8 +881,10 @@ class AssayTools:
         ----------
         analyte: str
             Analyte to plot
-        log_axis: bool (default=True)
-            If True, data is assumed to have had a logarithmic transformation applied and the y-axis will
+        log_axis: int or float, optional (default=10)
+            Set to None to plot on linear scale. If value is given, concentration predicted from standard curve is
+            assumed to have had a logarithmic transformation applied. Provide an int or float value
+            to be interpreted as the base of logarithmic transform to apply to y-axis.
             be a log axis
         ax: Matplotlib.Axes, optional
             If provided, used to plot data. Otherwise an axis object will be created with figure size 8x8
@@ -741,7 +903,7 @@ class AssayTools:
         x = self.predictions
         if mask is not None:
             x = x[mask].copy()
-        if log_axis:
+        if log_axis is not None:
             x = self.predictions_linear
         x["Duplication index"] = x.groupby("Sample").cumcount() + 1
         ax = pingouin.plot_paired(data=x,
@@ -752,8 +914,8 @@ class AssayTools:
                                   ax=ax,
                                   colors=['grey', 'grey', 'grey'],
                                   **kwargs)
-        if log_axis:
-            ax.set_yscale("log", ybase=BASE.get(self.standard_curves.get(analyte).get("transform")))
+        if log_axis is not None:
+            ax.set_yscale("log", base=log_axis)
         return ax
 
     @assert_fitted
@@ -822,7 +984,7 @@ class AssayTools:
     def plot_box_swarm(self,
                        analyte: str,
                        factor: str,
-                       log_axis: bool = True,
+                       log_axis: int or float or None = 10,
                        ax: plt.Axes or None = None,
                        **kwargs):
         """
@@ -835,8 +997,10 @@ class AssayTools:
             Analyte (y-axis variable)
         factor: str
             Factor (x-axis variable)
-        log_axis: bool (default=True)
-            If True, data is assumed to have had a logarithmic transformation applied and the y-axis will
+        log_axis: int or float, optional (default=10)
+            Set to None to plot on linear scale. If value is given, concentration predicted from standard curve is
+            assumed to have had a logarithmic transformation applied. Provide an int or float value
+            to be interpreted as the base of logarithmic transform to apply to y-axis.
             be a log axis
         ax: Matplotlib.Axes, optional
             If provided, used to plot data. Otherwise an axis object will be created with figure size 8x8
@@ -863,7 +1027,7 @@ class AssayTools:
                             palette="hls",
                             **kwargs)
         if log_axis:
-            ax.set_yscale("log", ybase=BASE.get(self.standard_curves.get(analyte).get("transform")))
+            ax.set_yscale("log", base=log_axis)
         return ax
 
     @assert_fitted
