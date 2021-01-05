@@ -139,8 +139,8 @@ def _transform(data: pd.DataFrame,
         return pd.DataFrame(hyperlog(data=data.values, channels=feature_i, **kwargs),
                             columns=data.columns, index=data.index)
     if method == 'log':
-        return pd.DataFrame(log_transform(npy=data.values, channels=feature_i,),
-                            columns=data.columns, index=data.index)
+        data[features] = data[features].apply(np.log, axis=1)
+        return data
     if method == 'log2':
         data[features] = data[features].apply(np.log2, axis=1)
         return data
