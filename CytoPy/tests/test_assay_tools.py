@@ -1,6 +1,5 @@
 from CytoPy.tests import assets
-from CytoPy.flow import ext_tools
-from lmfit.model import ModelResult
+from CytoPy import assay_tools
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -14,9 +13,9 @@ def load_example_data():
 
 
 def test_subtract_background(load_example_data):
-    corrected = ext_tools.subtract_background(load_example_data.get("data"),
-                                              "Background0",
-                                              ["beta-NGF", "CXCL10"])
+    corrected = assay_tools.subtract_background(load_example_data.get("data"),
+                                                "Background0",
+                                                ["beta-NGF", "CXCL10"])
     assert corrected.iloc[10]["beta-NGF"] == 19.5
     assert corrected.iloc[20]["beta-NGF"] == 1.5
     assert corrected.iloc[30]["beta-NGF"] == 1
@@ -27,12 +26,38 @@ def test_subtract_background(load_example_data):
     assert corrected.iloc[40]["CXCL10"] == (1642 - 31)
 
 
+def test_generalised_hill_equation():
+    x = np.array([4481., 4735., 2695.5,
+                  1466.5, 521.5, 417.5,
+                  133., 127.5, 43.,
+                  49.5, 20., 25.])
+    y = np.array([250., 250., 83.33333333,
+                  83.33333333, 27.77777778, 27.77777778,
+                  9.25925926, 9.25925926, 3.08641975,
+                  3.08641975, 1.02880658, 1.02880658])
+    xx = np.linspace(np.min(x) - (np.min(x) * 2),
+                     np.max(x) + (np.max(x) * 2),
+                     1000)
+    y_hat = assay_tools.generalised_hill_equation(xx,
+                                                  a=0.001,
+                                                  d=250,
+                                                  log_inflection_point=3.5,
+                                                  slope=10,
+                                                  symmetry=0.05)
+    ax = plt.subplots()[1]
+    ax.scatter(np.log10(x), y)
+    ax.plot(np.log10(xx), y_hat)
+    plt.show()
+
+
+
+
 def test_valid_assay_data(load_example_data):
     x = ext_tools.AssayTools(data=load_example_data.get("data"),
                              conc=load_example_data.get("conc"),
                              background_id="Background0",
                              standards=[f"Standard{i + 1}" for i in range(6)])
-    assert isinstance(x.raw, pd.DataFrame)
+    assert isinstance(x.response, pd.DataFrame)
 
 
 def test_invalid_assay_data(load_example_data):
@@ -78,45 +103,57 @@ def test_invalid_conc(load_example_data):
     assert str(err.value), "One or more of the specified standards missing from concentrations dataframe"
 
 
-@pytest.mark.parametrize("model,transform",
-                         [("linear", "log10"),
-                          ("poly", "log10"),
-                          ("quad", "log10"),
-                          ("logit", "log10"),
-                          ("linear", None),
-                          ("poly", None),
-                          ("quad", None),
-                          ("logit", None)])
-def test_fit_one_analyte(load_example_data, model, transform):
+def test_prepare_standards_data(load_example_data):
+    example = ext_tools.AssayTools(data=load_example_data.get("data"),
+                                   conc=load_example_data.get("conc"),
+                                   background_id="Background0",
+                                   standards=[f"Standard{i + 1}" for i in range(6)][::-1])
+    x1 = example._prepare_standards_data(analyte="CXCL10")
+    x2 = example._prepare_standards_data(analyte="CXCL10",
+                                         transform_x="log",
+                                         transform_y="log")
+    for x in [x1, x2]:
+        assert isinstance(x, pd.DataFrame)
+        assert all([i in x.columns for i in ["Sample", "x", "y"]])
+        assert x["x"].dtype == np.dtype("float")
+        assert x["x"].dtype == np.dtype("float")
+        assert x["Sample"].dtype == np.dtype("O")
+
+
+@pytest.mark.parametrize("model,transform_x,transform_y",
+                         [("linear", "log10", "log10"),
+                          ("logistic", None, "log10"),
+                          ("logistic", None, None),
+                          ("linear", None, None)])
+def test_fit_one_analyte(load_example_data, model, transform_x, transform_y):
     example = ext_tools.AssayTools(data=load_example_data.get("data"),
                                    conc=load_example_data.get("conc"),
                                    background_id="Background0",
                                    standards=[f"Standard{i + 1}" for i in range(6)][::-1])
     example.fit(model=model,
-                transform=transform,
+                transform_x=transform_x,
+                transform_y=transform_y,
                 analyte="CXCL10")
     assert "CXCL10" in example.standard_curves.keys()
     assert isinstance(example.standard_curves.get("CXCL10"), dict)
-    assert example.standard_curves.get("CXCL10").get("transform") == transform
+    assert example.standard_curves.get("CXCL10").get("transform_x") == transform_x
+    assert example.standard_curves.get("CXCL10").get("transform_y") == transform_y
     assert isinstance(example.standard_curves.get("CXCL10").get("model_result"), ModelResult)
 
 
-@pytest.mark.parametrize("model,transform",
-                         [("linear", "log10"),
-                          ("poly", "log10"),
-                          ("quad", "log10"),
-                          ("logit", "log10"),
-                          ("linear", None),
-                          ("poly", None),
-                          ("quad", None),
-                          ("logit", None)])
-def test_fit_all(load_example_data, model, transform):
+@pytest.mark.parametrize("model,transform_x,transform_y",
+                         [("linear", "log10", "log10"),
+                          ("logistic", None, "log10"),
+                          ("logistic", None, None),
+                          ("linear", None, None)])
+def test_fit_all(load_example_data, model, transform_x, transform_y):
     example = ext_tools.AssayTools(data=load_example_data.get("data"),
                                    conc=load_example_data.get("conc"),
                                    background_id="Background0",
                                    standards=[f"Standard{i + 1}" for i in range(6)][::-1])
     example.fit(model=model,
-                transform=transform,
+                transform_x=transform_x,
+                transform_y=transform_y,
                 analyte=None)
     assert all([x in example.standard_curves.keys() for x in example.analytes])
 
@@ -160,11 +197,13 @@ def test_plot_standard_curve(load_example_data, overlay_predictions):
                                    conc=load_example_data.get("conc"),
                                    background_id="Background0",
                                    standards=[f"Standard{i + 1}" for i in range(6)][::-1])
-    example.fit_predict(model="logit", transform="log10", analyte="CXCL10")
+    example.fit_predict(model="logistic", analyte="CXCL10", transform_y="log10")
     example.plot_standard_curve(analyte="CXCL10", overlay_predictions=overlay_predictions)
-    example.fit_predict(model="logit", transform="log10", analyte="beta-NGF")
-    example.plot_standard_curve(analyte="beta-NGF", overlay_predictions=overlay_predictions)
     plt.show()
+
+    # example.fit_predict(model="logistic", analyte="beta-NGF")
+    # example.plot_standard_curve(analyte="beta-NGF", overlay_predictions=overlay_predictions)
+    # plt.show()
 
 
 def test_plot_repeat_measures(load_example_data):
@@ -194,7 +233,7 @@ def test_plot_shift(load_example_data):
                                    background_id="Background0",
                                    standards=[f"Standard{i + 1}" for i in range(6)][::-1])
     example.fit_predict(model="logit", transform="log10", analyte="CXCL10")
-    example.raw["RandomMeta"] = np.random.randint(0, 2, size=example.raw.shape[0])
+    example.response["RandomMeta"] = np.random.randint(0, 2, size=example.response.shape[0])
     example.plot_shift(analyte="CXCL10", factor="RandomMeta")
     plt.show()
 
@@ -208,4 +247,3 @@ def test_corr_matrix(load_example_data):
     example.fit_predict(model="logit", transform="log10", analyte="beta-NGF")
     example.corr_matrix()
     plt.show()
-

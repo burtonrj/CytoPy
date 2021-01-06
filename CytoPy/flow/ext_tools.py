@@ -45,7 +45,7 @@ def generalised_hill_equation(x: np.ndarray,
                               a: float,
                               d: float,
                               slope: float,
-                              inflection_point: float,
+                              log_inflection_point: float,
                               symmetry: float = 1.0):
     """
     Five parameter logistic fit for dose-response curves. If four parameter fit is desired, symmetry should have a 
@@ -64,7 +64,7 @@ def generalised_hill_equation(x: np.ndarray,
         Top asymptote
     slope: float
         Steepness of the curve at the inflection point
-    inflection_point: float
+    log_inflection_point: float
         Inflection point as read on the x-axis (scale equivalent to dose)
     symmetry: float
         Degree of asymmetry
@@ -76,9 +76,16 @@ def generalised_hill_equation(x: np.ndarray,
 
     assert slope > 0, "parameter 'slope' must be greater than 0"
     assert symmetry > 0, "parameter 'symmetry' must be greater than 0"
-    numerator = a - d
-    denominator = (1 + np.exp(slope * (np.log10(x) - inflection_point))) ** symmetry
-    return d + (numerator / denominator)
+    x = np.log(x)
+    logxb = log_inflection_point + (1/slope) * np.log((2 ** (1 / symmetry)) - 1)
+    num = d - a
+    denom = (1 + 10 ** ((logxb - x) * slope)) ** symmetry
+    return a + (num / denom)
+
+
+class LogisticCurveFit():
+    def __init__(self):
+        
 
 
 class LogisticDoseCurve(Model, ABC):
@@ -93,8 +100,8 @@ class LogisticDoseCurve(Model, ABC):
 
     Parameter values are not constrained by default, but it is recommended to constrain parameters using parameter
     hints (https://lmfit.github.io/lmfit-py/model.html#initializing-values-with-model-make-params). Alternatively,
-    the user can call the 'guess' method to set suitable constraints based on the dose data, and this is the
-    recommended method for those unfamiliar of this function.
+    the user can call the 'set_parameter_bounds' method to set suitable constraints based on the dose data,
+    and this is the recommended method for those unfamiliar of this function.
     """
 
     def __init__(self,
@@ -108,23 +115,25 @@ class LogisticDoseCurve(Model, ABC):
                                 min=1.0,
                                 max=1.0)
 
-    def guess(self, data: np.ndarray, **kws):
+    def set_parameter_bounds(self,
+                             x: np.ndarray,
+                             y: np.ndarray,
+                             f: float = 0.5):
         """
         Generate parameters with appropriate limits based on the input response data (x). The parameter bounds
         are chosen as such:
-        * a (the bottom asymptote) is bound between the range of the bottom 25th percentile of the concentration (data),
+        * a (the bottom asymptote) is bound between the range of the bottom 25th percentile of the concentration (y),
         +/- u * f, where u is the median concentration and f is a float (default=0.1)
-        * d (the top asymptote) is bound between the range of the top 25th percentile of the concentration (data),
+        * d (the top asymptote) is bound between the range of the top 25th percentile of the concentration (y),
         +/- u * f, where u is the median response value and f is a float (default=0.1)
-        * symmetry (controls the asymmetric behavior of the curve) is bound between 1e-5 and 10 unless the object
+        * symmetry (controls the asymmetric behavior of the curve) is bound between 1e-5 and 5 unless the object
         was initialised as a four parameter fit, in which case it's value is fixed to 1.0
-        * slope (the steepness of the curve at the inflection point) is bound between 1e-5 and n * max(data), where
-        the default value for n is 3
+        * slope (the steepness of the curve at the inflection point) is bound between 1e-5 and max(y)
         * inflection point is bound within the range of response variable (x)
 
         Parameters
         ----------
-        data: Numpy.Array
+        y: Numpy.Array
             The concentrations measured e.g. standard concentrations (if required, should be transformed prior to
             calling this function)
         x: Numpy.Array
@@ -132,36 +141,28 @@ class LogisticDoseCurve(Model, ABC):
             Raw values should be provided, log10 transform is applied prior to generating bounds.
         f: float (default=0.1)
             Used to control the bounds of the bottom and top asymptote (higher value will result in larger bounds)
-        n: float (default=3.0)
-            Used to control the bounds of the slope (higher value will result in larger bounds)
 
         Returns
         -------
-
+        lmfit.
         """
-        assert "x" in kws.keys(), "Must provide dose data 'x' as a Numpy Array"
-        x = np.log10(kws.get("x"))
-        y = np.array(data)
-        f = kws.get("f", 0.1)
-        n = kws.get("n", 3.0)
+        x = np.log(x)
+        y = np.array(y)
 
         fa = (np.median(y) * f)
-        a_start = np.min(y)
-        a_min = np.min(y[y <= np.quantile(y, 0.25)]) - fa
-        a_max = np.max(y[y <= np.quantile(y, 0.25)]) + fa
+        a_min = np.min(y) - fa
+        a_max = np.min(y) + fa
 
         d_start = np.max(y)
-        d_min = np.min(y[y > np.quantile(y, 0.25)]) - fa
-        d_max = np.max(y[y > np.quantile(y, 0.25)]) + fa
+        d_min = np.max(y) - fa
+        d_max = np.max(y) + fa
 
-        self.set_param_hint(name="a", value=a_start, min=a_min, max=a_max)
+        self.set_param_hint(name="a", value=0, min=a_min, max=a_max)
         self.set_param_hint(name="d", value=d_start, min=d_min, max=d_max)
         self.set_param_hint(name="inflection_point", value=np.median(x), min=np.min(x), max=np.max(x))
-        self.set_param_hint(name="slope", value=1, min=1e-5, max=n * np.max(y))
-        if not self.five_parameter_fit:
-            self.set_param_hint(name="symmetry", value=0.5, min=1e-5, max=10)
-
-        return self.make_params()
+        self.set_param_hint(name="slope", value=1, min=1e-5, max=np.max(y))
+        if self.five_parameter_fit:
+            self.set_param_hint(name="symmetry", value=0.5, min=1e-5, max=5)
 
 
 def default_models(model: str,
@@ -290,7 +291,7 @@ class AssayTools:
 
     Attributes
     ----------
-    raw: Pandas.DataFrame
+    response: Pandas.DataFrame
         Raw unaltered assay data. Will also contain any associated meta data if the subject ID is
         provided.
     predictions: Pandas.DataFrame
@@ -354,11 +355,11 @@ class AssayTools:
         self.standard_curves = dict()
         self._predictions = dict()
         self.standards = standards
-        self.raw = data
+        self.response = data
         if background_id:
-            self.raw = subtract_background(data=data,
-                                           background_id=background_id,
-                                           analytes=self.analytes)
+            self.response = subtract_background(data=data,
+                                                background_id=background_id,
+                                                analytes=self.analytes)
         if isinstance(nan_policy, str):
             assert nan_policy in ["warn", "raise"], "nan_policy should be a float or a string of value value " \
                                                     "'raise' or 'warn'"
@@ -367,9 +368,9 @@ class AssayTools:
     @property
     def predictions(self):
         x = pd.DataFrame(self._predictions)
-        other_vars = [c for c in self.raw.columns if c not in self.analytes]
+        other_vars = [c for c in self.response.columns if c not in self.analytes]
         for c in other_vars:
-            x[c] = self.raw[~self.raw.Sample.isin(self.standards)][c].values
+            x[c] = self.response[~self.response.Sample.isin(self.standards)][c].values
         return x
 
     @predictions.setter
@@ -411,7 +412,7 @@ class AssayTools:
         """
         if analyte in self.standard_curves.keys():
             warn("Standard curve has already been fitted for this data. Call fit again for transform to take effect.")
-        self.raw = apply_transform(self.raw, transform_method=transform, features_to_transform=[analyte])
+        self.response = apply_transform(self.response, transform_method=transform, features_to_transform=[analyte])
 
     def _prepare_standards_data(self,
                                 analyte: str,
@@ -430,13 +431,15 @@ class AssayTools:
         -------
         Pandas.DataFrame
         """
-        x = (self.raw[self.raw.Sample.isin(self.standards)][["Sample", analyte]]
+        x = (self.response[self.response.Sample.isin(self.standards)][["Sample", analyte]]
              .copy()
              .rename({analyte: "x"}, axis=1))
         y = (self.concentrations[self.concentrations.analyte == analyte]
              .copy()
              .melt(var_name="Sample", value_name="y"))
         standards = x.merge(y, on="Sample")
+        standards["x"] = standards["x"].astype(dtype="float64")
+        standards["y"] = standards["y"].astype(dtype="float64")
         if transform_x:
             standards = apply_transform(standards,
                                         transform_method=transform_x,
@@ -484,19 +487,23 @@ class AssayTools:
                                                  transform_x=transform_x,
                                                  transform_y=transform_y)
         if guess_start_params:
-            try:
-                params = model.guess(data=standards["conc"].values,
-                                     x=standards[analyte].values,
-                                     **guess_start_params_kwargs)
-            except NotImplementedError:
-                params = model.make_params(**params)
+            if isinstance(model, LogisticDoseCurve):
+                params = model.set_parameter_bounds(x=standards["x"].values,
+                                                    y=standards["y"].values,
+                                                    **guess_start_params_kwargs)
+            else:
+                try:
+                    params = model.guess(data=standards["y"].values,
+                                         **guess_start_params_kwargs)
+                except NotImplementedError:
+                    params = model.make_params(**params)
         else:
             params = model.make_params(**params)
         self.standard_curves[analyte] = {"transform_x": transform_x,
                                          "transform_y": transform_y,
-                                         "model_result": model.fit(standards["conc"].values,
+                                         "model_result": model.fit(standards["y"].values,
                                                                    params=params,
-                                                                   x=standards[analyte].values,
+                                                                   x=standards["x"].values,
                                                                    **kwargs)}
 
     def fit(self,
@@ -604,7 +611,7 @@ class AssayTools:
         -------
         None
         """
-        sample_response = self.raw[~self.raw.Sample.isin(self.standards)][[analyte]]
+        sample_response = self.response[~self.response.Sample.isin(self.standards)][[analyte]]
         transform_x = self.standard_curves[analyte].get("transform_x")
         if transform_x:
             sample_response = apply_transform(sample_response,
@@ -812,8 +819,8 @@ class AssayTools:
         xcurve = np.linspace(standards["x"].min() - (standards["x"].min() * 0.01),
                              standards["x"].max() + (standards["x"].max() * 0.01))
         ycurve = self.standard_curves[analyte].get("model_result").eval(x=xcurve)
-        xscatter = standards[analyte].values
-        yscatter = standards["conc"].values
+        xscatter = standards["x"].values
+        yscatter = standards["y"].values
 
         # Inverse logarithmic scales prior to plotting
         if x_log_scale is not None:
@@ -864,6 +871,9 @@ class AssayTools:
             x = self.predictions_linear
         x = (x.groupby("Sample")[analyte].std() / x.groupby("Sample")[analyte].mean()).reset_index()
         return x.sort_values(analyte)
+
+    def standards_sample_response_kde(self):
+        pass
 
     @assert_fitted
     def plot_repeat_measures(self,
@@ -939,9 +949,9 @@ class AssayTools:
         -------
         Matplotlib.Figure
         """
-        assert factor in self.raw.columns, "Factor is not a valid variable. You can generate meta variables with the " \
-                                           "'load_meta' function"
-        assert self.raw[factor].nunique() == 2, "Factor must be binary"
+        assert factor in self.response.columns, "Factor is not a valid variable. You can generate meta variables with the " \
+                                                "'load_meta' function"
+        assert self.response[factor].nunique() == 2, "Factor must be binary"
         if analyte not in self.predictions.columns:
             self.predict(analyte=analyte)
         df = self.predictions
@@ -1012,8 +1022,8 @@ class AssayTools:
         Matplotlib.Axes
         """
         ax = ax or plt.subplots(figsize=(8, 8))[1]
-        assert factor in self.raw.columns, "Factor is not a valid variable. You can generate meta variables with the " \
-                                           "'load_meta' function"
+        assert factor in self.response.columns, "Factor is not a valid variable. You can generate meta variables with the " \
+                                                "'load_meta' function"
         if analyte not in self.predictions.columns:
             self.predict(analyte=analyte)
         df = self.predictions
@@ -1141,9 +1151,9 @@ class AssayTools:
         -------
         Pandas.DataFrame
         """
-        assert factor in self.raw.columns, "Factor is not a valid variable. You can generate meta variables with the " \
-                                           "'load_meta' function"
-        assert self.raw[factor].nunique() == 2, "Factor must be binary"
+        assert factor in self.response.columns, "Factor is not a valid variable. You can generate meta variables with the " \
+                                                "'load_meta' function"
+        assert self.response[factor].nunique() == 2, "Factor must be binary"
         df = self.predictions
         analytes = list(self._predictions.keys())
         groupings = df.groupby(factor)
@@ -1196,11 +1206,11 @@ class AssayTools:
         None
         """
         identity_mapper = identity_mapper or {}
-        subjects = [subject.safe_search(identity_mapper.get(i, i)) for i in self.raw["Sample"].values]
+        subjects = [subject.safe_search(identity_mapper.get(i, i)) for i in self.response["Sample"].values]
         meta_var_values = list()
         for s in subjects:
             if s is None:
                 meta_var_values.append(None)
             else:
                 meta_var_values.append(s[meta_var])
-        self.raw[meta_var] = meta_var_values
+        self.response[meta_var] = meta_var_values
