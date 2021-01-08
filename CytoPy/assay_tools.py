@@ -8,6 +8,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import pingouin
+
 np.seterr(over="raise")
 
 
@@ -165,7 +166,7 @@ def inverse_generalised_hill_equation(response: np.ndarray,
     assert symmetry > 0, "parameter 'symmetry' must be greater than 0"
     xi = ((a - d) / (response - d))
     xi = np.where((xi < 1.0) & (xi > 0.0), 1.0, xi)
-    return 10**(log_inflection_point * ((xi ** (1 / symmetry)) - 1) ** (1 / slope))
+    return 10 ** (log_inflection_point * ((xi ** (1 / symmetry)) - 1) ** (1 / slope))
 
 
 def estimate_inflection_point(concentration: np.ndarray,
@@ -212,9 +213,9 @@ def rsquared(func: callable,
     Numpy.float64
     """
     err = (response - func(conc, *params))
-    sse = np.sum(err**2)
+    sse = np.sum(err ** 2)
     var = (len(response) - 1.0) * np.var(response, ddof=1)
-    return 1.0 - (sse/var)
+    return 1.0 - (sse / var)
 
 
 def confidence_band(xspace: np.ndarray,
@@ -255,7 +256,7 @@ def confidence_band(xspace: np.ndarray,
     sxd = np.sum((conc - conc.mean()) ** 2)
 
     yhat = func(xspace, *optimal_parameters)
-    dy = studentt * std * np.sqrt(1.0 + (1.0/sample_size) + (sx/sxd))
+    dy = studentt * std * np.sqrt(1.0 + (1.0 / sample_size) + (sx / sxd))
     return yhat - dy, yhat + dy
 
 
@@ -447,7 +448,7 @@ class LogisticCurveFit:
             warn("One or more values exceeds detectable range. Null values will be replaced with "
                  "a value twice the highest standard control")
         idx = np.where((predictions == 1.0) | np.isnan(predictions))[0]
-        predictions = np.nan_to_num(predictions, nan=np.max(self._training_data.get("x"))*2)
+        predictions = np.nan_to_num(predictions, nan=np.max(self._training_data.get("x")) * 2)
         return predictions, idx
 
     def standard_curve(self,
@@ -795,10 +796,10 @@ def predictions_dataframe(model,
     flag = np.zeros(len(p))
     flag[err] = 1
     sample_ids = response[~response.Sample.str.contains("Standard")].Sample.values
-    df =  pd.DataFrame({"Sample": sample_ids,
-                        "concentration": p,
-                        "flag": flag})
-    df["duplicate"] = df.groupby("Sample").cumcount()+1
+    df = pd.DataFrame({"Sample": sample_ids,
+                       "concentration": p,
+                       "flag": flag})
+    df["duplicate"] = df.groupby("Sample").cumcount() + 1
     df["analyte"] = analyte
     return df
 
