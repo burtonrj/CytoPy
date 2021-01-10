@@ -1,5 +1,5 @@
-from ..feedback import progress_bar
-from .explore import Explorer
+from CytoPy.feedback import progress_bar
+from CytoPy.flow.explore import Explorer
 from sklearn import preprocessing
 from dash import Dash
 from dash.dependencies import Input, Output
