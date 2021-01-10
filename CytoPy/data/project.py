@@ -151,7 +151,7 @@ class Project(mongoengine.Document):
                     subject_id: str,
                     drug_data: list or None = None,
                     infection_data: list or None = None,
-                    patient_biology: list or None = None,
+                    biology: list or None = None,
                     **kwargs) -> Subject:
         """
         Create a new subject and associated to project; a subject is an individual element of a study
@@ -165,7 +165,7 @@ class Project(mongoengine.Document):
             list of Drug documents to associated to subject (see cytopy.data.subject.Drug)
         infection_data: list, optional
             list of Bug documents to associated to subject (see cytopy.data.subject.Bug)
-        patient_biology: list, optional
+        biology: list, optional
             list of Biology documents to associated to subject (see cytopy.data.subject.Biology)
         kwargs:
             Additional keyword arguments to pass to Subject initialisation (see cytopy.data.subject.Subject)
@@ -179,8 +179,8 @@ class Project(mongoengine.Document):
             new_subject.drug_data = drug_data
         if infection_data is not None:
             new_subject.infection_data = infection_data
-        if patient_biology is not None:
-            new_subject.patient_biology = patient_biology
+        if biology is not None:
+            new_subject.biology = biology
         new_subject.save()
         self.subjects.append(new_subject)
         self.save()

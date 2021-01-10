@@ -176,7 +176,7 @@ class Subject(mongoengine.DynamicDocument):
     # Embeddings
     drug_data = mongoengine.EmbeddedDocumentListField(Drug)
     infection_data = mongoengine.EmbeddedDocumentListField(Bug)
-    patient_biology = mongoengine.EmbeddedDocumentListField(Biology)
+    biology = mongoengine.EmbeddedDocumentListField(Biology)
 
     # Notes
     notes = mongoengine.StringField(required=False)
