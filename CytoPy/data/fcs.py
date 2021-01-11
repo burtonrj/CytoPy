@@ -136,30 +136,6 @@ def h5_read_population_ctrl_index(population_name: str,
     return {ctrl_id: h5file[f"index/{population_name}/{ctrl_id}"][:] for ctrl_id in ctrls}
 
 
-@population_in_file
-def h5_read_population_clusters(population_name: str,
-                                h5file: h5py.File):
-    """
-    Given a population and an instance of a H5 file object, return a dictionary containing
-    the event indexes of clusters for given population. If no clusters exist for population
-    returns empty dictionary.
-
-    Parameters
-    ----------
-    population_name: str
-    h5file: h5py.File
-
-    Returns
-    -------
-    Dict
-        {cluster ID and tag: index}
-    """
-    if population_name not in h5file["clusters"].keys():
-        return {}
-    return {cluster_id_tag: h5file[f"/clusters/{population_name}/{cluster_id_tag}"][:]
-            for cluster_id_tag in h5file[f"/clusters/{population_name}"].keys()}
-
-
 def set_column_names(df: pd.DataFrame,
                      channels: list,
                      markers: list,
@@ -310,13 +286,12 @@ class FileGroup(mongoengine.Document):
             f.create_dataset("mappings/primary/markers", data=np.array(markers, dtype='S'))
             f.create_group("index")
             f.create_group("index/root")
-            f.create_group("clusters")
-            f.create_group("clusters/root")
             f.create_group("cell_meta_labels")
         self.populations = [Population(population_name="root",
                                        index=np.arange(0, data.shape[0]),
                                        parent="root",
-                                       n=data.shape[0])]
+                                       n=data.shape[0],
+                                       source="root")]
         self.tree = {"root": anytree.Node(name="root", parent=None)}
         self.save()
 
@@ -386,13 +361,6 @@ class FileGroup(mongoengine.Document):
                 p.index = primary_index
                 p.set_ctrl_index(**h5_read_population_ctrl_index(population_name=p.population_name,
                                                                  h5file=f))
-                cluster_idx = h5_read_population_clusters(population_name=p.population_name,
-                                                          h5file=f)
-                if len(cluster_idx) == 0:
-                    continue
-                for cluster in p.clusters:
-                    if f"{cluster.cluster_id}_{cluster.tag}" in cluster_idx.keys():
-                        cluster.index = cluster_idx[f"{cluster.cluster_id}_{cluster.tag}"]
 
     def add_population(self,
                        population: Population):
@@ -708,34 +676,6 @@ class FileGroup(mongoengine.Document):
         for pre, fill, node in anytree.RenderTree(root):
             print('%s%s' % (pre, node.name))
 
-    def delete_clusters(self,
-                        tag: str or None = None,
-                        meta_label: str or None = None,
-                        drop_all: bool = False):
-        """
-
-        Parameters
-        ----------
-        tag
-        meta_label
-        drop_all
-
-        Returns
-        -------
-
-        """
-        if drop_all:
-            for p in self.populations:
-                p.delete_all_clusters(clusters="all")
-        elif tag:
-            for p in self.populations:
-                p.delete_cluster(tag=tag)
-        elif meta_label:
-            for p in self.populations:
-                p.delete_cluster(meta_label=meta_label)
-        else:
-            raise ValueError("If drop_all is False, must provide tag or meta_label")
-
     def delete_populations(self, populations: list or str) -> None:
         """
         Delete given populations. Populations downstream from delete population(s) will
@@ -921,10 +861,6 @@ class FileGroup(mongoengine.Document):
                 f.create_dataset(f'/index/{p.population_name}/primary', data=p.index)
                 for ctrl, idx in p.ctrl_index.items():
                     f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
-                for cluster in p.clusters:
-                    cluster.prop_of_events = cluster.n / p.n
-                    f.create_dataset(f'/clusters/{p.population_name}/{cluster.cluster_id}_{cluster.tag}',
-                                     data=cluster.index)
 
     def _hdf_reset_population_data(self):
         """
@@ -947,8 +883,6 @@ class FileGroup(mongoengine.Document):
                     for ctrl_id in p.ctrl_index.keys():
                         if ctrl_id in f[f"index/{p.population_name}"].keys():
                             del f[f"index/{p.population_name}/{ctrl_id}"]
-                if p.population_name in f["clusters"].keys():
-                    del f[f"clusters/{p.population_name}"]
 
     def population_stats(self,
                          population: str):
