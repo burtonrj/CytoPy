@@ -29,14 +29,13 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from _warnings import warn
 
 from ..feedback import vprint, progress_bar
 from .fcs import FileGroup
 from .subject import Subject
 from .read_write import FCSFile
 from .mapping import ChannelMap
-from typing import Generator, List
+from typing import List
 from collections import Counter
 from datetime import datetime
 from warnings import warn

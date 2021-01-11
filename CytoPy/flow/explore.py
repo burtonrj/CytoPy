@@ -639,7 +639,7 @@ class Explorer:
                        ax=ax2,
                        palette=boxplot_palette,
                        boxplot_kwargs=boxplot_kwargs,
-                       swarmplot_kwargs=swarmplot_kwargs)
+                       overlay_kwargs=swarmplot_kwargs)
         handles, labels = ax2.get_legend_handles_labels()
         ax2.legend(handles[0:2], labels[0:2])
         if stats:

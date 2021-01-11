@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import sys
 
 try:
@@ -10,12 +10,7 @@ if sys.version_info.major >= 3.7:
 setup(
     name='CytoPy',
     version='1.2.0',
-    packages=['CytoPy',
-              'CytoPy.flow',
-              'CytoPy.flow.clustering', 
-              'CytoPy.data',
-              'CytoPy.tests',
-              'CytoPy.tests/assets'],
+    packages=find_packages(),
     url='https://github.com/burtonrj/CytoPy',
     license='MIT',
     author='Ross Burton',
