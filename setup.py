@@ -9,7 +9,7 @@ if sys.version_info.major >= 3.7:
     raise RuntimeError('CytoPy requires Python version >= 3.7')
 setup(
     name='CytoPy',
-    version='1.0.0',
+    version='1.2.0',
     packages=['CytoPy',
               'CytoPy.flow',
               'CytoPy.flow.clustering', 
@@ -21,5 +21,6 @@ setup(
     author='Ross Burton',
     author_email='burtonrj@cardiff.ac.uk',
     description='Python framework for data-centric autonomous cytometry analysis',
-    install_requires=open("requirements.txt").read()
+    install_requires=open("requirements.txt").read(),
+    python_requires='>=3.7'
 )
