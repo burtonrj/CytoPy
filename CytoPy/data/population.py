@@ -139,7 +139,7 @@ class Population(mongoengine.EmbeddedDocument):
     geom = mongoengine.EmbeddedDocumentField(PopulationGeometry)
     clusters = mongoengine.EmbeddedDocumentListField(Cluster)
     definition = mongoengine.StringField()
-    signature = mongoengine.DictField()
+    source = mongoengine.StringField(required=True, choices=["gate", "cluster", "root", "classifier"])
 
     def __init__(self, *args, **kwargs):
         # If the Population existed previously, fetched the index
