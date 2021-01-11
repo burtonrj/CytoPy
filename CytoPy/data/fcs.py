@@ -916,7 +916,7 @@ class FileGroup(mongoengine.Document):
                     f.create_dataset(f'/cell_meta_labels/{meta}', data=ascii_labels)
             for p in self.populations:
                 parent_n = self.get_population(p.parent).n
-                p.prop_of_parent = p.n / parent_n
+                p._prop_of_parent = p.n / parent_n
                 p.prop_of_total = p.n / root_n
                 f.create_dataset(f'/index/{p.population_name}/primary', data=p.index)
                 for ctrl, idx in p.ctrl_index.items():

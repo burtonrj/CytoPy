@@ -1,3 +1,43 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+The assay_tools model is a one-stop-shop for the analysis of plate based assays such as ELISAs, where
+the first step to analysis to fitting a standard curve to infer the concentration of samples with
+unknown values.
+
+The tools present in this module assume that two DataFrames are available, referred to as 'response' and
+'concentrations' throughout. These DataFrames should be formatted as follows and could be derived from an excel
+document or csv file using the Pandas read_excel or read_csv method, respectively:
+
+* response - contains the OD or MFI etc of standards, background, and any experimental samples. There should be
+a column named 'Sample' that contains a unique identifier for each row. This should include identifiers for rows
+that correspond to standards and background. Subsequent columns should be analytes measured.
+* concentrations - contains the standard concentrations for each standard control. There should be column name d
+'analyte' who's contents are the analytes measured in the response table. Subsequent columns should be
+the names of measured standards, who's contents are the concentration of the standard for the given analyte (row)
+and given standard (column)
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from warnings import warn
 from .flow.transform import apply_transform
 from scipy.optimize import curve_fit

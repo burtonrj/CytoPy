@@ -322,7 +322,9 @@ def l1_feature_selection(feature_space: pd.DataFrame,
     return ax
 
 
-def prop_of_parent(x, parent, experiment):
+def _prop_of_parent(x: dict,
+                    parent: str,
+                    experiment: Experiment):
     parent_n = experiment.get_sample(x["sample_id"]).get_population(parent).n
     return x["sample_id"], x["n"] / parent_n
 
@@ -332,12 +334,11 @@ def _subset_and_summarise(data: pd.DataFrame,
                           parent: str,
                           group_var: str,
                           experiment: Experiment):
-    subset_data = [data[data[group_var].str.contains(s, regex=False)]
-                   for s in search_terms]
+    subset_data = [data[data[group_var].str.contains(s, regex=False)] for s in search_terms]
     total_n = {i: x.groupby("sample_id")["n"].sum() for i, x in zip(search_terms, subset_data)}
-    proportions = {k: v.reset_index().apply(lambda x: prop_of_parent(x,
-                                                                     parent=parent,
-                                                                     experiment=experiment),
+    proportions = {k: v.reset_index().apply(lambda x: _prop_of_parent(x,
+                                                                      parent=parent,
+                                                                      experiment=experiment),
                                             axis=1).values
                    for k, v in total_n.items()}
     subsets = pd.DataFrame({subset: {sample_id: v for sample_id, v in x}
@@ -351,6 +352,21 @@ def cluster_subsets(experiment,
                     search_terms,
                     sample_ids: list or None,
                     exclusion_terms: list or None):
+    """
+
+    Parameters
+    ----------
+    experiment
+    population
+    tag
+    search_terms
+    sample_ids
+    exclusion_terms
+
+    Returns
+    -------
+
+    """
     exp_data = cluster_statistics(experiment=experiment,
                                   population=population,
                                   tag=tag,
