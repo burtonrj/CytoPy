@@ -34,7 +34,7 @@ from sklearn.discriminant_analysis import *
 from sklearn.neighbors import *
 from sklearn.ensemble import *
 from sklearn.svm import *
-from keras.models import Sequential
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import *
 import matplotlib.pyplot as plt
 import pandas as pd
