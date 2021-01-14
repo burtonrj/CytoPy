@@ -36,9 +36,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from ...data.experiment import Experiment, load_population_data_from_experiment
-from ...data.population import Cluster
 from ...feedback import vprint, progress_bar
-from ..explore import Explorer
+from ..dim_reduction import dimensionality_reduction
+from ..explore import scatterplot
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from sklearn.cluster import *
@@ -577,7 +577,7 @@ class Clustering:
                  root_population: str = "root",
                  transform: str = "logicle",
                  verbose: bool = True,
-                 cluster_prefix: str = "cluster"):
+                 population_prefix: str = "cluster"):
         self.experiment = experiment
         self.verbose = verbose
         self.print = vprint(verbose)
@@ -587,35 +587,15 @@ class Clustering:
         self.root_population = root_population
         self.graph = None
         self.metrics = None
-        self.cluster_prefix = cluster_prefix
+        self.population_prefix = population_prefix
         self.print("Loading single cell data...")
         self.data = load_population_data_from_experiment(experiment=experiment,
                                                          sample_ids=sample_ids,
                                                          transform=transform,
-                                                         population=root_population,
-                                                         include_clusters=self.tag)
+                                                         population=root_population)
+        self.data["meta_label"] = None
+        self.data["cluster_label"] = None
         self.print("Ready to cluster!")
-
-    def _load_clusters(self):
-        """
-        Search the associated Experiment for existing clusters with the same clustering tag.
-        If found, populates the relevant rows of 'cluster_id' and 'meta_label' in self.data.
-
-        Returns
-        -------
-        None
-        """
-        self.print("Loading existing clusters...")
-        for sample_id, sample_df in progress_bar(self.data.groupby("sample_id"),
-                                                 verbose=self.verbose,
-                                                 total=len(self.data.sample_id.unique())):
-            pop = self.experiment.get_sample(sample_id).get_population(self.root_population)
-            for cluster in pop.clusters:
-                if cluster.tag != self.tag:
-                    continue
-                idx = sample_df[sample_df.original_index.isin(cluster.index)].index.values
-                self.data.loc[idx, "cluster_id"] = cluster.cluster_id
-                self.data.loc[idx, "meta_label"] = cluster.meta_label
 
     def _check_null(self) -> list:
         """
@@ -667,10 +647,9 @@ class Clustering:
                                                    features=features,
                                                    verbose=self.verbose,
                                                    **kwargs)
-        self.data["cluster_id"] = self.data["cluster_id"].apply(lambda x: f"{self.cluster_prefix}_{x}")
 
     def reset_clusters(self):
-        self.data["cluster_id"] = None
+        self.data["cluster_label"] = None
         self.data["meta_label"] = None
 
     def reset_meta_clusters(self):
@@ -703,7 +682,6 @@ class Clustering:
         ----------
         func: callable
         summary_method: str (default="median")
-        normalise: str (default="norm")
         kwargs:
             Additional keyword arguments passed to func
 
@@ -756,37 +734,26 @@ class Clustering:
             updated_data.append(df)
         self.data = pd.concat(updated_data).reset_index(drop=True)
 
-    def explore(self):
-        """
-        Generate an Explorer object (see CytoPy.flow.explore.Explorer) using the
-        associated data with clustering labels
+    def scatterplot_sample(self,
+                           sample_id: str,
+                           method: str = "UMAP",
+                           dim_reduction_kwargs: dict or None = None,
+                           **kwargs):
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        data = dimensionality_reduction(data=self.data[self.data.sample_id == sample_id],
+                                        features=self.features,
+                                        method=method,
+                                        n_components=2,
+                                        **dim_reduction_kwargs)
+        return scatterplot(data=data,
+                           method=method,
+                           label="cluster_label",
+                           discrete=True,
+                           **kwargs)
 
-        Returns
-        -------
-        Explorer
-        """
-        self._cluster_counts()
-        return Explorer(data=self.data)
+    def scatterplot_meta(self):
+        pass
 
-    def save(self):
-        """
-        Save the results of the clustering analysis to the Population of each FileGroup
-        clustered in this analysis.
+    def clustered_heatmap(self):
+        pass
 
-        Returns
-        -------
-        None
-        """
-        for sample_id, sample_df in self.data.groupby("sample_id"):
-            fg = self.experiment.get_sample(sample_id)
-            root = fg.get_population(self.root_population)
-            root.delete_cluster(tag=self.tag)
-            for cluster_id, cluster_df in sample_df.groupby("cluster_id"):
-                idx = cluster_df.original_index.values
-                root.add_cluster(Cluster(cluster_id=cluster_id,
-                                         meta_label=str(cluster_df.meta_label.values[0]),
-                                         n=int(len(idx)),
-                                         index=idx,
-                                         prop_of_events=float(len(idx) / sample_df.shape[0]),
-                                         tag=str(self.tag)))
-            fg.save()

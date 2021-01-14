@@ -245,7 +245,7 @@ def test_estimate_ctrl_population(example_populated_experiment, pop_name, n):
     fg.estimate_ctrl_population(ctrl="test_ctrl",
                                 population=pop_name,
                                 downsample=0.9,
-                                sml_population_mappings=mappings)
+                                population_mappings=mappings)
     pop = fg.get_population(pop_name)
     assert "test_ctrl" in pop.ctrl_index.keys()
     assert isinstance(pop.ctrl_index.get("test_ctrl"), np.ndarray)

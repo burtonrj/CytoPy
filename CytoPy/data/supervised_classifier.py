@@ -510,6 +510,7 @@ class CellClassifier(mongoengine.Document):
         """
         idx = x.index.values[np.where(y_pred == 0)[0]]
         target.add_population(Population(population_name=f"{self.population_prefix}_Unclassified",
+                                         source="classifier",
                                          index=idx,
                                          n=len(idx),
                                          parent=root_population,
@@ -570,6 +571,7 @@ class CellClassifier(mongoengine.Document):
             else:
                 idx = x.index.values[np.where(y_pred == i + 1)[0]]
             target.add_population(Population(population_name=f"{self.population_prefix}_{pop}",
+                                             source="classifier",
                                              index=idx,
                                              n=len(idx),
                                              parent=root_population,

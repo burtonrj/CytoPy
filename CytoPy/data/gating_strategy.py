@@ -460,9 +460,8 @@ class GatingStrategy(mongoengine.Document):
         Apply an action, that is, a merge or subtraction:
             * Merge: merge two populations present in the current population tree.
             The merged population will have the combined index of both populations but
-            will not inherit any clusters and will not be associated to any children
-            downstream of either the left or right population. The population will be
-            added to the tree as a descendant of the left populations parent
+            and will not be associated to any children downstream of either the left or right population.
+            The population will be added to the tree as a descendant of the left populations parent
             * Subtraction: subtract the right population from the left population.
             The right population must either have the same parent as the left population
             or be downstream of the left population. The new population will descend from

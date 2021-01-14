@@ -130,7 +130,7 @@ def compute_ctrl_populations(experiment: Experiment,
                                                     verbose=verbose,
                                                     scoring=scoring,
                                                     downsample=downsample,
-                                                    sml_population_mappings=sml_population_mappings,
+                                                    population_mappings=sml_population_mappings,
                                                     **kwargs)
                     except AssertionError as e:
                         warn(f"Failed to identify {pop} in {ctrl_id} for {fg.primary_id}; {str(e)}")
