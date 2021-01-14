@@ -33,7 +33,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from ..flow.transform import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
     create_convex_hull, create_polygon, ellipse_to_polygon, probablistic_ellipse
-from .population import Population, merge_multiple_populations, create_signature
+from .population import Population, merge_multiple_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
 from shapely.geometry import Polygon as ShapelyPoly
@@ -42,7 +42,6 @@ from sklearn.cluster import *
 from sklearn.mixture import *
 from hdbscan import HDBSCAN
 from warnings import warn
-from scipy.spatial.distance import euclidean
 from string import ascii_uppercase
 from collections import Counter
 from typing import List, Dict
@@ -705,7 +704,6 @@ class ThresholdGate(Gate):
         for definition, df in data.items():
             self.add_child(ChildThreshold(name=definition,
                                           definition=definition,
-                                          signature=create_signature(data=df),
                                           geom=ThresholdGeom(x_threshold=thresholds[0],
                                                              y_threshold=y_threshold)))
         return None
@@ -803,8 +801,8 @@ class ThresholdGate(Gate):
                                    definition=definition,
                                    parent=self.parent,
                                    n=df.shape[0],
+                                   source="gate",
                                    index=df.index.values,
-                                   signature=create_signature(data=df),
                                    geom=ThresholdGeom(x=self.x,
                                                       y=self.y,
                                                       transform_x=self.transformations.get("x", None),
@@ -906,11 +904,11 @@ class PolygonGate(Gate):
                                x_values=poly.exterior.xy[0],
                                y_values=poly.exterior.xy[1])
             pops.append(Population(population_name=name,
+                                   source="gate",
                                    parent=self.parent,
                                    n=pop_df.shape[0],
                                    geom=geom,
-                                   index=pop_df.index.values,
-                                   signature=create_signature(pop_df)))
+                                   index=pop_df.index.values))
         return pops
 
     def label_children(self,
@@ -1049,12 +1047,7 @@ class PolygonGate(Gate):
         data = self._dim_reduction(data=data)
         polygons = self._fit(data=data)
         for name, poly in zip(ascii_uppercase, polygons):
-            poly_df = inside_polygon(df=data,
-                                     x=self.x,
-                                     y=self.y,
-                                     poly=poly)
             self.add_child(ChildPolygon(name=name,
-                                        signature=create_signature(data=poly_df),
                                         geom=PolygonGeom(x_values=poly.exterior.xy[0].tolist(),
                                                          y_values=poly.exterior.xy[1].tolist())))
 
@@ -1501,8 +1494,7 @@ def find_inflection_point(x: np.array,
 
 def _reset_population(population: Population):
     """
-    When a population geometry is updated, this function removes associated
-    clusters and control indexes.
+    When a population geometry is updated, this function removes associated control indexes.
 
     Parameters
     ----------
@@ -1512,9 +1504,6 @@ def _reset_population(population: Population):
     -------
     None
     """
-    if len(population.list_clusters()) > 0:
-        warn(f"{population.population_name} has associated clusters which will be removed")
-        population.delete_all_clusters()
     for ctrl_id in population.ctrl_index.keys():
         warn(f"{ctrl_id} index for {population.population_name} will be reset")
         population.ctrl_index.pop(ctrl_id)
@@ -1527,8 +1516,6 @@ def update_threshold(population: Population,
     """
     Given an existing population and some new threshold(s) (different to what is already
     associated to the Population), update the Population index and geom accordingly.
-    Any associated clusters will be removed and any controls will have to be estimated
-    again.
 
     Parameters
     ----------
@@ -1570,9 +1557,7 @@ def update_polygon(population: Population,
     """
     Given an existing population and some new definition for it's polygon gate
     (different to what is already associated to the Population), update the Population
-    index and geom accordingly. Any associated clusters will be removed and any controls
-    will have to be estimated
-    again.
+    index and geom accordingly. Any controls will have to be estimated again.
     Parameters
     ----------
     population

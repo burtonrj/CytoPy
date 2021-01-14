@@ -1001,35 +1001,6 @@ class Experiment(mongoengine.Document):
         super().delete(*args, **kwargs)
 
 
-def load_clusters(pop_data: pd.DataFrame,
-                  tag: str,
-                  filegroup: FileGroup,
-                  population: str):
-    """
-    Given a DataFrame of population level data (where each row is a single cell), the tag for some clusters,
-    and the target FileGroup and population, populate the DataFrame with the cluster ID and meta cluster
-    label in the columns cluster_id and meta_label, respectively.
-
-    Parameters
-    ----------
-    pop_data: Pandas.DataFrame
-    tag: str
-    filegroup: FileGroup
-    population: str
-
-    Returns
-    -------
-    Pandas.DataFrame
-    """
-    population = filegroup.get_population(population)
-    for cluster in population.clusters:
-        if cluster.tag != tag:
-            continue
-        pop_data.loc[cluster.index, "cluster_id"] = cluster.cluster_id
-        pop_data.loc[cluster.index, "meta_label"] = cluster.meta_label
-    return pop_data
-
-
 def load_subject_id(pop_data: pd.DataFrame,
                     filegroup: FileGroup):
     """
@@ -1057,12 +1028,11 @@ def load_population_data_from_experiment(experiment: Experiment,
                                          transform: str = "logicle",
                                          sample_ids: list or None = None,
                                          verbose: bool = True,
-                                         include_clusters: str or None = None,
                                          additional_columns: list or None = None):
     """
     Load Population from samples in the given Experiment and generate a
     standard exploration dataframe that contains the columns 'sample_id',
-    'subject_id', 'cluster_id', 'meta_label' and initialises additional
+    'subject_id', 'meta_label' and initialises additional
     columns with null values if specified (additional_columns).
 
 
@@ -1073,7 +1043,6 @@ def load_population_data_from_experiment(experiment: Experiment,
     transform: str
     sample_ids: list, optional
     verbose: bool (default=True)
-    include_clusters: str, optional
     additional_columns: list, optional
 
     Returns
@@ -1090,14 +1059,7 @@ def load_population_data_from_experiment(experiment: Experiment,
                                          label_downstream_affiliations=True)
 
         pop_data["sample_id"] = _id
-        pop_data["cluster_id"] = None
-        pop_data["meta_label"] = None
         pop_data = load_subject_id(pop_data, fg)
-        if include_clusters is not None:
-            pop_data = load_clusters(pop_data=pop_data,
-                                     tag=include_clusters,
-                                     population=population,
-                                     filegroup=fg)
         population_data.append(pop_data)
     data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
                       for df in population_data]).reset_index(drop=True)
@@ -1143,7 +1105,6 @@ def load_control_population_from_experiment(experiment: Experiment,
                                               transform=transform,
                                               ctrl=ctrl)
         pop_data["sample_id"] = _id
-        pop_data["cluster_id"] = None
         pop_data["meta_label"] = None
         pop_data = load_subject_id(pop_data, fg)
         population_data.append(pop_data)

@@ -46,12 +46,6 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 
-META_VARS = ["meta_label",
-             "cluster_id",
-             "population_label",
-             "sample_id",
-             "subject_id"]
-
 SEQ_COLOURS = ['viridis', 'plasma', 'inferno', 'magma', 'cividis',
                'Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
                'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
@@ -59,14 +53,6 @@ SEQ_COLOURS = ['viridis', 'plasma', 'inferno', 'magma', 'cividis',
                'binary', 'gist_yarg', 'gist_gray', 'gray', 'bone', 'pink',
                'spring', 'summer', 'autumn', 'winter', 'cool', 'Wistia',
                'hot', 'afmhot', 'gist_heat', 'copper']
-
-
-def data_loaded(func):
-    def wrapper(*args, **kwargs):
-        assert args[0].data is not None, f"Dataframe has not been initialised"
-        return func(*args, **kwargs)
-
-    return wrapper
 
 
 def assert_column(column_name: str, data: pd.DataFrame):
@@ -93,6 +79,39 @@ def scatterplot(data: pd.DataFrame,
                 colourbar_kwargs: dict or None = None,
                 legend_kwargs: dict or None = None,
                 **kwargs):
+    """
+    Generates an exploratory scatterplot following some dimensionality reduction technique
+    applied to the input data. The resulting embeddings should be stored as columns within the
+    given DataFrame of format {method}[1-2].
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    method: str
+        Dimension reduction method applied
+    label: str
+        Grouping variable to determine colour in plots. Should be a column in data.
+    discrete: bool
+        Determines if label is discrete or continuous. If False, colour will be a gradient and plot
+        will be accompanied with a colourbar.
+    size: str, optional
+        If given, will be interpreted as the name of a variable (column) that will control the size of
+        data points (creates a bubble plot)
+    scale_factor: int (default=15)
+        Scale factor if size is given (marker size = scale_factor*size)
+    figsize: tuple (default=(10,12))
+    palette: str (default="tab20")
+    colourbar_kwargs: dict, optional
+        Additional keyword arguments passed to colourbar
+    legend_kwargs: dict, optional
+        Additional keyword arguments passed to legend
+    kwargs:
+        Additional keyword arguments passed to Matplotlib.Axes.scatter call
+
+    Returns
+    -------
+    Matplotlib.Axes
+    """
     fig, ax = plt.subplots(figsize=figsize)
     colourbar_kwargs = colourbar_kwargs or {}
     legend_kwargs = legend_kwargs or {"bbox_to_anchor": (1.15, 1.)}

@@ -800,3 +800,4 @@ def generate_groups(linkage_matrix: np.array,
                                              hierarchy.cut_tree(linkage_matrix, n_groups).flatten()))})
     groups = groups.sort_values('group')
     return groups
+
