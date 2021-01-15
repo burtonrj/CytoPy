@@ -873,6 +873,7 @@ def standards_sample_response_density(response: pd.DataFrame,
 def predictions_dataframe(model: LogisticCurveFit or LinearFit,
                           response: pd.DataFrame,
                           analyte: str,
+                          dilution_factor: int = 1,
                           standard_regex: str = "Standard[0-9]+"):
     """
     Given a valid model object (LogisticCurveFit or LinearFit) generate a dataframe of
@@ -899,6 +900,7 @@ def predictions_dataframe(model: LogisticCurveFit or LinearFit,
                        "flag": flag})
     df["duplicate"] = df.groupby("Sample").cumcount() + 1
     df["analyte"] = analyte
+    df["concentration"] = df["concentration"]/dilution_factor
     return df
 
 
@@ -936,3 +938,7 @@ def plot_repeat_measures(predictions_df: pd.DataFrame,
         ax.set_yscale("log", base=10)
         ax.set_ylabel("log10(Concentration)")
     return ax
+
+
+def rank_cv(predictions_df: pd.DataFrame):
+    return predictions_df.groupby("Sample")["concentration"].apply(stats.variation).sort_values(ascending=False)
