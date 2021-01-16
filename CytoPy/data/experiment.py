@@ -537,7 +537,7 @@ class Experiment(mongoengine.Document):
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
     data_directory = mongoengine.StringField(required=True)
-    panel = mongoengine.EmbeddedDocument(Panel)
+    panel = mongoengine.EmbeddedDocumentField(Panel)
     fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.PULL))
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
