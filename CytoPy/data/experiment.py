@@ -371,7 +371,7 @@ def missing_channels(mappings: List[dict],
                 warn(f"Missing channel {x.standard}")
 
 
-class Panel(mongoengine.Document):
+class Panel(mongoengine.EmbeddedDocument):
     """
     Document representation of channel/marker definition for an experiment. A panel, once associated to an experiment
     will standardise data upon input; when an fcs file is created in the database, it will be associated to
@@ -379,8 +379,6 @@ class Panel(mongoengine.Document):
 
     Attributes
     -----------
-    panel_name: str, required
-        unique identifier for the panel
     markers: EmbeddedDocListField
         list of marker names; see NormalisedName
     channels: EmbeddedDocListField
@@ -391,7 +389,6 @@ class Panel(mongoengine.Document):
         date of creationfiles['controls']
 
     """
-    panel_name = mongoengine.StringField(required=True, unique=True)
     markers = mongoengine.EmbeddedDocumentListField(NormalisedName)
     channels = mongoengine.EmbeddedDocumentListField(NormalisedName)
     mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
@@ -540,7 +537,7 @@ class Experiment(mongoengine.Document):
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
     data_directory = mongoengine.StringField(required=True)
-    panel = mongoengine.ReferenceField(Panel, reverse_delete_rule=mongoengine.NULLIFY)
+    panel = mongoengine.EmbeddedDocument(Panel)
     fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.PULL))
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
@@ -551,7 +548,6 @@ class Experiment(mongoengine.Document):
 
     def __init__(self, *args, **kwargs):
         panel_definition = kwargs.pop("panel_definition", None)
-        panel_name = kwargs.pop("panel_name", None)
         super().__init__(*args, **kwargs)
         if self.data_directory:
             assert os.path.isdir(self.data_directory), f"data directory {self.data_directory} does not exist"
@@ -559,25 +555,17 @@ class Experiment(mongoengine.Document):
         else:
             raise ValueError("No data directory provided")
         if self.panel is None:
-            if self.id:
-                warn("This Experiment was previously defined yet the associated Panel has been removed. A new "
-                     "panel definition must be provided or a reference to an existing panel given by calling "
-                     "'generate_panel' method. This should be done prior to executing any additional code.")
-            else:
-                self.panel = self.generate_panel(panel_definition=panel_definition,
-                                                 panel_name=panel_name)
-                self.panel.save()
+            assert panel_definition is not None, "No panel associated to this experiment, please provide a " \
+                                                 "panel definition"
+            self.panel = self.generate_panel(panel_definition=panel_definition)
 
     @staticmethod
-    def _check_panel(panel_name: str or None,
-                     panel_definition: str or None):
+    def _check_panel(panel_definition: str or None):
         """
         Check that parameters provided for defining a panel are valid.
 
         Parameters
         ----------
-        panel_name: str or None
-            Name of an existing panel
         panel_definition: str or None
             Path to a panel definition
 
@@ -586,39 +574,27 @@ class Experiment(mongoengine.Document):
         None
             Raises AssertionError in the condition that the given parameters are invalid
         """
-        if panel_definition is None and panel_name is None:
-            raise ValueError("Must provide either path to panel definition or name of an existing panel")
-        if panel_definition is not None:
-            assert os.path.isfile(panel_definition), f"{panel_definition} does not exist"
-            err = "Panel definition is not a valid Excel document"
-            assert os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"], err
-        else:
-            assert len(Panel.objects(panel_name=panel_name)) > 0, "Invalid panel name, panel does not exist"
+        assert os.path.isfile(panel_definition), f"{panel_definition} does not exist"
+        err = "Panel definition is not a valid Excel document"
+        assert os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"], err
 
     def generate_panel(self,
-                       panel_definition: str or None,
-                       panel_name: str or None):
+                       panel_definition: str):
         """
         Associate a panel to this Experiment, either by fetching an existing panel using the
         given panel name or by generating a new panel using the panel definition provided (path to a valid template).
 
         Parameters
         ----------
-        panel_name: str or None
-            Name of an existing panel
-        panel_definition: str or None
+        panel_definition: str
             Path to a panel definition
 
         Returns
         -------
         Panel
         """
-        self._check_panel(panel_name=panel_name, panel_definition=panel_definition)
-        if panel_definition is None:
-            return Panel.objects(panel_name=panel_name).get()
-        if panel_name is None:
-            panel_name = f"{self.experiment_id}_panel"
-        new_panel = Panel(panel_name=panel_name)
+        self._check_panel(panel_definition=panel_definition)
+        new_panel = Panel()
         new_panel.create_from_excel(path=panel_definition)
         return new_panel
 
@@ -977,7 +953,6 @@ class Experiment(mongoengine.Document):
         return mappings
 
     def delete(self,
-               delete_panel: bool = True,
                *args,
                **kwargs):
         """
@@ -985,8 +960,6 @@ class Experiment(mongoengine.Document):
 
         Parameters
         ----------
-        delete_panel: bool (default=True)
-            Delete associated panel. Check that other experiments do not depend on the same panel!
         args: list
         kwargs: dict
 
@@ -994,8 +967,6 @@ class Experiment(mongoengine.Document):
         -------
         None
         """
-        if delete_panel:
-            self.panel.delete()
         for f in self.fcs_files:
             f.delete()
         super().delete(*args, **kwargs)
