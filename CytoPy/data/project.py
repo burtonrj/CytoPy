@@ -112,8 +112,7 @@ class Project(mongoengine.Document):
     def add_experiment(self,
                        experiment_id: str,
                        data_directory: str,
-                       panel_name: str or None = None,
-                       panel_definition: str or None = None) -> Experiment:
+                       panel_definition: str) -> Experiment:
         """
         Add new experiment to project. Note you must provide either a path to an excel template for the panel
         definition (panel_definition) or the name of an existing panel (panel_name). If panel_definition is provided,
@@ -126,9 +125,7 @@ class Project(mongoengine.Document):
             experiment name
         data_directory: str
             Path where experiment events data files will be stored
-        panel_name: str (optional)
-            Name of panel to associate to experiment
-        panel_definition: str (optional)
+        panel_definition: str
             Path to excel template for generating the panel
 
         Returns
@@ -140,7 +137,6 @@ class Project(mongoengine.Document):
         assert experiment_id not in list(self.list_experiments()), err
         exp = Experiment(experiment_id=experiment_id,
                          panel_definition=panel_definition,
-                         panel_name=panel_name,
                          data_directory=data_directory)
         exp.save()
         self.experiments.append(exp)
@@ -221,8 +217,6 @@ class Project(mongoengine.Document):
             samples = e.list_samples()
             for s in samples:
                 e.remove_sample(s)
-            if e.panel:
-                e.panel.delete()
             e.delete()
         for p in self.subjects:
             p.delete()
