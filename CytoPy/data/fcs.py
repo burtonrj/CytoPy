@@ -377,6 +377,9 @@ class FileGroup(mongoengine.Document):
         """
         err = f"Population with name '{population.population_name}' already exists"
         assert population.population_name not in self.tree.keys(), err
+        assert population.index is not None, "Population index is empty"
+        if population.n is None:
+            population.n = len(population.index)
         self.populations.append(population)
         self.tree[population.population_name] = anytree.Node(name=population.population_name,
                                                              parent=self.tree.get(population.parent))
@@ -692,6 +695,8 @@ class FileGroup(mongoengine.Document):
         None
         """
         if populations == "all":
+            for p in self.populations:
+                self.tree[p.population_name].parent = None
             self.populations = [p for p in self.populations if p.population_name == "root"]
             self.tree = {name: node for name, node in self.tree.items() if name == "root"}
         else:

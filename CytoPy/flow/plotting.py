@@ -737,6 +737,7 @@ class CreatePlot:
                              x=x,
                              y=y,
                              **plot_kwargs)
+        self._set_axis_limits(data=parent, x=x, y=y)
 
         for c, (child_name, df) in zip(colours, children.items()):
             method_ = method

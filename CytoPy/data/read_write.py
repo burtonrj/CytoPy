@@ -105,7 +105,7 @@ def get_fcs_file_paths(fcs_dir: str,
     dict
         standard dictionary of fcs files contained in target directory
     """
-    file_tree = dict(primary=[], controls=[])
+    file_tree = dict(primary=[], controls={})
     fcs_files = filter_fcs_files(fcs_dir, exclude_comps=ignore_comp, exclude_dir=exclude_dir)
     ctrl_files = [f for f in fcs_files if f.find(ctrl_id) != -1]
     primary = [f for f in fcs_files if f.find(ctrl_id) == -1]
@@ -116,9 +116,8 @@ def get_fcs_file_paths(fcs_dir: str,
             continue
         if len(matched_controls) > 1:
             print(f'Warning: multiple files found for {c_name} control')
-            file_tree['controls'].append(dict(control_id=c_name, path=matched_controls))
-            continue
-        file_tree['controls'].append(dict(control_id=c_name, path=matched_controls[0]))
+        file_tree['controls'][c_name] = matched_controls
+
     if len(primary) > 1:
         print('Warning! Multiple non-control (primary) files found in directory. Check before proceeding.')
     file_tree['primary'] = primary
