@@ -620,8 +620,9 @@ class Experiment(mongoengine.Document):
         assert os.path.isdir(new_path), "Invalid directory given for new_path"
         for file in self.fcs_files:
             file.data_directory = new_path
+            file.h5path = os.path.join(new_path, f"{file.id.__str__()}.hdf5")
             if move:
-                shutil.move(f"{self.data_directory}/{file.id}", f"{new_path}/{file.id}")
+                shutil.move(f"{self.data_directory}{file.id}.hdf5", f"{new_path}/{file.id}.hdf5")
             file.save()
         self.data_directory = new_path
         shutil.move(self.data_directory, new_path)

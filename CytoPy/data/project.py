@@ -81,18 +81,6 @@ class Project(mongoengine.Document):
         'collection': 'projects'
     }
 
-    def list_experiments(self) -> Generator:
-        """
-        Generate a list of associated flow cytometry experiments
-
-        Returns
-        -------
-        Generator
-            list of experiment IDs
-        """
-        for e in self.experiments:
-            yield e.experiment_id
-
     def load_experiment(self, experiment_id: str) -> Experiment:
         """
         Load the experiment object for a given experiment ID
@@ -106,7 +94,8 @@ class Project(mongoengine.Document):
         --------
         Experiment
         """
-        assert experiment_id in list(self.list_experiments()), f'Error: no experiment {experiment_id} found'
+        assert experiment_id in [x.experiment_id for x in self.experiments], \
+            f'Error: no experiment {experiment_id} found'
         return Experiment.objects(experiment_id=experiment_id).get()
 
     def add_experiment(self,
@@ -134,7 +123,7 @@ class Project(mongoengine.Document):
             Newly created FCSExperiment
         """
         err = f'Error: Experiment with id {experiment_id} already exists!'
-        assert experiment_id not in list(self.list_experiments()), err
+        assert experiment_id not in [x.experiment_id for x in self.experiments], err
         exp = Experiment(experiment_id=experiment_id,
                          panel_definition=panel_definition,
                          data_directory=data_directory)
@@ -212,8 +201,7 @@ class Project(mongoengine.Document):
         --------
         None
         """
-        experiments = [self.load_experiment(e) for e in list(self.list_experiments())]
-        for e in experiments:
+        for e in self.experiments:
             samples = e.list_samples()
             for s in samples:
                 e.remove_sample(s)

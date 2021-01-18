@@ -612,6 +612,7 @@ class GatingStrategy(mongoengine.Document):
         downstream = self.filegroup.list_downstream_populations(population=parent)
         assert all([x in downstream for x in overlay]), \
             "One or more of the given populations is not downstream of the given parent"
+        create_plot_kwargs = create_plot_kwargs or {}
         plotting = CreatePlot(**create_plot_kwargs)
         parent = self.filegroup.load_population_df(population=parent,
                                                    transform=None,
