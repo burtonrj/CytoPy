@@ -253,7 +253,7 @@ class Gate(mongoengine.Document):
                 raise ValueError("Sampling parameter 'n' must be an integer or float")
         if self.sampling.get("method", None) == "density":
             kwargs = {k: v for k, v in self.sampling.items()
-                      if k not in  ["method", "features"]}
+                      if k not in ["method", "features"]}
             features = [f for f in [self.x, self.y] if f is not None]
             return density_dependent_downsampling(data=data,
                                                   features=features,
@@ -466,7 +466,8 @@ class ThresholdGate(Gate):
             assert child.definition in ["+", "-"], "Invalid child definition, should be either '+' or '-'"
         child.geom.x = self.x
         child.geom.y = self.y
-        child.geom.transform_x, child.geom.transform_y = self.transformations.get("x", None), self.transformations.get("y", None)
+        child.geom.transform_x, child.geom.transform_y = self.transformations.get("x", None), self.transformations.get(
+            "y", None)
         self.children.append(child)
 
     def _duplicate_children(self) -> None:
@@ -643,10 +644,13 @@ class ThresholdGate(Gate):
                     thresholds.append(find_local_minima(p=p, x=x_grid, peaks=peaks))
                 else:
                     smoothed_peak_finding_kwargs = self.method_kwargs.get("smoothed_peak_finding_kwargs", {})
-                    smoothed_peak_finding_kwargs["min_peak_threshold"] = smoothed_peak_finding_kwargs.get("min_peak_threshold",
-                                                                                                          self.method_kwargs.get("min_peak_threshold", 0.05))
+                    smoothed_peak_finding_kwargs["min_peak_threshold"] = smoothed_peak_finding_kwargs.get(
+                        "min_peak_threshold",
+                        self.method_kwargs.get("min_peak_threshold", 0.05))
                     smoothed_peak_finding_kwargs["peak_boundary"] = smoothed_peak_finding_kwargs.get("peak_boundary",
-                                                                                                     self.method_kwargs.get("peak_boundary", 0.1))
+                                                                                                     self.method_kwargs.get(
+                                                                                                         "peak_boundary",
+                                                                                                         0.1))
                     p, peaks = smoothed_peak_finding(p=p, **smoothed_peak_finding_kwargs)
                     if len(peaks) == 1:
                         thresholds.append(self._process_one_peak(d=d,
@@ -803,6 +807,7 @@ class ThresholdGate(Gate):
                                    n=df.shape[0],
                                    source="gate",
                                    index=df.index.values,
+                                   signature=df.mean().to_dict(),
                                    geom=ThresholdGeom(x=self.x,
                                                       y=self.y,
                                                       transform_x=self.transformations.get("x", None),
@@ -907,6 +912,7 @@ class PolygonGate(Gate):
                                    source="gate",
                                    parent=self.parent,
                                    n=pop_df.shape[0],
+                                   signature=pop_df.mean().to_dict(),
                                    geom=geom,
                                    index=pop_df.index.values))
         return pops

@@ -326,3 +326,12 @@ class FCSFile:
         comp_data = self.event_data[:, channel_idx]
         comp_data = np.linalg.solve(self.spill.values.T, comp_data.T).T
         self.event_data[:, channel_idx] = comp_data
+
+
+def export_database(path: str):
+    pass
+
+
+def import_database(path: str,
+                    data_directories: dict):
+    pass
