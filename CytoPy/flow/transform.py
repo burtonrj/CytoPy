@@ -167,7 +167,7 @@ def _transform(data: pd.DataFrame,
     if method == "Standard":
         data[features] = StandardScaler(**kwargs).fit_transform(data[features])
         return data
-    if method == "Qunatile":
+    if method == "Quantile":
         data[features] = QuantileTransformer(**kwargs).fit_transform(data[features])
         return data
     raise ValueError("Error: invalid transform_method, see docs for available transforms")
