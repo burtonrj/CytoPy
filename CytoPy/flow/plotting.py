@@ -797,7 +797,7 @@ class CreatePlot:
         -------
         None
         """
-        assert method in ["scatter", "kde"], "Overlay method should be 'scatter' or 'kde'"
+        assert method in ["scatter", "kde", "polygon"], "Overlay method should be 'scatter' or 'kde'"
         if y is None and method == "scatter":
             warn("1-dimensional plot, defaulting to KDE overlay")
             method = "kde"
@@ -810,12 +810,12 @@ class CreatePlot:
                              label=label,
                              **kwargs)
         elif method == "polygon":
-            hull = ConvexHull(data[[x, y]].values)
+            d = data[[x, y]].values
+            hull = ConvexHull(d)
             for simplex in hull.simplices:
-                self._ax.plot(data[simplex, 0],
-                              data[simplex, 1],
+                self._ax.plot(d[simplex, 0],
+                              d[simplex, 1],
                               '-',
-                              label=label,
                               **kwargs)
         else:
             if y is None:
