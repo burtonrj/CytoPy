@@ -36,6 +36,8 @@ from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
 from .population import Population, merge_multiple_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
+from ..flow.fda_norm import fda_norm
+from .fcs import FileGroup
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
 from sklearn.cluster import *
@@ -190,6 +192,8 @@ class Gate(mongoengine.Document):
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
     children = mongoengine.EmbeddedDocumentListField(Child)
+    reference = mongoengine.ReferenceField(FileGroup)
+    fda_norm = mongoengine.BooleanField()
 
     meta = {
         'db_alias': 'core',
@@ -723,6 +727,7 @@ class ThresholdGate(Gate):
                                                              y_threshold=y_threshold)))
         return None
 
+    @fda_norm
     def fit_predict(self,
                     data: pd.DataFrame,
                     ctrl_data: pd.DataFrame or None = None) -> list:
@@ -1037,7 +1042,8 @@ class PolygonGate(Gate):
         List
             List of Shapely polygon's
         """
-        self.model = globals()[self.method](**self.method_kwargs)
+        kwargs = {k: v for k, v in self.method_kwargs.items() if k != "conf"}
+        self.model = globals()[self.method](**kwargs)
         if self.method == "manual":
             return [self._manual()]
         self._xy_in_dataframe(data=data)
@@ -1075,6 +1081,7 @@ class PolygonGate(Gate):
                                         geom=PolygonGeom(x_values=poly.exterior.xy[0].tolist(),
                                                          y_values=poly.exterior.xy[1].tolist())))
 
+    @fda_norm
     def fit_predict(self,
                     data: pd.DataFrame) -> List[Population]:
         """
