@@ -204,8 +204,6 @@ class Gate(mongoengine.Document):
         assert method in ["manual", "density", "quantile"] + list(globals().keys()), err
         super().__init__(*args, **values)
         self.model = None
-        if method not in ["manual", "density", "quantile"]:
-            self.model = globals()[method](**self.method_kwargs)
 
     def _transform(self,
                    data: pd.DataFrame) -> pd.DataFrame:
@@ -676,8 +674,16 @@ class ThresholdGate(Gate):
         assert all([isinstance(i, float) for i in thresholds]), "Thresholds must be floating point values"
         return thresholds
 
+    def _ctrl_fit(self,
+                  ctrl_data: pd.DataFrame):
+        ctrl_data = ctrl_data.copy()
+        ctrl_data = self._transform(data=ctrl_data)
+        ctrl_data = self._dim_reduction(data=ctrl_data)
+        return self._fit(data=ctrl_data)
+
     def fit(self,
-            data: pd.DataFrame) -> None:
+            data: pd.DataFrame,
+            ctrl_data: pd.DataFrame or None = None) -> None:
         """
         Fit the gate using a given dataframe. If children already exist will raise an AssertionError
         and notify user to call `fit_predict`.
@@ -685,7 +691,9 @@ class ThresholdGate(Gate):
         Parameters
         ----------
         data: Pandas.DataFrame
-            Population data to fit threshold too
+            Population data to fit threshold
+        ctrl_data: Pandas.DataFrame, optional
+            If provided, thresholds will be calculated using ctrl_data and then applied to data
 
         Returns
         -------
@@ -698,7 +706,10 @@ class ThresholdGate(Gate):
                                         "fit to new data and match populations to children, or call " \
                                         "'predict' to apply static thresholds to new data. If you want to " \
                                         "reset the gate and call 'fit' again, first call 'reset_gate'"
-        thresholds = self._fit(data=data)
+        if ctrl_data is not None:
+            thresholds = self._ctrl_fit(ctrl_data=ctrl_data)
+        else:
+            thresholds = self._fit(data=data)
         y_threshold = None
         if len(thresholds) > 1:
             y_threshold = thresholds[1]
@@ -713,7 +724,8 @@ class ThresholdGate(Gate):
         return None
 
     def fit_predict(self,
-                    data: pd.DataFrame) -> list:
+                    data: pd.DataFrame,
+                    ctrl_data: pd.DataFrame or None = None) -> list:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -722,7 +734,9 @@ class ThresholdGate(Gate):
         Parameters
         ----------
         data: Pandas.DataFrame
-            Population data to fit threshold too
+            Population data to fit threshold to
+        ctrl_data: Pandas.DataFrame, optional
+            If provided, thresholds will be calculated using ctrl_data and then applied to data
 
         Returns
         -------
@@ -733,7 +747,10 @@ class ThresholdGate(Gate):
         data = data.copy()
         data = self._transform(data=data)
         data = self._dim_reduction(data=data)
-        thresholds = self._fit(data=data)
+        if ctrl_data is not None:
+            thresholds = self._ctrl_fit(ctrl_data=ctrl_data)
+        else:
+            thresholds = self._fit(data=data)
         y_threshold = None
         if len(thresholds) == 2:
             y_threshold = thresholds[1]
@@ -1020,6 +1037,7 @@ class PolygonGate(Gate):
         List
             List of Shapely polygon's
         """
+        self.model = globals()[self.method](**self.method_kwargs)
         if self.method == "manual":
             return [self._manual()]
         self._xy_in_dataframe(data=data)
@@ -1206,6 +1224,7 @@ class EllipseGate(PolygonGate):
         list
             List of Shapely polygon's
         """
+        self.model = globals()[self.method](**self.method_kwargs)
         if not self.method_kwargs.get("probabilistic_ellipse", True):
             return super()._fit(data=data)
         self._xy_in_dataframe(data=data)
