@@ -89,7 +89,7 @@ def dimensionality_reduction(data: pd.DataFrame,
     elif method == 'tSNE':
         reducer = TSNE(random_state=42, n_components=n_components, **kwargs)
     elif method == 'PHATE':
-        reducer = phate.PHATE(random_state=42, n_jobs=-2, n_components=n_components, **kwargs)
+        reducer = phate.PHATE(random_state=42, n_jobs=-2, n_components=n_components, verbose=False, **kwargs)
     elif method == 'KernelPCA':
         reducer = KernelPCA(random_state=42, n_components=n_components, **kwargs)
     else:

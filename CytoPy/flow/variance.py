@@ -409,15 +409,15 @@ def dim_reduction_grid(data: OrderedDict,
                                                      **dim_reduction_kwargs)
     i = 0
     fig.suptitle(f'{method}, Reference: {reference}', y=1.05)
-    for sample_id, df in progress_bar(data.items(), verbose=verbose):
+    for sample_id in progress_bar(comparison_samples, verbose=verbose):
         if sample_id == reference:
             continue
-        if not all([f in df.columns for f in features]):
+        if not all([f in data[sample_id].columns for f in features]):
             warn(f'Features missing from {sample_id}, skipping')
             continue
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
-        embeddings = reducer.transform(df[features])
+        embeddings = reducer.transform(data[sample_id][features])
         x = f'{method}1'
         y = f'{method}2'
         ax.scatter(reference_df[x], reference_df[y], c='blue', s=4, alpha=0.2)
@@ -485,6 +485,7 @@ def overlay_plot(data: pd.DataFrame or OrderedDict,
     -------
     Matplotlib.Axes
     """
+    dim_reduction_kwargs = dim_reduction_kwargs or {}
     ax = ax or plt.subplots(figsize=figsize)[1]
     data = data.copy()
     if isinstance(data, OrderedDict) or isinstance(data, dict):
@@ -495,14 +496,18 @@ def overlay_plot(data: pd.DataFrame or OrderedDict,
     if (method != "PCA" and data.shape[0] > 3e5 and downsample == 1) or downsample == 2:
         if data.shape[0] <= downsample_n:
             downsample_n = data.shape[0] / 3
-        sample = data.sample(n=downsample_n)
+        sample = data.sample(n=int(downsample_n))
+        print("Generate reducer...")
         _, reducer = dimensionality_reduction(sample,
                                               features=features,
                                               method=method,
                                               n_components=2,
                                               return_reducer=True,
                                               **dim_reduction_kwargs)
-        embeddings = {k: pd.DataFrame(reducer.fit_transform(df[features])) for k, df in data.groupby(key)}
+        embeddings = {}
+        print("Dimension reduction...")
+        for k in progress_bar(data[key].unique(), total=data[key].nunique()):
+            embeddings[k] = reducer.fit_transform(data[data[key] == k][features])
     else:
         embeddings = dimensionality_reduction(data,
                                               features=features,
