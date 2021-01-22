@@ -194,6 +194,7 @@ class Gate(mongoengine.Document):
     children = mongoengine.EmbeddedDocumentListField(Child)
     reference = mongoengine.ReferenceField(FileGroup)
     fda_norm = mongoengine.BooleanField()
+    fda_norm_kwargs = mongoengine.DictField()
 
     meta = {
         'db_alias': 'core',
@@ -1083,7 +1084,8 @@ class PolygonGate(Gate):
 
     @fda_norm
     def fit_predict(self,
-                    data: pd.DataFrame) -> List[Population]:
+                    data: pd.DataFrame,
+                    ctrl_data: None = None) -> List[Population]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -1093,6 +1095,8 @@ class PolygonGate(Gate):
         ----------
         data: Pandas.DataFrame
             Population data to fit gate to
+        ctrl_data: None
+            No effect. Present for fda_norm signature.
 
         Returns
         -------
