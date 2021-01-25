@@ -101,7 +101,7 @@ def test_transform_none():
                   method="manual")
     data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
                          "Y": np.random.normal(1, scale=0.5, size=1000)})
-    transformed = g._transform(data)
+    transformed = g.transform(data)
     assert isinstance(transformed, pd.DataFrame)
     assert transformed.shape[0] == 1000
     assert transformed.shape[1] == 2
@@ -119,7 +119,7 @@ def test_transform_x():
                   transformations={"x": "logicle"})
     data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
                          "Y": np.random.normal(1, scale=0.5, size=1000)})
-    transformed = g._transform(data)
+    transformed = g.transform(data)
     assert isinstance(transformed, pd.DataFrame)
     assert transformed.shape[0] == 1000
     assert transformed.shape[1] == 2
@@ -139,7 +139,7 @@ def test_transform_xy():
                                    "y": "logicle"})
     data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
                          "Y": np.random.normal(1, scale=0.5, size=1000)})
-    transformed = g._transform(data)
+    transformed = g.transform(data)
     assert isinstance(transformed, pd.DataFrame)
     assert transformed.shape[0] == 1000
     assert transformed.shape[1] == 2
