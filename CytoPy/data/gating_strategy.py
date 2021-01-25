@@ -318,9 +318,9 @@ class GatingStrategy(mongoengine.Document):
     def add_normalisation(self,
                           gate_name: str,
                           reference: FileGroup or None = None,
-                          commit: bool = False,
                           **kwargs):
         reference = reference or self.filegroup
+        assert gate_name in self.list_gates(), "Invalid gate name"
         self.normalisation[gate_name] = {"reference": str(reference.id),
                                          "kwargs": kwargs}
 
@@ -329,15 +329,11 @@ class GatingStrategy(mongoengine.Document):
                        gate_name: str):
         if gate_name not in self.normalisation.keys():
             warn(f"No normalisation criteria defined for {gate_name}")
-            return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)
-        if self.filegroup.get_population(population_name=population).normalised:
-            warn(f"Population {population} has previously been normalised")
-            return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)
+            return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)[0]
         gate = self.get_gate(gate_name)
-
-        ref = self.filegroup
-        if self.normalisation.get(gate_name).get("reference") != str(self.filegroup.id):
-            ref = FileGroup.objects(id=self.normalisation.get(gate_name).get("reference")).get()
+        if self.normalisation.get(gate_name).get("reference") == str(self.filegroup.id):
+            return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)[0]
+        ref = FileGroup.objects(id=self.normalisation.get(gate_name).get("reference")).get()
         kwargs = self.normalisation.get(gate_name).get("kwargs")
 
         transformations = {gate.x: gate.transformations.get("x"),
