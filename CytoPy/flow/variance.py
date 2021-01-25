@@ -45,6 +45,7 @@ from scipy.stats import entropy as kl
 from scipy.cluster import hierarchy
 from scipy.spatial import distance
 from collections import defaultdict, OrderedDict
+from multiprocessing import Pool, cpu_count
 from KDEpy import FFTKDE
 from warnings import warn
 from itertools import cycle
@@ -401,7 +402,7 @@ def dim_reduction_grid(data: OrderedDict,
     reference_df = data.get(reference).copy()
     assert all([f in reference_df.columns for f in features]), \
         f'Invalid features; valid are: {reference_df.columns}'
-    reference_df, reducer = dimensionality_reduction(reference_df,
+    reference_df, reducer = dimensionality_reduction(reference_df.reset_index(),
                                                      features=features,
                                                      method=method,
                                                      n_components=2,
@@ -417,7 +418,7 @@ def dim_reduction_grid(data: OrderedDict,
             continue
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
-        embeddings = reducer.transform(data[sample_id][features])
+        embeddings = reducer.transform(data[sample_id].reset_index()[features])
         x = f'{method}1'
         y = f'{method}2'
         ax.scatter(reference_df[x], reference_df[y], c='blue', s=4, alpha=0.2)
@@ -491,14 +492,14 @@ def overlay_plot(data: pd.DataFrame or OrderedDict,
     if isinstance(data, OrderedDict) or isinstance(data, dict):
         for k, v in data.items():
             v["key"] = k
-        data = pd.concat(data)
+        data = pd.concat(list(data.values()))
         key = "key"
     if (method != "PCA" and data.shape[0] > 3e5 and downsample == 1) or downsample == 2:
         if data.shape[0] <= downsample_n:
             downsample_n = data.shape[0] / 3
         sample = data.sample(n=int(downsample_n))
         print("Generate reducer...")
-        _, reducer = dimensionality_reduction(sample,
+        _, reducer = dimensionality_reduction(sample.reset_index(),
                                               features=features,
                                               method=method,
                                               n_components=2,
@@ -506,8 +507,12 @@ def overlay_plot(data: pd.DataFrame or OrderedDict,
                                               **dim_reduction_kwargs)
         embeddings = {}
         print("Dimension reduction...")
-        for k in progress_bar(data[key].unique(), total=data[key].nunique()):
-            embeddings[k] = reducer.fit_transform(data[data[key] == k][features])
+        if method != "PHATE":
+            for k in progress_bar(data[key].unique(), total=data[key].nunique()):
+                embeddings[k] = reducer.transform(data[data[key] == k][features])
+        else:
+            for k in progress_bar(data[key].unique(), total=data[key].nunique()):
+                embeddings[k] = reducer.fit_transform(data[data[key] == k].reset_index()[features])
     else:
         embeddings = dimensionality_reduction(data,
                                               features=features,
@@ -516,12 +521,14 @@ def overlay_plot(data: pd.DataFrame or OrderedDict,
                                               return_reducer=False,
                                               return_embeddings_only=False,
                                               **dim_reduction_kwargs)
-        embeddings = {k: df for k, df in embeddings[[f"{method}1", f"{method}2", key]].groupby(key)}
+        embeddings = {k: df.values for k, df in embeddings[[f"{method}1", f"{method}2", key]].groupby(key)}
     colours = cycle(COLOURS)
-    for k, df in enumerate(embeddings.items()):
-        s = kwargs.pop("s", 5)
+    for k, v in embeddings.items():
+        s = kwargs.pop("s", 1)
         alpha = kwargs.pop("alpha", 0.7)
-        ax.scatter(df[f"{method}1"], df[f"{method}2"], c=next(colours), s=s, alpha=alpha, label=k, **kwargs)
+        ax.scatter(v[:, 0], v[:, 1], color=next(colours), s=s, alpha=alpha, label=k, **kwargs)
+    ax.set_xlabel(f"{method}1")
+    ax.set_xlabel(f"{method}2")
     if include_legend:
         ax.legend(bbox_to_anchor=(1.05, 1.15))
     else:
@@ -927,7 +934,9 @@ class Harmony:
     """
 
     def __init__(self,
-                 data: OrderedDict):
+                 data: OrderedDict,
+                 features: list or None = None,
+                 n_jobs: int = -1):
         """
         Parameters
         ----------
@@ -937,10 +946,13 @@ class Harmony:
         for k, v in data.items():
             v["batch_id"] = k
         self.data = pd.concat(list(data.values()))
-        self.features = [x for x in self.data.columns if x != "batch_id"]
-        self.meta = data[["batch_id"]]
+        self.features = features or [x for x in self.data.columns if x != "batch_id"]
+        self.meta = self.data[["batch_id"]]
         self.harmony = None
         self._norms = None
+        self.n_jobs = n_jobs
+        if self.n_jobs <= 0:
+            self.n_jobs = cpu_count()
 
     def normalisation(self):
         """
@@ -950,8 +962,9 @@ class Harmony:
         -------
         None
         """
-        self._norms = self.data[self.features].apply(l2_norm, axis=1)
-        self.data[self.features] = self.data[self.features] / self._norms
+        with Pool(self.n_jobs) as pool:
+            self._norms = np.array(list(pool.map(l2_norm, [self.data.loc[i].values for i in self.data.index])))
+        self.data[self.features] = self.data[self.features].apply(lambda x: x.values/self._norms, axis=0)
 
     def run(self, **kwargs):
         """
@@ -982,7 +995,7 @@ class Harmony:
         Pandas.DataFrame
         """
         assert self.harmony is not None, "Call 'run' first"
-        corrected = pd.DataFrame(self.harmony.Z_corr, columns=self.features)
+        corrected = pd.DataFrame(self.harmony.Z_corr.T, columns=self.features)
         corrected["batch_id"] = self.meta.batch_id.values
         if self._norms is not None:
             corrected[self.features] = corrected[self.features] * self._norms

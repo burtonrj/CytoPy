@@ -33,9 +33,11 @@ from ..feedback import progress_bar, vprint
 from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, \
     PolygonGeom, update_polygon, update_threshold
 from ..flow.gate_search import hyperparameter_gate
+from ..flow.fda_norm import normalise_data
 from .experiment import Experiment
 from .fcs import FileGroup
 from datetime import datetime
+from warnings import warn
 import pandas as pd
 import mongoengine
 
@@ -130,6 +132,7 @@ class GatingStrategy(mongoengine.Document):
     gates = mongoengine.ListField(mongoengine.ReferenceField(Gate, reverse_delete_rule=mongoengine.PULL))
     actions = mongoengine.EmbeddedDocumentListField(Action)
     hyperparameter_search = mongoengine.DictField()
+    normalisation = mongoengine.DictField()
     creation_date = mongoengine.DateTimeField(default=datetime.now)
     last_edit = mongoengine.DateTimeField(default=datetime.now)
     flags = mongoengine.StringField(required=False)
@@ -312,6 +315,48 @@ class GatingStrategy(mongoengine.Document):
         self.hyperparameter_search[gate_name] = {"grid": params,
                                                  "cost": cost}
 
+    def add_normalisation(self,
+                          gate_name: str,
+                          reference: FileGroup or None = None,
+                          **kwargs):
+        reference = reference or self.filegroup
+        self.normalisation[gate_name] = {"reference": str(reference.id),
+                                         "kwargs": kwargs}
+
+    def normalise_data(self,
+                       population: str,
+                       gate_name: str):
+        if gate_name not in self.normalisation.keys():
+            warn(f"No normalisation criteria defined for {gate_name}")
+            return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)
+        gate = self.get_gate(gate_name)
+        ref = self.filegroup
+        if self.normalisation.get(gate_name).get("reference") != str(self.filegroup.id):
+            ref = FileGroup.objects(id=self.normalisation.get(gate_name).get("reference")).get()
+        kwargs = self.normalisation.get(gate_name).get("kwargs")
+        return normalise_data(target=self.filegroup,
+                              population=population,
+                              dims=[d for d in [gate.x, gate.y] if d is not None],
+                              ref=ref,
+                              transform={gate.x: gate.transformations.get("x"),
+                                         gate.y: gate.transformations.get("y")},
+                              ctrl=gate.ctrl,
+                              **kwargs)
+
+    def _load_gate_dataframes(self,
+                              gate: Gate,
+                              fda_norm: bool = False):
+        parent = self.filegroup.load_population_df(population=gate.parent,
+                                                   transform=None,
+                                                   label_downstream_affiliations=False)
+        if fda_norm:
+            return self.normalise_data(population=gate.parent, gate_name=gate.gate_name), None
+        if gate.ctrl:
+            return parent, self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl,
+                                                                  population=gate.parent,
+                                                                  transform=None)
+        return parent, None
+
     def apply_gate(self,
                    gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate,
                    plot: bool = True,
@@ -320,6 +365,7 @@ class GatingStrategy(mongoengine.Document):
                    create_plot_kwargs: dict or None = None,
                    plot_gate_kwargs: dict or None = None,
                    hyperparam_search: bool = True,
+                   fda_norm: bool = False,
                    overwrite_method_kwargs: dict or None = None):
         """
         Apply a gate to the associated FileGroup. The gate must be previously defined;
@@ -359,27 +405,21 @@ class GatingStrategy(mongoengine.Document):
                 f"Gate with name {gate.gate_name} already exists. To continue set add_to_strategy to False"
         create_plot_kwargs = create_plot_kwargs or {}
         plot_gate_kwargs = plot_gate_kwargs or {}
-        parent_data = self.filegroup.load_population_df(population=gate.parent,
-                                                        transform=None,
-                                                        label_downstream_affiliations=False)
+        parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm)
         original_method_kwargs = gate.method_kwargs.copy()
         if overwrite_method_kwargs is not None:
             gate.method_kwargs = overwrite_method_kwargs
-        if gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search:
+        if gate.ctrl:
+            assert isinstance(gate, ThresholdGate), "Control gate only supported for ThresholdGate"
+            populations = gate.fit_predict(data=parent_data, ctrl_data=ctrl_parent_data)
+        elif gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search:
             populations = hyperparameter_gate(gate=gate,
                                               grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
                                               cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
                                               parent=parent_data,
                                               verbose=verbose)
-        elif gate.ctrl is None:
-            populations = gate.fit_predict(data=parent_data)
         else:
-            assert gate.ctrl in self.filegroup.controls, f"FileGroup does not have data for {gate.ctrl}"
-            assert isinstance(gate, ThresholdGate), "Control gate only supported for ThresholdGate"
-            ctrl_parent_data = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl,
-                                                                      population=gate.parent,
-                                                                      transform=None)
-            populations = gate.fit_predict(data=parent_data, ctrl_data=ctrl_parent_data)
+            populations = gate.fit_predict(data=parent_data)
         for p in populations:
             self.filegroup.add_population(population=p)
         if verbose:
@@ -395,7 +435,9 @@ class GatingStrategy(mongoengine.Document):
         return None
 
     def apply_all(self,
-                  verbose: bool = True):
+                  verbose: bool = True,
+                  fda_norm: bool = False,
+                  hyperparam_search: bool = False):
         """
         Apply all the gates associated to this GatingStrategy
 
@@ -431,7 +473,9 @@ class GatingStrategy(mongoengine.Document):
                 self.apply_gate(gate=gate,
                                 plot=False,
                                 verbose=verbose,
-                                add_to_strategy=False)
+                                add_to_strategy=False,
+                                fda_norm=fda_norm,
+                                hyperparam_search=hyperparam_search)
                 feedback("----------------------------------------")
                 gates_to_apply = [g for g in gates_to_apply if g.gate_name != gate.gate_name]
             actions_applied_this_loop = list()
@@ -587,6 +631,7 @@ class GatingStrategy(mongoengine.Document):
         parent = self.filegroup.load_population_df(population=gate.parent,
                                                    transform=None,
                                                    label_downstream_affiliations=False)
+
         plotting = CreatePlot(**create_plot_kwargs)
         return plotting.plot_population_geoms(parent=parent,
                                               children=[self.filegroup.get_population(c.name)
@@ -853,4 +898,3 @@ class GatingStrategy(mongoengine.Document):
                     f.delete_populations(populations=populations)
                     f.save()
         self.print(f"{self.name} successfully deleted.")
-

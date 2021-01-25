@@ -1,52 +1,12 @@
 from skfda.preprocessing.registration import landmark_registration
 from skfda.representation.grid import FDataGrid
+from multiprocessing import Pool, cpu_count
+from functools import partial
 from ..data.fcs import FileGroup
 from detecta import detect_peaks
 from KDEpy import FFTKDE
 import pandas as pd
 import numpy as np
-
-
-def load_reference_data(filegroup: FileGroup,
-                        parent: str,
-                        x: str or None,
-                        y: str or None,
-                        x_transform: str or None,
-                        y_transform: str or None,
-                        ctrl: str or None = None):
-    """
-    Load the parent population from the given FileGroup. This will be used
-    as reference for landmark registration.
-
-    Parameters
-    ----------
-    filegroup: FileGroup
-        FileGroup containing cytometry data
-    parent: str
-        Parent population that we're interested in
-    x: str or None
-        Name of the x-axis dimension
-    y: str or None
-        Name of the x-axis dimension
-    x_transform: str or None
-        X-axis transformation
-    y_transform: str or None
-        Y-axis transformation
-    ctrl: str or None (default=None)
-        Name of control file to load. Loads population from primary data if None.
-
-    Returns
-    -------
-    Pandas.DataFrame
-    """
-    if ctrl is not None:
-        return filegroup.load_ctrl_population_df(ctrl=ctrl,
-                                                 population=parent,
-                                                 transform={x: x_transform,
-                                                            y: y_transform})
-    return filegroup.load_population_df(population=parent,
-                                        transform={x: x_transform,
-                                                   y: y_transform})
 
 
 def peaks(y: np.ndarray,
@@ -87,7 +47,7 @@ def match_landmarks(l1: np.ndarray, l2: np.ndarray):
     """
     u2 = list()
     for i in l1:
-        dist = [abs(i-ix) for ix in l2]
+        dist = [abs(i - ix) for ix in l2]
         u2.append(l2[np.argmin(dist)])
     return u2
 
@@ -115,9 +75,27 @@ def update_landmarks(landmarks: list):
     return [u, l2]
 
 
+def find_nearest_x(value, y, grid):
+    return grid[(np.abs(y - value)).argmin()]
+
+
+def estimate_new_x(data: np.ndarray,
+                   before: FDataGrid,
+                   after: FDataGrid,
+                   n_jobs: int = -1):
+    if n_jobs <= 0:
+        n_jobs = cpu_count()
+    before = before.evaluate(data)[0].reshape(-1)
+    y_after = after.data_matrix[0].reshape(-1)
+    find_func = partial(find_nearest_x, y=y_after, grid=after.grid_points[0])
+    with Pool(n_jobs) as pool:
+        return np.array(list(pool.map(find_func, before)))
+
+
 def align_data(data: pd.DataFrame,
                ref_data: pd.DataFrame,
                dims: list,
+               n_jobs: int = -1,
                **kwargs):
     """
     Given some new data and reference data to align to, estimate the
@@ -139,12 +117,12 @@ def align_data(data: pd.DataFrame,
     -------
 
     """
-    mph = kwargs.pop("mph", lambda y: 0.001*np.max(y))
+    mph = kwargs.pop("mph", lambda y: 0.001 * np.max(y))
     data = data.copy()
     for d in dims:
         x = np.linspace(np.min([data[d].min(), ref_data[d].min()]) - 0.01,
                         np.max([data[d].max(), ref_data[d].max()]) + 0.01,
-                        100)
+                        10000)
         y1 = (FFTKDE(kernel="gaussian",
                      bw="silverman")
               .fit(data[d].values)
@@ -156,49 +134,37 @@ def align_data(data: pd.DataFrame,
         landmarks = update_landmarks([peaks(y, x, mph=mph(y), **kwargs) for y in [y1, y2]])
         fdata = FDataGrid([y1, y2], grid_points=x)
         shifted = landmark_registration(fdata, landmarks)
-        data[d] = shifted.data_matrix[0]
+        data[d] = estimate_new_x(data=data[d].values,
+                                 before=fdata,
+                                 after=shifted,
+                                 n_jobs=n_jobs)
     return data
 
 
-def fda_norm(fit_predict):
-    """
-    Wrapper function that modifies the fit_predict call of a Gate
-    object to normalise data prior to fit
+def _load_dataframes(target: FileGroup,
+                     ref: FileGroup,
+                     population: str,
+                     transform: dict or str or None = None,
+                     ctrl: str or None = None):
+    if ctrl is not None:
+        return (target.load_ctrl_population_df(ctrl=ctrl,
+                                               population=population,
+                                               transform=transform),
+                ref.load_ctrl_population_df(ctrl=ctrl,
+                                            population=population,
+                                            transform=transform))
+    return (target.load_population_df(population=population,
+                                      transform=transform),
+            ref.load_population_df(population=population,
+                                   transform=transform))
 
-    Parameters
-    ----------
-    fit_predict: Gate.fit_predict
 
-    Returns
-    -------
-    callable
-        Gate.fit_predict with data normalised using landmark registration
-    """
-    def normalise_data(gate, data: pd.DataFrame, ctrl_data: pd.DataFrame or None = None):
-        if gate.fda_norm:
-            assert gate.reference is not None, "No reference sample defined"
-            kwargs = gate.fda_norm_kwargs or {}
-            ref_data = load_reference_data(filegroup=gate.reference,
-                                           parent=gate.parent,
-                                           x=gate.x,
-                                           y=gate.y,
-                                           x_transform=gate.transformations.get("x"),
-                                           y_transform=gate.transformations.get("y"))
-            data = align_data(data=data,
-                              ref_data=ref_data,
-                              dims=[d for d in [gate.x, gate.y] if d is not None],
-                              **kwargs)
-            if ctrl_data is not None:
-                ref_data = load_reference_data(filegroup=gate.reference,
-                                               parent=gate.parent,
-                                               x=gate.x,
-                                               y=gate.y,
-                                               x_transform=gate.transformations.get("x"),
-                                               y_transform=gate.transformations.get("y"),
-                                               ctrl=gate.ctrl)
-                data = align_data(data=ctrl_data,
-                                  ref_data=ref_data,
-                                  dims=[d for d in [gate.x, gate.y] if d is not None],
-                                  **kwargs)
-        return fit_predict(data=data, ctrl_data=ctrl_data)
-    return normalise_data
+def normalise_data(target: FileGroup,
+                   ref: FileGroup,
+                   dims: list,
+                   population: str,
+                   transform: dict or str or None = "logicle",
+                   ctrl: str or None = None,
+                   **kwargs):
+    target, ref = _load_dataframes(target, ref, population, transform, ctrl)
+    return align_data(target, ref, dims, **kwargs)
