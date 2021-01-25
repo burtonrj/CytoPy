@@ -33,7 +33,7 @@ from ..feedback import progress_bar, vprint
 from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, \
     PolygonGeom, update_polygon, update_threshold
 from ..flow.gate_search import hyperparameter_gate
-from ..flow.fda_norm import normalise_data
+from ..flow.fda_norm import LandmarkReg
 from .experiment import Experiment
 from .fcs import FileGroup
 from datetime import datetime
@@ -318,6 +318,7 @@ class GatingStrategy(mongoengine.Document):
     def add_normalisation(self,
                           gate_name: str,
                           reference: FileGroup or None = None,
+                          commit: bool = False,
                           **kwargs):
         reference = reference or self.filegroup
         self.normalisation[gate_name] = {"reference": str(reference.id),
@@ -329,19 +330,31 @@ class GatingStrategy(mongoengine.Document):
         if gate_name not in self.normalisation.keys():
             warn(f"No normalisation criteria defined for {gate_name}")
             return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)
+        if self.filegroup.get_population(population_name=population).normalised:
+            warn(f"Population {population} has previously been normalised")
+            return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)
         gate = self.get_gate(gate_name)
+
         ref = self.filegroup
         if self.normalisation.get(gate_name).get("reference") != str(self.filegroup.id):
             ref = FileGroup.objects(id=self.normalisation.get(gate_name).get("reference")).get()
         kwargs = self.normalisation.get(gate_name).get("kwargs")
-        return normalise_data(target=self.filegroup,
-                              population=population,
-                              dims=[d for d in [gate.x, gate.y] if d is not None],
-                              ref=ref,
-                              transform={gate.x: gate.transformations.get("x"),
-                                         gate.y: gate.transformations.get("y")},
-                              ctrl=gate.ctrl,
-                              **kwargs)
+
+        transformations = {gate.x: gate.transformations.get("x"),
+                           gate.y: gate.transformations.get("y")}
+        ref_df = ref.load_population_df(population=gate.parent,
+                                        transform=transformations)
+        target_df = self.filegroup.load_population_df(population=population,
+                                                      transform=transformations)
+        for d in [gate.x, gate.y]:
+            if d is None:
+                continue
+            lr = LandmarkReg(target=target_df,
+                             ref=ref_df,
+                             var=d,
+                             **kwargs)
+            target_df[d] = lr().shift_data(target_df[d].values)
+        return target_df
 
     def _load_gate_dataframes(self,
                               gate: Gate,
@@ -628,10 +641,7 @@ class GatingStrategy(mongoengine.Document):
         assert gate in self.list_gates(), \
             f"Gate {gate} not recognised. Have you applied it and added it to the strategy?"
         gate = self.get_gate(gate=gate)
-        parent = self.filegroup.load_population_df(population=gate.parent,
-                                                   transform=None,
-                                                   label_downstream_affiliations=False)
-
+        parent, _ = self._load_gate_dataframes(gate=gate, fda_norm=gate.gate_name in self.normalisation.keys())
         plotting = CreatePlot(**create_plot_kwargs)
         return plotting.plot_population_geoms(parent=parent,
                                               children=[self.filegroup.get_population(c.name)
