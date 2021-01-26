@@ -54,6 +54,11 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
+class MissingControlError(Exception):
+    """Raised when control file missing from FileGroup"""
+    pass
+
+
 def h5file_exists(func: callable) -> callable:
     """
     Decorator that asserts the h5 file corresponding to the FileGroup exists.
@@ -414,7 +419,8 @@ class FileGroup(mongoengine.Document):
         -------
 
         """
-        assert ctrl in self.controls, f"No such control {ctrl} associated to this FileGroup"
+        if ctrl not in self.controls:
+            raise MissingControlError(f"No such control {ctrl} associated to this FileGroup")
         if ctrl not in self.get_population(population_name=population).ctrl_index.keys():
             warn(f"Population {population} missing for control {ctrl}, will attempt to "
                  f"estimate population using KNN")

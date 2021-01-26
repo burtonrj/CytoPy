@@ -187,7 +187,8 @@ class Gate(mongoengine.Document):
     transformations = mongoengine.DictField()
     sampling = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
-    ctrl = mongoengine.StringField()
+    ctrl_x = mongoengine.StringField()
+    ctrl_y = mongoengine.StringField()
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
     children = mongoengine.EmbeddedDocumentListField(Child)
@@ -676,15 +677,15 @@ class ThresholdGate(Gate):
         return thresholds
 
     def _ctrl_fit(self,
-                  ctrl_data: pd.DataFrame):
+                  ctrl_data: dict):
         ctrl_data = ctrl_data.copy()
-        ctrl_data = self.transform(data=ctrl_data)
-        ctrl_data = self._dim_reduction(data=ctrl_data)
-        return self._fit(data=ctrl_data)
+        ctrl_data = {k: self.transform(data=x) for k, x in ctrl_data.items()}
+        ctrl_data = {k: self._dim_reduction(data=x) for k, x in ctrl_data.items()}
+        return {k: self._fit(data=x) for k, x in ctrl_data.items()}
 
     def fit(self,
             data: pd.DataFrame,
-            ctrl_data: pd.DataFrame or None = None) -> None:
+            ctrl_data: dict or None = None) -> None:
         """
         Fit the gate using a given dataframe. If children already exist will raise an AssertionError
         and notify user to call `fit_predict`.
@@ -693,7 +694,7 @@ class ThresholdGate(Gate):
         ----------
         data: Pandas.DataFrame
             Population data to fit threshold
-        ctrl_data: Pandas.DataFrame, optional
+        ctrl_data: dict, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
 
         Returns
@@ -703,12 +704,15 @@ class ThresholdGate(Gate):
         data = data.copy()
         data = self.transform(data=data)
         data = self._dim_reduction(data=data)
+        if ctrl_data.get("y", None) is not None:
+            assert ctrl_data.get("x", None) is not None, "If y-axis control is defined, x-axis control is also expected"
         assert len(self.children) == 0, "Children already defined for this gate. Call 'fit_predict' to " \
                                         "fit to new data and match populations to children, or call " \
                                         "'predict' to apply static thresholds to new data. If you want to " \
                                         "reset the gate and call 'fit' again, first call 'reset_gate'"
         if ctrl_data is not None:
             thresholds = self._ctrl_fit(ctrl_data=ctrl_data)
+            thresholds = [thresholds["x"], thresholds.get("y", None)]
         else:
             thresholds = self._fit(data=data)
         y_threshold = None
