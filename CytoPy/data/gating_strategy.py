@@ -150,6 +150,7 @@ class GatingStrategy(mongoengine.Document):
     last_edit = mongoengine.DateTimeField(default=datetime.now)
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
+    show_ctrl_estimation_feedback = mongoengine.BooleanField(default=True)
     meta = {
         'db_alias': 'core',
         'collection': 'gating_strategy'
@@ -361,18 +362,20 @@ class GatingStrategy(mongoengine.Document):
         parent = self.filegroup.load_population_df(population=gate.parent,
                                                    transform=None,
                                                    label_downstream_affiliations=False)
-        if fda_norm is not None:
+        if fda_norm:
             return self.normalise_data(population=gate.parent, gate_name=gate.gate_name), None
         if gate.ctrl_x is not None or gate.ctrl_y is not None:
             ctrls = {"x": None, "y": None}
             if gate.ctrl_x is not None:
                 ctrls["x"] = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_x,
                                                                     population=gate.parent,
-                                                                    transform=None)
+                                                                    transform=None,
+                                                                    verbose=self.show_ctrl_estimation_feedback)
             if gate.ctrl_y is not None:
                 ctrls["y"] = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_y,
                                                                     population=gate.parent,
-                                                                    transform=None)
+                                                                    transform=None,
+                                                                    verbose=self.show_ctrl_estimation_feedback)
             return parent, ctrls
         return parent, None
 

@@ -39,6 +39,7 @@ from typing import List
 from collections import Counter
 from datetime import datetime
 from warnings import warn
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import mongoengine
@@ -952,6 +953,14 @@ class Experiment(mongoengine.Document):
         missing_channels(mappings=mappings, channels=self.panel.channels, errors=missing_error)
         duplicate_mappings(mappings)
         return mappings
+
+    def control_counts(self, ax: plt.Axes or None = None):
+        ctrls = [f.controls for f in self.fcs_files]
+        ctrl_counts = Counter([x for sl in ctrls for x in sl])
+        ctrl_counts["Total"] = len(self.fcs_files)
+        ax = ax or plt.subplots(figsize=(6, 6))[1]
+        ax.bar(ctrl_counts.keys(), ctrl_counts.values())
+        return ax
 
     def delete(self,
                *args,

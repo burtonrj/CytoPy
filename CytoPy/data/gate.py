@@ -187,8 +187,8 @@ class Gate(mongoengine.Document):
     transformations = mongoengine.DictField()
     sampling = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
-    ctrl_x = mongoengine.StringField()
-    ctrl_y = mongoengine.StringField()
+    ctrl_x = mongoengine.DictField()
+    ctrl_y = mongoengine.DictField()
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
     children = mongoengine.EmbeddedDocumentListField(Child)
@@ -601,7 +601,7 @@ class ThresholdGate(Gate):
                                      **inflection_point_kwargs)
 
     def _fit(self,
-             data: pd.DataFrame) -> list:
+             data: pd.DataFrame or dict) -> list:
         """
         Internal method to fit threshold density gating to a given dataframe. Returns the
         list of thresholds generated and the dataframe the threshold were generated from
@@ -677,11 +677,77 @@ class ThresholdGate(Gate):
         return thresholds
 
     def _ctrl_fit(self,
-                  ctrl_data: dict):
+                  primary_data: pd.DataFrame,
+                  ctrl_data: pd.DataFrame):
+        if ctrl_data.get("y", None) is not None:
+            assert ctrl_data.get("x", None) is not None, \
+                "If y-axis control is defined, x-axis control is also expected"
+        ctrl_data = {k: v for k, v in ctrl_data.items() if v is not None}
         ctrl_data = ctrl_data.copy()
         ctrl_data = {k: self.transform(data=x) for k, x in ctrl_data.items()}
         ctrl_data = {k: self._dim_reduction(data=x) for k, x in ctrl_data.items()}
-        return {k: self._fit(data=x) for k, x in ctrl_data.items()}
+        data = {self.x: ctrl_data.get("x")[self.x].values}
+        if self.y is not None:
+            if ctrl_data.get("y", None) is None:
+                data[self.y] = primary_data[self.y].values
+            else:
+                data[self.y] = ctrl_data.get("y")[self.y].values
+        if not data[self.x].shape[0] == data[self.y].shape[0]:
+            data = pd.DataFrame({k: np.random.choice(v, min([x.shape[0] for x in data.values()]), replace=False)
+                                 for k, v in data.items()})
+        thresholds = self._fit(data=data)
+        y_data = None
+        cy_data = None
+        if self.y:
+            y_data = primary_data[self.y].values
+            cy_data = data[self.y].values
+        return self.check_ctrl_threshold(thresholds,
+                                         primary_data[self.x].values,
+                                         data[self.x].values,
+                                         y_data=y_data,
+                                         cy_data=cy_data)
+
+    def check_ctrl_threshold(self,
+                             thresholds: list,
+                             x_data: np.ndarray,
+                             cx_data: np.ndarray,
+                             y_data: np.ndarray or None = None,
+                             cy_data: np.ndarray or None = None):
+        for i, (d, c) in enumerate(zip([x_data, y_data], [cx_data, cy_data])):
+            if d is None:
+                continue
+            x_grid, p = (FFTKDE(kernel=self.method_kwargs.get("kernel", "gaussian"),
+                                bw=self.method_kwargs.get("bw", "silverman"))
+                         .fit(d)
+                         .evaluate())
+            peaks = find_peaks(p=p,
+                               min_peak_threshold=self.method_kwargs.get("min_peak_threshold", 0.05),
+                               peak_boundary=self.method_kwargs.get("peak_boundary", 0.1))
+            assert len(peaks) > 0, "No peaks found in density estimate"
+            inflection_point_kwargs = self.method_kwargs.get("inflection_point_kwargs", {})
+            if len(peaks) >= 2:
+                nearest_peak = peaks[min(range(len(peaks)), key=lambda pi: abs(x_grid[peaks[pi]] - thresholds[i]))]
+                if x_grid[peaks[0]] > thresholds[i] > x_grid[peaks[len(peaks) - 1]]:
+                    thresholds[i] = find_local_minima(p, x_grid, [nearest_peak, nearest_peak + 1])
+                else:
+                    if thresholds[i] > x_grid[nearest_peak]:
+                        inflection_point_kwargs["incline"] = False
+                    else:
+                        inflection_point_kwargs["incline"] = True
+                    thresholds[i] = find_inflection_point(x=x_grid,
+                                                          p=p,
+                                                          peak_idx=nearest_peak,
+                                                          **inflection_point_kwargs)
+            else:
+                inflection_point_kwargs["incline"] = False
+                if np.quantile(c, 0.75) < x_grid[peaks[0]]:
+                    inflection_point_kwargs["incline"] = True
+                thresholds[i] = find_inflection_point(x=x_grid,
+                                                      p=p,
+                                                      peak_idx=peaks[0],
+                                                      **inflection_point_kwargs)
+
+        return thresholds
 
     def fit(self,
             data: pd.DataFrame,
@@ -704,15 +770,12 @@ class ThresholdGate(Gate):
         data = data.copy()
         data = self.transform(data=data)
         data = self._dim_reduction(data=data)
-        if ctrl_data.get("y", None) is not None:
-            assert ctrl_data.get("x", None) is not None, "If y-axis control is defined, x-axis control is also expected"
         assert len(self.children) == 0, "Children already defined for this gate. Call 'fit_predict' to " \
                                         "fit to new data and match populations to children, or call " \
                                         "'predict' to apply static thresholds to new data. If you want to " \
                                         "reset the gate and call 'fit' again, first call 'reset_gate'"
         if ctrl_data is not None:
-            thresholds = self._ctrl_fit(ctrl_data=ctrl_data)
-            thresholds = [thresholds["x"], thresholds.get("y", None)]
+            thresholds = self._ctrl_fit(primary_data=data, ctrl_data=ctrl_data)
         else:
             thresholds = self._fit(data=data)
         y_threshold = None
@@ -755,7 +818,7 @@ class ThresholdGate(Gate):
             data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         if ctrl_data is not None:
-            thresholds = self._ctrl_fit(ctrl_data=ctrl_data)
+            thresholds = self._ctrl_fit(primary_data=data, ctrl_data=ctrl_data)
         else:
             thresholds = self._fit(data=data)
         y_threshold = None
@@ -1062,7 +1125,8 @@ class PolygonGate(Gate):
 
     def fit(self,
             data: pd.DataFrame,
-            transform: bool = True) -> None:
+            transform: bool = True,
+            ctrl_data: None = None) -> None:
         """
         Fit the gate using a given dataframe. This will generate new children using the calculated
         polygons. If children already exist will raise an AssertionError and notify user to call
@@ -1089,7 +1153,8 @@ class PolygonGate(Gate):
 
     def fit_predict(self,
                     data: pd.DataFrame,
-                    transform: bool = True) -> List[Population]:
+                    transform: bool = True,
+                    ctrl_data: None = None) -> List[Population]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
