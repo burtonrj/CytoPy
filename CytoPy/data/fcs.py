@@ -438,7 +438,7 @@ class FileGroup(mongoengine.Document):
                                  population: str,
                                  verbose: bool = True,
                                  scoring: str = "balanced_accuracy",
-                                 downsample: int or float or None = 0.1,
+                                 downsample: int or float or None = 1000,
                                  population_mappings: dict or None = None,
                                  **kwargs):
         """
@@ -512,11 +512,12 @@ class FileGroup(mongoengine.Document):
         training_data = self.load_population_df(population=population.parent,
                                                 transform=transformations,
                                                 label_downstream_affiliations=False).copy()
-        assert training_data.shape[0] > 3, "Three or less events found in training data"
+        assert training_data.shape[0] > 3, f"Three or less events found in training data for " \
+                                           f"{ctrl} {population} estimation"
 
         training_data["labels"] = 0
         training_data.loc[population.index, "labels"] = 1
-        if isinstance(downsample, int):
+        if isinstance(downsample, int) and training_data.shape[0] > downsample*2:
             training_data = pd.concat([training_data[training_data.labels == i].sample(n=downsample)
                                        for i in range(2)])
         if isinstance(downsample, float):
