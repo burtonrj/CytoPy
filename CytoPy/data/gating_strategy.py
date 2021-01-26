@@ -38,8 +38,13 @@ from .experiment import Experiment
 from .fcs import FileGroup
 from datetime import datetime
 from warnings import warn
+from matplotlib import gridspec
+import matplotlib.pyplot as plt
 import pandas as pd
 import mongoengine
+import logging
+import math
+import os
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"
@@ -49,6 +54,14 @@ __version__ = "1.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+
+
+class PopulationAlreadyExistsError(Exception):
+    pass
+
+
+class InsufficientEventsError(Exception):
+    pass
 
 
 class Action(mongoengine.EmbeddedDocument):
@@ -238,18 +251,8 @@ class GatingStrategy(mongoengine.Document):
         plot_gate_kwargs = plot_gate_kwargs or {}
         if isinstance(gate, str):
             gate = self.get_gate(gate=gate)
-        parent_data = self.filegroup.load_population_df(population=gate.parent,
-                                                        transform=None,
-                                                        label_downstream_affiliations=False)
-        if gate.ctrl is not None:
-            assert gate.ctrl in self.filegroup.controls, f"FileGroup does not have data for {gate.ctrl}"
-            assert isinstance(gate, ThresholdGate), "Control gate only supported for ThresholdGate"
-            ctrl_parent_data = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl,
-                                                                      population=gate.parent,
-                                                                      transform=None)
-            gate.fit(data=parent_data, ctrl_data=ctrl_parent_data)
-        else:
-            gate.fit(data=parent_data)
+        parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=False)
+        gate.fit(data=parent_data, ctrl_data=ctrl_parent_data)
         plot = CreatePlot(**create_plot_kwargs)
         return plot.plot_gate_children(gate=gate,
                                        parent=parent_data,
@@ -358,12 +361,19 @@ class GatingStrategy(mongoengine.Document):
         parent = self.filegroup.load_population_df(population=gate.parent,
                                                    transform=None,
                                                    label_downstream_affiliations=False)
-        if fda_norm:
+        if fda_norm is not None:
             return self.normalise_data(population=gate.parent, gate_name=gate.gate_name), None
-        if gate.ctrl:
-            return parent, self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl,
-                                                                  population=gate.parent,
-                                                                  transform=None)
+        if gate.ctrl_x is not None or gate.ctrl_y is not None:
+            ctrls = {"x": None, "y": None}
+            if gate.ctrl_x is not None:
+                ctrls["x"] = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_x,
+                                                                    population=gate.parent,
+                                                                    transform=None)
+            if gate.ctrl_y is not None:
+                ctrls["y"] = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_y,
+                                                                    population=gate.parent,
+                                                                    transform=None)
+            return parent, ctrls
         return parent, None
 
     def apply_gate(self,
@@ -418,7 +428,7 @@ class GatingStrategy(mongoengine.Document):
         original_method_kwargs = gate.method_kwargs.copy()
         if overwrite_method_kwargs is not None:
             gate.method_kwargs = overwrite_method_kwargs
-        if gate.ctrl:
+        if gate.ctrl_x is not None and gate.y is not None:
             assert isinstance(gate, ThresholdGate), "Control gate only supported for ThresholdGate"
             populations = gate.fit_predict(data=parent_data, ctrl_data=ctrl_parent_data)
         elif gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search:
@@ -465,7 +475,8 @@ class GatingStrategy(mongoengine.Document):
         assert len(self.gates) > 0, "No gates to apply"
         err = "One or more of the populations generated from this gating strategy are already " \
               "presented in the population tree"
-        assert all([x not in self.list_populations() for x in populations_created]), err
+        if not all([x not in self.list_populations() for x in populations_created]):
+            raise PopulationAlreadyExistsError(err)
         gates_to_apply = list(self.gates)
         actions_to_apply = list(self.actions)
         i = 0
@@ -477,7 +488,7 @@ class GatingStrategy(mongoengine.Document):
             gate = gates_to_apply[i]
             if gate.parent in self.list_populations():
                 if self.filegroup.population_stats(gate.parent).get("n") <= 3:
-                    raise ValueError(f"Insufficient events in parent population {gate.parent}")
+                    raise InsufficientEventsError(f"Insufficient events in parent population {gate.parent}")
                 feedback(f"------ Applying {gate.gate_name} ------")
                 self.apply_gate(gate=gate,
                                 plot=False,
@@ -502,6 +513,56 @@ class GatingStrategy(mongoengine.Document):
             iteration_limit -= 1
             assert iteration_limit > 0, "Maximum number of iterations reached. This means that one or more parent " \
                                         "populations are not being identified."
+
+    def apply_to_experiment(self,
+                            experiment: Experiment,
+                            logging_path: str,
+                            fda_norm: bool = False,
+                            hyperparam_search: bool = False,
+                            plots_path: str or None = None,
+                            sample_ids: list or None = None,
+                            verbose: bool = True):
+        logging.basicConfig(filename=logging_path,
+                            filemode="a",
+                            format="%(asctime)s - %(levelname)s - %(message)s",
+                            level=logging.INFO)
+        logging.info(f" -- Gating {experiment.experiment_id} using {self.name} strategy --")
+        sample_ids = sample_ids or experiment.list_samples()
+        if plots_path is not None:
+            assert os.path.isdir(plots_path), "Invalid plots_path, directory does not exist"
+        for s in progress_bar(sample_ids, verbose=verbose):
+            self.load_data(experiment=experiment, sample_id=s)
+            try:
+                self.apply_all(verbose=False, fda_norm=fda_norm, hyperparam_search=hyperparam_search)
+                self.save(save_strategy=False, save_filegroup=True)
+                logging.info(f"{s} - gated successfully!")
+                if plots_path is not None:
+                    fig = self.plot_all_gates()
+                    fig.savefig(plots_path, facecolor="white", dpi=300)
+                    logging.info(f"{s} - gates plotted to {plots_path}")
+            except PopulationAlreadyExistsError as e:
+                logging.error(f"{s} - {str(e)}")
+            except InsufficientEventsError as e:
+                logging.error(f"{s} - {str(e)}")
+            except AssertionError as e:
+                logging.error(f"{s} - {str(e)}")
+            except ValueError as e:
+                logging.error(f"{s} - {str(e)}")
+        logging.info(f" -- {experiment.experiment_id} complete --")
+
+    def plot_all_gates(self):
+        n = len(self.gates)
+        cols = 2
+        rows = int(math.ceil(n / cols))
+        gs = gridspec.GridSpec(rows, cols)
+        fig = plt.figure(figsize=(12, 5 * rows))
+        for i in range(n):
+            ax = fig.add_subplot(gs[i])
+            self.plot_gate(gate=self.gates[i].gate_name,
+                           create_plot_kwargs={"ax": ax})
+            ax.set_title(self.gates[i].gate_name)
+        fig.tight_layout()
+        return fig
 
     def delete_actions(self,
                        action_name: str):

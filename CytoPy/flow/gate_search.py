@@ -103,7 +103,7 @@ def cost_func(target: ChildPolygon or ChildThreshold,
         idx = np.argmin([target.geom.shape.hausdorff_distance(p.geom.shape)
                          for p in search_space])
         return search_space[int(idx)]
-    raise ValueError("Unrecognised cost metrix; should be either euclidean, manhattan, threshold_dict "
+    raise ValueError("Unrecognised cost metric; should be either euclidean, manhattan, threshold_dict "
                      "or hausdorff")
 
 
