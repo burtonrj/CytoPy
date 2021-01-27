@@ -1066,6 +1066,6 @@ class Harmony:
                                          total=self.meta.batch_id.nunique()):
             experiment.add_dataframes(sample_id=str(prefix) + str(batch_id),
                                       primary_data=df,
-                                      mappings=[{"channel": x, "marker": x} for x in df.columns],
+                                      mappings=[{"channel": x, "marker": ""} for x in df.columns],
                                       verbose=False,
                                       subject_id=subject_mappings.get(batch_id, None))

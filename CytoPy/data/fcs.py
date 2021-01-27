@@ -518,7 +518,7 @@ class FileGroup(mongoengine.Document):
         training_data["labels"] = 0
         training_data.loc[population.index, "labels"] = 1
         if isinstance(downsample, int) and training_data.shape[0] > downsample*2:
-            training_data = pd.concat([training_data[training_data.labels == i].sample(n=downsample)
+            training_data = pd.concat([training_data[training_data.labels == i].sample(n=downsample, replace=True)
                                        for i in range(2)])
         if isinstance(downsample, float):
             training_data = pd.concat([training_data[training_data.labels == i].sample(frac=downsample)
@@ -933,12 +933,13 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
-        df = self.data(source="primary")
+        df = self.load_population_df("root", transform="logicle")
         for x in df.columns:
             df = df[(df[x] >= df[x].quantile(lower)) & (df[x] <= df[x].quantile(upper))]
         clean_pop = Population(population_name="root_clean",
                                index=df.index.values,
                                parent="root",
+                               source="root",
                                n=df.shape[0])
         self.add_population(clean_pop)
 
