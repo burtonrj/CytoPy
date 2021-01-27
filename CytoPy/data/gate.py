@@ -187,8 +187,8 @@ class Gate(mongoengine.Document):
     transformations = mongoengine.DictField()
     sampling = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
-    ctrl_x = mongoengine.DictField()
-    ctrl_y = mongoengine.DictField()
+    ctrl_x = mongoengine.StringField()
+    ctrl_y = mongoengine.StringField()
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
     children = mongoengine.EmbeddedDocumentListField(Child)
@@ -203,7 +203,7 @@ class Gate(mongoengine.Document):
         method = values.get("method", None)
         assert method is not None, "No method given"
         err = f"Module {method} not supported. See docs for supported methods."
-        assert method in ["manual", "density", "quantile"] + list(globals().keys()), err
+        assert method in ["manual", "density", "quantile", "time"] + list(globals().keys()), err
         super().__init__(*args, **values)
         self.model = None
 
@@ -564,8 +564,7 @@ class ThresholdGate(Gate):
         return [data[self.x].quantile(q), data[self.y].quantile(q)]
 
     def _process_one_peak(self,
-                          d: str,
-                          data: pd.DataFrame,
+                          x: np.ndarray,
                           x_grid: np.array,
                           p: np.array,
                           peak_idx: int):
@@ -593,7 +592,7 @@ class ThresholdGate(Gate):
             q = self.method_kwargs.get("q", None)
             assert q is not None, "Must provide a value for 'q' in method kwargs " \
                                   "for desired quantile if use_inflection_point is False"
-            return data[d].quantile(q)
+            return np.quantile(x, q)
         inflection_point_kwargs = self.method_kwargs.get("inflection_point_kwargs", {})
         return find_inflection_point(x=x_grid,
                                      p=p,
@@ -617,7 +616,6 @@ class ThresholdGate(Gate):
         """
         if self.method == "manual":
             return self._manual()
-        thresholds = list()
         self._xy_in_dataframe(data=data)
         dims = [i for i in [self.x, self.y] if i is not None]
         if self.sampling.get("method", None) is not None:
@@ -625,42 +623,56 @@ class ThresholdGate(Gate):
         if self.method == "quantile":
             thresholds = self._quantile_gate(data=data)
         else:
+            thresholds = list()
             for d in dims:
-                x_grid, p = (FFTKDE(kernel=self.method_kwargs.get("kernel", "gaussian"),
-                                    bw=self.method_kwargs.get("bw", "silverman"))
-                             .fit(data[d].values)
-                             .evaluate())
-                peaks = find_peaks(p=p,
-                                   min_peak_threshold=self.method_kwargs.get("min_peak_threshold", 0.05),
-                                   peak_boundary=self.method_kwargs.get("peak_boundary", 0.1))
-                assert len(peaks) > 0, "No peaks detected"
-                if len(peaks) == 1:
-                    thresholds.append(self._process_one_peak(d=d,
-                                                             data=data,
-                                                             x_grid=x_grid,
-                                                             p=p,
-                                                             peak_idx=peaks[0]))
-                elif len(peaks) == 2:
-                    thresholds.append(find_local_minima(p=p, x=x_grid, peaks=peaks))
-                else:
-                    smoothed_peak_finding_kwargs = self.method_kwargs.get("smoothed_peak_finding_kwargs", {})
-                    smoothed_peak_finding_kwargs["min_peak_threshold"] = smoothed_peak_finding_kwargs.get(
-                        "min_peak_threshold",
-                        self.method_kwargs.get("min_peak_threshold", 0.05))
-                    smoothed_peak_finding_kwargs["peak_boundary"] = smoothed_peak_finding_kwargs.get("peak_boundary",
-                                                                                                     self.method_kwargs.get(
-                                                                                                         "peak_boundary",
-                                                                                                         0.1))
-                    p, peaks = smoothed_peak_finding(p=p, **smoothed_peak_finding_kwargs)
-                    if len(peaks) == 1:
-                        thresholds.append(self._process_one_peak(d=d,
-                                                                 data=data,
-                                                                 x_grid=x_grid,
-                                                                 p=p,
-                                                                 peak_idx=peaks[0]))
-                    else:
-                        thresholds.append(find_local_minima(p=p, x=x_grid, peaks=peaks))
+                thresholds.append(self._find_threshold(data[d].values))
         return thresholds
+
+    def _find_threshold(self, x: np.ndarray):
+        peaks, x_grid, p = self._density_peak_finding(x)
+        assert len(peaks) > 0, "No peaks detected"
+        if len(peaks) == 1:
+            threshold = self._process_one_peak(x,
+                                               x_grid=x_grid,
+                                               p=p,
+                                               peak_idx=peaks[0])
+        elif len(peaks) == 2:
+            threshold = find_local_minima(p=p, x=x_grid, peaks=peaks)
+        else:
+            threshold = self._solve_threshold_for_multiple_peaks(x=x, p=p, x_grid=x_grid)
+        return threshold
+
+    def _solve_threshold_for_multiple_peaks(self,
+                                            x: np.ndarray,
+                                            p: np.ndarray,
+                                            x_grid: np.ndarray):
+        smoothed_peak_finding_kwargs = self.method_kwargs.get("smoothed_peak_finding_kwargs", {})
+        smoothed_peak_finding_kwargs["min_peak_threshold"] = smoothed_peak_finding_kwargs.get(
+            "min_peak_threshold",
+            self.method_kwargs.get("min_peak_threshold", 0.05))
+        smoothed_peak_finding_kwargs["peak_boundary"] = smoothed_peak_finding_kwargs.get("peak_boundary",
+                                                                                         self.method_kwargs.get(
+                                                                                             "peak_boundary",
+                                                                                             0.1))
+        p, peaks = smoothed_peak_finding(p=p, **smoothed_peak_finding_kwargs)
+        if len(peaks) == 1:
+            return self._process_one_peak(x,
+                                               x_grid=x_grid,
+                                               p=p,
+                                               peak_idx=peaks[0])
+        else:
+            return find_local_minima(p=p, x=x_grid, peaks=peaks)
+
+    def _density_peak_finding(self,
+                              x: np.ndarray):
+        x_grid, p = (FFTKDE(kernel=self.method_kwargs.get("kernel", "gaussian"),
+                            bw=self.method_kwargs.get("bw", "silverman"))
+                     .fit(x)
+                     .evaluate())
+        peaks = find_peaks(p=p,
+                           min_peak_threshold=self.method_kwargs.get("min_peak_threshold", 0.05),
+                           peak_boundary=self.method_kwargs.get("peak_boundary", 0.1))
+        return peaks, x_grid, p
 
     def _manual(self) -> list:
         """
@@ -679,79 +691,36 @@ class ThresholdGate(Gate):
     def _ctrl_fit(self,
                   primary_data: pd.DataFrame,
                   ctrl_data: pd.DataFrame):
-        if ctrl_data.get("y", None) is not None:
-            assert ctrl_data.get("x", None) is not None, \
-                "If y-axis control is defined, x-axis control is also expected"
-        ctrl_data = {k: v for k, v in ctrl_data.items() if v is not None}
-        ctrl_data = ctrl_data.copy()
-        ctrl_data = {k: self.transform(data=x) for k, x in ctrl_data.items()}
-        ctrl_data = {k: self._dim_reduction(data=x) for k, x in ctrl_data.items()}
-        data = {self.x: ctrl_data.get("x")[self.x].values}
-        if self.y is not None:
-            if ctrl_data.get("y", None) is None:
-                data[self.y] = primary_data[self.y].values
+        self._xy_in_dataframe(data=primary_data)
+        self._xy_in_dataframe(data=ctrl_data)
+        ctrl_data = self.transform(data=ctrl_data)
+        ctrl_data = self._dim_reduction(data=ctrl_data)
+        dims = [i for i in [self.x, self.y] if i is not None]
+        if self.sampling.get("method", None) is not None:
+            primary_data, ctrl_data = self._downsample(data=primary_data), self._downsample(data=ctrl_data)
+        thresholds = list()
+        for d in dims:
+            fmo_threshold = self._find_threshold(ctrl_data[d].values)
+            peaks, x_grid, p = self._density_peak_finding(primary_data[d].values)
+            if len(peaks) == 1:
+                thresholds.append(fmo_threshold)
             else:
-                data[self.y] = ctrl_data.get("y")[self.y].values
-        if not data[self.x].shape[0] == data[self.y].shape[0]:
-            data = pd.DataFrame({k: np.random.choice(v, min([x.shape[0] for x in data.values()]), replace=False)
-                                 for k, v in data.items()})
-        thresholds = self._fit(data=data)
-        y_data = None
-        cy_data = None
-        if self.y:
-            y_data = primary_data[self.y].values
-            cy_data = data[self.y].values
-        return self.check_ctrl_threshold(thresholds,
-                                         primary_data[self.x].values,
-                                         data[self.x].values,
-                                         y_data=y_data,
-                                         cy_data=cy_data)
-
-    def check_ctrl_threshold(self,
-                             thresholds: list,
-                             x_data: np.ndarray,
-                             cx_data: np.ndarray,
-                             y_data: np.ndarray or None = None,
-                             cy_data: np.ndarray or None = None):
-        for i, (d, c) in enumerate(zip([x_data, y_data], [cx_data, cy_data])):
-            if d is None:
-                continue
-            x_grid, p = (FFTKDE(kernel=self.method_kwargs.get("kernel", "gaussian"),
-                                bw=self.method_kwargs.get("bw", "silverman"))
-                         .fit(d)
-                         .evaluate())
-            peaks = find_peaks(p=p,
-                               min_peak_threshold=self.method_kwargs.get("min_peak_threshold", 0.05),
-                               peak_boundary=self.method_kwargs.get("peak_boundary", 0.1))
-            assert len(peaks) > 0, "No peaks found in density estimate"
-            inflection_point_kwargs = self.method_kwargs.get("inflection_point_kwargs", {})
-            if len(peaks) >= 2:
-                nearest_peak = peaks[min(range(len(peaks)), key=lambda pi: abs(x_grid[peaks[pi]] - thresholds[i]))]
-                if x_grid[peaks[0]] > thresholds[i] > x_grid[peaks[len(peaks) - 1]]:
-                    thresholds[i] = find_local_minima(p, x_grid, [nearest_peak, nearest_peak + 1])
+                if len(peaks) > 2:
+                    t = self._solve_threshold_for_multiple_peaks(x=primary_data[d].values,
+                                                                 p=p,
+                                                                 x_grid=x_grid)
                 else:
-                    if thresholds[i] > x_grid[nearest_peak]:
-                        inflection_point_kwargs["incline"] = False
-                    else:
-                        inflection_point_kwargs["incline"] = True
-                    thresholds[i] = find_inflection_point(x=x_grid,
-                                                          p=p,
-                                                          peak_idx=nearest_peak,
-                                                          **inflection_point_kwargs)
-            else:
-                inflection_point_kwargs["incline"] = False
-                if np.quantile(c, 0.75) < x_grid[peaks[0]]:
-                    inflection_point_kwargs["incline"] = True
-                thresholds[i] = find_inflection_point(x=x_grid,
-                                                      p=p,
-                                                      peak_idx=peaks[0],
-                                                      **inflection_point_kwargs)
-
+                    t = find_local_minima(p=p, x=x_grid, peaks=peaks)
+                if t > fmo_threshold:
+                    thresholds.append(t)
+                else:
+                    thresholds.append(fmo_threshold)
         return thresholds
 
     def fit(self,
             data: pd.DataFrame,
-            ctrl_data: dict or None = None) -> None:
+            ctrl_data: pd.DataFrame or None = None,
+            transform: bool = True) -> None:
         """
         Fit the gate using a given dataframe. If children already exist will raise an AssertionError
         and notify user to call `fit_predict`.
@@ -760,7 +729,7 @@ class ThresholdGate(Gate):
         ----------
         data: Pandas.DataFrame
             Population data to fit threshold
-        ctrl_data: dict, optional
+        ctrl_data: Pandas.DataFrame, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
 
         Returns
@@ -768,7 +737,8 @@ class ThresholdGate(Gate):
         None
         """
         data = data.copy()
-        data = self.transform(data=data)
+        if transform:
+            data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         assert len(self.children) == 0, "Children already defined for this gate. Call 'fit_predict' to " \
                                         "fit to new data and match populations to children, or call " \
@@ -1109,10 +1079,10 @@ class PolygonGate(Gate):
         List
             List of Shapely polygon's
         """
-        kwargs = {k: v for k, v in self.method_kwargs.items() if k != "conf"}
-        self.model = globals()[self.method](**kwargs)
         if self.method == "manual":
             return [self._manual()]
+        kwargs = {k: v for k, v in self.method_kwargs.items() if k != "conf"}
+        self.model = globals()[self.method](**kwargs)
         self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
@@ -1317,6 +1287,111 @@ class EllipseGate(PolygonGate):
         polygons = [ellipse_to_polygon(centroid, *ellipse)
                     for centroid, ellipse in zip(self.model.means_, ellipses)]
         return polygons
+
+
+class TimeGate(PolygonGate):
+
+    def __init__(self, method="time", *args, **kwargs):
+        super().__init__(method=method, *args, **kwargs)
+
+    def _fit(self,
+             data: pd.DataFrame) -> List[ShapelyPoly]:
+        """
+        Internal method for fitting gate to the given data and returning geometric polygons for
+        captured populations.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+
+        Returns
+        -------
+        List
+            List of Shapely polygon's
+        """
+        if self.method == "manual":
+            return [self._manual()]
+        start = self.method_kwargs.get("start", 0.05)
+        end = self.method_kwargs.get("end", 0.95)
+        self._xy_in_dataframe(data=data)
+        xs, xe = data[self.x].max() * start, data[self.x].max() * end
+        ys, ye = data[self.y].min(), data[self.y].max()
+        x_values = [xs, xe, xe, xs, xs]
+        y_values = [ys, ys, ye, ye, ys]
+        return [create_polygon(x_values, y_values)]
+
+    def fit(self,
+            data: pd.DataFrame,
+            transform: None = None,
+            ctrl_data: None = None) -> None:
+        """
+        Fit the gate using a given dataframe. This will generate new children using the calculated
+        polygons. If children already exist will raise an AssertionError and notify user to call
+        `fit_predict`.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Population data to fit gate to
+
+        Returns
+        -------
+        None
+        """
+        assert len(self.children) == 0, "Gate is already defined, call 'reset_gate' to clear children"
+        poly = self._fit(data=data)[0]
+        self.add_child(ChildPolygon(name="Time filter",
+                                    geom=PolygonGeom(x_values=poly.exterior.xy[0].tolist(),
+                                                     y_values=poly.exterior.xy[1].tolist())))
+
+    def fit_predict(self,
+                    data: pd.DataFrame,
+                    transform: None = None,
+                    ctrl_data: None = None) -> List[Population]:
+        """
+        Fit the gate using a given dataframe and then associate predicted Population objects to
+        existing children. If no children exist, an AssertionError will be raised prompting the
+        user to call 'fit' method.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Population data to fit gate to
+
+        Returns
+        -------
+        List
+            List of predicted Population objects, labelled according to the gates child objects
+        """
+        assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
+        return self._match_to_children(self._generate_populations(data=data.copy(),
+                                                                  polygons=self._fit(data=data)))
+
+    def predict(self,
+                data: pd.DataFrame,
+                transform: None = None) -> List[Population]:
+        """
+        Using existing children associated to this gate, the previously calculated polygons of
+        these children will be applied to the given data and then Population objects created and
+        labelled to match the children of this gate. NOTE: the data will not be fitted and polygons
+        applied will be STATIC not data driven. For data driven gates call `fit_predict` method.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Data to apply static polygons to
+
+        Returns
+        -------
+        List
+            List of Population objects
+        """
+        c = self.children[0]
+        poly = create_polygon(c.geom.x_values, c.geom.y_values)
+        populations = self._generate_populations(data=data, polygons=[poly])
+        for p, name in zip(populations, [c.name for c in self.children]):
+            p.population_name = name
+        return populations
 
 
 def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:

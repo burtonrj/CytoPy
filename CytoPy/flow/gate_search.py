@@ -109,7 +109,8 @@ def cost_func(target: ChildPolygon or ChildThreshold,
 
 def fit_gate(updated_params: dict,
              gate: PolygonGate or ThresholdGate or EllipseGate,
-             data: pd.DataFrame) -> list:
+             data: pd.DataFrame,
+             transform: bool) -> list:
     """
     Update the Gate method parameters and fit to the given data, predicting matching
     Populations that are returned as a list
@@ -129,7 +130,7 @@ children
         List of new Population objects
     """
     gate.method_kwargs = updated_params
-    return gate.fit_predict(data=data)
+    return gate.fit_predict(data=data, transform=transform)
 
 
 def optimal_populations(population_grid: list,
@@ -164,6 +165,7 @@ def hyperparameter_gate(gate: ThresholdGate or PolygonGate or EllipseGate,
                         grid: dict,
                         cost: str,
                         parent: pd.DataFrame,
+                        transform: bool = True,
                         verbose: bool = True) -> list:
     """
     Fit a Gate to some parent data whilst searching the hyperparameter space (grid)
@@ -218,7 +220,7 @@ def hyperparameter_gate(gate: ThresholdGate or PolygonGate or EllipseGate,
     grid = ParameterGrid(grid)
     feedback(f"Grid space: {len(grid)}")
 
-    fitter = partial(fit_gate, gate=gate, data=parent)
+    fitter = partial(fit_gate, gate=gate, data=parent,  transform=transform)
     feedback("Fitting gates across parameter grid...")
     populations = list()
     for params in progress_bar(grid, verbose=verbose, total=len(grid)):

@@ -31,7 +31,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from ..flow.plotting import CreatePlot
 from ..feedback import progress_bar, vprint
 from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, \
-    PolygonGeom, update_polygon, update_threshold
+    PolygonGeom, update_polygon, update_threshold, TimeGate
 from ..flow.gate_search import hyperparameter_gate
 from ..flow.fda_norm import LandmarkReg
 from .experiment import Experiment
@@ -41,6 +41,7 @@ from warnings import warn
 from matplotlib import gridspec
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 import mongoengine
 import logging
 import math
@@ -150,7 +151,7 @@ class GatingStrategy(mongoengine.Document):
     last_edit = mongoengine.DateTimeField(default=datetime.now)
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
-    show_ctrl_estimation_feedback = mongoengine.BooleanField(default=True)
+    show_ctrl_estimation_feedback = mongoengine.BooleanField(default=False)
     meta = {
         'db_alias': 'core',
         'collection': 'gating_strategy'
@@ -229,7 +230,7 @@ class GatingStrategy(mongoengine.Document):
         return [g for g in self.gates if g.gate_name == gate][0]
 
     def preview_gate(self,
-                     gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate,
+                     gate: str or Gate,
                      create_plot_kwargs: dict or None = None,
                      plot_gate_kwargs: dict or None = None):
         """
@@ -237,7 +238,7 @@ class GatingStrategy(mongoengine.Document):
 
         Parameters
         ----------
-        gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate
+        gate: str or Gate
             Name of an existing Gate or a Gate object
         create_plot_kwargs: dict (optional)
             Additional arguments passed to CreatePlot
@@ -364,23 +365,29 @@ class GatingStrategy(mongoengine.Document):
                                                    label_downstream_affiliations=False)
         if fda_norm:
             return self.normalise_data(population=gate.parent, gate_name=gate.gate_name), None
-        if gate.ctrl_x is not None or gate.ctrl_y is not None:
-            ctrls = {"x": None, "y": None}
+        if gate.ctrl_x is not None:
+            ctrls = {}
             if gate.ctrl_x is not None:
-                ctrls["x"] = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_x,
-                                                                    population=gate.parent,
-                                                                    transform=None,
-                                                                    verbose=self.show_ctrl_estimation_feedback)
+                x = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_x,
+                                                           population=gate.parent,
+                                                           transform=None,
+                                                           verbose=self.show_ctrl_estimation_feedback)
+                ctrls[gate.ctrl_x] = x[gate.ctrl_x].values
             if gate.ctrl_y is not None:
-                ctrls["y"] = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_y,
-                                                                    population=gate.parent,
-                                                                    transform=None,
-                                                                    verbose=self.show_ctrl_estimation_feedback)
+                y = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_y,
+                                                           population=gate.parent,
+                                                           transform=None,
+                                                           verbose=self.show_ctrl_estimation_feedback)
+                ctrls[gate.ctrl_y] = y[gate.ctrl_y].values
+                if len(ctrls[gate.ctrl_x]) != len(ctrls[gate.ctrl_y]):
+                    min_ = min([x.shape[0] for x in ctrls.values()])
+                    ctrls = {k: np.random.choice(v, min_) for k, v in ctrls.items()}
+            ctrls = pd.DataFrame(ctrls)
             return parent, ctrls
         return parent, None
 
     def apply_gate(self,
-                   gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate,
+                   gate: str or Gate,
                    plot: bool = True,
                    verbose: bool = True,
                    add_to_strategy: bool = True,
@@ -396,7 +403,7 @@ class GatingStrategy(mongoengine.Document):
 
         Parameters
         ----------
-        gate: str or Gate or ThresholdGate or PolygonGate or EllipseGate
+        gate: str or Gate
             Name of an existing Gate or a Gate object
         plot: bool (default=True)
             If True, returns a Matplotlib.Axes object of plotted gate
@@ -429,9 +436,12 @@ class GatingStrategy(mongoengine.Document):
         plot_gate_kwargs = plot_gate_kwargs or {}
         parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm)
         original_method_kwargs = gate.method_kwargs.copy()
+        transform = fda_norm is False
+        if gate.gate_name not in self.normalisation.keys():
+            transform = True
         if overwrite_method_kwargs is not None:
             gate.method_kwargs = overwrite_method_kwargs
-        if gate.ctrl_x is not None and gate.y is not None:
+        if gate.ctrl_x is not None:
             assert isinstance(gate, ThresholdGate), "Control gate only supported for ThresholdGate"
             populations = gate.fit_predict(data=parent_data, ctrl_data=ctrl_parent_data)
         elif gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search:
@@ -439,9 +449,10 @@ class GatingStrategy(mongoengine.Document):
                                               grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
                                               cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
                                               parent=parent_data,
+                                              transform=transform,
                                               verbose=verbose)
         else:
-            populations = gate.fit_predict(data=parent_data)
+            populations = gate.fit_predict(data=parent_data, transform=transform)
         for p in populations:
             self.filegroup.add_population(population=p)
         if verbose:
@@ -452,6 +463,7 @@ class GatingStrategy(mongoengine.Document):
             plot = CreatePlot(**create_plot_kwargs)
             return plot.plot_population_geoms(parent=parent_data,
                                               children=populations,
+                                              do_not_transform=transform is False,
                                               **plot_gate_kwargs)
         gate.method_kwargs = original_method_kwargs
         return None
@@ -541,7 +553,7 @@ class GatingStrategy(mongoengine.Document):
                 logging.info(f"{s} - gated successfully!")
                 if plots_path is not None:
                     fig = self.plot_all_gates()
-                    fig.savefig(plots_path, facecolor="white", dpi=300)
+                    fig.savefig(f"{plots_path}/{s}.png", facecolor="white", dpi=300)
                     logging.info(f"{s} - gates plotted to {plots_path}")
             except PopulationAlreadyExistsError as e:
                 logging.error(f"{s} - {str(e)}")
@@ -685,7 +697,7 @@ class GatingStrategy(mongoengine.Document):
 
         Parameters
         ----------
-        gate: str or Gate or EllipseGate or ThresholdGate or PolygonGate
+        gate: str or Gate
         create_plot_kwargs: dict
             Keyword arguments for CreatePlot object. See CytoPy.plotting.CreatePlot for details.
         kwargs:
@@ -701,11 +713,13 @@ class GatingStrategy(mongoengine.Document):
         assert gate in self.list_gates(), \
             f"Gate {gate} not recognised. Have you applied it and added it to the strategy?"
         gate = self.get_gate(gate=gate)
-        parent, _ = self._load_gate_dataframes(gate=gate, fda_norm=gate.gate_name in self.normalisation.keys())
+        fda_norm = gate.gate_name in self.normalisation.keys()
+        parent, _ = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm)
         plotting = CreatePlot(**create_plot_kwargs)
         return plotting.plot_population_geoms(parent=parent,
                                               children=[self.filegroup.get_population(c.name)
                                                         for c in gate.children],
+                                              do_not_transform=fda_norm,
                                               **kwargs)
 
     def plot_backgate(self,

@@ -236,6 +236,7 @@ def _merge_thresholds(left: Population,
                                 warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
                                 index=_merge_index(left, right),
                                 geom=new_geom,
+                                source="gate",
                                 definition=",".join([left.definition, right.definition]),
                                 signature=_merge_signatures(left, right))
     return new_population
@@ -272,6 +273,7 @@ def _merge_polygons(left: Population,
                                 parent=left.parent,
                                 warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
                                 index=new_idx,
+                                source="gate",
                                 geom=new_geom,
                                 signature=_merge_signatures(left, right))
     return new_population

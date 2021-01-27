@@ -394,6 +394,7 @@ class CreatePlot:
                               y: str or None = None,
                               transform_x: str or None = None,
                               transform_y: str or None = None,
+                              do_not_transform: bool = False,
                               plot_kwargs: dict or None = None,
                               legend_kwargs: dict or None = None):
         """
@@ -447,8 +448,10 @@ class CreatePlot:
         plot_kwargs = plot_kwargs or {}
         legend_kwargs = legend_kwargs or dict()
         # Plot the parent population
-        self.transforms = {"x": children[0].geom.transform_x or transform_x,
-                           "y": children[0].geom.transform_y or transform_y}
+        self.transforms = {"x": transform_x or children[0].geom.transform_x,
+                           "y": transform_y or children[0].geom.transform_y}
+        if do_not_transform:
+            self. transforms["x"], self.transforms["y"] = None, None
         self._ax = self.plot(data=parent,
                              x=children[0].geom.x,
                              y=children[0].geom.y or y,
