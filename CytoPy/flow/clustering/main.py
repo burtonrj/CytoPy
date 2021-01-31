@@ -36,6 +36,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from ...data.experiment import Experiment, load_population_data_from_experiment
+from ...data.population import Population
+from ...data.subject import Subject
 from ...feedback import vprint, progress_bar
 from ..dim_reduction import dimensionality_reduction
 from ..explore import scatterplot
@@ -43,9 +45,12 @@ from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from sklearn.cluster import *
 from sklearn.metrics import calinski_harabasz_score, silhouette_score, davies_bouldin_score
+from sklearn.preprocessing import RobustScaler
 from scipy.stats.mstats import gmean
 from warnings import warn
+import seaborn as sns
 import pandas as pd
+import numpy as np
 import phenograph
 
 __author__ = "Ross Burton"
@@ -81,7 +86,7 @@ def sklearn_clustering(data: pd.DataFrame,
     (if global_clustering is True) or on each biological sample, in which case a
     column should be provided called 'sample_id' which this function will group on
     and perform clustering in turn. In both cases, the clustering labels are assigned
-    to a new column named 'cluster_id'.
+    to a new column named 'cluster_label'.
 
     Parameters
     ----------
@@ -104,20 +109,20 @@ def sklearn_clustering(data: pd.DataFrame,
     Returns
     -------
     Pandas.DataFrame and None and None
-        Modified dataframe with clustering IDs assigned to the column 'cluster_id'
+        Modified dataframe with clustering IDs assigned to the column 'cluster_label'
     """
     assert method in globals().keys(), \
         "Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN"
     model = globals()[method](**kwargs)
     if global_clustering:
-        data["cluster_id"] = model.fit_predict(data[features])
+        data["cluster_label"] = model.fit_predict(data[features])
         if print_performance_metrics:
-            clustering_performance(data[features], data["cluster_id"].values)
+            clustering_performance(data[features], data["cluster_label"].values)
         return data, None, None
     for _id, df in progress_bar(data.groupby("sample_id"), verbose=verbose):
-        data.loc[df.index, ["cluster_id"]] = model.fit_predict(df[features])
+        data.loc[df.index, ["cluster_label"]] = model.fit_predict(df[features])
         if print_performance_metrics:
-            clustering_performance(df[features], df["cluster_id"].values)
+            clustering_performance(df[features], df["cluster_label"].values)
     return data, None, None
 
 
@@ -134,7 +139,7 @@ def phenograph_clustering(data: pd.DataFrame,
     Clustering is performed either on the entire dataframe (if global_clustering is True)
     or on each biological sample, in which case a column should be provided called 'sample_id'
     which this function will group on and perform clustering in turn. In both cases,
-    the clustering labels are assigned to a new column named 'cluster_id'.
+    the clustering labels are assigned to a new column named 'cluster_label'.
 
     Parameters
     ----------
@@ -155,16 +160,16 @@ def phenograph_clustering(data: pd.DataFrame,
     Returns
     -------
     Pandas.DataFrame, scipy.sparse.base.spmatrix, float
-        Modified dataframe with clustering IDs assigned to the column 'cluster_id', sparse graph
+        Modified dataframe with clustering IDs assigned to the column 'cluster_label', sparse graph
         matrix, and modularity score for communities (Q)
     """
     _print = vprint(verbose=verbose)
-    data["cluster_id"] = None
+    data["cluster_label"] = None
     if global_clustering:
         communities, graph, q = phenograph.cluster(data[features], **kwargs)
-        data["cluster_id"] = communities
+        data["cluster_label"] = communities
         if print_performance_metrics:
-            clustering_performance(data[features], data["cluster_id"].values)
+            clustering_performance(data[features], data["cluster_label"].values)
         return data, graph, q
     graphs = dict()
     q = dict()
@@ -172,10 +177,10 @@ def phenograph_clustering(data: pd.DataFrame,
         _print(f"----- Clustering {_id} -----")
         communities, graph, q_ = phenograph.cluster(df[features], **kwargs)
         graphs[_id], q[_id] = graph, q_
-        df["cluster_id"] = communities
-        data.loc[df.index, ["cluster_id"]] = df.cluster_id
+        df["cluster_label"] = communities
+        data.loc[df.index, ["cluster_label"]] = df.cluster_label
         if print_performance_metrics:
-            clustering_performance(df[features], df["cluster_id"].values)
+            clustering_performance(df[features], df["cluster_label"].values)
         _print("-----------------------------")
         _print("\n")
     return data, graphs, q
@@ -199,7 +204,7 @@ def _assign_metalabels(data: pd.DataFrame,
     Pandas.DataFrame
     """
     data = data.drop("meta_label", axis=1)
-    return pd.merge(data, metadata[["sample_id", "cluster_id", "meta_label"]], on=["sample_id", "cluster_id"])
+    return pd.merge(data, metadata[["sample_id", "cluster_label", "meta_label"]], on=["sample_id", "cluster_label"])
 
 
 def _summarise_clusters(data: pd.DataFrame,
@@ -217,11 +222,15 @@ def _summarise_clusters(data: pd.DataFrame,
     -------
 
     """
+    scale = RobustScaler()
     if summary_method == "median":
-        return data.groupby(["sample_id", "cluster_id"])[features].median().reset_index()
-    if summary_method == "mean":
-        return data.groupby(["sample_id", "cluster_id"])[features].mean().reset_index()
-    raise ValueError("summary_method should be 'mean' or 'median'")
+        data = data.groupby(["sample_id", "cluster_label"])[features].median().reset_index()
+    elif summary_method == "mean":
+        data = data.groupby(["sample_id", "cluster_label"])[features].mean().reset_index()
+    else:
+        raise ValueError("summary_method should be 'mean' or 'median'")
+    data[features] = scale.fit_transform(data[features].values)
+    return data
 
 
 def sklearn_metaclustering(data: pd.DataFrame,
@@ -234,12 +243,12 @@ def sklearn_metaclustering(data: pd.DataFrame,
     """
     Meta-clustering with a Scikit-learn clustering/mixture model algorithm. This function
     will summarise the clusters in 'data' (where cluster IDs should be contained in a column
-    named 'cluster_id') and then 'cluster the clusters' using the given method.
+    named 'cluster_label') and then 'cluster the clusters' using the given method.
 
     Parameters
     ----------
     data: Pandas.DataFrame
-        Clustered data with columns for sample_id and cluster_id
+        Clustered data with columns for sample_id and cluster_label
     features: list
         Columns clustering is performed on
     method: str
@@ -286,11 +295,11 @@ def phenograph_metaclustering(data: pd.DataFrame,
     """
     Meta-clustering with a the PhenoGraph algorithm. This function
     will summarise the clusters in 'data' (where cluster IDs should be contained in a column
-    named 'cluster_id') and then 'cluster the clusters' using the PhenoGraph.
+    named 'cluster_label') and then 'cluster the clusters' using the PhenoGraph.
     Parameters
     ----------
     data: Pandas.DataFrame
-        Clustered data with columns for sample_id and cluster_id
+        Clustered data with columns for sample_id and cluster_label
     features: list
         Columns clustering is performed on
     summary_method: str (default="median")
@@ -339,7 +348,7 @@ def consensus_metacluster(data: pd.DataFrame,
     Meta-clustering with the consensus clustering algorithm, as first described here:
     https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf. This function
     will summarise the clusters in 'data' (where cluster IDs should be contained in a column
-    named 'cluster_id') and then 'cluster the clusters'. The optimal number of clusters is
+    named 'cluster_label') and then 'cluster the clusters'. The optimal number of clusters is
     taken as a consensus amongst multiple rounds of clustering with random starts. The algorithm
     used for clustering should be given with 'cluster_class' and should have the Scikit-Learn
     signatures for clustering i.e. fit_predict method.
@@ -347,7 +356,7 @@ def consensus_metacluster(data: pd.DataFrame,
     Parameters
     ----------
     data: Pandas.DataFrame
-        Clustered data with columns for sample_id and cluster_id
+        Clustered data with columns for sample_id and cluster_label
     features: list
         Columns clustering is performed on
     summary_method: str (default="median")
@@ -463,11 +472,11 @@ def flowsom_clustering(data: pd.DataFrame,
     Clustering is performed either on the entire dataframe (if global_clustering is True)
     or on each biological sample, in which case a column should be provided called 'sample_id'
     which this function will group on and perform clustering in turn. In both cases,
-    the clustering labels are assigned to a new column named 'cluster_id'.
+    the clustering labels are assigned to a new column named 'cluster_label'.
     Parameters
     ----------
     data: Pandas.DataFrame
-        Clustered data with columns for sample_id and cluster_id
+        Clustered data with columns for sample_id and cluster_label
     features: list
         Columns clustering is performed on
     verbose: bool
@@ -493,7 +502,7 @@ def flowsom_clustering(data: pd.DataFrame,
     Returns
     -------
     Pandas.DataFrame and None and None
-        Modified dataframe with clustering IDs assigned to the column 'cluster_id'
+        Modified dataframe with clustering IDs assigned to the column 'cluster_label'
     """
     if global_clustering:
         cluster = _flowsom_clustering(data=data,
@@ -503,9 +512,9 @@ def flowsom_clustering(data: pd.DataFrame,
                                       init_kwargs=init_kwargs,
                                       training_kwargs=training_kwargs,
                                       meta_cluster_kwargs=meta_cluster_kwargs)
-        data["cluster_id"] = cluster.predict()
+        data["cluster_label"] = cluster.predict()
         if print_performance_metrics:
-            clustering_performance(data[features], data["cluster_id"].values)
+            clustering_performance(data[features], data["cluster_label"].values)
         return data, None, None
     vprint_ = vprint(verbose)
     for _id, df in data.groupby("sample_id"):
@@ -517,10 +526,11 @@ def flowsom_clustering(data: pd.DataFrame,
                                       init_kwargs=init_kwargs,
                                       training_kwargs=training_kwargs,
                                       meta_cluster_kwargs=meta_cluster_kwargs)
-        df["cluster_id"] = cluster.predict()
+        df["cluster_label"] = cluster.predict()
         if print_performance_metrics:
-            clustering_performance(df[features], df["cluster_id"].values)
-        data.loc[df.index, ["cluster_id"]] = df.cluster_id
+            clustering_performance(df[features], df["cluster_label"].values)
+        data.loc[df.index, ["cluster_label"]] = df.cluster_label
+        vprint_("\n")
     return data, None, None
 
 
@@ -571,7 +581,6 @@ class Clustering:
 
     def __init__(self,
                  experiment: Experiment,
-                 tag: str,
                  features: list,
                  sample_ids: list or None = None,
                  root_population: str = "root",
@@ -581,7 +590,6 @@ class Clustering:
         self.experiment = experiment
         self.verbose = verbose
         self.print = vprint(verbose)
-        self.tag = tag
         self.features = features
         self.transform = transform
         self.root_population = root_population
@@ -628,7 +636,7 @@ class Clustering:
             * phenograph_clustering - access to the PhenoGraph clustering algorithm
             * flowsom_clustering - access to the FlowSOM clustering algorithm
         See documentation for specific function parameters. Parameters can be provided in kwargs. Results
-        will be stored in self.data under the 'cluster_id' column. If the function given uses PhenoGraph,
+        will be stored in self.data under the 'cluster_label' column. If the function given uses PhenoGraph,
         the sparse graph matrix will be stored in self.graph and the modularity score in self.metrics
 
         Parameters
@@ -728,8 +736,8 @@ class Clustering:
         """
         updated_data = list()
         for _id, df in self.data.groupby("sample_id"):
-            cluster_counts = df.cluster_id.value_counts().to_dict()
-            df["cluster_size"] = df["cluster_id"].apply(lambda x: cluster_counts.get(x))
+            cluster_counts = df.cluster_label.value_counts().to_dict()
+            df["cluster_size"] = df["cluster_label"].apply(lambda x: cluster_counts.get(x))
             df["cluster_size"] = df["cluster_size"] / df.shape[0]
             updated_data.append(df)
         self.data = pd.concat(updated_data).reset_index(drop=True)
@@ -738,22 +746,145 @@ class Clustering:
                            sample_id: str,
                            method: str = "UMAP",
                            dim_reduction_kwargs: dict or None = None,
+                           sample: int or None = None,
                            **kwargs):
         dim_reduction_kwargs = dim_reduction_kwargs or {}
-        data = dimensionality_reduction(data=self.data[self.data.sample_id == sample_id],
+        if sample:
+            data = self.data[self.data.sample_id == sample_id].sample(sample)
+        else:
+            data = self.data
+        data = dimensionality_reduction(data=data,
                                         features=self.features,
                                         method=method,
                                         n_components=2,
                                         **dim_reduction_kwargs)
+        kwargs = _scatterplot_defaults(**kwargs)
         return scatterplot(data=data,
                            method=method,
                            label="cluster_label",
                            discrete=True,
                            **kwargs)
 
-    def scatterplot_meta(self):
-        pass
+    def _assign_labels(self, data: pd.DataFrame, label: str):
+        lookup = self.data.groupby(["sample_id", "cluster_label"])[label].unique().apply(_assert_unique_label)
+        data[label] = data[["sample_id", "cluster_label"]].apply(lambda x: lookup.loc[x[0], x[1]], axis=1)
 
-    def clustered_heatmap(self):
-        pass
+    def cluster_size(self,
+                     data: pd.DataFrame):
+        lookup = self._cluster_size_lookup()
+        cluster_n = data[["sample_id", "cluster_label"]].apply(lambda x: lookup.loc[x["sample_id"], x["cluster_label"]],
+                                                            axis=1)
+        lookup = self._sample_size_lookup()
+        sample_n = data["sample_id"].apply(lambda x: lookup.loc[x])
+        data["sample_n"], data["cluster_n"] = sample_n, cluster_n
+        data["cluster_size"] = cluster_n / sample_n * 100
 
+    def _cluster_size_lookup(self):
+        return self.data.groupby("sample_id")["cluster_label"].value_counts()
+
+    def _sample_size_lookup(self):
+        return self.data.sample_id.value_counts()
+
+    def scatterplot_meta(self,
+                         method: str = "UMAP",
+                         label: str = "sample_id",
+                         dim_reduction_kwargs: dict or None = None,
+                         **kwargs):
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        data = self.data.groupby(["sample_id", "meta_label"])[self.features].median().reset_index()
+        data = dimensionality_reduction(data=data,
+                                        features=self.features,
+                                        method=method,
+                                        n_components=2,
+                                        **dim_reduction_kwargs)
+        self._assign_labels(data=data, label=label)
+        self.cluster_size(data)
+        kwargs = _scatterplot_defaults(**kwargs)
+        return scatterplot(data=data,
+                           method=method,
+                           label=label,
+                           discrete=True,
+                           size="cluster_size",
+                           **kwargs)
+
+    def load_meta_variable(self,
+                           variable: str,
+                           verbose: bool = True,
+                           embedded: list or None = None):
+        self.data[variable] = None
+        for _id in progress_bar(self.data.subject_id.unique(),
+                                verbose=verbose):
+            if _id is None:
+                continue
+            p = Subject.objects(subject_id=_id).get()
+            try:
+                if embedded is not None:
+                    x = None
+                    for key in embedded:
+                        x = p[key]
+                    self.data.loc[self.data.subject_id == _id, variable] = x[variable]
+                else:
+                    self.data.loc[self.data.subject_id == _id, variable] = p[variable]
+            except KeyError:
+                warn(f'{_id} is missing meta-variable {variable}')
+                self.data.loc[self.data.subject_id == _id, variable] = None
+
+    def clustered_heatmap(self,
+                          features: list,
+                          sample_id: str or None = None,
+                          **kwargs):
+        if sample_id is None:
+            data = self.data.groupby(["meta_label"])[self.features].median()
+        else:
+            data = self.data[self.data.sample_id == sample_id].set_index("cluster_label")
+        data[features] = data[features].apply(pd.to_numeric)
+        kwargs = kwargs or {"col_cluster": True,
+                            "figsize": (10, 15),
+                            "standard_scale": 1,
+                            "cmap": "viridis"}
+        return sns.clustermap(data[features], **kwargs)
+
+    def save(self, verbose: bool = True, population_name: str = "meta"):
+        if population_name == "meta":
+            assert not self.data.meta_label.isnull().all(), "Meta clustering has not been performed"
+        for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
+            fg = self.experiment.get_sample(sample_id)
+            sample_data = self.data[self.data.sample_id == sample_id]
+            for cluster_label, cluster in sample_data.groupby("cluster_label"):
+                if population_name == "meta":
+                    meta_label = cluster.meta_label.unique()
+                    assert len(meta_label) == 1, "Meta labels should be unique within a single cluster"
+                    meta_label = meta_label[0]
+                    population_name = str(meta_label)
+                else:
+                    population_name = str(cluster_label)
+                pop = Population(population_name=population_name,
+                                 n=cluster.shape[0],
+                                 parent=self.root_population,
+                                 source="cluster",
+                                 signature=cluster.mean().to_dict())
+                pop.index = cluster.original_index.values
+                fg.add_population(population=pop)
+            fg.save()
+
+
+def geo_mean(x):
+    a = np.array(x)
+    return a.prod()**(1.0/len(a))
+
+
+def _assert_unique_label(x):
+    assert len(x) == 1, "Chosen label is not unique within clusters"
+    return x[0]
+
+
+def _scatterplot_defaults(**kwargs):
+    updated_kwargs = {k: v for k, v in kwargs.items()}
+    defaults = {"edgecolor": "black",
+                "alpha": 0.75,
+                "linewidth": 2,
+                "s": 5}
+    for k, v in defaults.items():
+        if k not in updated_kwargs.keys():
+            updated_kwargs[k] = v
+    return updated_kwargs
