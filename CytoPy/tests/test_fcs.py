@@ -1,6 +1,6 @@
 from CytoPy.data.fcs import *
 from CytoPy.data.project import Project
-from CytoPy.data.population import Cluster, Population
+from CytoPy.data.population import Population
 from .conftest import reload_filegroup, create_example_populations
 import pandas as pd
 import numpy as np

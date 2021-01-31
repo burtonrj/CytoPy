@@ -861,40 +861,17 @@ class FileGroup(mongoengine.Document):
         None
         """
         root_n = self.get_population("root").n
-        with h5py.File(self.h5path, "a") as f:
-            if "cell_meta_labels" in f.keys():
-                for meta, labels in self.cell_meta_labels.items():
-                    ascii_labels = [x.encode("ascii", "ignore") for x in labels]
-                    f.create_dataset(f'/cell_meta_labels/{meta}', data=ascii_labels)
+        with h5py.File(self.h5path, "r+") as f:
+            for meta, labels in self.cell_meta_labels.items():
+                ascii_labels = np.array([x.encode("ascii", "ignore") for x in labels])
+                overwrite_or_create(file=f, data=ascii_labels, key=f"/cell_meta_labels/{meta}")
             for p in self.populations:
                 parent_n = self.get_population(p.parent).n
                 p._prop_of_parent = p.n / parent_n
                 p.prop_of_total = p.n / root_n
-                f.create_dataset(f'/index/{p.population_name}/primary', data=p.index)
+                overwrite_or_create(file=f, data=p.index, key=f"/index/{p.population_name}/primary")
                 for ctrl, idx in p.ctrl_index.items():
-                    f.create_dataset(f'/index/{p.population_name}/{ctrl}', data=idx)
-
-    def _hdf_reset_population_data(self):
-        """
-        For each population clear existing data ready for overwriting with
-        current data.
-
-        Returns
-        -------
-        None
-        """
-        with h5py.File(self.h5path, "a") as f:
-            if "cell_meta_labels" in f.keys():
-                for meta in self.cell_meta_labels.keys():
-                    if meta in f["cell_meta_labels"]:
-                        del f[f"cell_meta_labels/{meta}"]
-            for p in self.populations:
-                if p.population_name in f["index"].keys():
-                    if "primary" in f[f"index/{p.population_name}"].keys():
-                        del f[f"index/{p.population_name}/primary"]
-                    for ctrl_id in p.ctrl_index.keys():
-                        if ctrl_id in f[f"index/{p.population_name}"].keys():
-                            del f[f"index/{p.population_name}/{ctrl_id}"]
+                    overwrite_or_create(file=f, data=idx, key=f"/index/{p.population_name}/{ctrl}")
 
     def population_stats(self,
                          population: str):
@@ -946,9 +923,7 @@ class FileGroup(mongoengine.Document):
     def save(self, *args, **kwargs):
         # Calculate meta and save indexes to disk
         if self.populations:
-            # self._hdf_create_population_grps()
             # Populate h5path for populations
-            self._hdf_reset_population_data()
             self._write_populations()
         super().save(*args, **kwargs)
 
@@ -962,6 +937,29 @@ class FileGroup(mongoengine.Document):
                 os.remove(self.h5path)
             else:
                 warn(f"Could not locate hdf5 file {self.h5path}")
+
+
+def overwrite_or_create(file: h5py.File,
+                        data: np.ndarray,
+                        key: str):
+    """
+    Check if node exists in hdf5 file. If it does exist, overwrite with the given
+    array otherwise create a new dataset.
+
+    Parameters
+    ----------
+    file: h5py File object
+    data: Numpy Array
+    key: str
+
+    Returns
+    -------
+    None
+    """
+    if key in file:
+        file[key] = data
+    else:
+        file.create_dataset(key, data=data)
 
 
 def population_stats(filegroup: FileGroup) -> pd.DataFrame:

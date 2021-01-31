@@ -1,7 +1,7 @@
 from CytoPy.tests import assets
-from ..data.population import Population, Cluster
+from ..data.population import Population
 from ..data.project import Project
-from ..data.experiment import Experiment, FileGroup
+from ..data.experiment import FileGroup
 from mongoengine.connection import connect, disconnect
 import pytest
 import shutil
@@ -38,8 +38,7 @@ def example_populated_experiment():
     test_project = Project(project_id="test")
     exp = test_project.add_experiment(experiment_id="test experiment",
                                       data_directory=f"{os.getcwd()}/test_data",
-                                      panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx",
-                                      panel_name="test_panel")
+                                      panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx")
     exp.add_fcs_files(sample_id="test sample",
                       primary=f"{assets.__path__._path[0]}/test.FCS",
                       controls={"test_ctrl": f"{assets.__path__._path[0]}/test.FCS"},
@@ -151,12 +150,6 @@ def create_example_populations(filegroup: FileGroup,
                        parent=parent,
                        index=idx.get("primary"))
         p.set_ctrl_index(test_ctrl=idx.get("ctrl"))
-        p.add_cluster(Cluster(cluster_id="test cluster",
-                              index=idx.get("cluster"),
-                              n=len(idx.get("cluster")),
-                              prop_of_events=len(idx.get("cluster")) / 30000,
-                              tag="testing",
-                              meta_label="meta testing"))
         filegroup.add_population(population=p)
     filegroup.save()
     return filegroup
