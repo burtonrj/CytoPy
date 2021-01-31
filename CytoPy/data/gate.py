@@ -30,18 +30,14 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ..flow.transform import apply_transform
+from CytoPy.flow.transform import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
     create_convex_hull, create_polygon, ellipse_to_polygon, probablistic_ellipse
 from .population import Population, merge_multiple_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
 from ..flow.dim_reduction import dimensionality_reduction
-from .fcs import FileGroup
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
-from sklearn.cluster import *
-from sklearn.mixture import *
-from hdbscan import HDBSCAN
 from warnings import warn
 from string import ascii_uppercase
 from collections import Counter

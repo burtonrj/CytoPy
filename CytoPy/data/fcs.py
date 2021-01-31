@@ -30,7 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from ..feedback import vprint
 from ..flow.tree import construct_tree
-from ..flow.transform import apply_transform
+from CytoPy.flow.transform import apply_transform
 from ..flow.neighbours import knn, calculate_optimal_neighbours
 from ..flow.sampling import uniform_downsampling
 from .geometry import create_convex_hull

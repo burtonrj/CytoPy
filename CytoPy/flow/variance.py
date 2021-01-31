@@ -36,10 +36,9 @@ from ..data.experiment import Experiment, FileGroup
 from ..feedback import progress_bar, vprint
 from .dim_reduction import dimensionality_reduction
 from .sampling import density_dependent_downsampling, faithful_downsampling, uniform_downsampling
-from .transform import apply_transform
+from CytoPy.flow.transform import apply_transform
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
-from sklearn.preprocessing import normalize
 from scipy.spatial.distance import jensenshannon as jsd
 from scipy.stats import entropy as kl
 from scipy.cluster import hierarchy

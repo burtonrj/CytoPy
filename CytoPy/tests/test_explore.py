@@ -1,6 +1,6 @@
 from ..data.read_write import FCSFile
 from ..flow.clustering.main import sklearn_clustering, sklearn_metaclustering
-from ..flow.transform import apply_transform
+from CytoPy.flow.transform import apply_transform
 from ..flow.explore import *
 import pandas as pd
 import numpy as np
