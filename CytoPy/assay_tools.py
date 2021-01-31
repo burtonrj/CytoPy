@@ -39,7 +39,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from warnings import warn
-from .flow.transform import apply_transform
+from CytoPy.flow.transform import apply_transform
 from scipy.optimize import curve_fit
 from scipy import stats
 import matplotlib.pyplot as plt

@@ -28,9 +28,9 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-from flowutils.transforms import logicle, hyperlog, log_transform, asinh
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler, QuantileTransformer
+from functools import partial
+from flowutils import transforms
+from sklearn import preprocessing
 import pandas as pd
 import numpy as np
 
@@ -44,191 +44,438 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def percentile_rank_transform(data: pd.DataFrame, 
-                              features_to_transform: list) -> pd.DataFrame:
-    """
-    Calculate percentile rank transform of data-frame. Each event is
-    ranked as the average according to the column, then divided by
-    the total number of events and multiplied by 100 to give the percentile.
-    
-    Parameters
-    -----------
-    data: Pandas.DataFrame
-        Pandas DataFrame of events
-    features_to_transform: list 
-        features to perform transformation on
-    Returns
-    --------
-    Pandas.DataFrame
-        Transformed DataFrame
-    """
-    data = data.copy()
-    transform = data[features_to_transform].rank(axis=0, method='average')
-    transform = (transform / transform.shape[0]) * 100
-    data[features_to_transform] = transform
-    return data
+class TransformError(Exception):
+    pass
 
 
-def _features(data: pd.DataFrame,
-              features_to_transform: str):
+def _get_dataframe_column_index(data: pd.DataFrame,
+                                features: list):
     """
-    Filter data to only required features, either all or just fluorochromes
+    Given the features of interest (columns in data) return the index of these features
 
     Parameters
     ----------
     data: Pandas.DataFrame
-    features_to_transform: str
-
-    Returns
-    -------
-    Pandas.DataFrame
-    """
-    if features_to_transform == 'all':
-        return list(data.columns)
-    elif features_to_transform == 'fluorochromes':
-        return [x for x in data.columns if all([y not in x.lower() for y in ['fsc', 'ssc', 'time', 'label']])]
-    raise ValueError(f"Expected one of: 'all' or 'fluorochromes', but got {features_to_transform}")
-
-
-def _transform(data: pd.DataFrame,
-               features: list,
-               method: str or None,
-               **kwargs):
-    """
-    Wrap the FlowUtils/Scikit-Learn functions for transformations and returning the transformed
-    data as a Pandas Dataframe.
-
-    Parameters
-    ----------
-    data: Pandas.DataFrame
-        Data to transform
     features: list
-        Features to be included in transformation
-    method: str or None
-        Method used for transformation (if None, returns original data unchanged)
-        Available transforms:
-        * logicle
-        * hyperlog
-        * log
-        * log2
-        * log10
-        * asinh
-        * percentile_rank
-        * Yeo-Johnson
-        * Box-Cox
-        * RobustScale
-        * MinMaxScale
-        * Standard
-        * Quantile
-    kwargs:
-        Additional keyword arguments passed to transform function
 
     Returns
     -------
-    Pandas.DataFrame
+    Numpy.Array
+        Index of columns of interest
     """
-    data = data.copy()
-    pre_scale = kwargs.pop("pre_scale", 1)
-    feature_i = [list(data.columns).index(i) for i in features]
-    if method is None:
-        return data
-    if method == 'logicle':
-        return pd.DataFrame(logicle(data=data.values, channels=feature_i, **kwargs),
-                            columns=data.columns, index=data.index)
-    if method == 'hyperlog':
-        return pd.DataFrame(hyperlog(data=data.values, channels=feature_i, **kwargs),
-                            columns=data.columns, index=data.index)
-    if method == 'log':
-        data[features] = data[features].apply(np.log, axis=1)
-        return data
-    if method == 'log2':
-        data[features] = data[features].apply(np.log2, axis=1)
-        return data
-    if method == "log10":
-        data[features] = data[features].apply(np.log10, axis=1)
-        return data
-    if method == 'asinh':
-        return pd.DataFrame(asinh(data=data.values, columns=feature_i, pre_scale=pre_scale),
-                            columns=data.columns, index=data.index)
-    if method == 'percentile rank':
-        return percentile_rank_transform(data, features)
-    if method == 'Yeo-Johnson':
-        data[features] = PowerTransformer(method="yeo-johnson", **kwargs).fit_transform(data[features])
-        return data
-    if method == "Box-Cox":
-        data[features] = PowerTransformer(method="box-cox", **kwargs).fit_transform(data[features])
-        return data
-    if method == 'RobustScale':
-        data[features] = RobustScaler(**kwargs).fit_transform(data[features])
-        return data
-    if method == "MinMaxScale":
-        data[features] = MinMaxScaler(**kwargs).fit_transform(data[features])
-        return data
-    if method == "Standard":
-        data[features] = StandardScaler(**kwargs).fit_transform(data[features])
-        return data
-    if method == "Quantile":
-        data[features] = QuantileTransformer(**kwargs).fit_transform(data[features])
-        return data
-    raise ValueError("Error: invalid transform_method, see docs for available transforms")
+    return np.array([data.columns.get_loc(f) for f in features if f in data.columns])
 
 
-def individual_transforms(data: pd.DataFrame,
-                          transforms: dict,
-                          **kwargs):
+class LogicleTransformer:
     """
-    Given a Pandas DataFrame and a dictionary of transformations to apply, where the
-    key is the column to transform and the value the method for transformation, apply
-    transforms to each specified column.
+    Implementation of Logicle transform is authored by Scott White (FlowUtils v0.8).
+    Logicle transformation, implemented as defined in the GatingML 2.0 specification:
 
-    Parameters
+    logicle(x, T, W, M, A) = root(B(y, T, W, M, A) − x)
+
+    where B is a modified bi-exponential function defined as:
+
+    B(y, T, W, M, A) = ae^(by) − ce^(−dy) − f
+
+    The Logicle transformation was originally defined in the publication:
+    Moore WA and Parks DR. Update for the logicle data scale including operational
+    code implementations. Cytometry A., 2012:81A(4):273–277.
+
+    Attributes
     ----------
-    data: Pandas.DataFrame
-    transforms: dict
-    kwargs:
-        Additional keyword arguments passed to transform function
-
-    Returns
-    -------
-    Pandas.DataFrame
+    w: float (default=0.5)
+        Approximate number of decades in the linear region
+    m: float (default=4.5)
+        Number of decades the true logarithmic scale approaches at the high end of the scale
+    a: float (default=0)
+        Additional number of negative decades
+    t: int (default=262144)
+        Top of the linear scale
     """
-    for feature, method in transforms.items():
-        assert feature in data.columns, f"{feature} column not found for given DataFrame"
-        data[feature] = _transform(data, [feature], method, **kwargs)[feature]
-    return data
+
+    def __init__(self,
+                 w: float = 0.5,
+                 m: float = 4.5,
+                 a: float = 0.0,
+                 t: int = 262144):
+        self.w = w
+        self.m = m
+        self.a = a
+        self.t = t
+
+    def scale(self,
+              data: pd.DataFrame,
+              features: list):
+        """
+        Scale features (columns) of given dataframe using logicle transform
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        data = data.copy()
+        idx = _get_dataframe_column_index(data, features)
+        data[features] = transforms.logicle(data=data,
+                                            channel_indices=idx,
+                                            t=self.t,
+                                            m=self.m,
+                                            w=self.w,
+                                            a=self.a)
+        return data
+
+    def inverse(self,
+                data: pd.DataFrame,
+                features: list):
+        """
+        Apply inverse logicle scale to features (columns) of given dataframe, under the assumption that
+        these features have previously been transformed with LogicleTransformer
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        data = data.copy()
+        idx = _get_dataframe_column_index(data, features)
+        data[features] = transforms.logicle_inverse(data=data,
+                                                    channel_indices=idx,
+                                                    t=self.t,
+                                                    m=self.m,
+                                                    w=self.w,
+                                                    a=self.a)
+        return data
+
+
+class HyperlogTransformer:
+    """
+    Implementation of Hyperlog transform is authored by Scott White (FlowUtils v0.8).
+
+    Hyperlog transformation, implemented as defined in the GatingML 2.0 specification:
+
+    hyperlog(x, T, W, M, A) = root(EH(y, T, W, M, A) − x)
+
+    where EH is defined as:
+
+    EH(y, T, W, M, A) = ae^(by) + cy − f
+
+    The Hyperlog transformation was originally defined in the publication:
+    Bagwell CB. Hyperlog-a flexible log-like transform for negative, zero, and
+    positive valued data. Cytometry A., 2005:64(1):34–42.
+
+    Attributes
+    ----------
+    w: float (default=0.5)
+        Approximate number of decades in the linear region
+    m: float (default=4.5)
+        Number of decades the true logarithmic scale approaches at the high end of the scale
+    a: float (default=0)
+        Additional number of negative decades
+    t: int (default=262144)
+        Top of the linear scale
+    """
+
+    def __init__(self,
+                 w: float = 0.5,
+                 m: float = 4.5,
+                 a: float = 0.0,
+                 t: int = 262144):
+        self.w = w
+        self.m = m
+        self.a = a
+        self.t = t
+
+    def scale(self,
+              data: pd.DataFrame,
+              features: list):
+        """
+        Scale features (columns) of given dataframe using hyperlog transform
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        data = data.copy()
+        idx = _get_dataframe_column_index(data, features)
+        data[features] = transforms.hyperlog(data=data,
+                                             channel_indices=idx,
+                                             t=self.t,
+                                             m=self.m,
+                                             w=self.w,
+                                             a=self.a)
+        return data
+
+    def inverse(self,
+                data: pd.DataFrame,
+                features: list):
+        """
+        Apply inverse hyperlog scale to features (columns) of given dataframe, under the assumption that
+        these features have previously been transformed with HyperlogTransformer
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        data = data.copy()
+        idx = _get_dataframe_column_index(data, features)
+        data[features] = transforms.hyperlog_inverse(data=data,
+                                                     channels=idx,
+                                                     t=self.t,
+                                                     m=self.m,
+                                                     w=self.w,
+                                                     a=self.a)
+        return data
+
+
+class AsinhTransformer:
+    """
+    Implementation of inverse hyperbolic sine function, authored by Scott White (FlowUtils v0.8).
+
+    Attributes
+    ----------
+    m: float (default=4.5)
+        Number of decades the true logarithmic scale approaches at the high end of the scale
+    a: float (default=0)
+        Additional number of negative decades
+    t: int (default=262144)
+        Top of the linear scale
+    """
+
+    def __init__(self,
+                 t: int = 262144,
+                 m: float = 4.5,
+                 a: float = 0):
+        self.t = t
+        self.m = m
+        self.a = a
+
+    def scale(self,
+              data: pd.DataFrame,
+              features: list):
+        """
+        Scale features (columns) of given dataframe using inverse hyperbolic sine transform
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        data = data.copy()
+        idx = _get_dataframe_column_index(data, features)
+        data[features] = transforms.asinh(data=data,
+                                          channel_indices=idx,
+                                          t=self.t,
+                                          m=self.m,
+                                          a=self.a)
+        return data
+
+    def inverse(self,
+                data: pd.DataFrame,
+                features: list):
+        """
+        Apply inverse of parametrized hyperbolic sine function scale to features (columns) of given dataframe,
+        under the assumption that these features have previously been transformed with AsinhTransformer
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        data = data.copy()
+        idx = _get_dataframe_column_index(data, features)
+        data[features] = transforms.asinh_inverse(data=data,
+                                                  channel_indices=idx,
+                                                  t=self.t,
+                                                  m=self.m,
+                                                  a=self.a)
+        return data
+
+
+class LogTransformer:
+    """
+    Apply log transform to data, either using parametrized log transform as defined in GatingML 2.0 specification
+    (implemented by Scott White in FlowUtils v0.8) or using natural log, base 2 or base 10.
+
+    Attributes
+    ----------
+    base: str or int (default="parametrized")
+        Method to be used, should either be 'parametrized', 10, 2, or 'natural'
+    m: float (default=4.5)
+        Number of decades the true logarithmic scale approaches at the high end of the scale
+    t: int (default=262144)
+        Top of the linear scale
+    """
+    def __init__(self,
+                 base: str or int = "parametrized",
+                 m: float = 4.5,
+                 t: int = 262144,
+                 **kwargs):
+        if base == "parametrized":
+            self._log = lambda x: (1./m) * np.log10(x/t) + 1.
+            self._inverse = lambda x: t * (10 ** ((x-1) * m))
+        elif base == 10:
+            self._log = partial(np.log10, **kwargs)
+            self._inverse = lambda x: 10**x
+        elif base == 2:
+            self._log = partial(np.log2, **kwargs)
+            self._inverse = lambda x: 2**x
+        elif base == "natural":
+            self._log = partial(np.log, **kwargs)
+            self._inverse = np.exp
+        else:
+            raise TransformError("Invalid LogTransformer method, expected one of:"
+                                 "'parametrized', 10, 2, or 'natural'")
+
+    def scale(self,
+              data: pd.DataFrame,
+              features: list):
+        """
+        Scale features (columns) of given dataframe using log transform
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        data = data.copy()
+        data[features] = self._log(data[features].values)
+        return data
+
+    def inverse(self,
+                data: pd.DataFrame,
+                features: list):
+        """
+        Apply inverse of log transform to features (columns) of given dataframe,
+        under the assumption that these features have previously been transformed with LogTransformer
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        data = data.copy()
+        data[features] = self._inverse(data[features].values)
+        return data
+
+
+class Normalise:
+    def __init__(self,
+                 norm: str = "l2",
+                 axis: int = 1):
+        self.norm = norm
+        self.axis = axis
+        self._norms = None
+        self._shape = None
+
+    def __call__(self, data: pd.DataFrame, features: list):
+        data = data.copy()
+        self._shape = data[features].shape
+        x, self._norms = preprocessing.normalize(data[features].values,
+                                                 norm=self.norm,
+                                                 axis=self.axis,
+                                                 return_norm=True)
+        data[features] = x
+        return data
+
+    def inverse(self,
+                data: pd.DataFrame,
+                features: list):
+        assert data[features].shape == self._shape, "Shape of given dataframe does not match the data " \
+                                                    f"transformed originally: {self._shape} != {data.shape}"
+        assert self._norms is not None, "Call Normalise object to first normalise target data prior to attempting " \
+                                        "inverse"
+        data[features] = data[features] * self._norms
+        return data
+
+
+SCALERS = {"standard": preprocessing.StandardScaler,
+           "minmax": preprocessing.MinMaxScaler,
+           "robust": preprocessing.RobustScaler,
+           "maxabs": preprocessing.MaxAbsScaler,
+           "quantile": preprocessing.QuantileTransformer,
+           "yeo_johnson": preprocessing.PowerTransformer,
+           "box_cox": preprocessing.PowerTransformer}
+
+
+class Scaler:
+    def __init__(self,
+                 method: str = "standard",
+                 **kwargs):
+        if method not in SCALERS.keys():
+            raise TransformError(f"Method not supported, must be one of: {list(SCALERS.keys())}")
+        kwargs = kwargs or {}
+        if method == "yeo_johnson":
+            kwargs["method"] = "yeo-johnson"
+        if method == "box_cox":
+            kwargs["method"] = "box_cox"
+        self._scaler = SCALERS.get(method)(**kwargs)
+
+    def __call__(self, data: pd.DataFrame, features: list, **kwargs):
+        data = data.copy()
+        data[features] = self._scaler.fit_transform(data[features].values)
+        return data
+
+    def inverse(self, data: pd.DataFrame, features: list):
+        if getattr(self._scaler, "inverse_transform", None) is None:
+            raise TransformError("Chosen scaler method does not support inverse transformation")
+        else:
+            data = data.copy()
+            data[features] = self._scaler.inverse_transform(data[features].values)
+            return data
+
+    def set_params(self, **kwargs):
+        self._scaler.set_params(**kwargs)
+
+
+TRANSFORMERS = {"logicle": LogicleTransformer,
+                "hyperlog": HyperlogTransformer,
+                "asinh": AsinhTransformer,
+                "log": LogTransformer}
 
 
 def apply_transform(data: pd.DataFrame,
-                    features_to_transform: list or str or dict = 'all',
-                    transform_method: str or None = 'logicle',
-                    **kwargs) -> pd.DataFrame:
-    """
-    Apply a transformation to the given dataframe. The features_to_transform specified which
-    columns in the dataframe to transform. This can be given as:
-    * a string value of either 'all' or 'fluorochromes'; transform_method defines which transform
-      to apply to columns
-    * a list of columns to transform; transform_method defines which transform
-      to apply to columns
-    * alternatively, a dictionary where the key is the column name and the value is the
-      transform method to apply to this column; transform_method is ignored
-    
-    Parameters
-    -----------
-    data: Pandas.DataFrame
-    features_to_transform: list or str or dict (default="all")
-    transform_method: str or None
-
-    Returns
-    --------
-    Pandas.DataFrame
-    """
-    data = data.copy()
-    if isinstance(features_to_transform, dict):
-        return individual_transforms(data, features_to_transform, **kwargs)
-    if isinstance(features_to_transform, str):
-        features_to_transform = _features(data, features_to_transform)
-    elif isinstance(features_to_transform, list):
-        assert all([x in data.columns for x in features_to_transform]), \
-            "One or more provided features does not exist for the given dataframe"
-    return _transform(data=data, features=features_to_transform, method=transform_method, **kwargs)
-
+                    features: list,
+                    method: str = "logicle",
+                    return_transformer: bool = False,
+                    **kwargs):
+    if method not in TRANSFORMERS.keys():
+        raise TransformError(f"Invalid transform, must be one of: {list(TRANSFORMERS.keys())}")
+    method = TRANSFORMERS.get(method)(**kwargs)
+    if return_transformer:
+        x = method.scale(data=data, features=features)
+        return x, method
+    return method.scale(data=data, features=features)
