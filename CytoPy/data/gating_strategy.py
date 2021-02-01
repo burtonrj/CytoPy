@@ -28,10 +28,10 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ..flow.plotting import CreatePlot
+from CytoPy.flow.plotting.facs_plot import FlowPlot
 from ..feedback import progress_bar, vprint
 from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, \
-    PolygonGeom, update_polygon, update_threshold, TimeGate
+    PolygonGeom, update_polygon, update_threshold
 from ..flow.gate_search import hyperparameter_gate
 from ..flow.fda_norm import LandmarkReg
 from .experiment import Experiment
@@ -255,7 +255,7 @@ class GatingStrategy(mongoengine.Document):
             gate = self.get_gate(gate=gate)
         parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=False)
         gate.fit(data=parent_data, ctrl_data=ctrl_parent_data)
-        plot = CreatePlot(**create_plot_kwargs)
+        plot = FlowPlot(**create_plot_kwargs)
         return plot.plot_gate_children(gate=gate,
                                        parent=parent_data,
                                        **plot_gate_kwargs)
@@ -460,7 +460,7 @@ class GatingStrategy(mongoengine.Document):
         if add_to_strategy:
             self.gates.append(gate)
         if plot:
-            plot = CreatePlot(**create_plot_kwargs)
+            plot = FlowPlot(**create_plot_kwargs)
             return plot.plot_population_geoms(parent=parent_data,
                                               children=populations,
                                               do_not_transform=transform is False,
@@ -715,7 +715,7 @@ class GatingStrategy(mongoengine.Document):
         gate = self.get_gate(gate=gate)
         fda_norm = gate.gate_name in self.normalisation.keys()
         parent, _ = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm)
-        plotting = CreatePlot(**create_plot_kwargs)
+        plotting = FlowPlot(**create_plot_kwargs)
         return plotting.plot_population_geoms(parent=parent,
                                               children=[self.filegroup.get_population(c.name)
                                                         for c in gate.children],
@@ -755,7 +755,7 @@ class GatingStrategy(mongoengine.Document):
         assert all([x in downstream for x in overlay]), \
             "One or more of the given populations is not downstream of the given parent"
         create_plot_kwargs = create_plot_kwargs or {}
-        plotting = CreatePlot(**create_plot_kwargs)
+        plotting = FlowPlot(**create_plot_kwargs)
         parent = self.filegroup.load_population_df(population=parent,
                                                    transform=None,
                                                    label_downstream_affiliations=False)
@@ -801,9 +801,9 @@ class GatingStrategy(mongoengine.Document):
                                                  transform=None,
                                                  label_downstream_affiliations=False)
         create_plot_kwargs = create_plot_kwargs or {}
-        plotting = CreatePlot(transform_x=transform_x,
-                              transform_y=transform_y,
-                              **create_plot_kwargs)
+        plotting = FlowPlot(transform_x=transform_x,
+                            transform_y=transform_y,
+                            **create_plot_kwargs)
         return plotting.plot(data=data, x=x, y=y, **plot_kwargs)
 
     def print_population_tree(self, **kwargs):

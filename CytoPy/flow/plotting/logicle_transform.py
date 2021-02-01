@@ -24,6 +24,11 @@ class LogicleScale(mscale.ScaleBase):
         axis.set_minor_formatter(NullFormatter())
 
     class LogicleTransform(mtransforms.Transform):
+        input_dims = 1
+        output_dims = 1
+        is_separable = True
+        has_inverse = True
+
         def __init__(self, scaler: LogicleTransformer):
             mtransforms.Transform.__init__(self)
             self._scaler = scaler
@@ -37,6 +42,11 @@ class LogicleScale(mscale.ScaleBase):
             return LogicleScale.InvertedLogicalTransform(scaler=self._scaler)
 
     class InvertedLogicalTransform(mtransforms.Transform):
+        input_dims = 1
+        output_dims = 1
+        is_separable = True
+        has_inverse = True
+
         def __init__(self, scaler: LogicleTransformer):
             mtransforms.Transform.__init__(self)
             self._scaler = scaler
