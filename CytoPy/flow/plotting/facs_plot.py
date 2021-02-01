@@ -32,9 +32,8 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-
-from ..data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, Population
-from ..data.geometry import ThresholdGeom, PolygonGeom
+from CytoPy.data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, Population
+from CytoPy.data.geometry import ThresholdGeom, PolygonGeom
 from CytoPy.flow.transform import apply_transform
 from warnings import warn
 from typing import List, Generator, Dict
@@ -58,7 +57,10 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-class CreatePlot:
+TRANSFORMS = ["log_scale", "logicle", "hyperlog", "asinh"]
+
+
+class FlowPlot:
     """
     Generate 1D or 2d histograms of cell populations as identified by cytometry. Supports plotting of individual
     populations, single or multiple gates, "backgating" (plotting child populations overlaid on parent) and
@@ -120,6 +122,8 @@ class CreatePlot:
                  bw: str or float = "scott",
                  autoscale: bool = True,
                  axis_ticks: bool = True):
+        assert transform_x in TRANSFORMS, f"Unsupported transform, must be one of: {TRANSFORMS}"
+        assert transform_y in TRANSFORMS, f"Unsupported transform, must be one of: {TRANSFORMS}"
         self.transforms = {'x': transform_x, 'y': transform_y}
         self.labels = {'x': xlabel, 'y': ylabel}
         self.autoscale = autoscale
