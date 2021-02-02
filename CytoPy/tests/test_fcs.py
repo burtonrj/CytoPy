@@ -27,7 +27,6 @@ def create_test_h5file(path: str,
     """
     with h5py.File(path, "w") as f:
         f.create_group("index")
-        f.create_group("clusters")
         if empty:
             return
         f.create_group("index/test_pop")
@@ -35,8 +34,6 @@ def create_test_h5file(path: str,
         f.create_dataset("index/test_pop/primary", data=np.random.random_integers(1000, size=1000))
         f.create_dataset("index/test_pop/test_ctrl1", data=np.random.random_integers(1000, size=1000))
         f.create_dataset("index/test_pop/test_ctrl2", data=np.random.random_integers(1000, size=1000))
-        f.create_dataset("clusters/test_pop/cluster1_tag1", data=np.random.random_integers(1000, size=1000))
-        f.create_dataset("clusters/test_pop/cluster2_tag2", data=np.random.random_integers(1000, size=1000))
 
 
 def add_dummy_ctrl(fg: FileGroup, ctrl_id: str):
@@ -84,20 +81,6 @@ def test_h5_read_population_ctrl_index():
         assert len(x) == 2
         assert x.get("test_ctrl1").shape[0] == 1000
         assert x.get("test_ctrl2").shape[0] == 1000
-
-
-def test_h5_read_population_clusters():
-    path = f"{os.getcwd()}/test_data/test.h5"
-    create_test_h5file(path=path, empty=True)
-    with h5py.File(path, "r") as f:
-        assert h5_read_population_clusters("test_pop", f) is None
-    create_test_h5file(path=path, empty=False)
-    with h5py.File(path, "r") as f:
-        x = h5_read_population_clusters("test_pop", f)
-        assert isinstance(x, dict)
-        assert len(x) == 2
-        assert x.get("cluster1_tag1").shape[0] == 1000
-        assert x.get("cluster2_tag2").shape[0] == 1000
 
 
 def test_set_column_names():
@@ -195,12 +178,6 @@ def test_add_population(example_populated_experiment):
         for name, expected_n in zip(["root", "pop1", "pop2", "pop3"],
                                     [30000, 24000, 12000, 6000]):
             assert len(data_dict.get(name)) == expected_n
-    # Check cluster idx
-    clustered_pops = [p for p in fg.populations if p.population_name != "root"]
-    cluster_idx = {p.population_name: p.clusters[0].index for p in clustered_pops}
-    for name, n in zip(["pop1", "pop2", "pop3"],
-                       [24000, 12000, 6000]):
-        assert len(cluster_idx.get(name)) == n * 0.25
     # Check trees
     assert all([x in fg.tree.keys() for x in ["root", "pop1", "pop2", "pop3"]])
     assert not fg.tree.get("root").parent

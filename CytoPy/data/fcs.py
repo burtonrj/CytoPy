@@ -392,7 +392,9 @@ class FileGroup(mongoengine.Document):
     def load_ctrl_population_df(self,
                                 ctrl: str,
                                 population: str,
-                                transform: str or dict or None = "logicle",
+                                transform: str or None = "logicle",
+                                features_to_transform: list or None = None,
+                                transform_kwargs: dict or None = None,
                                 **kwargs):
         """
         Load the DataFrame for the events pertaining to a single population from a
@@ -407,11 +409,12 @@ class FileGroup(mongoengine.Document):
             Name of the control sample to load
         population: str
             Name of the desired population
-        transform: str or dict (optional)
-            If given, transformation method applied to the columns of the DataFrame. If the
-            value given is a string, it should be the name of the transform method applied
-            to ALL columns. If it is a dictionary, keys should correspond to column names
-            and values the transform to apply to said column.
+        transform: str, optional (default="logicle")
+            Transform to be applied; specify a value of None to not perform any transformation
+        features_to_transform: list, optional
+            Features (columns) to be transformed. If not provied, all columns transformed
+        transform_kwargs: dict, optional
+            Additional keyword arguments passed to transform method
         kwargs
             Additional keyword arguments passed to estimated_ctrl_population
 
@@ -419,6 +422,7 @@ class FileGroup(mongoengine.Document):
         -------
 
         """
+        transform_kwargs = transform_kwargs or {}
         if ctrl not in self.controls:
             raise MissingControlError(f"No such control {ctrl} associated to this FileGroup")
         if ctrl not in self.get_population(population_name=population).ctrl_index.keys():
@@ -427,10 +431,13 @@ class FileGroup(mongoengine.Document):
             self.estimate_ctrl_population(ctrl=ctrl, population=population, **kwargs)
         idx = self.get_population(population_name=population).ctrl_index.get(ctrl)
         data = self.data(source=ctrl).loc[idx]
-        if isinstance(transform, dict):
-            data = apply_transform(data=data, features_to_transform=transform)
-        elif isinstance(transform, str):
-            data = apply_transform(data, transform_method=transform)
+        if transform is not None:
+            features_to_transform = features_to_transform or list(data.columns)
+            data = apply_transform(data=data,
+                                   features=features_to_transform,
+                                   method=transform,
+                                   return_transformer=False,
+                                   **transform_kwargs)
         return data
 
     def estimate_ctrl_population(self,
@@ -560,7 +567,9 @@ class FileGroup(mongoengine.Document):
 
     def load_population_df(self,
                            population: str,
-                           transform: str or dict or None = "logicle",
+                           transform: str or None = "logicle",
+                           features_to_transform: list or None = None,
+                           transform_kwargs: dict or None = None,
                            label_downstream_affiliations: bool = False) -> pd.DataFrame:
         """
         Load the DataFrame for the events pertaining to a single population.
@@ -569,11 +578,12 @@ class FileGroup(mongoengine.Document):
         ----------
         population: str
             Name of the desired population
-        transform: str or dict (optional)
-            If given, transformation method applied to the columns of the DataFrame. If the
-            value given is a string, it should be the name of the transform method applied
-            to ALL columns. If it is a dictionary, keys should correspond to column names
-            and values the transform to apply to said column.
+        transform: str, optional (default="logicle")
+            Transform to be applied; specify a value of None to not perform any transformation
+        features_to_transform: list, optional
+            Features (columns) to be transformed. If not provied, all columns transformed
+        transform_kwargs: dict, optional
+            Additional keyword arguments passed to transform method
         label_downstream_affiliations: bool (default=False)
             If True, an additional column will be generated named "population_label" containing
             the end node membership of each event e.g. if you choose CD4+ population and
@@ -589,10 +599,13 @@ class FileGroup(mongoengine.Document):
         assert population in self.tree.keys(), f"Invalid population, {population} does not exist"
         idx = self.get_population(population_name=population).index
         data = self.data(source="primary").loc[idx]
-        if isinstance(transform, dict):
-            data = apply_transform(data=data, features_to_transform=transform)
-        elif isinstance(transform, str):
-            data = apply_transform(data, transform_method=transform)
+        if transform is not None:
+            features_to_transform = features_to_transform or list(data.columns)
+            transform_kwargs = transform_kwargs or {}
+            data = apply_transform(data=data,
+                                   method=transform,
+                                   features=features_to_transform,
+                                   **transform_kwargs)
         if label_downstream_affiliations:
             return self._label_downstream_affiliations(parent=population,
                                                        data=data)
@@ -957,9 +970,8 @@ def overwrite_or_create(file: h5py.File,
     None
     """
     if key in file:
-        file[key] = data
-    else:
-        file.create_dataset(key, data=data)
+        del file[key]
+    file.create_dataset(key, data=data)
 
 
 def population_stats(filegroup: FileGroup) -> pd.DataFrame:
