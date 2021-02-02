@@ -34,9 +34,9 @@ class LogicleScale(mscale.ScaleBase):
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame({"x": data})
+            data = pd.DataFrame(data, columns=["x"])
             data = self._scaler.scale(data=data, features=["x"])
-            return data.x.values
+            return data.values
 
         def inverted(self):
             return LogicleScale.InvertedLogicalTransform(scaler=self._scaler)
@@ -52,9 +52,9 @@ class LogicleScale(mscale.ScaleBase):
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame({"x": data})
-            data = self._scaler.inverse(data=data, features=["x"])
-            return data.x.values
+            data = pd.DataFrame(data, columns=["x"])
+            data = self._scaler.inverse_scale(data=data, features=["x"])
+            return data.values
 
         def inverted(self):
             return LogicleScale.LogicleTransform(scaler=self._scaler)
@@ -80,10 +80,10 @@ class LogicleMajorLocator(Locator):
         'Every decade, including 0 and negative'
 
         vmin, vmax = self.view_limits(vmin, vmax)
-        logicle = self.axis._scale.logicle
+        kwargs = self.axis._scale._scaler.kwargs
 
         max_decade = np.ceil(np.log10(vmax * 1.1))
-        min_positive_decade = np.ceil(np.log10(logicle.T()) - logicle.M()) + 1
+        min_positive_decade = np.ceil(np.log10(kwargs["t"]) - kwargs["m"]) + 1
 
         if vmin < 0:
             max_negative_decade = np.floor(np.log10(-1.0 * vmin))
@@ -139,10 +139,10 @@ class LogicleMinorLocator(Locator):
         'Every tenth decade, including 0 and negative'
 
         vmin, vmax = self.view_limits(vmin, vmax)
-        logicle = self.axis._scale.logicle
+        kwargs = self.axis._scale._scaler.kwargs
 
         max_decade = np.ceil(np.log10(vmax * 1.1)) + 1
-        min_positive_decade = np.ceil(np.log10(logicle.T()) - logicle.M()) + 1
+        min_positive_decade = np.ceil(np.log10(kwargs["t"]) - kwargs["m"]) + 1
 
         if vmin < 0:
             max_negative_decade = np.floor(np.log10(-1.0 * vmin)) + 1

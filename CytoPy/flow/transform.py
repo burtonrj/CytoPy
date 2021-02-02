@@ -31,6 +31,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from functools import partial
 from flowutils import transforms
 from sklearn import preprocessing
+from warnings import warn
 import pandas as pd
 import numpy as np
 
@@ -112,13 +113,15 @@ class Transformer:
         data = data.copy()
         idx = _get_dataframe_column_index(data, features)
         if "channel_indices" in self.transform.__code__.co_varnames:
-            data[features] = self.transform(data=data,
-                                            channel_indices=idx,
-                                            **self.kwargs)
+            data = pd.DataFrame(self.transform(data=data.values,
+                                               channel_indices=idx,
+                                               **self.kwargs),
+                                columns=data.columns)
         elif "channels" in self.transform.__code__.co_varnames:
-            data[features] = self.transform(data=data,
-                                            channels=idx,
-                                            **self.kwargs)
+            data = pd.DataFrame(self.transform(data=data.values,
+                                               channels=idx,
+                                               **self.kwargs),
+                                columns=data.columns)
         else:
             raise TransformError("Invalid transform function, missing argument 'channel_indices' or 'channels'")
         return data
@@ -148,13 +151,15 @@ class Transformer:
         data = data.copy()
         idx = _get_dataframe_column_index(data, features)
         if "channel_indices" in self.inverse.__code__.co_varnames:
-            data[features] = self.inverse(data=data,
-                                          channel_indices=idx,
-                                          **self.kwargs)
+            data = pd.DataFrame(self.inverse(data=data.values,
+                                             channel_indices=idx,
+                                             **self.kwargs),
+                                columns=data.columns)
         elif "channels" in self.inverse.__code__.co_varnames:
-            data[features] = self.inverse(data=data,
-                                          channels=idx,
-                                          **self.kwargs)
+            data = pd.DataFrame(self.inverse(data=data.values,
+                                             channels=idx,
+                                             **self.kwargs),
+                                columns=data.columns)
         else:
             raise TransformError("Invalid inverse transform function, missing argument 'channel_indices' or 'channels'")
         return data
@@ -317,7 +322,7 @@ class LogTransformer(Transformer):
         -------
         Pandas.DataFrame
         """
-        data = data.copy()
+        data = remove_negative_values(data, features)
         data[features] = self.transform(data[features].values)
         return data
 
@@ -337,7 +342,9 @@ class LogTransformer(Transformer):
         -------
         Pandas.DataFrame
         """
-        data = data.copy()
+        if data.shape[0] == 1 and data[features].iloc[0] == 0:
+            return data
+        data = remove_negative_values(data, features)
         data[features] = self.inverse(data[features].values)
         return data
 
@@ -588,3 +595,24 @@ def apply_transform(data: pd.DataFrame,
         x = method.scale(data=data, features=features)
         return x, method
     return method.scale(data=data, features=features)
+
+
+def remove_negative_values(data: pd.DataFrame,
+                           features: list):
+    data = data.copy()
+    for f in features:
+        if (data[f] <= 0).any():
+            warn(f"Feature {f} contains negative values. Chosen Transformer requires values "
+                 f">=0, all values <=0 will be forced to the minimum valid values in {f}")
+            valid_range = data[data[f] > 0][f].values
+            if len(valid_range) == 0:
+                raise TransformError(f"All values for {f} <= 0")
+            min_ = np.min(valid_range)
+            data[f] = np.where(data[f].values <= 0, min_, data[f].values)
+    return data
+
+
+def safe_range(data: pd.DataFrame, x: str):
+    valid_range = data[data[x] > 0][x].values
+    assert len(valid_range) > 0, f"All values for {x} <= 0"
+    return np.min(valid_range), np.max(valid_range)

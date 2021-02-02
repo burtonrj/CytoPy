@@ -28,7 +28,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from CytoPy.flow.plotting.facs_plot import FlowPlot
+from CytoPy.flow.plotting.flow_plot import FlowPlot
 from ..feedback import progress_bar, vprint
 from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, \
     PolygonGeom, update_polygon, update_threshold

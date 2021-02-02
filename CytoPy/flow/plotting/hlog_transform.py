@@ -24,27 +24,39 @@ class HyperlogScale(mscale.ScaleBase):
         axis.set_minor_formatter(NullFormatter())
 
     class HyperlogTransform(mtransforms.Transform):
+
+        input_dims = 1
+        output_dims = 1
+        is_separable = True
+        has_inverse = True
+
         def __init__(self, scaler: HyperlogTransformer):
             mtransforms.Transform.__init__(self)
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame({"x": data})
+            data = pd.DataFrame(data, columns=["x"])
             data = self._scaler.scale(data=data, features=["x"])
-            return data.x.values
+            return data.values
 
         def inverted(self):
             return HyperlogScale.InvertedHyperlogTransform(scaler=self._scaler)
 
     class InvertedHyperlogTransform(mtransforms.Transform):
+
+        input_dims = 1
+        output_dims = 1
+        is_separable = True
+        has_inverse = True
+
         def __init__(self, scaler: HyperlogTransformer):
             mtransforms.Transform.__init__(self)
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame({"x": data})
-            data = self._scaler.inverse(data=data, features=["x"])
-            return data.x.values
+            data = pd.DataFrame(data, columns=["x"])
+            data = self._scaler.inverse_scale(data=data, features=["x"])
+            return data.values
 
         def inverted(self):
             return HyperlogScale.HyperlogTransform(scaler=self._scaler)
