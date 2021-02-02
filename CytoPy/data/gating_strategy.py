@@ -341,12 +341,15 @@ class GatingStrategy(mongoengine.Document):
         ref = FileGroup.objects(id=self.normalisation.get(gate_name).get("reference")).get()
         kwargs = self.normalisation.get(gate_name).get("kwargs")
 
-        transformations = {gate.x: gate.transformations.get("x"),
-                           gate.y: gate.transformations.get("y")}
+        transformations = {gate.x: gate.transform_x,
+                           gate.y: gate.transform_y}
+        transform_kwargs = {gate.x: gate.transform_x_kwargs,
+                            gate.y: gate.transform_y_kwargs}
         ref_df = ref.load_population_df(population=gate.parent,
                                         transform=transformations)
         target_df = self.filegroup.load_population_df(population=population,
-                                                      transform=transformations)
+                                                      transform=transformations,
+                                                      transform_kwargs=transform_kwargs)
         for d in [gate.x, gate.y]:
             if d is None:
                 continue
@@ -853,10 +856,13 @@ class GatingStrategy(mongoengine.Document):
         err = "Cannot edit a gate that has not been applied; gate children not present in population " \
               "tree."
         assert all([x in self.filegroup.tree.keys() for x in [c.name for c in gate.children]]), err
-        transforms = [gate.transformations.get(x, None) for x in ["x", "y"]]
+        transforms = [gate.transform_y, gate.transform_y]
+        transform_kwargs = [gate.transform_x_kwargs, gate.transform_y_kwargs]
         transforms = {k: v for k, v in zip([gate.x, gate.y], transforms) if k is not None}
+        transform_kwargs = {k: v for k, v in zip([gate.x, gate.y], transform_kwargs) if k is not None}
         parent = self.filegroup.load_population_df(population=gate.parent,
-                                                   transform=transforms)
+                                                   transform=transforms,
+                                                   transform_kwargs=transform_kwargs)
         for child in gate.children:
             pop = self.filegroup.get_population(population_name=child.name)
             if isinstance(pop.geom, ThresholdGeom):

@@ -30,7 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from ..feedback import vprint
 from ..flow.tree import construct_tree
-from CytoPy.flow.transform import apply_transform
+from CytoPy.flow.transform import apply_transform, apply_transform_map
 from ..flow.neighbours import knn, calculate_optimal_neighbours
 from ..flow.sampling import uniform_downsampling
 from .geometry import create_convex_hull
@@ -392,7 +392,7 @@ class FileGroup(mongoengine.Document):
     def load_ctrl_population_df(self,
                                 ctrl: str,
                                 population: str,
-                                transform: str or None = "logicle",
+                                transform: str or dict or None = "logicle",
                                 features_to_transform: list or None = None,
                                 transform_kwargs: dict or None = None,
                                 **kwargs):
@@ -433,11 +433,14 @@ class FileGroup(mongoengine.Document):
         data = self.data(source=ctrl).loc[idx]
         if transform is not None:
             features_to_transform = features_to_transform or list(data.columns)
-            data = apply_transform(data=data,
-                                   features=features_to_transform,
-                                   method=transform,
-                                   return_transformer=False,
-                                   **transform_kwargs)
+            if isinstance(transform, dict):
+                data = apply_transform_map(data=data, feature_method=transform)
+            else:
+                data = apply_transform(data=data,
+                                       features=features_to_transform,
+                                       method=transform,
+                                       return_transformer=False,
+                                       **transform_kwargs)
         return data
 
     def estimate_ctrl_population(self,
@@ -567,7 +570,7 @@ class FileGroup(mongoengine.Document):
 
     def load_population_df(self,
                            population: str,
-                           transform: str or None = "logicle",
+                           transform: str or dict or None = "logicle",
                            features_to_transform: list or None = None,
                            transform_kwargs: dict or None = None,
                            label_downstream_affiliations: bool = False) -> pd.DataFrame:
@@ -602,10 +605,13 @@ class FileGroup(mongoengine.Document):
         if transform is not None:
             features_to_transform = features_to_transform or list(data.columns)
             transform_kwargs = transform_kwargs or {}
-            data = apply_transform(data=data,
-                                   method=transform,
-                                   features=features_to_transform,
-                                   **transform_kwargs)
+            if isinstance(transform, dict):
+                data = apply_transform_map(data=data, feature_method=transform, kwargs=transform_kwargs)
+            else:
+                data = apply_transform(data=data,
+                                       method=transform,
+                                       features=features_to_transform,
+                                       **transform_kwargs)
         if label_downstream_affiliations:
             return self._label_downstream_affiliations(parent=population,
                                                        data=data)

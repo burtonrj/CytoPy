@@ -552,8 +552,8 @@ TRANSFORMERS = {"logicle": LogicleTransformer,
 
 
 def apply_transform(data: pd.DataFrame,
-                    features: list,
-                    method: str = "logicle",
+                    features: list or dict,
+                    method: str or None = "logicle",
                     return_transformer: bool = False,
                     **kwargs):
     """
@@ -569,7 +569,7 @@ def apply_transform(data: pd.DataFrame,
     Parameters
     ----------
     data: Pandas.DataFrame
-    features: List
+    features: List or dict
         Column names to be transformed
     method: str (default='logicle')
         Transformation method
@@ -588,6 +588,10 @@ def apply_transform(data: pd.DataFrame,
     TransformError
         Raised if invalid transform method requested
     """
+    if method is None:
+        if return_transformer:
+            return data, None
+        return data
     if method not in TRANSFORMERS.keys():
         raise TransformError(f"Invalid transform, must be one of: {list(TRANSFORMERS.keys())}")
     method = TRANSFORMERS.get(method)(**kwargs)
@@ -595,6 +599,20 @@ def apply_transform(data: pd.DataFrame,
         x = method.scale(data=data, features=features)
         return x, method
     return method.scale(data=data, features=features)
+
+
+def apply_transform_map(data: pd.DataFrame,
+                        feature_method: dict,
+                        kwargs: dict or None = None):
+    kwargs = kwargs or {}
+    for feature, method in feature_method.items():
+        transform_kwargs = kwargs.get(feature, {})
+        data = apply_transform(data=data,
+                               features=feature,
+                               method=method,
+                               return_transformer=False,
+                               **transform_kwargs)
+    return data
 
 
 def remove_negative_values(data: pd.DataFrame,

@@ -343,40 +343,6 @@ def test_delete_all_populations(example_populated_experiment):
     assert_population_tree(fg, ["root"])
 
 
-@pytest.mark.parametrize("drop_all,drop_tag,drop_metalabel,expected_clusters",
-                         [(False, "testing", None, ["test cluster 0", "test cluster 1", "test cluster 2"]),
-                          (False, "testing 2", None, ["test cluster 2"]),
-                          (False, None, "test meta 1", ["test cluster 2"]),
-                          (False, None, "test meta 2", ["test cluster 0", "test cluster 1"]),
-                          (True, None, None, [])])
-def test_delete_clusters(example_populated_experiment, drop_all, drop_tag, drop_metalabel, expected_clusters):
-    fg = create_example_populations(example_populated_experiment.get_sample("test sample"))
-    for name in ["pop4", "pop5", "pop6"]:
-        p = Population(population_name=name,
-                       n=1000,
-                       parent="pop2",
-                       index=np.arange(0, 1000))
-        p.set_ctrl_index(test_ctrl=np.arange(0, 1000))
-        cluster_idx = np.arange(0, 1000)
-        for i, (tag, metalabel) in enumerate(zip(["testing 2", "testing 2", "testing 3"],
-                                                 ["test meta 1", "test meta 1", "test meta 2"])):
-            p.add_cluster(Cluster(cluster_id=f"test cluster {i}",
-                                  index=cluster_idx,
-                                  n=len(cluster_idx),
-                                  prop_of_events=len(cluster_idx) / 30000,
-                                  tag=tag,
-                                  meta_label=metalabel))
-        fg.add_population(population=p)
-    fg.save()
-    fg = reload_filegroup(project_id="test", exp_id="test experiment", sample_id="test sample")
-    fg.delete_clusters(tag=drop_tag, meta_label=drop_metalabel, drop_all=drop_all)
-    fg.save()
-    fg = reload_filegroup(project_id="test", exp_id="test experiment", sample_id="test sample")
-    for pop_name in ["pop4", "pop5", "pop6"]:
-        p = fg.get_population(population_name=pop_name)
-        assert p.list_clusters() == expected_clusters
-
-
 @pytest.mark.parametrize("pop_name, expected_pops",
                          [("pop3", []),
                           ("pop2", ["pop3"]),
