@@ -27,7 +27,7 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
+from ..flow import transform
 import numpy as np
 import pandas as pd
 from multiprocessing import Pool, cpu_count
@@ -68,6 +68,8 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
     y = mongoengine.StringField()
     transform_x = mongoengine.StringField()
     transform_y = mongoengine.StringField()
+    transform_x_kwargs = mongoengine.DictField()
+    transform_y_kwargs = mongoengine.DictField()
     meta = {'allow_inheritance': True}
 
 
@@ -84,6 +86,18 @@ class ThresholdGeom(PopulationGeometry):
     """
     x_threshold = mongoengine.FloatField()
     y_threshold = mongoengine.FloatField()
+
+    def transform_to_linear(self):
+        x, y = self.x_threshold, self.y_threshold
+        if self.transform_x:
+            kwargs = self.transform_x_kwargs or {}
+            transformer = transform.TRANSFORMERS.get(self.transform_x)(**kwargs)
+            x = transformer.inverse_scale(pd.DataFrame({"x": [self.x_threshold]}), features=["x"])["x"].values[0]
+        if self.transform_y:
+            kwargs = self.transform_y_kwargs or {}
+            transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
+            y = transformer.inverse_scale(pd.DataFrame({"y": [self.x_threshold]}), features=["y"])["y"].values[0]
+        return x, y
 
 
 class PolygonGeom(PopulationGeometry):
@@ -105,6 +119,18 @@ class PolygonGeom(PopulationGeometry):
         assert self.x_values is not None and self.y_values is not None, \
             "x and y values not defined for this Polygon"
         return create_polygon(self.x_values, self.y_values)
+
+    def transform_to_linear(self):
+        x_values, y_values = self.x_values, self.y_values
+        if self.transform_x:
+            kwargs = self.transform_x_kwargs or {}
+            transformer = transform.TRANSFORMERS.get(self.transform_x)(**kwargs)
+            x_values = transformer.inverse_scale(pd.DataFrame({"x": [self.x_values]}), features=["x"])["x"].values
+        if self.transform_y:
+            kwargs = self.transform_y_kwargs or {}
+            transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
+            x_values = transformer.inverse_scale(pd.DataFrame({"y": [self.y_values]}), features=["y"])["y"].values
+        return x_values, y_values
 
 
 def point_in_poly(coords: np.array,

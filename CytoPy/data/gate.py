@@ -149,14 +149,7 @@ class Gate(mongoengine.Document):
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
         is applied to
-    transformations: dict (optional)
-        Transform method to be applied to each dimension, should be a dictionary with
-        keys corresponding to each variable (e.g. "x" and/or "y") and values the
-        transform to apply (e.g. {"x": "logicle"} for logicle transform of x-axis)
-    transform_kwargs: dict (optional)
-        Additional keyword arguments to be passed to transformation method. Should be a
-        dictionary with keys "x" or "y" and value of each of these keys being a dictionary
-         of keyword arguments to pass to transform method applied to this dimension.
+    # TODO add transform params
     sampling: dict (optional)
          Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
@@ -184,8 +177,10 @@ class Gate(mongoengine.Document):
     parent = mongoengine.StringField(required=True)
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField(required=False)
-    transformations = mongoengine.DictField()
-    transform_kwargs = mongoengine.DictField()
+    transform_x = mongoengine.StringField(required=True, default=None)
+    transform_y = mongoengine.StringField(required=True, default=None)
+    transform_x_kwargs = mongoengine.DictField()
+    transform_y_kwargs = mongoengine.DictField()
     sampling = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
     ctrl_x = mongoengine.StringField()
@@ -224,19 +219,18 @@ class Gate(mongoengine.Document):
         Pandas.DataFrame
             Transformed dataframe
         """
-        x, y = self.transformations.get("x", None), self.transformations.get("y", None)
-        if x is not None:
-            kwargs = self.transform_kwargs.get("x", {})
+        if self.transform_x is not None:
+            kwargs = self.transform_x_kwargs or {}
             data, self.x_transformer = apply_transform(data=data,
-                                                       features=[x],
-                                                       method=x,
+                                                       features=[self.x],
+                                                       method=self.transform_x,
                                                        return_transformer=True,
                                                        **kwargs)
-        if y is not None:
-            kwargs = self.transform_kwargs.get("y", {})
+        if self.transform_y is not None:
+            kwargs = self.transform_y_kwargs or {}
             data, self.y_transformer = apply_transform(data=data,
-                                                       features=[y],
-                                                       method=y,
+                                                       features=[self.y],
+                                                       method=self.transform_y,
                                                        return_transformer=True,
                                                        **kwargs)
         return data
@@ -485,8 +479,9 @@ class ThresholdGate(Gate):
             assert child.definition in ["+", "-"], "Invalid child definition, should be either '+' or '-'"
         child.geom.x = self.x
         child.geom.y = self.y
-        child.geom.transform_x, child.geom.transform_y = self.transformations.get("x", None), self.transformations.get(
-            "y", None)
+        child.geom.transform_x, child.geom.transform_y = self.transform_x, self.transform_y
+        child.geom.transform_x_kwargs = self.transform_x_kwargs
+        child.geom.transform_y_kwargs = self.transform_y_kwargs
         self.children.append(child)
 
     def _duplicate_children(self) -> None:
@@ -945,8 +940,10 @@ class ThresholdGate(Gate):
                                    signature=df.mean().to_dict(),
                                    geom=ThresholdGeom(x=self.x,
                                                       y=self.y,
-                                                      transform_x=self.transformations.get("x", None),
-                                                      transform_y=self.transformations.get("y", None),
+                                                      transform_x=self.transform_x,
+                                                      transform_y=self.transform_y,
+                                                      transform_x_kwargs=self.transform_x_kwargs,
+                                                      transform_y_kwargs=self.transform_y_kwargs,
                                                       x_threshold=x_threshold,
                                                       y_threshold=y_threshold)))
         return pops
@@ -1039,8 +1036,10 @@ class PolygonGate(Gate):
             pop_df = inside_polygon(df=data, x=self.x, y=self.y, poly=poly)
             geom = PolygonGeom(x=self.x,
                                y=self.y,
-                               transform_x=self.transformations.get("x", None),
-                               transform_y=self.transformations.get("y", None),
+                               transform_x=self.transform_x,
+                               transform_y=self.transform_y,
+                               transform_x_kwargs=self.transform_x_kwargs,
+                               transform_y_kwargs=self.transform_y_kwargs,
                                x_values=poly.exterior.xy[0],
                                y_values=poly.exterior.xy[1])
             pops.append(Population(population_name=name,
@@ -1094,8 +1093,10 @@ class PolygonGate(Gate):
         """
         child.geom.x = self.x
         child.geom.y = self.y
-        child.geom.transform_x = self.transformations.get("x", None)
-        child.geom.transform_y = self.transformations.get("y", None)
+        child.geom.transform_x = self.transform_x
+        child.geom.transform_y = self.transform_y
+        child.geom.transform_x_kwargs = self.transform_x_kwargs
+        child.geom.transform_y_kwargs = self.transform_y_kwargs
         assert isinstance(child.geom.x_values, list), "ChildPolygon x_values should be of type list"
         assert isinstance(child.geom.y_values, list), "ChildPolygon y_values should be of type list"
         self.children.append(child)
