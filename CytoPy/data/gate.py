@@ -153,6 +153,10 @@ class Gate(mongoengine.Document):
         Transform method to be applied to each dimension, should be a dictionary with
         keys corresponding to each variable (e.g. "x" and/or "y") and values the
         transform to apply (e.g. {"x": "logicle"} for logicle transform of x-axis)
+    transform_kwargs: dict (optional)
+        Additional keyword arguments to be passed to transformation method. Should be a
+        dictionary with keys "x" or "y" and value of each of these keys being a dictionary
+         of keyword arguments to pass to transform method applied to this dimension.
     sampling: dict (optional)
          Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
@@ -181,6 +185,7 @@ class Gate(mongoengine.Document):
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField(required=False)
     transformations = mongoengine.DictField()
+    transform_kwargs = mongoengine.DictField()
     sampling = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
     ctrl_x = mongoengine.StringField()
@@ -202,6 +207,8 @@ class Gate(mongoengine.Document):
         assert method in ["manual", "density", "quantile", "time"] + list(globals().keys()), err
         super().__init__(*args, **values)
         self.model = None
+        self.x_transformer = None
+        self.y_transformer = None
 
     def transform(self,
                   data: pd.DataFrame) -> pd.DataFrame:
@@ -217,11 +224,22 @@ class Gate(mongoengine.Document):
         Pandas.DataFrame
             Transformed dataframe
         """
-        transforms = {self.x: self.transformations.get("x", None)}
-        if self.y is not None:
-            transforms[self.y] = self.transformations.get("y", None)
-        return apply_transform(data=data,
-                               features_to_transform=transforms)
+        x, y = self.transformations.get("x", None), self.transformations.get("y", None)
+        if x is not None:
+            kwargs = self.transform_kwargs.get("x", {})
+            data, self.x_transformer = apply_transform(data=data,
+                                                       features=[x],
+                                                       method=x,
+                                                       return_transformer=True,
+                                                       **kwargs)
+        if y is not None:
+            kwargs = self.transform_kwargs.get("y", {})
+            data, self.y_transformer = apply_transform(data=data,
+                                                       features=[y],
+                                                       method=y,
+                                                       return_transformer=True,
+                                                       **kwargs)
+        return data
 
     def _downsample(self,
                     data: pd.DataFrame) -> pd.DataFrame or None:
@@ -304,6 +322,7 @@ class Gate(mongoengine.Document):
     def _dim_reduction(self,
                        data: pd.DataFrame):
         """
+        Experimental!
         Perform dimension reduction prior to gating. Returns dataframe
         with appended columns for embeddings
 
@@ -419,6 +438,10 @@ class ThresholdGate(Gate):
         Transform method to be applied to each dimension, should be a dictionary with
         keys corresponding to each variable (e.g. "x" and/or "y") and values the
         transform to apply (e.g. {"x": "logicle"} for logicle transform of x-axis)
+    transform_kwargs: dict (optional)
+        Additional keyword arguments to be passed to transformation method. Should be a
+        dictionary with keys "x" or "y" and value of each of these keys being a dictionary
+         of keyword arguments to pass to transform method applied to this dimension.
     sampling: dict (optional)
          Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
@@ -625,6 +648,18 @@ class ThresholdGate(Gate):
         return thresholds
 
     def _find_threshold(self, x: np.ndarray):
+        """
+        Given a single dimension of data find the threshold point according to the
+        methodology defined for this gate and the number of peaks detected.
+
+        Parameters
+        ----------
+        x: Numpy Array
+
+        Returns
+        -------
+        float
+        """
         peaks, x_grid, p = self._density_peak_finding(x)
         assert len(peaks) > 0, "No peaks detected"
         if len(peaks) == 1:
@@ -642,6 +677,23 @@ class ThresholdGate(Gate):
                                             x: np.ndarray,
                                             p: np.ndarray,
                                             x_grid: np.ndarray):
+        """
+        Handle the detection of > 2 peaks by smoothing the estimated PDF and
+        rerunning the peak finding algorithm
+
+        Parameters
+        ----------
+        x: Numpy Array
+            One dimensional PDF
+        p: Numpy Array
+            Indices of detected peaks
+        x_grid: Numpy Array
+            Grid space PDF was generated in
+
+        Returns
+        -------
+        float
+        """
         smoothed_peak_finding_kwargs = self.method_kwargs.get("smoothed_peak_finding_kwargs", {})
         smoothed_peak_finding_kwargs["min_peak_threshold"] = smoothed_peak_finding_kwargs.get(
             "min_peak_threshold",
@@ -653,14 +705,27 @@ class ThresholdGate(Gate):
         p, peaks = smoothed_peak_finding(p=p, **smoothed_peak_finding_kwargs)
         if len(peaks) == 1:
             return self._process_one_peak(x,
-                                               x_grid=x_grid,
-                                               p=p,
-                                               peak_idx=peaks[0])
+                                          x_grid=x_grid,
+                                          p=p,
+                                          peak_idx=peaks[0])
         else:
             return find_local_minima(p=p, x=x_grid, peaks=peaks)
 
     def _density_peak_finding(self,
                               x: np.ndarray):
+        """
+        Estimate the underlying PDF of a single dimension using a convolution based
+        KDE (KDEpy.FFTKDE), then run a peak finding algorithm (detecta.detect_peaks)
+
+        Parameters
+        ----------
+        x: Numpy Array
+
+        Returns
+        -------
+        (Numpy Array, Numpy Array, Numpy Array)
+            Index of detected peaks, grid space that PDF is estimated on, and estimated PDF
+        """
         x_grid, p = (FFTKDE(kernel=self.method_kwargs.get("kernel", "gaussian"),
                             bw=self.method_kwargs.get("bw", "silverman"))
                      .fit(x)
@@ -687,6 +752,19 @@ class ThresholdGate(Gate):
     def _ctrl_fit(self,
                   primary_data: pd.DataFrame,
                   ctrl_data: pd.DataFrame):
+        """
+        Estimate the thresholds to apply to dome primary data using the given control data
+
+        Parameters
+        ----------
+        primary_data: Pandas.DataFrame
+        ctrl_data: Pandas.DataFrame
+
+        Returns
+        -------
+        List
+            List of thresholds [x dimension threshold, y dimension threshold]
+        """
         self._xy_in_dataframe(data=primary_data)
         self._xy_in_dataframe(data=ctrl_data)
         ctrl_data = self.transform(data=ctrl_data)
@@ -727,6 +805,8 @@ class ThresholdGate(Gate):
             Population data to fit threshold
         ctrl_data: Pandas.DataFrame, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
+        transform: bool (default=True)
+            Whether to apply transformations prior to fitting data
 
         Returns
         -------

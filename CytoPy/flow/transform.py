@@ -66,7 +66,101 @@ def _get_dataframe_column_index(data: pd.DataFrame,
     return np.array([data.columns.get_loc(f) for f in features if f in data.columns])
 
 
-class LogicleTransformer:
+class Transformer:
+    """
+    Base class for Transformer object.
+
+    Attributes
+    ----------
+    transform: callable
+        Transform function
+    inverse: callable
+        Inverse transformation function
+    kwargs:
+        Keyword arguments passed to transform/inverse transform
+    """
+
+    def __init__(self,
+                 transform_function: callable,
+                 inverse_function: callable,
+                 **kwargs):
+        self.transform = transform_function
+        self.inverse = inverse_function
+        self.kwargs = kwargs or {}
+
+    def scale(self,
+              data: pd.DataFrame,
+              features: list):
+        """
+        Scale features (columns) of given dataframe
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+
+        Raises
+        ------
+        TransformError
+            Chosen transform function is missing the arguments channel_indices or channels. CytoPy uses
+            the FlowUtils class for transformations. See FlowUtils documentation for details.
+        """
+        data = data.copy()
+        idx = _get_dataframe_column_index(data, features)
+        if "channel_indices" in self.transform.__code__.co_varnames:
+            data[features] = self.transform(data=data,
+                                            channel_indices=idx,
+                                            **self.kwargs)
+        elif "channels" in self.transform.__code__.co_varnames:
+            data[features] = self.transform(data=data,
+                                            channels=idx,
+                                            **self.kwargs)
+        else:
+            raise TransformError("Invalid transform function, missing argument 'channel_indices' or 'channels'")
+        return data
+
+    def inverse_scale(self,
+                      data: pd.DataFrame,
+                      features: list):
+        """
+        Apply inverse scale to features (columns) of given dataframe, under the assumption that
+        these features have previously been transformed with this Transformer
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+
+        Raises
+        ------
+        TransformError
+            Chosen inverse transform function is missing the arguments channel_indices or channels.
+            CytoPy uses the FlowUtils class for transformations. See FlowUtils documentation for details.
+        """
+        data = data.copy()
+        idx = _get_dataframe_column_index(data, features)
+        if "channel_indices" in self.inverse.__code__.co_varnames:
+            data[features] = self.inverse(data=data,
+                                          channel_indices=idx,
+                                          **self.kwargs)
+        elif "channels" in self.inverse.__code__.co_varnames:
+            data[features] = self.inverse(data=data,
+                                          channels=idx,
+                                          **self.kwargs)
+        else:
+            raise TransformError("Invalid inverse transform function, missing argument 'channel_indices' or 'channels'")
+        return data
+
+
+class LogicleTransformer(Transformer):
     """
     Implementation of Logicle transform is authored by Scott White (FlowUtils v0.8).
     Logicle transformation, implemented as defined in the GatingML 2.0 specification:
@@ -98,64 +192,15 @@ class LogicleTransformer:
                  m: float = 4.5,
                  a: float = 0.0,
                  t: int = 262144):
-        self.w = w
-        self.m = m
-        self.a = a
-        self.t = t
-
-    def scale(self,
-              data: pd.DataFrame,
-              features: list):
-        """
-        Scale features (columns) of given dataframe using logicle transform
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-        features: list
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        data = data.copy()
-        idx = _get_dataframe_column_index(data, features)
-        data[features] = transforms.logicle(data=data,
-                                            channel_indices=idx,
-                                            t=self.t,
-                                            m=self.m,
-                                            w=self.w,
-                                            a=self.a)
-        return data
-
-    def inverse(self,
-                data: pd.DataFrame,
-                features: list):
-        """
-        Apply inverse logicle scale to features (columns) of given dataframe, under the assumption that
-        these features have previously been transformed with LogicleTransformer
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-        features: list
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        data = data.copy()
-        idx = _get_dataframe_column_index(data, features)
-        data[features] = transforms.logicle_inverse(data=data,
-                                                    channel_indices=idx,
-                                                    t=self.t,
-                                                    m=self.m,
-                                                    w=self.w,
-                                                    a=self.a)
-        return data
+        super().__init__(transform_function=transforms.logicle,
+                         inverse_function=transforms.logicle_inverse,
+                         w=w,
+                         m=m,
+                         a=a,
+                         t=t)
 
 
-class HyperlogTransformer:
+class HyperlogTransformer(Transformer):
     """
     Implementation of Hyperlog transform is authored by Scott White (FlowUtils v0.8).
 
@@ -188,64 +233,15 @@ class HyperlogTransformer:
                  m: float = 4.5,
                  a: float = 0.0,
                  t: int = 262144):
-        self.w = w
-        self.m = m
-        self.a = a
-        self.t = t
-
-    def scale(self,
-              data: pd.DataFrame,
-              features: list):
-        """
-        Scale features (columns) of given dataframe using hyperlog transform
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-        features: list
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        data = data.copy()
-        idx = _get_dataframe_column_index(data, features)
-        data[features] = transforms.hyperlog(data=data,
-                                             channel_indices=idx,
-                                             t=self.t,
-                                             m=self.m,
-                                             w=self.w,
-                                             a=self.a)
-        return data
-
-    def inverse(self,
-                data: pd.DataFrame,
-                features: list):
-        """
-        Apply inverse hyperlog scale to features (columns) of given dataframe, under the assumption that
-        these features have previously been transformed with HyperlogTransformer
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-        features: list
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        data = data.copy()
-        idx = _get_dataframe_column_index(data, features)
-        data[features] = transforms.hyperlog_inverse(data=data,
-                                                     channels=idx,
-                                                     t=self.t,
-                                                     m=self.m,
-                                                     w=self.w,
-                                                     a=self.a)
-        return data
+        super().__init__(transform_function=transforms.hyperlog,
+                         inverse_function=transforms.hyperlog_inverse,
+                         w=w,
+                         m=m,
+                         a=a,
+                         t=t)
 
 
-class AsinhTransformer:
+class AsinhTransformer(Transformer):
     """
     Implementation of inverse hyperbolic sine function, authored by Scott White (FlowUtils v0.8).
 
@@ -260,64 +256,17 @@ class AsinhTransformer:
     """
 
     def __init__(self,
-                 t: int = 262144,
                  m: float = 4.5,
-                 a: float = 0):
-        self.t = t
-        self.m = m
-        self.a = a
-
-    def scale(self,
-              data: pd.DataFrame,
-              features: list):
-        """
-        Scale features (columns) of given dataframe using inverse hyperbolic sine transform
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-        features: list
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        data = data.copy()
-        idx = _get_dataframe_column_index(data, features)
-        data[features] = transforms.asinh(data=data,
-                                          channel_indices=idx,
-                                          t=self.t,
-                                          m=self.m,
-                                          a=self.a)
-        return data
-
-    def inverse(self,
-                data: pd.DataFrame,
-                features: list):
-        """
-        Apply inverse of parametrized hyperbolic sine function scale to features (columns) of given dataframe,
-        under the assumption that these features have previously been transformed with AsinhTransformer
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-        features: list
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        data = data.copy()
-        idx = _get_dataframe_column_index(data, features)
-        data[features] = transforms.asinh_inverse(data=data,
-                                                  channel_indices=idx,
-                                                  t=self.t,
-                                                  m=self.m,
-                                                  a=self.a)
-        return data
+                 a: float = 0.0,
+                 t: int = 262144):
+        super().__init__(transform_function=transforms.asinh,
+                         inverse_function=transforms.asinh_inverse,
+                         m=m,
+                         a=a,
+                         t=t)
 
 
-class LogTransformer:
+class LogTransformer(Transformer):
     """
     Apply log transform to data, either using parametrized log transform as defined in GatingML 2.0 specification
     (implemented by Scott White in FlowUtils v0.8) or using natural log, base 2 or base 10.
@@ -331,23 +280,24 @@ class LogTransformer:
     t: int (default=262144)
         Top of the linear scale
     """
+
     def __init__(self,
                  base: str or int = "parametrized",
                  m: float = 4.5,
                  t: int = 262144,
                  **kwargs):
         if base == "parametrized":
-            self._log = lambda x: (1./m) * np.log10(x/t) + 1.
-            self._inverse = lambda x: t * (10 ** ((x-1) * m))
+            super().__init__(transform_function=lambda x: (1. / m) * np.log10(x / t) + 1.,
+                             inverse_function=lambda x: t * (10 ** ((x - 1) * m)))
         elif base == 10:
-            self._log = partial(np.log10, **kwargs)
-            self._inverse = lambda x: 10**x
+            super().__init__(transform_function=partial(np.log10, **kwargs),
+                             inverse_function=lambda x: 10 ** x)
         elif base == 2:
-            self._log = partial(np.log2, **kwargs)
-            self._inverse = lambda x: 2**x
+            super().__init__(transform_function=partial(np.log2, **kwargs),
+                             inverse_function=lambda x: 2 ** x)
         elif base == "natural":
-            self._log = partial(np.log, **kwargs)
-            self._inverse = np.exp
+            super().__init__(transform_function=partial(np.log, **kwargs),
+                             inverse_function=np.exp)
         else:
             raise TransformError("Invalid LogTransformer method, expected one of:"
                                  "'parametrized', 10, 2, or 'natural'")
@@ -368,12 +318,12 @@ class LogTransformer:
         Pandas.DataFrame
         """
         data = data.copy()
-        data[features] = self._log(data[features].values)
+        data[features] = self.transform(data[features].values)
         return data
 
-    def inverse(self,
-                data: pd.DataFrame,
-                features: list):
+    def inverse_scale(self,
+                      data: pd.DataFrame,
+                      features: list):
         """
         Apply inverse of log transform to features (columns) of given dataframe,
         under the assumption that these features have previously been transformed with LogTransformer
@@ -388,11 +338,25 @@ class LogTransformer:
         Pandas.DataFrame
         """
         data = data.copy()
-        data[features] = self._inverse(data[features].values)
+        data[features] = self.inverse(data[features].values)
         return data
 
 
 class Normalise:
+    """
+    Normalise data using Scikit-Learn normalize function (https://bit.ly/2YBfe3o)
+    Norms are stored in the attribute 'norms' and normalisation reversed
+    by passing the transformed data to the 'inverse' method.
+
+    Attributes
+    ----------
+    norm: Numpy Array
+        An array of norms along given axis for X
+    axis: int (default=1)
+        Axis to apply normalisation along. If 1, independently normalize each sample, otherwise (if 0)
+         normalize each feature.
+    """
+
     def __init__(self,
                  norm: str = "l2",
                  axis: int = 1):
@@ -401,7 +365,22 @@ class Normalise:
         self._norms = None
         self._shape = None
 
-    def __call__(self, data: pd.DataFrame, features: list):
+    def __call__(self,
+                 data: pd.DataFrame,
+                 features: list):
+        """
+        Normalise columns (features) for given dataframe. Returns copy of DataFrame
+        with chosen columns normalised
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: List
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         data = data.copy()
         self._shape = data[features].shape
         x, self._norms = preprocessing.normalize(data[features].values,
@@ -414,6 +393,19 @@ class Normalise:
     def inverse(self,
                 data: pd.DataFrame,
                 features: list):
+        """
+        Perform inverse of normalisation to given dataframe. Returns copy of DataFrame
+        with inverse normalisation applied to chosen columns (features)
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: List
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         assert data[features].shape == self._shape, "Shape of given dataframe does not match the data " \
                                                     f"transformed originally: {self._shape} != {data.shape}"
         assert self._norms is not None, "Call Normalise object to first normalise target data prior to attempting " \
@@ -432,9 +424,47 @@ SCALERS = {"standard": preprocessing.StandardScaler,
 
 
 class Scaler:
+    """
+    Utility object for applying Scikit-Learn transformers to a chosen
+    dataset. Following transformations supported; method and corresponding
+    Scikit-Learn class:
+
+    * "standard" - sklearn.preprocessing.StandardScaler
+    * "minmax" - sklearn.preprocessing.MinMaxScaler
+    * "robust" - sklearn.preprocessing.RobustScaler
+    * "maxabs" - sklearn.preprocessing.MaxAbsScaler
+    * "quantile" - sklearn.preprocessing.QuantileTransformer
+    * "yeo_johnson" - sklearn.preprocessing.PowerTransformer
+    * "box_cox" - sklearn.preprocessing.PowerTransformer
+
+    (PowerTransformer method argument will be 'yeo-johnson' or 'box-cox'
+    according to the chosen method)
+
+    See relevant Scikit-Learn documentation for guidance on a particular method:
+    https://scikit-learn.org/stable/modules/classes.html#module-sklearn.preprocessing
+
+    User should initialise object with 'method' according to the above and
+    provide any additional keyword arguments, relevant to the chosen object,
+    as kwargs.
+
+    Attributes
+    -----------
+    method: str
+        Name of scikit-learn transformer to use
+    """
+
     def __init__(self,
                  method: str = "standard",
                  **kwargs):
+        """
+        Initialise object and create transformer
+
+        Parameters
+        ----------
+        method: str
+        kwargs:
+            Additional keyword arguments used when initialising Scikit-Learn object
+        """
         if method not in SCALERS.keys():
             raise TransformError(f"Method not supported, must be one of: {list(SCALERS.keys())}")
         kwargs = kwargs or {}
@@ -444,12 +474,47 @@ class Scaler:
             kwargs["method"] = "box_cox"
         self._scaler = SCALERS.get(method)(**kwargs)
 
-    def __call__(self, data: pd.DataFrame, features: list, **kwargs):
+    def __call__(self,
+                 data: pd.DataFrame,
+                 features: list):
+        """
+        Using a given dataframe and a list of columns (features) to transform,
+        call 'fit_transform' on Scikit-Learn transformer. Returns copy of
+        DataFrame with columns transformed
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+
+        """
         data = data.copy()
         data[features] = self._scaler.fit_transform(data[features].values)
         return data
 
     def inverse(self, data: pd.DataFrame, features: list):
+        """
+        Given dataframe and a list of columns (features) that has been previously
+        transformed, apply inverse transform. Returns copy of DataFrame with
+        transformation reversed.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: List
+
+        Returns
+        -------
+        Pandas.DataFrame
+
+        Raises
+        -------
+        TransformError
+            If the chosen Scikit-Learn method does not support inverse transform
+        """
         if getattr(self._scaler, "inverse_transform", None) is None:
             raise TransformError("Chosen scaler method does not support inverse transformation")
         else:
@@ -458,6 +523,18 @@ class Scaler:
             return data
 
     def set_params(self, **kwargs):
+        """
+        Sets parameters of underlying Scikit-Learn method
+
+        Parameters
+        ----------
+        kwargs
+            Additional keyword arguments passed to 'set_params' call
+
+        Returns
+        -------
+        None
+        """
         self._scaler.set_params(**kwargs)
 
 
@@ -472,6 +549,38 @@ def apply_transform(data: pd.DataFrame,
                     method: str = "logicle",
                     return_transformer: bool = False,
                     **kwargs):
+    """
+    Apply a transformation to the given DataFrame and the chosen
+    columns (features). Transformation method is specified using the
+    'method' argument and should be one of:
+
+    * logicle: see CytoPy.flow.transform.LogicleTransformer
+    * hyperlog: see CytoPy.flow.transform.HyperlogTransformer
+    * asinh: see CytoPy.flow.transform.AsinhTransformer
+    * log: see CytoPy.flow.transform.LogTransformer
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    features: List
+        Column names to be transformed
+    method: str (default='logicle')
+        Transformation method
+    return_transformer: bool (default=False)
+        If True, Transformer object is also returned
+    kwargs
+        Additional keyword arguments passed to respective Transformer
+
+    Returns
+    -------
+    Pandas.DataFrame or (Pandas.DataFrame and Transformer)
+        Copy of the DataFrame with chosen features transformed and Transformer object if return_transformer is True
+
+    Raises
+    ------
+    TransformError
+        Raised if invalid transform method requested
+    """
     if method not in TRANSFORMERS.keys():
         raise TransformError(f"Invalid transform, must be one of: {list(TRANSFORMERS.keys())}")
     method = TRANSFORMERS.get(method)(**kwargs)

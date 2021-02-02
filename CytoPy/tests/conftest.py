@@ -74,7 +74,6 @@ def reload_filegroup(project_id: str,
 def create_example_population_indexes(filegroup: FileGroup,
                                       initial_population_prop: float = 0.8,
                                       downstream_population_prop: float = 0.5,
-                                      cluster_frac: float = 0.25,
                                       n_populations: int = 3):
     """
     Create example index data for a specified number of example populations.
@@ -100,23 +99,19 @@ def create_example_population_indexes(filegroup: FileGroup,
     assert n_populations > 1, "n_populations must be equal to or greater than 2"
     primary = filegroup.data("primary", sample_size=initial_population_prop)
     populations = [{"primary": primary,
-                    "ctrl": filegroup.data("test_ctrl", sample_size=initial_population_prop),
-                    "cluster": primary.sample(frac=cluster_frac)}]
+                    "ctrl": filegroup.data("test_ctrl", sample_size=initial_population_prop)}]
     for i in range(n_populations - 1):
         primary = populations[i].get("primary").sample(frac=downstream_population_prop)
         populations.append({"primary": primary,
-                            "ctrl": populations[i].get("ctrl").sample(frac=downstream_population_prop),
-                            "cluster": primary.sample(frac=cluster_frac)})
+                            "ctrl": populations[i].get("ctrl").sample(frac=downstream_population_prop)})
     return list(map(lambda x: {"primary": x["primary"].index.values,
-                               "ctrl": x["ctrl"].index.values,
-                               "cluster": x["cluster"].index.values},
+                               "ctrl": x["ctrl"].index.values},
                     populations))
 
 
 def create_example_populations(filegroup: FileGroup,
                                initial_population_prop: float = 0.8,
                                downstream_population_prop: float = 0.5,
-                               cluster_frac: float = 0.25,
                                n_populations: int = 3):
     """
     Given a FileGroup add the given number of example populations.
@@ -140,7 +135,6 @@ def create_example_populations(filegroup: FileGroup,
     pop_idx = create_example_population_indexes(filegroup=filegroup,
                                                 initial_population_prop=initial_population_prop,
                                                 downstream_population_prop=downstream_population_prop,
-                                                cluster_frac=cluster_frac,
                                                 n_populations=n_populations)
     for pname, parent, idx in zip([f"pop{i + 1}" for i in range(n_populations)],
                                   ["root"] + [f"pop{i + 1}" for i in range(n_populations - 1)],
@@ -148,7 +142,8 @@ def create_example_populations(filegroup: FileGroup,
         p = Population(population_name=pname,
                        n=len(idx.get("primary")),
                        parent=parent,
-                       index=idx.get("primary"))
+                       index=idx.get("primary"),
+                       source="gate")
         p.set_ctrl_index(test_ctrl=idx.get("ctrl"))
         filegroup.add_population(population=p)
     filegroup.save()
