@@ -34,7 +34,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from CytoPy.data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, Population
 from CytoPy.data.geometry import ThresholdGeom, PolygonGeom
-from CytoPy.flow.transform import apply_transform
+from CytoPy.flow import transform
+from . import hlog_transform, asinh_transform, logicle_transform
+from KDEpy import FFTKDE
 from warnings import warn
 from typing import List, Generator, Dict
 from scipy.spatial import ConvexHull
@@ -56,8 +58,27 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
+TRANSFORMS = ["log", "logicle", "hyperlog", "asinh", None]
 
-TRANSFORMS = ["log_scale", "logicle", "hyperlog", "asinh"]
+
+def kde_plot(data: pd.DataFrame,
+             x: str,
+             transform_method: str or None = None,
+             bw: str or float = "silverman",
+             **transform_kwargs):
+    if transform_method:
+        data, transformer = transform.apply_transform(data=data,
+                                                      features=[x],
+                                                      method=transform_method,
+                                                      return_transformer=True,
+                                                      **transform_kwargs)
+    x_grid, y = (FFTKDE(kernel="gaussian", bw=bw)
+                 .fit(data[x].values)
+                 .evaluate())
+    data = pd.DataFrame({"x": x_grid, "y": y})
+    if transform_method:
+        return transformer.inverse_scale(data=data, features=["x"])
+    return data
 
 
 class FlowPlot:
@@ -108,6 +129,8 @@ class FlowPlot:
     def __init__(self,
                  transform_x: str or None = "logicle",
                  transform_y: str or None = "logicle",
+                 transform_x_kwargs: dict or None = None,
+                 transform_y_kwargs: dict or None = None,
                  xlabel: str or None = None,
                  ylabel: str or None = None,
                  xlim: (float, float) or None = None,
@@ -115,24 +138,26 @@ class FlowPlot:
                  title: str or None = None,
                  ax: matplotlib.pyplot.axes or None = None,
                  figsize: (int, int) = (5, 5),
-                 bins: int or str = "sqrt",
+                 bins: int or None = None,
                  cmap: str = "jet",
                  style: str or None = "white",
                  font_scale: float or None = 1.2,
-                 bw: str or float = "scott",
+                 bw: str or float = "silverman",
                  autoscale: bool = True,
                  axis_ticks: bool = True):
         assert transform_x in TRANSFORMS, f"Unsupported transform, must be one of: {TRANSFORMS}"
         assert transform_y in TRANSFORMS, f"Unsupported transform, must be one of: {TRANSFORMS}"
-        self.transforms = {'x': transform_x, 'y': transform_y}
+        self.transform_x = transform_x
+        self.transform_y = transform_y
+        self.transform_x_kwargs = transform_x_kwargs or {}
+        self.transform_y_kwargs = transform_y_kwargs or {}
         self.labels = {'x': xlabel, 'y': ylabel}
         self.autoscale = autoscale
+        if xlim or ylim:
+            self.autoscale = False
         self.lims = {'x': xlim or [None, None], 'y': ylim or [None, None]}
         self.title = title
         self.bw = bw
-        if type(bins) == str:
-            valid_bin_str = ["scott", "sturges", "rice", "sqrt", "stone", "doane", "fd", "auto"]
-            assert bins in valid_bin_str, f"bins should be an integer or one of {valid_bin_str}"
         self.bins = bins
         self.fig, self._ax = None, ax
         if self._ax is None:
@@ -145,8 +170,15 @@ class FlowPlot:
         if font_scale is not None:
             sns.set_context(font_scale=font_scale)
         plt.xticks(rotation=90)
+        plt.tight_layout()
         self._ax.xaxis.labelpad = 20
         self._ax.yaxis.labelpad = 20
+
+    def _transform_axis(self):
+        if self.transform_x:
+            self._ax.set_xscale(self.transform_x, **self.transform_x_kwargs)
+        if self.transform_y:
+            self._ax.set_yscale(self.transform_y, **self.transform_y_kwargs)
 
     def _hist1d(self,
                 data: pd.DataFrame,
@@ -168,7 +200,45 @@ class FlowPlot:
         -------
         None
         """
-        sns.kdeplot(data=data[x], bw_method=self.bw, ax=self._ax, **kwargs)
+        self.transform_y = None
+        kwargs = kwargs or {}
+        data = kde_plot(data=data, x=x, transform_method=self.transform_x, bw=self.bw, **self.transform_x_kwargs)
+        self._ax.plot(data["x"].values,
+                      data["y"].values,
+                      linewidth=kwargs.get("linewidth", 2),
+                      color=kwargs.get("color", "black"))
+        self._ax.fill_between(data["x"].values, data["y"].values,
+                              color=kwargs.get("fill", "#8A8A8A"),
+                              alpha=kwargs.get("alpha", 0.5))
+        self._ax.get_yaxis().set_visible(False)
+
+    def _hist2d_axis_limits(self,
+                            data: pd.DataFrame,
+                            x: str,
+                            y: str):
+        if self.transform_x == "log":
+            xlim = transform.safe_range(data, "x")
+        else:
+            xlim = [data[x].min(), data[x].max()]
+        if self.transform_y == "log":
+            ylim = transform.safe_range(data, "y")
+        else:
+            ylim = [data[y].min(), data[x].max()]
+        xlim = pd.DataFrame({"Min": [xlim[0]], "Max": [xlim[1]]})
+        ylim = pd.DataFrame({"Min": [ylim[0]], "Max": [ylim[1]]})
+        return xlim, ylim
+
+    def _transform_axis_limits(self,
+                               limits: pd.DataFrame,
+                               axis: str,
+                               transform_method: str):
+        transform_kwargs = {"x": self.transform_x_kwargs, "y": self.transform_y_kwargs}
+        lim, transformer = transform.apply_transform(data=limits,
+                                                     features=["Min", "Max"],
+                                                     method=transform_method,
+                                                     return_transformer=True,
+                                                     **transform_kwargs.get(axis))
+        return lim, transformer
 
     def _hist2d(self,
                 data: pd.DataFrame,
@@ -194,9 +264,21 @@ class FlowPlot:
         -------
         None
         """
-        bins = [np.histogram_bin_edges(data[x].values, bins=self.bins),
-                np.histogram_bin_edges(data[y].values, bins=self.bins)]
-        self._ax.hist2d(data[x], data[y], bins=bins, norm=LogNorm(), cmap=self.cmap, **kwargs)
+        n = self.bins or int(np.sqrt(data.shape[0]))
+        xlim, ylim = self._hist2d_axis_limits(data=data, x=x, y=y)
+        if self.transform_x:
+            xlim, xtransformer = self._transform_axis_limits(limits=xlim, axis="x", transform_method=self.transform_x)
+            xgrid = pd.DataFrame({"x": np.linspace(xlim["Min"].iloc[0], xlim["Max"].iloc[0], n)})
+            xbins = xtransformer.inverse_scale(xgrid, features=["x"]).x.values
+        else:
+            xbins = pd.DataFrame({"x": np.linspace(xlim["Min"].iloc[0], xlim["Max"].iloc[0], n)}).x.values
+        if self.transform_y:
+            ylim, ytransformer = self._transform_axis_limits(limits=ylim, axis="y", transform_method=self.transform_y)
+            ygrid = pd.DataFrame({"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)})
+            ybins = ytransformer.inverse_scale(ygrid, features=["y"]).y.values
+        else:
+            ybins = pd.DataFrame({"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)}).y.values
+        self._ax.hist2d(data[x].values, data[y].values, bins=[xbins, ybins], norm=LogNorm(), cmap=self.cmap, **kwargs)
 
     def _set_axis_limits(self,
                          data: pd.DataFrame,
@@ -257,35 +339,6 @@ class FlowPlot:
         elif y is not None:
             self._ax.set_ylabel(y)
 
-    def _transform_axis(self,
-                        data: pd.DataFrame,
-                        x: str,
-                        y: str or None):
-        """
-        Transform plotting data according to objects transforms attribute
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-            Data to plot
-        x: str
-            Name of X-axis channel
-        y: str or None
-            Name of Y-axis channel
-
-        Returns
-        -------
-        Pandas.DataFrame
-            Transformed data
-        """
-        data = data.copy()
-        transforms = {column: self.transforms.get(axis) for column, axis in zip([x, y], ["x", "y"])
-                      if self.transforms.get(axis) is not None and column is not None}
-        if len(list(transforms.keys())) > 0:
-            data = apply_transform(data,
-                                   features_to_transform=transforms)
-        return data
-
     def plot(self,
              data: pd.DataFrame,
              x: str,
@@ -311,13 +364,13 @@ class FlowPlot:
         Matplotlib.pyplot.axes
             Axis object
         """
-        data = self._transform_axis(data=data, x=x, y=y)
         if y is None:
             self._hist1d(data=data, x=x, **kwargs)
         else:
             self._hist2d(data=data, x=x, y=y, **kwargs)
         self._set_axis_limits(data=data, x=x, y=y)
         self._set_aesthetics(x=x, y=y)
+        self._transform_axis()
         return self._ax
 
     def plot_gate_children(self,
@@ -373,8 +426,9 @@ class FlowPlot:
                               "#000000",
                               "#64b9c4",
                               "#9e3657"])
-        self.transforms = {"x": gate.transformations.get("x", None) or transform_x,
-                           "y": gate.transformations.get("y", None) or transform_y}
+        transforms = {"x": gate.transformations.get("x", None) or transform_x,
+                      "y": gate.transformations.get("y", None) or transform_y}
+        transform_kwargs = {"x": gate/}
         self._ax = self.plot(data=parent,
                              x=gate.x,
                              y=gate.y or y,
@@ -455,7 +509,7 @@ class FlowPlot:
         self.transforms = {"x": transform_x or children[0].geom.transform_x,
                            "y": transform_y or children[0].geom.transform_y}
         if do_not_transform:
-            self. transforms["x"], self.transforms["y"] = None, None
+            self.transforms["x"], self.transforms["y"] = None, None
         self._ax = self.plot(data=parent,
                              x=children[0].geom.x,
                              y=children[0].geom.y or y,

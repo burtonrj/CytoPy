@@ -3,6 +3,8 @@ from ..data.population import Population
 from ..data.project import Project
 from ..data.experiment import FileGroup
 from mongoengine.connection import connect, disconnect
+import pandas as pd
+import numpy as np
 import pytest
 import shutil
 import sys
@@ -148,3 +150,23 @@ def create_example_populations(filegroup: FileGroup,
         filegroup.add_population(population=p)
     filegroup.save()
     return filegroup
+
+
+def create_linear_data():
+    x = np.concatenate([np.random.normal(loc=3.2, scale=0.8, size=100000),
+                       np.random.normal(loc=0.95, scale=1.1, size=100000)])
+    y = np.concatenate([np.random.normal(loc=3.1, scale=0.85, size=100000),
+                       np.random.normal(loc=0.5, scale=1.4, size=100000)])
+    return pd.DataFrame({"x": x, "y": y})
+
+
+def create_lognormal_data():
+    x = np.concatenate([np.random.normal(loc=4.2, scale=0.8, size=50000),
+                        np.random.lognormal(mean=4.2, sigma=0.8, size=50000),
+                        np.random.lognormal(mean=7.2, sigma=0.8, size=50000),
+                       np.random.lognormal(mean=0.8, sigma=0.95, size=50000)])
+    y = np.concatenate([np.random.normal(loc=3.2, scale=0.8, size=50000),
+                        np.random.lognormal(mean=4.1, sigma=0.8, size=50000),
+                        np.random.lognormal(mean=6.2, sigma=0.8, size=50000),
+                       np.random.lognormal(mean=1.4, sigma=0.7, size=50000)])
+    return pd.DataFrame({"x": x, "y": y})

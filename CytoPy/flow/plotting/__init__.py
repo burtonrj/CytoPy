@@ -1,1 +1,1 @@
-from facs_plot import FlowPlot
+from .flow_plot import FlowPlot
