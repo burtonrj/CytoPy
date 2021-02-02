@@ -378,8 +378,6 @@ class FlowPlot:
                            parent: pd.DataFrame,
                            lw: float = 2.5,
                            y: str or None = None,
-                           transform_x: str or None = None,
-                           transform_y: str or None = None,
                            plot_kwargs: dict or None = None,
                            legend_kwargs: dict or None = None):
         """
@@ -426,9 +424,6 @@ class FlowPlot:
                               "#000000",
                               "#64b9c4",
                               "#9e3657"])
-        transforms = {"x": gate.transformations.get("x", None) or transform_x,
-                      "y": gate.transformations.get("y", None) or transform_y}
-        transform_kwargs = {"x": gate/}
         self._ax = self.plot(data=parent,
                              x=gate.x,
                              y=gate.y or y,
@@ -547,8 +542,7 @@ class FlowPlot:
         Matplotlib.pyplot.axes
             Axis object
         """
-        x = geoms[0].x_threshold
-        y = geoms[0].y_threshold
+        x, y = geoms[0].transform_to_linear()
         self._add_threshold(x=x,
                             y=y,
                             labels=definitions,
@@ -586,8 +580,9 @@ class FlowPlot:
         """
         for i, g in enumerate(geoms):
             colour = next(colours)
-            self._add_polygon(x_values=g.x_values,
-                              y_values=g.y_values,
+            x, y = g.transform_to_linear()
+            self._add_polygon(x_values=x,
+                              y_values=y,
                               colour=colour,
                               label=labels[i],
                               lw=lw)
@@ -832,6 +827,7 @@ class FlowPlot:
                               label=child_name,
                               **overlay_kwargs)
         self._set_legend(shape_n=len(children), **legend_kwargs)
+        self._transform_axis()
         return self._ax
 
     def _overlay(self,
@@ -862,9 +858,6 @@ class FlowPlot:
         if y is None and method == "scatter":
             warn("1-dimensional plot, defaulting to KDE overlay")
             method = "kde"
-        data = self._transform_axis(data=data,
-                                    x=x,
-                                    y=y)
         if method == "scatter":
             self._ax.scatter(x=data[x],
                              y=data[y],
@@ -947,6 +940,7 @@ class FlowPlot:
                       size=size,
                       alpha=alpha,
                       **overlay_kwargs)
+        self._transform_axis()
         return self._ax
 
     def _set_legend(self,

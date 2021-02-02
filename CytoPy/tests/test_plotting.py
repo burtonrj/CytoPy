@@ -94,7 +94,7 @@ TEST_CONDITIONS_1D = [(None, {}),
 @pytest.mark.parametrize("t,kwargs", TEST_CONDITIONS_1D)
 def test_plot_1dhistogram(t, kwargs):
     data = create_lognormal_data()
-    plotter = FlowPlot(transform_x=t, transform_kwargs=kwargs, title=f"{t}; {kwargs}")
+    plotter = FlowPlot(transform_x=t, transform_x_kwargs=kwargs, title=f"{t}; {kwargs}")
     plotter.plot(data=data, x="x")
     plt.tight_layout()
     plt.show()
@@ -136,32 +136,3 @@ def test_plot_axis_limits():
     plt.tight_layout()
     plt.show()
 
-
-@pytest.mark.parametrize("tx,ty,xkwargs,ykwargs", TEST_CONDITIONS_2D)
-def test_plot_threshold_gate_children(tx, ty, xkwargs, ykwargs):
-    pass
-
-
-@pytest.mark.parametrize("tx,ty,xkwargs,ykwargs", TEST_CONDITIONS_2D)
-def test_plot_polygon_gate_children(tx, ty, xkwargs, ykwargs):
-    pass
-
-
-@pytest.mark.parametrize("tx,ty,xkwargs,ykwargs", TEST_CONDITIONS_2D)
-def test_plot_threshold_populations(tx, ty, xkwargs, ykwargs):
-    pass
-
-
-@pytest.mark.parametrize("tx,ty,xkwargs,ykwargs", TEST_CONDITIONS_2D)
-def test_plot_polygon_populations(tx, ty, xkwargs, ykwargs):
-    pass
-
-
-@pytest.mark.parametrize("tx,ty,xkwargs,ykwargs", TEST_CONDITIONS_2D)
-def test_plot_backgate(tx, ty, xkwargs, ykwargs):
-    pass
-
-
-@pytest.mark.parametrize("tx,ty,xkwargs,ykwargs", TEST_CONDITIONS_2D)
-def test_plot_edit_legend(tx, ty, xkwargs, ykwargs):
-    pass
