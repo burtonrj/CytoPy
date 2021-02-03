@@ -685,6 +685,41 @@ class Experiment(mongoengine.Document):
         assert self.sample_exists(sample_id), f"Invalid sample: {sample_id} not associated with this experiment"
         return [f for f in self.fcs_files if f.primary_id == sample_id][0]
 
+    def filter_subjects(self,
+                        key: str or list,
+                        value: str or int or float,
+                        verbose: bool = True):
+        matches = list()
+        if isinstance(key, list) and len(key) == 1:
+            key = key[0]
+        if isinstance(key, str):
+            for f in self.fcs_files:
+                meta_var = fetch_subject_meta(sample_id=f.primary_id,
+                                              experiment=self,
+                                              meta_label=key)
+                if meta_var == value:
+                    matches.append(f.primary_id)
+            return matches
+        elif isinstance(key, list):
+            for f in self.fcs_files:
+                starting_node = fetch_subject_meta(sample_id=f.primary_id,
+                                                   experiment=self,
+                                                   meta_label=key[0])
+                if key[1] not in starting_node.keys():
+                    continue
+                elif len(key) == 2:
+                    if starting_node[key[1]] == value:
+                        matches.append(f.primary_id)
+                    continue
+                else:
+                    node = starting_node[key[1]]
+                    for k in key[2:]:
+                        if k in node.keys():
+                            node = node[k]
+                    if node == value:
+                        matches.append(f.primary_id)
+        return matches
+
     def list_samples(self,
                      valid_only: bool = True) -> list:
         """
@@ -1141,6 +1176,6 @@ def fetch_subject(filegroup: FileGroup):
     """
     subject = Subject.objects(files=filegroup)
     if len(subject) != 1:
-        warn("Requested sample is not associated to a Subject")
+        warn(f"{filegroup.primary_id} is not associated to a Subject")
         return None
     return subject[0]
