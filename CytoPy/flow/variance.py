@@ -296,7 +296,7 @@ def marker_variance(data: pd.DataFrame,
     markers = markers or data.get(reference).columns.tolist()
     i = 0
     nrows = math.ceil(len(markers) / 3)
-    fig.suptitle(f'Per-channel KDE, Reference: {reference}', y=1.05)
+    fig.suptitle(f'Per-channel KDE, Reference: {reference}', y=1.02)
     for marker in progress_bar(markers, verbose=verbose):
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
@@ -306,19 +306,17 @@ def marker_variance(data: pd.DataFrame,
                 .evaluate())
         ax.plot(x, y, color="b", **kwargs)
         ax.fill_between(x, 0, y, facecolor="b", alpha=0.2)
-        ax.set_title(f'Total variance in {marker}')
+        ax.set_title(marker)
         if xlim:
             ax.set_xlim(xlim)
         for comparison_sample_id in comparison_samples:
-            if comparison_sample_id not in data.keys():
-                warn(f"{comparison_sample_id} is not a valid ID")
-                continue
-            if marker not in data.get(comparison_sample_id).columns:
+            df = data[data.sample_id == comparison_sample_id]
+            if marker not in df.columns:
                 warn(f"{marker} missing from {comparison_sample_id}, this marker will be ignored")
             else:
                 x, y = (FFTKDE(kernel=kernel,
                                bw=kde_bw)
-                        .fit(data[data.sample_id == comparison_sample_id][marker].values)
+                        .fit(df[marker].values)
                         .evaluate())
                 ax.plot(x, y, color="r", **kwargs)
                 if ax.get_legend() is not None:
@@ -485,7 +483,7 @@ def overlay_plot(data: pd.DataFrame,
         alpha = kwargs.pop("alpha", 0.7)
         ax.scatter(v[:, 0], v[:, 1], color=next(colours), s=s, alpha=alpha, label=k, **kwargs)
     ax.set_xlabel(f"{method}1")
-    ax.set_xlabel(f"{method}2")
+    ax.set_ylabel(f"{method}2")
     if include_legend:
         ax.legend(bbox_to_anchor=(1.05, 1.15))
     else:
@@ -527,7 +525,7 @@ class SimilarityMatrix:
                  kde_kernel: str = "gaussian",
                  kde_bw: str or float = "cv",
                  kde_norm: int = 2):
-        assert reference in data.keys(), "Invalid reference, not present in given data"
+        assert reference in data.sample_id.unique(), "Invalid reference, not present in given data"
         self.verbose = verbose
         self.print = vprint(verbose)
         self.kde_cache = dict()
@@ -740,7 +738,7 @@ class SimilarityMatrix:
                  "is an asymmetrical function and as such it is not advised to use this metric for the "
                  "similarity matrix'")
 
-        features = features or self.data.get(self.reference).columns.tolist()
+        features = features or self.data.columns.tolist()
         # Create the reducer
         n_components = dim_reduction_kwargs.get("n_components", 2)
         reducer = self._generate_reducer(features=features,
