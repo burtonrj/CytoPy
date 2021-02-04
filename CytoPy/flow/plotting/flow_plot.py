@@ -140,11 +140,8 @@ class FlowPlot:
                  figsize: (int, int) = (5, 5),
                  bins: int or None = None,
                  cmap: str = "jet",
-                 style: str or None = "white",
-                 font_scale: float or None = 1.2,
                  bw: str or float = "silverman",
-                 autoscale: bool = True,
-                 axis_ticks: bool = True):
+                 autoscale: bool = True):
         assert transform_x in TRANSFORMS, f"Unsupported transform, must be one of: {TRANSFORMS}"
         assert transform_y in TRANSFORMS, f"Unsupported transform, must be one of: {TRANSFORMS}"
         self.transform_x = transform_x
@@ -163,12 +160,6 @@ class FlowPlot:
         if self._ax is None:
             self.fig, self._ax = plt.subplots(figsize=figsize)
         self.cmap = plt.get_cmap(cmap)
-        if axis_ticks:
-            sns.set_style("ticks", {"xtick.major.size": 8, "ytick.major.size": 8})
-        if style is not None:
-            sns.set_style(style)
-        if font_scale is not None:
-            sns.set_context(font_scale=font_scale)
         plt.xticks(rotation=90)
         plt.tight_layout()
         self._ax.xaxis.labelpad = 20
@@ -501,10 +492,10 @@ class FlowPlot:
         plot_kwargs = plot_kwargs or {}
         legend_kwargs = legend_kwargs or dict()
         # Plot the parent population
-        self.transforms = {"x": transform_x or children[0].geom.transform_x,
-                           "y": transform_y or children[0].geom.transform_y}
+        self.transform_x = transform_x or children[0].geom.transform_x
+        self.transform_y = transform_y or children[0].geom.transform_y
         if do_not_transform:
-            self.transforms["x"], self.transforms["y"] = None, None
+            self.transform_x, self.transform_y = None, None
         self._ax = self.plot(data=parent,
                              x=children[0].geom.x,
                              y=children[0].geom.y or y,
@@ -659,6 +650,43 @@ class FlowPlot:
                                   label=label)
         self._ax.add_patch(ellipse)
 
+    def _2dthreshold_annotations(self, labels: dict or None = None):
+        labels = labels or {"-+": "-+", "++": "++", "--": "--", "+-": "+-"}
+        legend_labels = {}
+        for k, l in labels.items():
+            if "-+" in k:
+                legend_labels["A"] = l
+            elif "++" in k:
+                legend_labels["B"] = l
+            elif "--" in k:
+                legend_labels["C"] = l
+            elif "+-" in k:
+                legend_labels["D"] = l
+            else:
+                raise ValueError(f"Definition {k} is invalid for a 2D threshold gate.")
+        self._threshold_annotation(0.05, 0.95, "A")
+        self._threshold_annotation(0.95, 0.95, "B")
+        self._threshold_annotation(0.05, 0.05, "C")
+        self._threshold_annotation(0.95, 0.05, "D")
+        self._ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self._ax.transAxes)
+        self._ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self._ax.transAxes)
+        self._ax.text(1.15, 0.75, f"C: {legend_labels.get('C')}", transform=self._ax.transAxes)
+        self._ax.text(1.15, 0.65, f"D: {legend_labels.get('D')}", transform=self._ax.transAxes)
+
+    def _threshold_annotation(self, x: float, y: float, text: str):
+        self._ax.text(x, y, text, ha='center', va='center', transform=self._ax.transAxes,
+                      backgroundcolor="white", bbox=dict(facecolor='white', edgecolor='black', pad=5.0))
+
+    def _1dthreshold_annotations(self, labels: dict or None = None):
+        try:
+            legend_labels = {"A": labels["-"], "B": labels["+"]}
+        except KeyError:
+            raise KeyError(f"Definitions for 1D threshold gate must be either '-' or '+', not: {labels.keys()}")
+        self._threshold_annotation(0.05, 0.95, "A")
+        self._threshold_annotation(0.95, 0.95, "B")
+        self._ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self._ax.transAxes)
+        self._ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self._ax.transAxes)
+
     def _add_threshold(self,
                        x: float,
                        y: float or None,
@@ -682,51 +710,14 @@ class FlowPlot:
         -------
         None
         """
-        x_range = self._ax.get_xlim()
-        y_range = self._ax.get_ylim()
         self._ax.axvline(x, lw=lw, c="#c92c2c")
         if y is not None:
             self._ax.axhline(y, lw=lw, c="#c92c2c")
             # Label regions for two axis
-            if labels is not None:
-                xy = [(x + ((x_range[1] - x_range[0]) * .2),
-                       y + ((y_range[1] - y_range[0]) * .2)),
-                      (x - ((x_range[1] - x_range[0]) * .2),
-                       y - ((y_range[1] - y_range[0]) * .2)),
-                      (x + ((x_range[1] - x_range[0]) * .2),
-                       y - ((y_range[1] - y_range[0]) * .2)),
-                      (x - ((x_range[1] - x_range[0]) * .2),
-                       y + ((y_range[1] - y_range[0]) * .2))]
-                for d, xy_ in zip(["++", "--", "+-", "-+"], xy):
-                    label = [v for l, v in labels.items() if d in l]
-                    if len(label) == 0:
-                        continue
-                    label = label[0]
-                    if label in ["++", "--", "+-", "-+"]:
-                        label = f"{label[0]} {label[1]}"
-                    self._ax.annotate(text=label,
-                                      xy=xy_,
-                                      fontsize="small",
-                                      c="black",
-                                      backgroundcolor="white",
-                                      bbox=dict(facecolor='white', edgecolor='black', pad=5.0))
+            self._2dthreshold_annotations(labels=labels)
         else:
             # Label regions for one axis
-            if labels is not None:
-                self._ax.annotate(text=labels.get("+"),
-                                  xy=(x + ((x_range[1] - x_range[0]) * .2),
-                                      y_range[1] * .75),
-                                  fontsize="medium",
-                                  c="black",
-                                  backgroundcolor="white",
-                                  bbox=dict(facecolor='white', edgecolor='black', pad=5.0))
-                self._ax.annotate(text=labels.get("-"),
-                                  xy=(x - ((x_range[1] - x_range[0]) * .2),
-                                      y_range[1] * .75),
-                                  fontsize="medium",
-                                  c="black",
-                                  backgroundcolor="white",
-                                  bbox=dict(facecolor='white', edgecolor='black', pad=5.0))
+            self._1dthreshold_annotations(labels=labels)
 
     def backgate(self,
                  parent: pd.DataFrame,

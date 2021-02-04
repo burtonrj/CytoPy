@@ -96,7 +96,7 @@ class ThresholdGeom(PopulationGeometry):
         if self.transform_y:
             kwargs = self.transform_y_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
-            y = transformer.inverse_scale(pd.DataFrame({"y": [self.x_threshold]}), features=["y"])["y"].values[0]
+            y = transformer.inverse_scale(pd.DataFrame({"y": [self.y_threshold]}), features=["y"])["y"].values[0]
         return x, y
 
 
@@ -129,7 +129,7 @@ class PolygonGeom(PopulationGeometry):
         if self.transform_y:
             kwargs = self.transform_y_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
-            x_values = transformer.inverse_scale(pd.DataFrame({"y": [self.y_values]}), features=["y"])["y"].values
+            y_values = transformer.inverse_scale(pd.DataFrame({"y": [self.y_values]}), features=["y"])["y"].values
         return x_values, y_values
 
 

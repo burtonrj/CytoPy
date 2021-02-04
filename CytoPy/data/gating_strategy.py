@@ -255,6 +255,12 @@ class GatingStrategy(mongoengine.Document):
             gate = self.get_gate(gate=gate)
         parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=False)
         gate.fit(data=parent_data, ctrl_data=ctrl_parent_data)
+        create_plot_kwargs["transform_x"] = create_plot_kwargs.get("transform_x", None) or gate.transform_x
+        create_plot_kwargs["transform_y"] = create_plot_kwargs.get("transform_y", None) or gate.transform_y
+        create_plot_kwargs["transform_x_kwargs"] = create_plot_kwargs.get("transform_x_kwargs",
+                                                                          None) or gate.transform_x_kwargs
+        create_plot_kwargs["transform_y_kwargs"] = create_plot_kwargs.get("transform_y_kwargs",
+                                                                          None) or gate.transform_y_kwargs
         plot = FlowPlot(**create_plot_kwargs)
         return plot.plot_gate_children(gate=gate,
                                        parent=parent_data,
