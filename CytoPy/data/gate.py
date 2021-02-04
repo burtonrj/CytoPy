@@ -34,8 +34,10 @@ from CytoPy.flow.transform import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
     create_convex_hull, create_polygon, ellipse_to_polygon, probablistic_ellipse
 from .population import Population, merge_multiple_populations
-from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn
+from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn, uniform_downsampling
 from ..flow.dim_reduction import dimensionality_reduction
+from sklearn.cluster import *
+from sklearn.mixture import *
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
 from warnings import warn
@@ -253,12 +255,7 @@ class Gate(mongoengine.Document):
         if self.sampling.get("method", None) == "uniform":
             n = self.sampling.get("n", None) or self.sampling.get("frac", None)
             assert n is not None, "Must provide 'n' or 'frac' for uniform downsampling"
-            if isinstance(n, int):
-                return data.sample(n=n)
-            elif isinstance(n, float):
-                return data.sample(frac=n)
-            else:
-                raise ValueError("Sampling parameter 'n' must be an integer or float")
+            return uniform_downsampling(data=data, sample_size=n)
         if self.sampling.get("method", None) == "density":
             kwargs = {k: v for k, v in self.sampling.items()
                       if k not in ["method", "features"]}
@@ -738,11 +735,25 @@ class ThresholdGate(Gate):
         -------
         List
         """
-        thresholds = [i for i in [self.method_kwargs.get("x_threshold", None),
-                                  self.method_kwargs.get("y_threshold", None)] if i is not None]
-        assert len(thresholds) > 0, "For manual gating you must provide x_threshold and/or y_threshold"
-        assert all([isinstance(i, float) for i in thresholds]), "Thresholds must be floating point values"
-        return thresholds
+        x_threshold = self.method_kwargs.get("x_threshold", None)
+        y_threshold = self.method_kwargs.get("x_threshold", None)
+        assert x_threshold is not None, "Manual threshold gating requires the keyword argument 'x_threshold'"
+        if self.transform_x:
+            kwargs = self.transform_x_kwargs or {}
+            x_threshold = apply_transform(pd.DataFrame({"x": [x_threshold]}),
+                                          features=["x"],
+                                          method=self.transform_x,
+                                          **kwargs).x.values[0]
+        if self.y:
+            assert y_threshold is not None, "2D manual threshold gating requires the keyword argument 'y_threshold'"
+            if self.transform_y:
+                kwargs = self.transform_y_kwargs or {}
+                y_threshold = apply_transform(pd.DataFrame({"y": [y_threshold]}),
+                                              features=["y"],
+                                              method=self.transform_y,
+                                              **kwargs).y.values[0]
+        thresholds = [i for i in [x_threshold, y_threshold] if i is not None]
+        return [float(i) for i in thresholds]
 
     def _ctrl_fit(self,
                   primary_data: pd.DataFrame,
@@ -1139,6 +1150,16 @@ class PolygonGate(Gate):
         x_values, y_values = self.method_kwargs.get("x_values", None), self.method_kwargs.get("y_values", None)
         assert x_values is not None and y_values is not None, "For manual polygon gate must provide x_values and " \
                                                               "y_values"
+        if self.transform_x:
+            kwargs = self.transform_x_kwargs or {}
+            x_values = apply_transform(pd.DataFrame({"x": x_values}),
+                                       features="x",
+                                       method=self.transform_x, **kwargs).x.values
+        if self.transform_y:
+            kwargs = self.transform_y_kwargs or {}
+            y_values = apply_transform(pd.DataFrame({"y": y_values}),
+                                       features="y",
+                                       method=self.transform_y, **kwargs).y.values
         return create_polygon(x_values, y_values)
 
     def _fit(self,
@@ -1326,6 +1347,19 @@ class EllipseGate(PolygonGate):
         width = self.method_kwargs.get("width", None)
         height = self.method_kwargs.get("height", None)
         angle = self.method_kwargs.get("angle", None)
+        if self.transform_x:
+            assert self.transform_x == self.transform_y, "Manual elliptical gate requires that x and y axis are " \
+                                                         "transformed to the same scale"
+            kwargs = self.transform_x_kwargs or {}
+            centroid = apply_transform(pd.DataFrame({"c": list(centroid)}),
+                                       features=["c"],
+                                       method=self.transform_x,
+                                       **kwargs)["c"].values
+            df = apply_transform(pd.DataFrame({"w": [width], "h": [height], "a": [angle]}),
+                                 features=["w", "h", "a"],
+                                 method=self.transform_x,
+                                 **kwargs)
+            width, height, angle = df["w"].values[0], df["h"].values[0], df["a"].values[0]
         assert all([x is not None for x in [centroid, width, height, angle]]), \
             "Manual elliptical gate requires the following keyword arguments; width, height, angle and centroid"
         assert len(centroid) == 2 and all(isinstance(x, float) for x in centroid), \

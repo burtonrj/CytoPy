@@ -26,7 +26,12 @@ def test_childthreshold_init():
     test_child = gate.ChildThreshold(name="test",
                                      signature={"x": 2423, "y": 2232, "z": 4543},
                                      definition="+",
-                                     geom=ThresholdGeom(x="x", y="y", x_threshold=0.5, y_threshold=0.5))
+                                     geom=ThresholdGeom(x="x",
+                                                        y="y",
+                                                        x_threshold=0.5,
+                                                        y_threshold=0.5,
+                                                        transform_x="logicle",
+                                                        transform_y="logicle"))
     assert test_child.name == "test"
     assert test_child.signature.get("x") == 2423
     assert test_child.signature.get("y") == 2232
@@ -36,6 +41,8 @@ def test_childthreshold_init():
     assert test_child.geom.y == "y"
     assert test_child.geom.x_threshold == 0.5
     assert test_child.geom.y_threshold == 0.5
+    assert test_child.geom.transform_x == "logicle"
+    assert test_child.geom.transform_x == "logicle"
 
 
 @pytest.mark.parametrize("definition,expected", [("+", True),
@@ -44,7 +51,12 @@ def test_childthreshold_match_definition_1d(definition, expected):
     test_child = gate.ChildThreshold(name="test",
                                      signature={"x": 2423, "y": 2232, "z": 4543},
                                      definition=definition,
-                                     geom=ThresholdGeom(x="x", y="y", x_threshold=0.5, y_threshold=0.5))
+                                     geom=ThresholdGeom(x="x",
+                                                        y="y",
+                                                        x_threshold=0.5,
+                                                        y_threshold=0.5,
+                                                        transform_x="logicle",
+                                                        transform_y="logicle"))
     assert test_child.match_definition("+") == expected
 
 
@@ -57,7 +69,12 @@ def test_childthreshold_match_definition_2d(definition, expected):
     test_child = gate.ChildThreshold(name="test",
                                      signature={"x": 2423, "y": 2232, "z": 4543},
                                      definition=definition,
-                                     geom=ThresholdGeom(x="x", y="y", x_threshold=0.5, y_threshold=0.5))
+                                     geom=ThresholdGeom(x="x",
+                                                        y="y",
+                                                        x_threshold=0.5,
+                                                        y_threshold=0.5,
+                                                        transform_x="logicle",
+                                                        transform_y="logicle"))
     assert test_child.match_definition("++") == expected
 
 
@@ -116,7 +133,7 @@ def test_transform_x():
                   x="X",
                   y="Y",
                   method="manual",
-                  transformations={"x": "logicle"})
+                  transform_x="logicle")
     data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
                          "Y": np.random.normal(1, scale=0.5, size=1000)})
     transformed = g.transform(data)
@@ -135,8 +152,8 @@ def test_transform_xy():
                   x="X",
                   y="Y",
                   method="manual",
-                  transformations={"x": "logicle",
-                                   "y": "logicle"})
+                  transform_x="logicle",
+                  transform_y="logicle")
     data = pd.DataFrame({"X": np.random.normal(1, scale=0.5, size=1000),
                          "Y": np.random.normal(1, scale=0.5, size=1000)})
     transformed = g.transform(data)
@@ -253,7 +270,7 @@ def test_threshold_add_child():
                                    x="X",
                                    y="Y",
                                    method="manual",
-                                   transformations={"x": "logicle"})
+                                   transform_x="logicle")
     child = gate.ChildThreshold(name="test child",
                                 definition="++",
                                 geom=ThresholdGeom(x_threshold=0.56, y_threshold=0.75))
@@ -450,8 +467,8 @@ def test_threshold_predict_1d():
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
     assert all([p.geom.x == threshold.x for p in pops])
     assert all([p.geom.y == threshold.y for p in pops])
-    assert all(p.geom.transform_x == threshold.transformations.get("x") for p in pops)
-    assert all(p.geom.transform_y == threshold.transformations.get("y") for p in pops)
+    assert all(p.geom.transform_x == threshold.transform_x for p in pops)
+    assert all(p.geom.transform_y == threshold.transform_y for p in pops)
     assert all(i in [p.definition for p in pops] for i in ["+", "-"])
     neg_idx = new_data[new_data.X < threshold.children[0].geom.x_threshold].index.values
     pos_idx = new_data[new_data.X >= threshold.children[0].geom.x_threshold].index.values
@@ -484,8 +501,8 @@ def test_threshold_predict_2d():
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
     assert all([p.geom.x == threshold.x for p in pops])
     assert all([p.geom.y == threshold.y for p in pops])
-    assert all(p.geom.transform_x == threshold.transformations.get("x") for p in pops)
-    assert all(p.geom.transform_y == threshold.transformations.get("y") for p in pops)
+    assert all(p.geom.transform_x == threshold.transform_x for p in pops)
+    assert all(p.geom.transform_y == threshold.transform_y for p in pops)
     assert all(i in [p.definition for p in pops] for i in ["++", "--", "-+", "+-"])
     neg_idx = new_data[(new_data.X < threshold.children[0].geom.x_threshold) &
                        (new_data.Y < threshold.children[0].geom.y_threshold)].index.values
@@ -525,8 +542,8 @@ def test_threshold_fit_predict_1d():
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
     assert all([p.geom.x == threshold.x for p in pops])
     assert all([p.geom.y == threshold.y for p in pops])
-    assert all(p.geom.transform_x == threshold.transformations.get("x") for p in pops)
-    assert all(p.geom.transform_y == threshold.transformations.get("y") for p in pops)
+    assert all(p.geom.transform_x == threshold.transform_x for p in pops)
+    assert all(p.geom.transform_y == threshold.transform_y for p in pops)
     assert all(i in [p.definition for p in pops] for i in ["+", "-"])
     pos_pop = [p for p in pops if p.definition == "+"][0]
     assert pos_pop.population_name == "Positive"
@@ -564,8 +581,8 @@ def test_threshold_fit_predict_2d():
     assert all([isinstance(p.geom, ThresholdGeom) for p in pops])
     assert all([p.geom.x == threshold.x for p in pops])
     assert all([p.geom.y == threshold.y for p in pops])
-    assert all(p.geom.transform_x == threshold.transformations.get("x") for p in pops)
-    assert all(p.geom.transform_y == threshold.transformations.get("y") for p in pops)
+    assert all(p.geom.transform_x == threshold.transform_x for p in pops)
+    assert all(p.geom.transform_y == threshold.transform_y for p in pops)
     top_left = [p for p in pops if p.population_name == "Top left"][0]
     other = [p for p in pops if p.population_name == "Other"][0]
     assert top_left.definition == "++"

@@ -125,11 +125,11 @@ class PolygonGeom(PopulationGeometry):
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_x)(**kwargs)
-            x_values = transformer.inverse_scale(pd.DataFrame({"x": [self.x_values]}), features=["x"])["x"].values
+            x_values = transformer.inverse_scale(pd.DataFrame({"x": self.x_values}), features=["x"])["x"].values
         if self.transform_y:
             kwargs = self.transform_y_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
-            y_values = transformer.inverse_scale(pd.DataFrame({"y": [self.y_values]}), features=["y"])["y"].values
+            y_values = transformer.inverse_scale(pd.DataFrame({"y": self.y_values}), features=["y"])["y"].values
         return x_values, y_values
 
 
