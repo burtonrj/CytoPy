@@ -653,17 +653,18 @@ class FlowPlot:
     def _2dthreshold_annotations(self, labels: dict or None = None):
         labels = labels or {"-+": "-+", "++": "++", "--": "--", "+-": "+-"}
         legend_labels = {}
-        for k, l in labels.items():
-            if "-+" in k:
-                legend_labels["A"] = l
-            elif "++" in k:
-                legend_labels["B"] = l
-            elif "--" in k:
-                legend_labels["C"] = l
-            elif "+-" in k:
-                legend_labels["D"] = l
-            else:
-                raise ValueError(f"Definition {k} is invalid for a 2D threshold gate.")
+        for definition, label in labels.items():
+            for d in definition.split(","):
+                if "-+" == d:
+                    legend_labels["A"] = label
+                elif "++" == d:
+                    legend_labels["B"] = label
+                elif "--" == d:
+                    legend_labels["C"] = label
+                elif "+-" == d:
+                    legend_labels["D"] = label
+                else:
+                    raise ValueError(f"Definition {d} is invalid for a 2D threshold gate.")
         self._threshold_annotation(0.05, 0.95, "A")
         self._threshold_annotation(0.95, 0.95, "B")
         self._threshold_annotation(0.05, 0.05, "C")

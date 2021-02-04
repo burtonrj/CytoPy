@@ -445,9 +445,9 @@ class GatingStrategy(mongoengine.Document):
         plot_gate_kwargs = plot_gate_kwargs or {}
         parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm)
         original_method_kwargs = gate.method_kwargs.copy()
-        transform = fda_norm is False
-        if gate.gate_name not in self.normalisation.keys():
-            transform = True
+        transform = True
+        if fda_norm:
+            transform = gate.gate_name not in self.normalisation.keys()
         if overwrite_method_kwargs is not None:
             gate.method_kwargs = overwrite_method_kwargs
         if gate.ctrl_x is not None:

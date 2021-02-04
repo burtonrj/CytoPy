@@ -111,17 +111,21 @@ class Transformer:
             the FlowUtils class for transformations. See FlowUtils documentation for details.
         """
         data = data.copy()
+        original_index = data.index.values
+        data[features] = data[features].astype(float)
         idx = _get_dataframe_column_index(data, features)
         if "channel_indices" in self.transform.__code__.co_varnames:
             data = pd.DataFrame(self.transform(data=data.values,
                                                channel_indices=idx,
                                                **self.kwargs),
-                                columns=data.columns)
+                                columns=data.columns,
+                                index=original_index)
         elif "channels" in self.transform.__code__.co_varnames:
             data = pd.DataFrame(self.transform(data=data.values,
                                                channels=idx,
                                                **self.kwargs),
-                                columns=data.columns)
+                                columns=data.columns,
+                                index=original_index)
         else:
             raise TransformError("Invalid transform function, missing argument 'channel_indices' or 'channels'")
         return data
@@ -149,17 +153,21 @@ class Transformer:
             CytoPy uses the FlowUtils class for transformations. See FlowUtils documentation for details.
         """
         data = data.copy()
+        original_index = data.index.values
+        data[features] = data[features].astype(float)
         idx = _get_dataframe_column_index(data, features)
         if "channel_indices" in self.inverse.__code__.co_varnames:
             data = pd.DataFrame(self.inverse(data=data.values,
                                              channel_indices=idx,
                                              **self.kwargs),
-                                columns=data.columns)
+                                columns=data.columns,
+                                index=original_index)
         elif "channels" in self.inverse.__code__.co_varnames:
             data = pd.DataFrame(self.inverse(data=data.values,
                                              channels=idx,
                                              **self.kwargs),
-                                columns=data.columns)
+                                columns=data.columns,
+                                index=original_index)
         else:
             raise TransformError("Invalid inverse transform function, missing argument 'channel_indices' or 'channels'")
         return data
