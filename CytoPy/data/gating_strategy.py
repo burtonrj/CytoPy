@@ -376,17 +376,21 @@ class GatingStrategy(mongoengine.Document):
             return self.normalise_data(population=gate.parent, gate_name=gate.gate_name), None
         if gate.ctrl_x is not None:
             ctrls = {}
+            ctrl_classifier_params = gate.ctrl_classifier_params or {}
+            kwargs = gate.ctrl_prediction_kwargs or {}
             if gate.ctrl_x is not None:
                 x = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_x,
                                                            population=gate.parent,
-                                                           transform=None,
-                                                           verbose=self.show_ctrl_estimation_feedback)
+                                                           classifier=gate.ctrl_classifier,
+                                                           classifier_params=ctrl_classifier_params,
+                                                           **kwargs)
                 ctrls[gate.ctrl_x] = x[gate.ctrl_x].values
             if gate.ctrl_y is not None:
                 y = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_y,
                                                            population=gate.parent,
-                                                           transform=None,
-                                                           verbose=self.show_ctrl_estimation_feedback)
+                                                           classifier=gate.ctrl_classifier,
+                                                           classifier_params=ctrl_classifier_params,
+                                                           **kwargs)
                 ctrls[gate.ctrl_y] = y[gate.ctrl_y].values
                 if len(ctrls[gate.ctrl_x]) != len(ctrls[gate.ctrl_y]):
                     min_ = min([x.shape[0] for x in ctrls.values()])

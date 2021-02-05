@@ -36,12 +36,12 @@ from CytoPy.flow.transform import apply_transform
 from ..flow import supervised
 from ..flow import sampling
 from .experiment import Experiment, FileGroup
-from .population import Population, create_signature
+from .population import Population
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import train_test_split, KFold, learning_curve, \
     BaseCrossValidator, GridSearchCV, RandomizedSearchCV
-from keras.callbacks import History
-from keras.utils import to_categorical
+from tensorflow.keras.callbacks import History
+from tensorflow.keras.utils import to_categorical
 from inspect import signature
 from matplotlib.axes import Axes
 from warnings import warn
