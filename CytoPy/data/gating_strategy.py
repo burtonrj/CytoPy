@@ -32,6 +32,7 @@ from CytoPy.flow.plotting.flow_plot import FlowPlot
 from ..feedback import progress_bar, vprint
 from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, \
     PolygonGeom, update_polygon, update_threshold
+from ..flow.transform import apply_transform
 from ..flow.gate_search import hyperparameter_gate
 from ..flow.fda_norm import LandmarkReg
 from .experiment import Experiment
@@ -151,7 +152,6 @@ class GatingStrategy(mongoengine.Document):
     last_edit = mongoengine.DateTimeField(default=datetime.now)
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
-    show_ctrl_estimation_feedback = mongoengine.BooleanField(default=False)
     meta = {
         'db_alias': 'core',
         'collection': 'gating_strategy'
@@ -346,43 +346,54 @@ class GatingStrategy(mongoengine.Document):
             return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)[0]
         ref = FileGroup.objects(id=self.normalisation.get(gate_name).get("reference")).get()
         kwargs = self.normalisation.get(gate_name).get("kwargs")
-
-        transformations = {gate.x: gate.transform_x,
-                           gate.y: gate.transform_y}
-        transform_kwargs = {gate.x: gate.transform_x_kwargs,
-                            gate.y: gate.transform_y_kwargs}
-        ref_df = ref.load_population_df(population=gate.parent,
-                                        transform=transformations)
-        target_df = self.filegroup.load_population_df(population=population,
-                                                      transform=transformations,
-                                                      transform_kwargs=transform_kwargs)
-        for d in [gate.x, gate.y]:
+        data = self.filegroup.load_population_df(population=population,
+                                                 transform=None)
+        for d, t, tkwargs in zip([gate.x, gate.y],
+                                 [gate.transform_x, gate.transform_y],
+                                 [gate.transform_x_kwargs, gate.transform_y_kwargs]):
             if d is None:
                 continue
+            ref_df = ref.load_population_df(population=population,
+                                            transform=t,
+                                            transform_kwargs=tkwargs)
+            target_df = self.filegroup.load_population_df(population=population,
+                                                          transform=None)
+            target_df, transformer = apply_transform(data=target_df,
+                                                     method=t,
+                                                     return_transformer=True,
+                                                     features=[d],
+                                                     **tkwargs)
             lr = LandmarkReg(target=target_df,
                              ref=ref_df,
                              var=d,
                              **kwargs)
             target_df[d] = lr().shift_data(target_df[d].values)
-        return target_df
+            target_df = transformer.inverse_scale(data=target_df, features=[d])
+            data[d] = target_df[d]
+        return data
 
     def _load_gate_dataframes(self,
                               gate: Gate,
-                              fda_norm: bool = False):
+                              fda_norm: bool = False,
+                              verbose: bool = True,
+                              ctrl: bool = True):
         parent = self.filegroup.load_population_df(population=gate.parent,
                                                    transform=None,
                                                    label_downstream_affiliations=False)
         if fda_norm:
             return self.normalise_data(population=gate.parent, gate_name=gate.gate_name), None
-        if gate.ctrl_x is not None:
+        if gate.ctrl_x is not None and ctrl:
             ctrls = {}
             ctrl_classifier_params = gate.ctrl_classifier_params or {}
             kwargs = gate.ctrl_prediction_kwargs or {}
+            if not verbose:
+                kwargs["verbose"] = False
             if gate.ctrl_x is not None:
                 x = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_x,
                                                            population=gate.parent,
                                                            classifier=gate.ctrl_classifier,
                                                            classifier_params=ctrl_classifier_params,
+                                                           verbose=verbose,
                                                            **kwargs)
                 ctrls[gate.ctrl_x] = x[gate.ctrl_x].values
             if gate.ctrl_y is not None:
@@ -390,6 +401,7 @@ class GatingStrategy(mongoengine.Document):
                                                            population=gate.parent,
                                                            classifier=gate.ctrl_classifier,
                                                            classifier_params=ctrl_classifier_params,
+                                                           verbose=verbose,
                                                            **kwargs)
                 ctrls[gate.ctrl_y] = y[gate.ctrl_y].values
                 if len(ctrls[gate.ctrl_x]) != len(ctrls[gate.ctrl_y]):
@@ -447,11 +459,8 @@ class GatingStrategy(mongoengine.Document):
                 f"Gate with name {gate.gate_name} already exists. To continue set add_to_strategy to False"
         create_plot_kwargs = create_plot_kwargs or {}
         plot_gate_kwargs = plot_gate_kwargs or {}
-        parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm)
+        parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm, verbose=verbose)
         original_method_kwargs = gate.method_kwargs.copy()
-        transform = True
-        if fda_norm:
-            transform = gate.gate_name not in self.normalisation.keys()
         if overwrite_method_kwargs is not None:
             gate.method_kwargs = overwrite_method_kwargs
         if gate.ctrl_x is not None:
@@ -462,10 +471,9 @@ class GatingStrategy(mongoengine.Document):
                                               grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
                                               cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
                                               parent=parent_data,
-                                              transform=transform,
                                               verbose=verbose)
         else:
-            populations = gate.fit_predict(data=parent_data, transform=transform)
+            populations = gate.fit_predict(data=parent_data)
         for p in populations:
             self.filegroup.add_population(population=p)
         if verbose:
@@ -476,7 +484,6 @@ class GatingStrategy(mongoengine.Document):
             plot = FlowPlot(**create_plot_kwargs)
             return plot.plot_population_geoms(parent=parent_data,
                                               children=populations,
-                                              do_not_transform=transform is False,
                                               **plot_gate_kwargs)
         gate.method_kwargs = original_method_kwargs
         return None
@@ -727,12 +734,11 @@ class GatingStrategy(mongoengine.Document):
             f"Gate {gate} not recognised. Have you applied it and added it to the strategy?"
         gate = self.get_gate(gate=gate)
         fda_norm = gate.gate_name in self.normalisation.keys()
-        parent, _ = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm)
+        parent, _ = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm, ctrl=False)
         plotting = FlowPlot(**create_plot_kwargs)
         return plotting.plot_population_geoms(parent=parent,
                                               children=[self.filegroup.get_population(c.name)
                                                         for c in gate.children],
-                                              do_not_transform=fda_norm,
                                               **kwargs)
 
     def plot_backgate(self,

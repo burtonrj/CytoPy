@@ -438,7 +438,6 @@ class FlowPlot:
                               y: str or None = None,
                               transform_x: str or None = None,
                               transform_y: str or None = None,
-                              do_not_transform: bool = False,
                               plot_kwargs: dict or None = None,
                               legend_kwargs: dict or None = None):
         """
@@ -494,8 +493,6 @@ class FlowPlot:
         # Plot the parent population
         self.transform_x = transform_x or children[0].geom.transform_x
         self.transform_y = transform_y or children[0].geom.transform_y
-        if do_not_transform:
-            self.transform_x, self.transform_y = None, None
         self._ax = self.plot(data=parent,
                              x=children[0].geom.x,
                              y=children[0].geom.y or y,

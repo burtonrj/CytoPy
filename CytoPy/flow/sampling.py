@@ -264,7 +264,7 @@ def density_probability_assignment(sample: pd.DataFrame,
     """
     if njobs < 0:
         njobs = cpu_count()
-    tree = KDTree(sample, metric=distance_metric)
+    tree = KDTree(sample, metric=distance_metric, leaf_size=100)
     dist, _ = tree.query(data, k=2)
     dist = np.median([x[1] for x in dist])
     dist_threshold = dist * alpha
