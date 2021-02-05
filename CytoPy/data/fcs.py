@@ -32,9 +32,11 @@ from ..feedback import vprint
 from ..flow.tree import construct_tree
 from CytoPy.flow.transform import apply_transform, apply_transform_map
 from ..flow.neighbours import knn, calculate_optimal_neighbours
-from ..flow.sampling import uniform_downsampling
+from ..flow.sampling import uniform_downsampling, density_dependent_downsampling
+from ..flow.supervised import build_sklearn_model
 from .geometry import create_convex_hull
 from .population import Population, merge_populations, PolygonGeom
+from sklearn.model_selection import StratifiedKFold, permutation_test_score
 from warnings import warn
 from typing import List, Generator
 import pandas as pd
@@ -43,6 +45,7 @@ import mongoengine
 import anytree
 import h5py
 import os
+import re
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"
@@ -59,6 +62,10 @@ class MissingControlError(Exception):
     pass
 
 
+class MissingPopulationError(Exception):
+    """Raised when population requested is missing from FileGroup"""
+
+
 def h5file_exists(func: callable) -> callable:
     """
     Decorator that asserts the h5 file corresponding to the FileGroup exists.
@@ -73,9 +80,11 @@ def h5file_exists(func: callable) -> callable:
     callable
         Wrapper function
     """
+
     def wrapper(*args, **kwargs):
         assert os.path.isfile(args[0].h5path), f"Could not locate FileGroup HDF5 record {args[0].h5path}"
         return func(*args, **kwargs)
+
     return wrapper
 
 
@@ -93,11 +102,13 @@ def population_in_file(func: callable):
     -------
     callable
     """
+
     def wrapper(population_name: str,
                 h5file: h5py.File):
         if population_name not in h5file["index"].keys():
             return None
         return func(population_name, h5file)
+
     return wrapper
 
 
@@ -118,27 +129,6 @@ def h5_read_population_primary_index(population_name: str,
     Numpy.Array
     """
     return h5file[f"/index/{population_name}/primary"][:]
-
-
-@population_in_file
-def h5_read_population_ctrl_index(population_name: str,
-                                  h5file: h5py.File):
-    """
-    Given a population and an instance of a H5 file object, return a dictionary containing
-    the event indexes for control files
-
-    Parameters
-    ----------
-    population_name: str
-    h5file: h5py.File
-
-    Returns
-    -------
-    Dict
-        {ctrl_id: index}
-    """
-    ctrls = [x for x in h5file[f"index/{population_name}"].keys() if x != "primary"]
-    return {ctrl_id: h5file[f"index/{population_name}/{ctrl_id}"][:] for ctrl_id in ctrls}
 
 
 def set_column_names(df: pd.DataFrame,
@@ -364,8 +354,6 @@ class FileGroup(mongoengine.Document):
                 if primary_index is None:
                     continue
                 p.index = primary_index
-                p.set_ctrl_index(**h5_read_population_ctrl_index(population_name=p.population_name,
-                                                                 h5file=f))
 
     def add_population(self,
                        population: Population):
@@ -392,181 +380,58 @@ class FileGroup(mongoengine.Document):
     def load_ctrl_population_df(self,
                                 ctrl: str,
                                 population: str,
-                                transform: str or dict or None = "logicle",
-                                features_to_transform: list or None = None,
+                                classifier: str = "XGBoostClassifier",
+                                classifier_params: dict or None = None,
+                                scoring: str = "balanced_accuracy",
+                                transform: str = "logicle",
                                 transform_kwargs: dict or None = None,
-                                **kwargs):
-        """
-        Load the DataFrame for the events pertaining to a single population from a
-        control. If the control is absent from this FileGroup it will raise an AssertionError.
-        If the population has not been estimated for the given control, it will attempt to
-        estimate the population using KNearestNeighbours classifier. See estimated_ctrl_population
-        for details.
-
-        Parameters
-        ----------
-        ctrl: str
-            Name of the control sample to load
-        population: str
-            Name of the desired population
-        transform: str, optional (default="logicle")
-            Transform to be applied; specify a value of None to not perform any transformation
-        features_to_transform: list, optional
-            Features (columns) to be transformed. If not provied, all columns transformed
-        transform_kwargs: dict, optional
-            Additional keyword arguments passed to transform method
-        kwargs
-            Additional keyword arguments passed to estimated_ctrl_population
-
-        Returns
-        -------
-
-        """
+                                verbose: bool = True,
+                                evaluate_classifier: bool = True,
+                                kfolds: int = 5,
+                                n_permutations: int = 100,
+                                sampling_method: str = "density",
+                                sample_size: int = 50000):
         transform_kwargs = transform_kwargs or {}
         if ctrl not in self.controls:
             raise MissingControlError(f"No such control {ctrl} associated to this FileGroup")
-        if ctrl not in self.get_population(population_name=population).ctrl_index.keys():
-            warn(f"Population {population} missing for control {ctrl}, will attempt to "
-                 f"estimate population using KNN")
-            self.estimate_ctrl_population(ctrl=ctrl, population=population, **kwargs)
-        idx = self.get_population(population_name=population).ctrl_index.get(ctrl)
-        data = self.data(source=ctrl).loc[idx]
-        if transform is not None:
-            features_to_transform = features_to_transform or list(data.columns)
-            if isinstance(transform, dict):
-                data = apply_transform_map(data=data, feature_method=transform)
-            else:
-                data = apply_transform(data=data,
-                                       features=features_to_transform,
-                                       method=transform,
-                                       return_transformer=False,
-                                       **transform_kwargs)
-        return data
-
-    def estimate_ctrl_population(self,
-                                 ctrl: str,
-                                 population: str,
-                                 verbose: bool = True,
-                                 scoring: str = "balanced_accuracy",
-                                 downsample: int or float or None = 1000,
-                                 population_mappings: dict or None = None,
-                                 **kwargs):
-        """
-        Estimate a population for a control sample by training a KNearestNeighbors classifier
-        on the population in the primary data and using this model to predict membership
-        in the control data. If n_neighbors parameter of Scikit-Learns KNearestNeighbors class
-        is not given, it will be estimated using grid search cross-validation and optimisation
-        of the given scoring parameter. See CytoPy.flow.neighbours for further details.
-
-        To emulate the conditions in which single cell populations are generated by traditional gating,
-        a KNN model is derived for each two dimensional population in the population tree.  If the target population
-        was derived from a CellClassifier or Clustering or the target population is
-        downstream of a population derived from either method, the user must provide the two-dimensional space
-        in which to construct the KNN model. This should be provided as a dictionary where the key is the population
-        and the value the features and transformations to be applied. For example, if we have the population
-        "CD4+" the entry might look like so:
-
-        {"CD4+": {"features": ["CD4", "CD8"], "transformations": ["logicle", "logicle"]}}
-
-        The population "CD4+" in the control population would be estimated by generating a KNN model using the
-        CD4 and CD8 channels and the primary data, with these channels having the "logicle" transform
-        applied prior to training.
-
-        Results of the population estimation will be saved to the populations ctrl_index property.
-
-        Parameters
-        ----------
-        ctrl: str
-            Control to estimate population for
-        population: str
-            Population to estimate
-        verbose: bool (default=True)
-            Whether to print feedback to stdout
-        scoring: str (default="balanced_accuracy")
-            Scoring method used for evaluating knn model(s)
-        downsample: int or float, optional (default=0.1)
-            If provided, will downsample data prior to generating KNN tree
-        population_mappings: dict, optional
-            Instructions for handling populations derived from CellClassifier or Clustering
-        kwargs: dict
-            Additional keyword arguments passed to initiate KNearestNeighbors object
-
-        Returns
-        -------
-        None
-        """
+        params = classifier_params or {}
+        transform_kwargs = transform_kwargs or {}
         feedback = vprint(verbose=verbose)
+        classifier = build_sklearn_model(klass=classifier, **params)
+        assert population in self.list_populations(), f"Desired population {population} not found"
         feedback(f"====== Estimating {population} for {ctrl} control ======")
+        feedback("Loading data...")
+        training, ctrl, transformer = _load_data_for_ctrl_estimate(filegroup=self,
+                                                                   target_population=population,
+                                                                   ctrl=ctrl,
+                                                                   transform=transform,
+                                                                   sample_size=sample_size,
+                                                                   sampling_method=sampling_method,
+                                                                   **transform_kwargs)
 
-        population = self.get_population(population_name=population)
-
-        if ctrl not in self.get_population(population_name=population.parent).ctrl_index.keys():
-            feedback(f"Control missing parent {population.parent}, will attempt to estimate....")
-            self.estimate_ctrl_population(ctrl=ctrl,
-                                          population=population.parent,
-                                          verbose=verbose,
-                                          scoring=scoring,
-                                          **kwargs)
-            feedback(f"{population.parent} estimated, resuming estimation of {population.population_name}....")
-
-        if population_mappings is not None:
-            features = population_mappings.get(population.population_name).get("features")
-            transformations = population_mappings.get(population.population_name).get("transformations")
-        else:
-            features = [x for x in [population.geom.x, population.geom.y] if x is not None]
-            transformations = {d: transform for d, transform in zip([population.geom.x, population.geom.y],
-                                                                    [population.geom.transform_x,
-                                                                     population.geom.transform_y])
-                               if d is not None}
-
-        training_data = self.load_population_df(population=population.parent,
-                                                transform=transformations,
-                                                label_downstream_affiliations=False).copy()
-        assert training_data.shape[0] > 3, f"Three or less events found in training data for " \
-                                           f"{ctrl} {population} estimation"
-
-        training_data["labels"] = 0
-        training_data.loc[population.index, "labels"] = 1
-        if isinstance(downsample, int) and training_data.shape[0] > downsample*2:
-            training_data = pd.concat([training_data[training_data.labels == i].sample(n=downsample, replace=True)
-                                       for i in range(2)])
-        if isinstance(downsample, float):
-            training_data = pd.concat([training_data[training_data.labels == i].sample(frac=downsample)
-                                       for i in range(2)])
-        labels = training_data["labels"].values
-
-        n = kwargs.get("n_neighbors", None)
-        if n is None:
-            feedback("Calculating optimal n_neighbours by grid search CV...")
-            n, score = calculate_optimal_neighbours(x=training_data[features].values,
-                                                    y=labels,
-                                                    scoring=scoring,
-                                                    **kwargs)
-            feedback(f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}...")
-
-        # Estimate control population using KNN
-        feedback("Training KNN classifier....")
-        train_acc, val_acc, model = knn(data=training_data,
-                                        features=features,
-                                        labels=labels,
-                                        n_neighbours=n,
-                                        holdout_size=0.2,
-                                        random_state=42,
-                                        return_model=True,
-                                        **kwargs)
-
-        feedback(f"...training balanced accuracy score: {train_acc}")
-        feedback(f"...validation balanced accuracy score: {val_acc}")
-        feedback(f"Predicting {population.population_name} for {ctrl} control...")
-        ctrl_data = self.load_ctrl_population_df(ctrl=ctrl,
-                                                 population=population.parent,
-                                                 transform=transformations,
-                                                 label_downstream_affiliations=False)
-        assert ctrl_data.shape[0] > 3, "Three or less events found in parent data"
-        ctrl_labels = model.predict(ctrl_data[features].values)
-        ctrl_idx = ctrl_data.index.values[np.where(ctrl_labels == 1)[0]]
-        population.set_ctrl_index(**{ctrl: ctrl_idx})
-        feedback("===============================================")
+        x, y = training.values, training["label"].values
+        if evaluate_classifier:
+            feedback("Evaluating classifier with permutation testing...")
+            skf = StratifiedKFold(n_splits=kfolds, random_state=42, shuffle=True)
+            score, permutation_scores, pvalue = permutation_test_score(classifier, x, y,
+                                                                       cv=skf,
+                                                                       n_permutations=n_permutations,
+                                                                       scoring=scoring,
+                                                                       n_jobs=-1,
+                                                                       random_state=42)
+            feedback(f"...Performance (without permutations): {score}")
+            feedback(f"...Performance (average across permutations; standard dev): "
+                     f"{np.mean(permutation_scores)}; {np.std(permutation_scores)}")
+            feedback(f"...p-value (comparison of original score to permuations): {pvalue}")
+        feedback("Predicting population for control data...")
+        classifier.fit(x)
+        ctrl_labels = classifier.predict(ctrl.values)
+        training_prop_of_root = self.get_population(population).n / self.get_population("root").n
+        ctrl_prop_of_root = np.sum(ctrl_labels) / ctrl.shape[0]
+        feedback(f"{population} - {training_prop_of_root}% of root")
+        feedback(f"Predicted in ctrl - {ctrl_prop_of_root}% of ctrl root")
+        ctrl = ctrl.iloc[np.where(ctrl_labels == 1)[0]]
+        return transformer.inverse_scale(data=ctrl, features=list(ctrl.columns))
 
     def load_population_df(self,
                            population: str,
@@ -581,7 +446,7 @@ class FileGroup(mongoengine.Document):
         ----------
         population: str
             Name of the desired population
-        transform: str, optional (default="logicle")
+        transform: str or dict, optional (default="logicle")
             Transform to be applied; specify a value of None to not perform any transformation
         features_to_transform: list, optional
             Features (columns) to be transformed. If not provied, all columns transformed
@@ -655,20 +520,6 @@ class FileGroup(mongoengine.Document):
         bool
         """
         return os.path.isfile(self.h5path)
-
-    def list_gated_controls(self) -> Generator:
-        """
-        List ID of controls that have a cached index in each population of the saved population tree
-        (i.e. they have been gated)
-
-        Returns
-        -------
-        list
-            List of control IDs for gated controls
-        """
-        for c in self.controls():
-            if all([p.get_ctrl(c) is not None for p in self.populations]):
-                yield c
 
     def list_populations(self) -> list:
         """
@@ -889,8 +740,6 @@ class FileGroup(mongoengine.Document):
                 p._prop_of_parent = p.n / parent_n
                 p.prop_of_total = p.n / root_n
                 overwrite_or_create(file=f, data=p.index, key=f"/index/{p.population_name}/primary")
-                for ctrl, idx in p.ctrl_index.items():
-                    overwrite_or_create(file=f, data=idx, key=f"/index/{p.population_name}/{ctrl}")
 
     def population_stats(self,
                          population: str):
@@ -996,3 +845,35 @@ def population_stats(filegroup: FileGroup) -> pd.DataFrame:
     """
     return pd.DataFrame([filegroup.population_stats(p)
                          for p in list(filegroup.list_populations())])
+
+
+def _load_data_for_ctrl_estimate(filegroup: FileGroup,
+                                 target_population: str,
+                                 ctrl: str,
+                                 transform: str,
+                                 sample_size: int,
+                                 sampling_method: str,
+                                 **transform_kwargs):
+    training = filegroup.data(source="primary")
+    population_idx = filegroup.get_population(target_population)
+    features = training.columns[~training.columns.str.contains("time", flags=re.IGNORECASE)]
+    if sampling_method == "density":
+        tree_sample = 0.1
+        if training.shape[0] >= 20000:
+            tree_sample = 20000
+        training = density_dependent_downsampling(data=training,
+                                                  features=features,
+                                                  tree_sample=tree_sample,
+                                                  sample_size=sample_size)
+    else:
+        training = uniform_downsampling(data=training[features], sample_size=sample_size)
+    ctrl = filegroup.data(source=ctrl)
+    training = apply_transform(data=training, features=features, method=transform, **transform_kwargs)
+    ctrl, transformer = apply_transform(data=ctrl,
+                                        features=features,
+                                        method=transform,
+                                        return_transformer=True,
+                                        **transform_kwargs)
+    training["label"] = 0
+    training.loc[population_idx, "label"] = 1
+    return training, ctrl, transformer

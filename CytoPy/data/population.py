@@ -92,7 +92,6 @@ class Population(mongoengine.EmbeddedDocument):
     def __init__(self, *args, **kwargs):
         # If the Population existed previously, fetched the index
         self._index = kwargs.pop("index", None)
-        self._ctrl_index = kwargs.pop("ctrl_index", dict())
         super().__init__(*args, **kwargs)
 
     @property
@@ -104,15 +103,6 @@ class Population(mongoengine.EmbeddedDocument):
         assert isinstance(idx, np.ndarray), "idx should be type numpy.array"
         self.n = len(idx)
         self._index = np.array(idx)
-
-    @property
-    def ctrl_index(self):
-        return self._ctrl_index
-
-    def set_ctrl_index(self, **kwargs):
-        for k, v in kwargs.items():
-            assert isinstance(v, np.ndarray), "ctrl_idx should be type numpy.array"
-            self._ctrl_index[k] = v
 
 
 def _check_overlap(left: Population,
@@ -219,8 +209,7 @@ def _merge_thresholds(left: Population,
     assert left.geom.y_threshold == right.geom.y_threshold, \
         "Threshold merge assumes that the populations are derived " \
         "from the same gate; Y threshold should match between populations"
-    if len(left.ctrl_index) > 0 or len(right.ctrl_index) > 0:
-        warn("Associated control indexes are now void. Repeat control gating on new population")
+
     new_geom = ThresholdGeom(x=left.geom.x,
                              y=left.geom.y,
                              transform_x=left.geom.transform_x,

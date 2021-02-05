@@ -36,6 +36,7 @@ from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
 from .population import Population, merge_multiple_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn, uniform_downsampling
 from ..flow.dim_reduction import dimensionality_reduction
+from ..flow.supervised import build_sklearn_model
 from sklearn.cluster import *
 from sklearn.mixture import *
 from shapely.geometry import Polygon as ShapelyPoly
@@ -179,14 +180,17 @@ class Gate(mongoengine.Document):
     parent = mongoengine.StringField(required=True)
     x = mongoengine.StringField(required=True)
     y = mongoengine.StringField(required=False)
-    transform_x = mongoengine.StringField(required=True, default=None)
-    transform_y = mongoengine.StringField(required=True, default=None)
+    transform_x = mongoengine.StringField(required=False, default=None)
+    transform_y = mongoengine.StringField(required=False, default=None)
     transform_x_kwargs = mongoengine.DictField()
     transform_y_kwargs = mongoengine.DictField()
     sampling = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
     ctrl_x = mongoengine.StringField()
     ctrl_y = mongoengine.StringField()
+    ctrl_classifier = mongoengine.StringField(default="XGBClassifier")
+    ctrl_classifier_params = mongoengine.DictField()
+    ctrl_prediction_kwargs = mongoengine.DictField()
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
     children = mongoengine.EmbeddedDocumentListField(Child)
@@ -206,6 +210,9 @@ class Gate(mongoengine.Document):
         self.model = None
         self.x_transformer = None
         self.y_transformer = None
+        if self.ctrl_classifier:
+            params = self.ctrl_classifier_params or {}
+            build_sklearn_model(klass=self.ctrl_classifier, **params)
 
     def transform(self,
                   data: pd.DataFrame) -> pd.DataFrame:
@@ -228,7 +235,7 @@ class Gate(mongoengine.Document):
                                                        method=self.transform_x,
                                                        return_transformer=True,
                                                        **kwargs)
-        if self.transform_y is not None:
+        if self.transform_y is not None and self.y is not None:
             kwargs = self.transform_y_kwargs or {}
             data, self.y_transformer = apply_transform(data=data,
                                                        features=[self.y],
