@@ -806,8 +806,7 @@ class ThresholdGate(Gate):
 
     def fit(self,
             data: pd.DataFrame,
-            ctrl_data: pd.DataFrame or None = None,
-            transform: bool = True) -> None:
+            ctrl_data: pd.DataFrame or None = None) -> None:
         """
         Fit the gate using a given dataframe. If children already exist will raise an AssertionError
         and notify user to call `fit_predict`.
@@ -826,8 +825,7 @@ class ThresholdGate(Gate):
         None
         """
         data = data.copy()
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         assert len(self.children) == 0, "Children already defined for this gate. Call 'fit_predict' to " \
                                         "fit to new data and match populations to children, or call " \
@@ -852,7 +850,6 @@ class ThresholdGate(Gate):
 
     def fit_predict(self,
                     data: pd.DataFrame,
-                    transform: bool = True,
                     ctrl_data: pd.DataFrame or None = None) -> list:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
@@ -873,8 +870,7 @@ class ThresholdGate(Gate):
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
         data = data.copy()
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         if ctrl_data is not None:
             thresholds = self._ctrl_fit(primary_data=data, ctrl_data=ctrl_data)
@@ -894,8 +890,7 @@ class ThresholdGate(Gate):
         return self._match_to_children(new_populations=pops)
 
     def predict(self,
-                data: pd.DataFrame,
-                transform: bool = True) -> list:
+                data: pd.DataFrame) -> list:
         """
         Using existing children associated to this gate, the previously calculated thresholds of
         these children will be applied to the given data and then Population objects created and
@@ -914,8 +909,7 @@ class ThresholdGate(Gate):
         """
         assert len(self.children) > 0, "Must call 'fit' prior to predict"
         self._xy_in_dataframe(data=data)
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         if self.y is not None:
             data = threshold_2d(data=data,
@@ -1200,7 +1194,6 @@ class PolygonGate(Gate):
 
     def fit(self,
             data: pd.DataFrame,
-            transform: bool = True,
             ctrl_data: None = None) -> None:
         """
         Fit the gate using a given dataframe. This will generate new children using the calculated
@@ -1217,8 +1210,7 @@ class PolygonGate(Gate):
         None
         """
         assert len(self.children) == 0, "Gate is already defined, call 'reset_gate' to clear children"
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         polygons = self._fit(data=data)
         for name, poly in zip(ascii_uppercase, polygons):
@@ -1228,7 +1220,6 @@ class PolygonGate(Gate):
 
     def fit_predict(self,
                     data: pd.DataFrame,
-                    transform: bool = True,
                     ctrl_data: None = None) -> List[Population]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
@@ -1246,15 +1237,13 @@ class PolygonGate(Gate):
             List of predicted Population objects, labelled according to the gates child objects
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         return self._match_to_children(self._generate_populations(data=data.copy(),
                                                                   polygons=self._fit(data=data)))
 
     def predict(self,
-                data: pd.DataFrame,
-                transform: bool = True) -> List[Population]:
+                data: pd.DataFrame) -> List[Population]:
         """
         Using existing children associated to this gate, the previously calculated polygons of
         these children will be applied to the given data and then Population objects created and
@@ -1271,8 +1260,7 @@ class PolygonGate(Gate):
         List
             List of Population objects
         """
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         polygons = [create_polygon(c.geom.x_values, c.geom.y_values) for c in self.children]
         populations = self._generate_populations(data=data, polygons=polygons)
@@ -1440,7 +1428,6 @@ class TimeGate(PolygonGate):
 
     def fit(self,
             data: pd.DataFrame,
-            transform: None = None,
             ctrl_data: None = None) -> None:
         """
         Fit the gate using a given dataframe. This will generate new children using the calculated
@@ -1464,7 +1451,6 @@ class TimeGate(PolygonGate):
 
     def fit_predict(self,
                     data: pd.DataFrame,
-                    transform: None = None,
                     ctrl_data: None = None) -> List[Population]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
@@ -1486,8 +1472,7 @@ class TimeGate(PolygonGate):
                                                                   polygons=self._fit(data=data)))
 
     def predict(self,
-                data: pd.DataFrame,
-                transform: None = None) -> List[Population]:
+                data: pd.DataFrame) -> List[Population]:
         """
         Using existing children associated to this gate, the previously calculated polygons of
         these children will be applied to the given data and then Population objects created and
@@ -1791,23 +1776,6 @@ def find_inflection_point(x: np.array,
     return float(x[peak_idx + np.argmax(ddy)])
 
 
-def _reset_population(population: Population):
-    """
-    When a population geometry is updated, this function removes associated control indexes.
-
-    Parameters
-    ----------
-    population: Population
-
-    Returns
-    -------
-    None
-    """
-    for ctrl_id in population.ctrl_index.keys():
-        warn(f"{ctrl_id} index for {population.population_name} will be reset")
-        population.ctrl_index.pop(ctrl_id)
-
-
 def update_threshold(population: Population,
                      parent_data: pd.DataFrame,
                      x_threshold: float,
@@ -1846,7 +1814,6 @@ def update_threshold(population: Population,
         population.index = new_data.index.values
         population.geom.x_threshold = x_threshold
         population.geom.y_threshold = y_threshold
-        _reset_population(population)
 
 
 def update_polygon(population: Population,
@@ -1876,4 +1843,3 @@ def update_polygon(population: Population,
     population.geom.x_values = x_values
     population.geom.y_values = y_values
     population.index = new_data.index.values
-    _reset_population(population)

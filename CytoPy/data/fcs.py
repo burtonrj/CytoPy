@@ -318,8 +318,6 @@ class FileGroup(mongoengine.Document):
             f.create_group(f"mappings/{ctrl_id}")
             f.create_dataset(f"mappings/{ctrl_id}/channels", data=np.array(channels, dtype='S'))
             f.create_dataset(f"mappings/{ctrl_id}/markers", data=np.array(markers, dtype='S'))
-        root = self.get_population(population_name="root")
-        root.set_ctrl_index(**{ctrl_id: np.arange(0, data.shape[0])})
         self.controls.append(ctrl_id)
         self.save()
 
@@ -380,7 +378,7 @@ class FileGroup(mongoengine.Document):
     def load_ctrl_population_df(self,
                                 ctrl: str,
                                 population: str,
-                                classifier: str = "XGBoostClassifier",
+                                classifier: str = "XGBClassifier",
                                 classifier_params: dict or None = None,
                                 scoring: str = "balanced_accuracy",
                                 transform: str = "logicle",
@@ -388,9 +386,8 @@ class FileGroup(mongoengine.Document):
                                 verbose: bool = True,
                                 evaluate_classifier: bool = True,
                                 kfolds: int = 5,
-                                n_permutations: int = 100,
-                                sampling_method: str = "density",
-                                sample_size: int = 50000):
+                                n_permutations: int = 25,
+                                sample_size: int = 10000):
         transform_kwargs = transform_kwargs or {}
         if ctrl not in self.controls:
             raise MissingControlError(f"No such control {ctrl} associated to this FileGroup")
@@ -406,10 +403,8 @@ class FileGroup(mongoengine.Document):
                                                                    ctrl=ctrl,
                                                                    transform=transform,
                                                                    sample_size=sample_size,
-                                                                   sampling_method=sampling_method,
                                                                    **transform_kwargs)
-
-        x, y = training.values, training["label"].values
+        x, y = training[[x for x in training.columns if x != "label"]], training["label"].values
         if evaluate_classifier:
             feedback("Evaluating classifier with permutation testing...")
             skf = StratifiedKFold(n_splits=kfolds, random_state=42, shuffle=True)
@@ -419,17 +414,17 @@ class FileGroup(mongoengine.Document):
                                                                        scoring=scoring,
                                                                        n_jobs=-1,
                                                                        random_state=42)
-            feedback(f"...Performance (without permutations): {score}")
+            feedback(f"...Performance (without permutations): {round(score, 4)}")
             feedback(f"...Performance (average across permutations; standard dev): "
-                     f"{np.mean(permutation_scores)}; {np.std(permutation_scores)}")
-            feedback(f"...p-value (comparison of original score to permuations): {pvalue}")
+                     f"{round(np.mean(permutation_scores), 4)}; {round(np.std(permutation_scores), 4)}")
+            feedback(f"...p-value (comparison of original score to permuations): {round(pvalue, 4)}")
         feedback("Predicting population for control data...")
-        classifier.fit(x)
-        ctrl_labels = classifier.predict(ctrl.values)
+        classifier.fit(x, y)
+        ctrl_labels = classifier.predict(ctrl)
         training_prop_of_root = self.get_population(population).n / self.get_population("root").n
         ctrl_prop_of_root = np.sum(ctrl_labels) / ctrl.shape[0]
-        feedback(f"{population} - {training_prop_of_root}% of root")
-        feedback(f"Predicted in ctrl - {ctrl_prop_of_root}% of ctrl root")
+        feedback(f"{population}: {round(training_prop_of_root, 3)}% of root in primary data")
+        feedback(f"Predicted in ctrl: {round(ctrl_prop_of_root, 3)}% of root in control data")
         ctrl = ctrl.iloc[np.where(ctrl_labels == 1)[0]]
         return transformer.inverse_scale(data=ctrl, features=list(ctrl.columns))
 
@@ -847,33 +842,47 @@ def population_stats(filegroup: FileGroup) -> pd.DataFrame:
                          for p in list(filegroup.list_populations())])
 
 
+def _sampling_for_class_imbalance(data: pd.DataFrame,
+                                  sample_size: int):
+    assert "label" in data.columns, "Missing label column"
+    label_count = data["label"].value_counts().to_dict()
+    n = int(sample_size/2)
+    if label_count.get(0) > n and label_count.get(1) > n:
+        data = pd.concat([data[data.label == 1].sample(n),
+                          data[data.label == 0].sample(n)])
+    elif label_count.get(0) > n:
+        data = pd.concat([data[data.label == 1].sample(n, replace=True),
+                          data[data.label == 0].sample(n)])
+    elif label_count.get(1) > n:
+        data = pd.concat([data[data.label == 1].sample(n),
+                          data[data.label == 0].sample(n, replace=True)])
+    else:
+        data = pd.concat([data[data.label == 1].sample(n, replace=True),
+                          data[data.label == 0].sample(n, replace=True)])
+    return data
+
+
 def _load_data_for_ctrl_estimate(filegroup: FileGroup,
                                  target_population: str,
                                  ctrl: str,
                                  transform: str,
                                  sample_size: int,
-                                 sampling_method: str,
                                  **transform_kwargs):
     training = filegroup.data(source="primary")
-    population_idx = filegroup.get_population(target_population)
-    features = training.columns[~training.columns.str.contains("time", flags=re.IGNORECASE)]
-    if sampling_method == "density":
-        tree_sample = 0.1
-        if training.shape[0] >= 20000:
-            tree_sample = 20000
-        training = density_dependent_downsampling(data=training,
-                                                  features=features,
-                                                  tree_sample=tree_sample,
-                                                  sample_size=sample_size)
-    else:
-        training = uniform_downsampling(data=training[features], sample_size=sample_size)
+    population_idx = filegroup.get_population(target_population).index
+    training["label"] = 0
+    training.loc[population_idx, "label"] = 1
     ctrl = filegroup.data(source=ctrl)
+    time_columns = training.columns[training.columns.str.contains("time", flags=re.IGNORECASE)].to_list()
+    for t in time_columns:
+        training.drop(t, axis=1, inplace=True)
+        ctrl.drop(t, axis=1, inplace=True)
+    features = [x for x in training.columns if x != "label"]
+    training = _sampling_for_class_imbalance(data=training, sample_size=sample_size)
     training = apply_transform(data=training, features=features, method=transform, **transform_kwargs)
     ctrl, transformer = apply_transform(data=ctrl,
                                         features=features,
                                         method=transform,
                                         return_transformer=True,
                                         **transform_kwargs)
-    training["label"] = 0
-    training.loc[population_idx, "label"] = 1
     return training, ctrl, transformer

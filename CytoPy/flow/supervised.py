@@ -25,7 +25,6 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from CytoPy.data.fcs import FileGroup
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn import metrics as skmetrics
 from xgboost import XGBClassifier
@@ -218,8 +217,7 @@ def confusion_matrix_plots(classifier,
     return fig
 
 
-def assert_population_labels(ref: FileGroup,
-                             expected_labels: list):
+def assert_population_labels(ref, expected_labels: list):
     """
     Given some reference FileGroup and the expected population labels, check the
     validity of the labels and return list of valid populations only.
@@ -238,7 +236,7 @@ def assert_population_labels(ref: FileGroup,
         assert x in ref.tree.keys(), f"Ref FileGroup missing expected population {x}"
 
 
-def check_downstream_populations(ref: FileGroup,
+def check_downstream_populations(ref,
                                  root_population: str,
                                  population_labels: list) -> None:
     """
@@ -262,7 +260,7 @@ def check_downstream_populations(ref: FileGroup,
         "downstream from the given root."
 
 
-def multilabel(ref: FileGroup,
+def multilabel(ref,
                root_population: str,
                population_labels: list,
                transform: str,
@@ -292,7 +290,7 @@ def multilabel(ref: FileGroup,
     return root[features], root[population_labels]
 
 
-def singlelabel(ref: FileGroup,
+def singlelabel(ref,
                 root_population: str,
                 population_labels: list,
                 transform: str,
