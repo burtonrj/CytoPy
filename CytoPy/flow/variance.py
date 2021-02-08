@@ -37,6 +37,7 @@ from ..feedback import progress_bar, vprint
 from ..flow import transform as transform_module
 from .dim_reduction import dimensionality_reduction
 from .sampling import density_dependent_downsampling, faithful_downsampling, uniform_downsampling
+from .transform import apply_transform, Transformer
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
 from scipy.spatial.distance import jensenshannon as jsd
@@ -46,13 +47,13 @@ from scipy.spatial import distance
 from collections import defaultdict
 from KDEpy import FFTKDE
 from warnings import warn
-from itertools import cycle
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import seaborn as sns
 import pandas as pd
 import numpy as np
 import harmonypy
+import logging
 import math
 
 np.random.seed(42)
@@ -75,9 +76,9 @@ def load_and_sample(experiment: Experiment,
                     sample_ids: list or None = None,
                     sampling_method: str or None = "uniform",
                     transform: str or None = "logicle",
+                    features: list or None = None,
                     transform_kwargs: dict or None = None,
-                    ctrl: str or None = None,
-                    **kwargs) -> pd.DataFrame:
+                    **kwargs) -> pd.DataFrame and Transformer:
     """
     Load sample data from experiment and return a Pandas DataFrame. Individual samples
     identified by "sample_id" column
@@ -90,36 +91,35 @@ def load_and_sample(experiment: Experiment,
         Total number of events to sample from each file
     sampling_method: str
     transform: str (optional)
+    features: list
     transform_kwargs: dict (optional)
     population: str
-    ctrl: str (optional)
     kwargs:
         Additional keyword arguments for sampling method
 
     Returns
     -------
-    Pandas.DataFrame
+    Pandas.DataFrame and Transformer
     """
+    transform_kwargs = transform_kwargs or {}
     sample_ids = sample_ids or experiment.list_samples()
     files = [experiment.get_sample(s) for s in sample_ids]
     data = list()
     for f in progress_bar(files, verbose=True):
-        if ctrl:
-            if ctrl not in f.controls:
-                warn(f"{ctrl} control missing from {f.primary_id}")
-                continue
         df = _sample_filegroup(filegroup=f,
                                sample_size=sample_size,
                                sampling_method=sampling_method,
-                               transform=transform,
-                               transform_kwargs=transform_kwargs,
                                population=population,
-                               ctrl=ctrl,
                                **kwargs)
         df["sample_id"] = f.primary_id
         data.append(df)
     data = pd.concat(data)
-    return data
+    if transform is not None:
+        assert features is not None, "Must provide features for transform"
+        data, transformer = apply_transform(data=data, features=features, method=transform,
+                                            return_transformer=True, **transform_kwargs)
+        return data, transformer
+    return data, None
 
 
 def bw_optimisation(data: pd.DataFrame,
@@ -206,11 +206,8 @@ def calculate_ref_sample(data: pd.DataFrame,
 
 def _sample_filegroup(filegroup: FileGroup,
                       population: str,
-                      transform: str or None,
-                      transform_kwargs: dict or None = None,
                       sample_size: int or float = 5000,
                       sampling_method: str or None = None,
-                      ctrl: str or None = None,
                       **kwargs) -> pd.DataFrame:
     """
     Given a FileGroup and the name of the desired population, load the
@@ -220,11 +217,8 @@ def _sample_filegroup(filegroup: FileGroup,
     ----------
     filegroup: FileGroup
     population: str
-    transform: str (optional)
-    transform_kwargs: dict (optional)
     sample_size: int or float (optional)
     sampling_method: str (optional)
-    ctrl: str (optional)
     kwargs:
         Down-sampling keyword arguments
 
@@ -232,16 +226,8 @@ def _sample_filegroup(filegroup: FileGroup,
     -------
     Pandas.DataFrame
     """
-    transform_kwargs = transform_kwargs or {}
-    if ctrl:
-        data = filegroup.load_ctrl_population_df(ctrl=ctrl,
-                                                 population=population,
-                                                 transform=transform,
-                                                 transform_kwargs=transform_kwargs)
-    else:
-        data = filegroup.load_population_df(population=population,
-                                            transform=transform,
-                                            transform_kwargs=transform_kwargs)
+    data = filegroup.load_population_df(population=population,
+                                        transform=None)
     if sampling_method == "uniform":
         return uniform_downsampling(data=data, sample_size=sample_size)
     if sampling_method == "density":
@@ -399,95 +385,6 @@ def dim_reduction_grid(data: pd.DataFrame,
         ax.set(aspect='auto')
     fig.tight_layout()
     return fig
-
-
-def overlay_plot(data: pd.DataFrame,
-                 features: list,
-                 downsample: int = 1,
-                 method: str = "UMAP",
-                 dim_reduction_kwargs: dict or None = None,
-                 downsample_n: int = 1e5,
-                 ax: plt.Axes or None = None,
-                 figsize: tuple or None = (8, 8),
-                 include_legend: bool = False,
-                 **kwargs):
-    """
-    Generate a scatter plot of embeddings generated by a given dimension reduction method. The data points will
-    be overlaid on one another.
-
-    Parameters
-    ----------
-    data: Pandas.DataFrame
-        DataFrame as generated from load_and_sample
-    features: list
-        Features of interest to use when performing dimension reduction
-    downsample: int (default = 1)
-        Controls whether to downsample data prior to estimating low dimension embedding. If 0, downsampling
-        is never performed. If value is 1, dowsampling is performed if the method is not PCA and the total
-        number of cells is greater than 300,000. If value is 2, downsampling is always performed.
-    method: str (default="UMAP")
-        Method to use for dimension reduction. See CytoPy.flow.dim_reduction for available methods
-    dim_reduction_kwargs: dict, optional
-        Optional additional keyword arguments passed to CytoPy.flow.dim_reduction.dimensionality_reduction
-    downsample_n: int (default=1e5)
-        Number of events to sample if downsampling performed. If total number of cells is less than this,
-        a third of cells will be sampled
-    ax: Matplotlib.Axes, optional
-        Axes object to plot on
-    figsize: tuple (default=(8,8))
-        Figure size to use if ax is not provided
-    include_legend: bool (default=False)
-    kwargs
-        Additional keyword arguments passed to Matplotlib.Axes.scatter call
-
-    Returns
-    -------
-    Matplotlib.Axes
-    """
-    key = "sample_id"
-    data = data.dropna(axis=1, how="any")
-    dim_reduction_kwargs = dim_reduction_kwargs or {}
-    ax = ax or plt.subplots(figsize=figsize)[1]
-    if (method != "PCA" and data.shape[0] > 3e5 and downsample == 1) or downsample == 2:
-        if data.shape[0] <= downsample_n:
-            downsample_n = data.shape[0] / 3
-        sample = data.sample(n=int(downsample_n))
-        print("Generate reducer...")
-        _, reducer = dimensionality_reduction(sample.reset_index(),
-                                              features=features,
-                                              method=method,
-                                              n_components=2,
-                                              return_reducer=True,
-                                              **dim_reduction_kwargs)
-        embeddings = {}
-        print("Dimension reduction...")
-        if method != "PHATE":
-            for k in progress_bar(data[key].unique(), total=data[key].nunique()):
-                embeddings[k] = reducer.transform(data[data[key] == k][features])
-        else:
-            for k in progress_bar(data[key].unique(), total=data[key].nunique()):
-                embeddings[k] = reducer.fit_transform(data[data[key] == k].reset_index()[features])
-    else:
-        embeddings = dimensionality_reduction(data,
-                                              features=features,
-                                              method=method,
-                                              n_components=2,
-                                              return_reducer=False,
-                                              return_embeddings_only=False,
-                                              **dim_reduction_kwargs)
-        embeddings = {k: df.values for k, df in embeddings[[f"{method}1", f"{method}2", key]].groupby(key)}
-    colours = cycle(COLOURS)
-    for k, v in embeddings.items():
-        s = kwargs.pop("s", 1)
-        alpha = kwargs.pop("alpha", 0.7)
-        ax.scatter(v[:, 0], v[:, 1], color=next(colours), s=s, alpha=alpha, label=k, **kwargs)
-    ax.set_xlabel(f"{method}1")
-    ax.set_ylabel(f"{method}2")
-    if include_legend:
-        ax.legend(bbox_to_anchor=(1.05, 1.15))
-    else:
-        ax.legend().remove()
-    return ax
 
 
 class SimilarityMatrix:
@@ -882,19 +779,49 @@ class Harmony:
     """
 
     def __init__(self,
-                 data: pd.DataFrame,
-                 features: list or None = None):
+                 experiment: Experiment,
+                 population: str,
+                 features: list,
+                 sample_size: int or float,
+                 sample_ids: list or None = None,
+                 sampling_method: str or None = "uniform",
+                 transform: str = "logicle",
+                 transform_kwargs: dict or None = None,
+                 sample_kwargs: dict or None = None,
+                 logging_level=None):
         """
         Parameters
         ----------
         data: Pandas.DataFrame
             Can be generated using the CytoPy.flow.variance.load_and_sample function
         """
-        self.data = data.dropna(axis=1)
-        self.features = features or [x for x in data.columns if x != "sample_id"]
-        self.meta = data[["sample_id"]]
+        sample_kwargs = sample_kwargs or {}
+        self.data, self.transformer = load_and_sample(experiment=experiment,
+                                                      population=population,
+                                                      sample_size=sample_size,
+                                                      sample_ids=sample_ids,
+                                                      sampling_method=sampling_method,
+                                                      transform=transform,
+                                                      features=features,
+                                                      transform_kwargs=transform_kwargs,
+                                                      **sample_kwargs)
+        self.data = self.data.dropna(axis=1, how="any")
+        self.features = [x for x in features if x in self.data.columns]
+        self.meta = self.data[["sample_id"]]
         self.harmony = None
         self._norms = None
+        self._logging_level = logging_level
+        if logging_level:
+            logging.getLogger("harmonypy").setLevel(logging_level)
+
+    @property
+    def logging_level(self):
+        return self._logging_level
+
+    @logging_level.setter
+    def logging_level(self, value):
+        logging.getLogger("harmonypy").setLevel(value)
+        self._logging_level = value
 
     def normalisation(self):
         """
@@ -920,12 +847,42 @@ class Harmony:
 
         Returns
         -------
-        None
+        Harmony
         """
-        self.harmony = harmonypy.run_harmony(data_mat=self.data[self.features].values,
+        data = self.data[self.features].astype(float)
+        self.harmony = harmonypy.run_harmony(data_mat=data.values,
                                              meta_data=self.meta,
                                              vars_use="sample_id",
                                              **kwargs)
+        return self
+
+    def hyperparameter_search(self,
+                              param_grid: list,
+                              **kwargs):
+        kwargs = kwargs or {}
+        kwargs["ci"] = kwargs.get("ci", "sd")
+        kwargs["estimator"] = kwargs.get("estimator", np.median)
+        kwargs["capsize"] = kwargs.get("capsize", .2)
+        lisi_values = dict()
+        for params in progress_bar(param_grid):
+            lisi_values[str(params)] = self.run(**params).batch_lisi()
+        lisi_values = (pd.DataFrame({k: v.reshape(-1) for k, v in lisi_values.items()})
+                       .melt(var_name="Params", value_name="LISI"))
+        return sns.pointplot(data=lisi_values, y="LISI", x="Params", **kwargs)
+
+    def batch_lisi(self):
+        return harmonypy.lisi.compute_lisi(self.batch_corrected()[self.features].values,
+                                           metadata=self.meta,
+                                           label_colnames=["sample_id"])
+
+    def batch_lisi_distribution(self, **kwargs):
+        before = harmonypy.lisi.compute_lisi(self.data[self.features].values,
+                                             metadata=self.meta,
+                                             label_colnames=["sample_id"])
+        data = pd.DataFrame({"Before": before.reshape(-1),
+                             "After": self.batch_lisi().reshape(-1)})
+        data = data.melt(var_name="Data", value_name="LISI")
+        return sns.histplot(data=data, x="LISI", hue="Data", **kwargs)
 
     def batch_corrected(self):
         """
@@ -939,34 +896,7 @@ class Harmony:
         assert self.harmony is not None, "Call 'run' first"
         corrected = pd.DataFrame(self.harmony.Z_corr.T, columns=self.features)
         corrected["sample_id"] = self.meta.sample_id.values
-        if self._norms is not None:
-            corrected[self.features] = corrected[self.features] * self._norms
         return corrected
-
-    def plot(self,
-             data: str = "original",
-             **kwargs):
-        """
-        Generates a low dimension embedding using CytoPy.flow.variance.overlay_plot showing the
-        different batches overlaid on one another to give a sense of the inter-sample variation.
-
-        Parameters
-        ----------
-        data: str (default="original")
-            If "original" plots uncorrected data, if "corrected" plots batch corrected data
-        kwargs:
-            Additional keyword arguments passed to CytoPy.flow.variance.overlay_plot
-
-        Returns
-        -------
-        Matplotlib.Axes
-        """
-        if data == "corrected":
-            assert self.harmony is not None, "Call 'run' first"
-            return overlay_plot(data=self.batch_corrected(), features=self.features, **kwargs)
-        if data == "original":
-            return overlay_plot(data=self.data, features=self.features, **kwargs)
-        raise ValueError("Argument 'data' should be either 'original' or 'corrected'")
 
     def save(self,
              experiment: Experiment,
@@ -993,23 +923,25 @@ class Harmony:
         subject_mappings = subject_mappings or {}
         for sample_id, df in progress_bar(self.batch_corrected().groupby("sample_id"),
                                           verbose=True,
-                                          total=self.meta.batch_id.nunique()):
+                                          total=self.meta.sample_id.nunique()):
+            if self.transformer is not None:
+                df[self.features] = self.transformer.inverse_scale(data=df, features=self.features)
             experiment.add_dataframes(sample_id=str(prefix) + str(sample_id),
-                                      primary_data=df,
-                                      mappings=[{"channel": x, "marker": ""} for x in df.columns],
+                                      primary_data=df[self.features],
+                                      mappings=[{"channel": x, "marker": x} for x in self.features],
                                       verbose=False,
                                       subject_id=subject_mappings.get(sample_id, None))
 
 
 def create_experiment(project,
-                      data: pd.DataFrame,
+                      features: list,
                       experiment_name: str,
                       data_directory: str) -> Experiment:
-    markers = [{"name": x, "regex": x, "case": 0, "permuations": []}
-               for x in data.columns]
-    channels = [{"name": x, "regex": x, "case": 0, "permuations": []}
-                for x in data.columns]
-    mappings = [(x, x) for x in data.columns]
+    markers = [{"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""}
+               for x in features]
+    channels = [{"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""}
+                for x in features]
+    mappings = [(x, x) for x in features]
     panel_definition = {"markers": markers, "channels": channels, "mappings": mappings}
     return project.add_experiment(experiment_id=experiment_name,
                                   data_directory=data_directory,
