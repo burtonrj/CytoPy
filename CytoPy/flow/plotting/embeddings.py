@@ -1,80 +1,106 @@
 from ..dim_reduction import dimensionality_reduction
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from itertools import cycle
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-import numpy as np
-
-np.random.seed(42)
-TAB = list(sns.color_palette("tab20") +
-           sns.color_palette("tab20b") +
-           sns.color_palette("tab20c"))
 
 
-def colour_palette(cmap: str,
-                   discrete: bool):
-    if cmap == "tab60":
-        return TAB
-    return sns.color_palette(palette=cmap, as_cmap=discrete is True)
+def _scatterplot_defaults(**kwargs):
+    updated_kwargs = {k: v for k, v in kwargs.items()}
+    defaults = {"alpha": 0.75,
+                "linewidth": 0,
+                "s": 10}
+    for k, v in defaults.items():
+        if k not in updated_kwargs.keys():
+            updated_kwargs[k] = v
+    return updated_kwargs
+
+
+def _discrete_scatterplot(data: pd.DataFrame,
+                          x: str,
+                          y: str,
+                          label: str,
+                          cmap: str,
+                          ax: plt.Axes,
+                          **kwargs):
+    colours = cycle(plt.get_cmap(cmap).colors)
+    data[label] = data[label].astype(str)
+    for (l, df), c in zip(data.groupby(label), colours):
+        ax.scatter(df[x].values,
+                   df[y].values,
+                   color=c,
+                   label=l,
+                   **kwargs)
+    return ax
+
+
+def _cont_scatterplot(data: pd.DataFrame,
+                      x: str,
+                      y: str,
+                      label: str,
+                      cmap: str,
+                      ax: plt.Axes,
+                      fig: plt.Figure,
+                      cbar_kwargs: dict,
+                      **kwargs):
+    im = ax.scatter(data[x].values,
+                    data[y].values,
+                    c=data[label].values,
+                    cmap=cmap,
+                    **kwargs)
+    fig.colorbar(im, ax=ax, **cbar_kwargs)
+    return ax
 
 
 def single_cell_plot(data: pd.DataFrame,
-                     features: list,
+                     x: str,
+                     y: str,
                      label: str or None = None,
                      discrete: bool or None = None,
-                     zscore: bool = False,
-                     downsample: int = 1,
-                     downsample_n: int = 1e5,
-                     method: str = "UMAP",
-                     dim_reduction_kwargs: dict or None = None,
-                     ax: plt.Axes or None = None,
-                     figsize: tuple or None = (8, 8),
+                     scale: str or None = None,
+                     figsize: tuple = (8, 8),
                      include_legend: bool = False,
-                     cmap: str = "tab60",
+                     cmap: str = "tab20",
                      legend_kwargs: dict or None = None,
+                     cbar_kwargs: dict or None = None,
                      **kwargs):
+    data = data.copy()
+    kwargs = _scatterplot_defaults(**kwargs)
+    cbar_kwargs = cbar_kwargs or {}
     data = data.dropna(axis=1, how="any")
-    if (method != "PCA" and data.shape[0] > downsample_n and downsample == 1) or downsample == 2:
-        if data.shape[0] > downsample_n:
-            data = data.sample(int(downsample_n))
-    dim_reduction_kwargs = dim_reduction_kwargs or {}
     legend_kwargs = legend_kwargs or {}
-    ax = ax or plt.subplots(figsize=figsize)[1]
-    palette = colour_palette(cmap=cmap, discrete=discrete)
-    data = dimensionality_reduction(data=data,
-                                    features=features,
-                                    method=method,
-                                    n_components=2,
-                                    return_reducer=False,
-                                    return_embeddings_only=False,
-                                    **dim_reduction_kwargs)
+    fig, ax = plt.subplots(figsize=figsize)
     if label is not None:
         if discrete:
-            data[label] = data[label].astype(str)
-        elif zscore:
-            data[label] = StandardScaler().fit_transform(data[label].values.reshape(-1, 1))
-        ax = sns.scatterplot(data=data,
-                             x=f"{method}1",
-                             y=f"{method}2",
-                             hue=label,
-                             palette=palette,
-                             ax=ax,
-                             **kwargs)
-    else:
-        ax = sns.scatterplot(data=data,
-                             x=f"{method}1",
-                             y=f"{method}2",
-                             ax=ax,
-                             **kwargs)
-    ax.set_xlabel(f"{method}1")
-    ax.set_ylabel(f"{method}2")
+            ax = _discrete_scatterplot(data=data,
+                                       x=x,
+                                       y=y,
+                                       label=label,
+                                       cmap=cmap,
+                                       ax=ax,
+                                       **kwargs)
+        else:
+            if scale == "zscore":
+                data[label] = StandardScaler().fit_transform(data[label].values.reshape(-1, 1))
+            elif scale == "minmax":
+                data[label] = MinMaxScaler().fit_transform(data[label].values.reshape(-1, 1))
+            ax = _cont_scatterplot(data=data,
+                                   x=x,
+                                   y=y,
+                                   label=label,
+                                   cmap=cmap,
+                                   ax=ax,
+                                   fig=fig,
+                                   cbar_kwargs=cbar_kwargs,
+                                   **kwargs)
+    ax.set_xlabel(x)
+    ax.set_ylabel(y)
     if discrete:
         if include_legend:
             ax.legend(*ax.get_legend_handles_labels(), **legend_kwargs)
         else:
             ax.legend().remove()
-    else:
-        ax.legend(*ax.get_legend_handles_labels(), **legend_kwargs)
     return ax
 
 
@@ -121,6 +147,7 @@ def meta_cluster_plot(data: pd.DataFrame,
                       cluster_label: str,
                       sample_label: str,
                       colour_label: str or None = None,
+                      zscore: bool = False,
                       discrete: bool = True,
                       cmap: str = "tab20",
                       dim_reduction_method="UMAP",
@@ -146,12 +173,15 @@ def meta_cluster_plot(data: pd.DataFrame,
                               sample_id=sample_label)
     kwargs = _bubbleplot_defaults(**kwargs)
     if colour_label:
-        palette = colour_palette(cmap=cmap, discrete=discrete)
+        if discrete:
+            centroids[colour_label] = data[colour_label].astype(str)
+        elif zscore:
+            centroids[colour_label] = StandardScaler().fit_transform(centroids[colour_label].values.reshape(-1, 1))
         return sns.scatterplot(data=centroids,
                                x=f"{dim_reduction_method}1",
                                y=f"{dim_reduction_method}2",
                                hue=colour_label,
-                               palette=palette,
+                               palette=cmap,
                                ax=ax,
                                size="cluster_size",
                                **kwargs)

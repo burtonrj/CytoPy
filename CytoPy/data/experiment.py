@@ -443,10 +443,6 @@ class Panel(mongoengine.EmbeddedDocument):
         # Check validity of input dictionary
         err = 'Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers, & mappings'
         assert all([k in ['channels', 'markers', 'mappings'] for k in x.keys()]), err
-        err = f'Invalid template dictionary; nested dictionaries for channels and markers must contain keys: name, ' \
-              f'regex case, and permutations'
-        for k in ['channels', 'markers']:
-            assert all([i.keys() == ['name', 'regex', 'case', 'permutations'] for i in x[k]]), err
 
         assert isinstance(x['mappings'], list), 'Invalid template dictionary; mappings must be a list of tuples'
         err = 'Invalid template dictionary; mappings should be of shape (n,2) where n is the number of ' \
@@ -595,9 +591,9 @@ class Experiment(mongoengine.Document):
         -------
         Panel
         """
-        self._check_panel(panel_definition=panel_definition)
         new_panel = Panel()
         if isinstance(panel_definition, str):
+            self._check_panel(panel_definition=panel_definition)
             new_panel.create_from_excel(path=panel_definition)
         elif isinstance(panel_definition, dict):
             new_panel.create_from_dict(panel_definition)
