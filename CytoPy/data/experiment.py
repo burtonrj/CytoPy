@@ -441,16 +441,17 @@ class Panel(mongoengine.EmbeddedDocument):
         """
 
         # Check validity of input dictionary
-        err = 'Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers'
+        err = 'Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers, & mappings'
         assert all([k in ['channels', 'markers', 'mappings'] for k in x.keys()]), err
-        err = f'Invalid template dictionary; nested dictionaries must contain keys: name, regex case, ' \
-              f'and permutations'
+        err = f'Invalid template dictionary; nested dictionaries for channels and markers must contain keys: name, ' \
+              f'regex case, and permutations'
         for k in ['channels', 'markers']:
             assert all([i.keys() == ['name', 'regex', 'case', 'permutations'] for i in x[k]]), err
 
-        assert type(x['mappings']) == list, 'Invalid template dictionary; mappings must be a list of tuples'
-        err = 'Invalid template dictionary; mappings must be a list of tuples'
-        assert all([type(k) != tuple for k in x['mappings']]), err
+        assert isinstance(x['mappings'], list), 'Invalid template dictionary; mappings must be a list of tuples'
+        err = 'Invalid template dictionary; mappings should be of shape (n,2) where n is the number of ' \
+              'channel/marker pairs'
+        assert all([len(i) == 2 for i in x['mappings']]), err
         self.markers = [NormalisedName(standard=k['name'],
                                        regex_str=k['regex'],
                                        case_sensitive=k['case'],
@@ -580,7 +581,7 @@ class Experiment(mongoengine.Document):
         assert os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"], err
 
     def generate_panel(self,
-                       panel_definition: str):
+                       panel_definition: str or dict):
         """
         Associate a panel to this Experiment, either by fetching an existing panel using the
         given panel name or by generating a new panel using the panel definition provided (path to a valid template).
@@ -596,7 +597,12 @@ class Experiment(mongoengine.Document):
         """
         self._check_panel(panel_definition=panel_definition)
         new_panel = Panel()
-        new_panel.create_from_excel(path=panel_definition)
+        if isinstance(panel_definition, str):
+            new_panel.create_from_excel(path=panel_definition)
+        elif isinstance(panel_definition, dict):
+            new_panel.create_from_dict(panel_definition)
+        else:
+            raise ValueError("panel_definition should be type string or dict")
         return new_panel
 
     def update_data_directory(self,
@@ -996,6 +1002,16 @@ class Experiment(mongoengine.Document):
         ax = ax or plt.subplots(figsize=(6, 6))[1]
         ax.bar(ctrl_counts.keys(), ctrl_counts.values())
         return ax
+
+    def population_statistics(self,
+                              populations: list or None = None):
+        data = list()
+        for f in self.fcs_files:
+            for p in populations or f.list_populations():
+                df = pd.DataFrame({k: [v] for k, v in f.population_stats(population=p).items()})
+                df["sample_id"] = f.primary_id
+                data.append(df)
+        return pd.concat(data).reset_index(drop=True)
 
     def delete(self,
                *args,

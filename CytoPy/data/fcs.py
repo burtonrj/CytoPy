@@ -404,7 +404,9 @@ class FileGroup(mongoengine.Document):
                                                                    transform=transform,
                                                                    sample_size=sample_size,
                                                                    **transform_kwargs)
-        x, y = training[[x for x in training.columns if x != "label"]], training["label"].values
+        features = [x for x in training.columns if x != "label"]
+        features = [x for x in features if x in ctrl.columns]
+        x, y = training[features], training["label"].values
         if evaluate_classifier:
             feedback("Evaluating classifier with permutation testing...")
             skf = StratifiedKFold(n_splits=kfolds, random_state=42, shuffle=True)
@@ -420,7 +422,7 @@ class FileGroup(mongoengine.Document):
             feedback(f"...p-value (comparison of original score to permuations): {round(pvalue, 4)}")
         feedback("Predicting population for control data...")
         classifier.fit(x, y)
-        ctrl_labels = classifier.predict(ctrl)
+        ctrl_labels = classifier.predict(ctrl[features])
         training_prop_of_root = self.get_population(population).n / self.get_population("root").n
         ctrl_prop_of_root = np.sum(ctrl_labels) / ctrl.shape[0]
         feedback(f"{population}: {round(training_prop_of_root, 3)}% of root in primary data")
@@ -881,7 +883,7 @@ def _load_data_for_ctrl_estimate(filegroup: FileGroup,
     training = _sampling_for_class_imbalance(data=training, sample_size=sample_size)
     training = apply_transform(data=training, features=features, method=transform, **transform_kwargs)
     ctrl, transformer = apply_transform(data=ctrl,
-                                        features=features,
+                                        features=[x for x in features if x in ctrl.columns],
                                         method=transform,
                                         return_transformer=True,
                                         **transform_kwargs)

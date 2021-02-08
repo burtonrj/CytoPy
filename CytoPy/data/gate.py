@@ -1324,6 +1324,7 @@ class EllipseGate(PolygonGate):
         method = values.get("method", None)
         method_kwargs = values.get("method_kwargs", {})
         self.conf = method_kwargs.pop("conf", 0.95)
+        self.method_kwargs = method_kwargs
         assert method_kwargs.get("covariance_type", "full"), "EllipseGate only supports covariance_type of 'full'"
         valid = ["manual", "GaussianMixture", "BayesianGaussianMixture"]
         assert method in valid, f"Elliptical gating method should be one of {valid}"

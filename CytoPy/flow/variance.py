@@ -44,7 +44,6 @@ from scipy.stats import entropy as kl
 from scipy.cluster import hierarchy
 from scipy.spatial import distance
 from collections import defaultdict
-from multiprocessing import Pool, cpu_count
 from KDEpy import FFTKDE
 from warnings import warn
 from itertools import cycle
@@ -884,8 +883,7 @@ class Harmony:
 
     def __init__(self,
                  data: pd.DataFrame,
-                 features: list or None = None,
-                 n_jobs: int = -1):
+                 features: list or None = None):
         """
         Parameters
         ----------
@@ -897,9 +895,6 @@ class Harmony:
         self.meta = data[["sample_id"]]
         self.harmony = None
         self._norms = None
-        self.n_jobs = n_jobs
-        if self.n_jobs <= 0:
-            self.n_jobs = cpu_count()
 
     def normalisation(self):
         """
@@ -910,7 +905,8 @@ class Harmony:
         None
         """
         normaliser = transform_module.Normalise()
-        self.data, self._norms = normaliser(self.data, self.features)
+        self.data = normaliser(self.data, self.features)
+        self._norms = normaliser._norms
 
     def run(self, **kwargs):
         """
@@ -1003,3 +999,18 @@ class Harmony:
                                       mappings=[{"channel": x, "marker": ""} for x in df.columns],
                                       verbose=False,
                                       subject_id=subject_mappings.get(sample_id, None))
+
+
+def create_experiment(project,
+                      data: pd.DataFrame,
+                      experiment_name: str,
+                      data_directory: str) -> Experiment:
+    markers = [{"name": x, "regex": x, "case": 0, "permuations": []}
+               for x in data.columns]
+    channels = [{"name": x, "regex": x, "case": 0, "permuations": []}
+                for x in data.columns]
+    mappings = [(x, x) for x in data.columns]
+    panel_definition = {"markers": markers, "channels": channels, "mappings": mappings}
+    return project.add_experiment(experiment_id=experiment_name,
+                                  data_directory=data_directory,
+                                  panel_definition=panel_definition)
