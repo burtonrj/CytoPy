@@ -36,7 +36,7 @@ from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
 from .population import Population, merge_multiple_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn, uniform_downsampling
 from ..flow.dim_reduction import dimensionality_reduction
-from ..flow.supervised import build_sklearn_model
+from ..flow.cell_classifier import build_sklearn_model
 from sklearn.cluster import *
 from sklearn.mixture import *
 from shapely.geometry import Polygon as ShapelyPoly
