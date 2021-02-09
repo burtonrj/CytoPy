@@ -925,7 +925,7 @@ class Harmony:
                                           verbose=True,
                                           total=self.meta.sample_id.nunique()):
             if self.transformer is not None:
-                df[self.features] = self.transformer.inverse_scale(data=df, features=self.features)
+                df = self.transformer.inverse_scale(data=df, features=self.features)
             experiment.add_dataframes(sample_id=str(prefix) + str(sample_id),
                                       primary_data=df[self.features],
                                       mappings=[{"channel": x, "marker": x} for x in self.features],
