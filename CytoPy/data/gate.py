@@ -1323,11 +1323,10 @@ class EllipseGate(PolygonGate):
     def __init__(self, *args, **values):
         method = values.get("method", None)
         method_kwargs = values.get("method_kwargs", {})
-        self.conf = method_kwargs.pop("conf", 0.95)
-        self.method_kwargs = method_kwargs
         assert method_kwargs.get("covariance_type", "full"), "EllipseGate only supports covariance_type of 'full'"
         valid = ["manual", "GaussianMixture", "BayesianGaussianMixture"]
         assert method in valid, f"Elliptical gating method should be one of {valid}"
+        self.conf = method_kwargs.get("conf", 0.95)
         super().__init__(*args, **values)
 
     def _manual(self) -> ShapelyPoly:
@@ -1382,7 +1381,8 @@ class EllipseGate(PolygonGate):
         list
             List of Shapely polygon's
         """
-        self.model = globals()[self.method](**self.method_kwargs)
+        params = {k: v for k, v in self.method_kwargs.items() if k != "conf"}
+        self.model = globals()[self.method](**params)
         if not self.method_kwargs.get("probabilistic_ellipse", True):
             return super()._fit(data=data)
         self._xy_in_dataframe(data=data)
