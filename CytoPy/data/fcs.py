@@ -30,10 +30,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from ..feedback import vprint
 from ..flow.tree import construct_tree
-from CytoPy.flow.transform import apply_transform, apply_transform_map
-from ..flow.neighbours import knn, calculate_optimal_neighbours
-from ..flow.sampling import uniform_downsampling, density_dependent_downsampling
-from ..flow.cell_classifier import build_sklearn_model
+from ..flow.transform import apply_transform, apply_transform_map
+from ..flow.sampling import uniform_downsampling
+from ..flow.build_models import build_sklearn_model
 from .geometry import create_convex_hull
 from .population import Population, merge_populations, PolygonGeom
 from sklearn.model_selection import StratifiedKFold, permutation_test_score

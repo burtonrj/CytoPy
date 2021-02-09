@@ -1,3 +1,4 @@
+from ..build_models import build_keras_model
 from .cell_classifier import CellClassifier, check_data_init, check_model_init
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
@@ -6,7 +7,6 @@ from matplotlib.pyplot import Axes
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-import utils
 
 
 class KerasCellClassifier(CellClassifier):
@@ -24,12 +24,12 @@ class KerasCellClassifier(CellClassifier):
                     layers: list,
                     layer_params: list,
                     **compile_kwargs):
-        self._model = utils.build_keras_model(layers=layers,
-                                              layer_params=layer_params,
-                                              optimizer=self.optimizer,
-                                              loss=self.loss,
-                                              metrics=self.metrics,
-                                              **compile_kwargs)
+        self._model = build_keras_model(layers=layers,
+                                        layer_params=layer_params,
+                                        optimizer=self.optimizer,
+                                        loss=self.loss,
+                                        metrics=self.metrics,
+                                        **compile_kwargs)
 
     @check_model_init
     def _predict(self,
