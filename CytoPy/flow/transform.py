@@ -128,6 +128,7 @@ class Transformer:
                                 index=original_index)
         else:
             raise TransformError("Invalid transform function, missing argument 'channel_indices' or 'channels'")
+        data[features] = data[features].astype(float)
         return data
 
     def inverse_scale(self,
@@ -170,6 +171,7 @@ class Transformer:
                                 index=original_index)
         else:
             raise TransformError("Invalid inverse transform function, missing argument 'channel_indices' or 'channels'")
+        data[features] = data[features].astype(float)
         return data
 
 
