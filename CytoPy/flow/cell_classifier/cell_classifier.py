@@ -1,19 +1,15 @@
-from ...feedback import vprint, progress_bar
+from ...feedback import progress_bar
 from ...data.experiment import Experiment, FileGroup
 from ...data.population import Population
 from ...flow.transform import apply_transform, Scaler
 from ...flow import sampling
+from . import utils
+from sklearn.model_selection import train_test_split, KFold, BaseCrossValidator
 from imblearn.over_sampling import RandomOverSampler
-from sklearn.model_selection import train_test_split, KFold, BaseCrossValidator, permutation_test_score
-from tensorflow.keras.callbacks import History
-from tensorflow.keras.utils import to_categorical
 from inspect import signature
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-import inspect
 import logging
-import utils
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"

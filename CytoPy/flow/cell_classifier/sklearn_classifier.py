@@ -1,5 +1,7 @@
 from ...data.experiment import Experiment
+from ..build_models import build_sklearn_model
 from .cell_classifier import CellClassifier, check_data_init, check_model_init
+from . import utils
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, learning_curve
 from matplotlib.pyplot import Axes
 from inspect import signature
@@ -8,7 +10,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import pickle
-import utils
 
 
 def _valid_multi_label(klass: str):
@@ -58,7 +59,7 @@ class SklearnCellClassifier(CellClassifier):
         None
         """
         params = self.params or {}
-        self._model = utils.build_sklearn_model(klass=self.klass, **params)
+        self._model = build_sklearn_model(klass=self.klass, **params)
         if self.class_weights:
             err = "Class weights defined yet the specified model does not support this"
             assert "sample_weight" in signature(self.model.fit).parameters.keys(), err
