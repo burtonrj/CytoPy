@@ -1,30 +1,3 @@
-#!/usr/bin.env/python
-# -*- coding: utf-8 -*-
-"""
-This module houses many of the utility functions for supervised
-classification.
-
-Copyright 2020 Ross Burton
-
-Permission is hereby granted, free of charge, to any person
-obtaining a copy of this software and associated documentation
-files (the "Software"), to deal in the Software without restriction,
-including without limitation the rights to use, copy, modify,
-merge, publish, distribute, sublicense, and/or sell copies of the
-Software, and to permit persons to whom the Software is furnished
-to do so, subject to the following conditions:
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-"""
-
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn import metrics as skmetrics
 from xgboost import XGBClassifier
@@ -39,15 +12,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import inspect
-
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, CytoPy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "1.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 
 
 def build_sklearn_model(klass: str,
@@ -70,6 +34,7 @@ def build_sklearn_model(klass: str,
 
 
 def build_keras_model(layers: list,
+                      layer_params: list,
                       optimizer: str,
                       loss: str,
                       metrics: list,
@@ -92,14 +57,13 @@ def build_keras_model(layers: list,
     -------
     object
     """
-    required_imports = [x.klass for x in layers]
-    for i in required_imports:
-        assert i in globals().keys(), f"Module {i} not found, have you imported it into " \
-                                      f"the working environment?"
+    for layer_klass in layers:
+        e = f"{layer_klass} is not a valid Keras Layer or is not currently supported by CytoPy"
+        assert layer_klass in globals().keys(), e
     model = Sequential()
-    for layer in layers:
-        keras_klass = globals()[layer.klass](**layer.kwargs)
-        model.add(keras_klass)
+    for layer_klass, lkwargs in zip(layers, layer_params):
+        layer_klass = globals()[layer_klass](**lkwargs)
+        model.add(layer_klass)
     model.compile(optimizer=optimizer,
                   loss=loss,
                   metrics=metrics,
@@ -240,7 +204,7 @@ def check_downstream_populations(ref,
                                  root_population: str,
                                  population_labels: list) -> None:
     """
-    Check that in the ordered list of population labels, all populaitons are downstream 
+    Check that in the ordered list of population labels, all populaitons are downstream
     of the given 'root' population.
 
     Parameters
@@ -263,7 +227,6 @@ def check_downstream_populations(ref,
 def multilabel(ref,
                root_population: str,
                population_labels: list,
-               transform: str,
                features: list) -> (pd.DataFrame, pd.DataFrame):
     """
     Load the root population DataFrame from the reference FileGroup (assumed to be the first
@@ -274,7 +237,6 @@ def multilabel(ref,
     ----------
     ref: FileGroup
     population_labels: list
-    transform: str
     features: list
 
     Returns
@@ -283,7 +245,7 @@ def multilabel(ref,
         Root population flourescent intensity values, population affiliations (dummy matrix)
     """
     root = ref.load_population_df(population=root_population,
-                                  transform=transform)
+                                  transform=None)
     for pop in population_labels:
         root[pop] = 0
         root.loc[ref.get_population(pop).index, pop] = 1
@@ -293,7 +255,6 @@ def multilabel(ref,
 def singlelabel(ref,
                 root_population: str,
                 population_labels: list,
-                transform: str,
                 features: list) -> (pd.DataFrame, np.ndarray):
     """
     Load the root population DataFrame from the reference FileGroup (assumed to be the first
@@ -315,7 +276,7 @@ def singlelabel(ref,
         Root population flourescent intensity values, labels
     """
     root = ref.load_population_df(population=root_population,
-                                  transform=transform)
+                                  transform=None)
     root["label"] = 0
     for i, pop in enumerate(population_labels):
         pop_idx = ref.get_population(population_name=pop).index
