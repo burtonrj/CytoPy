@@ -63,6 +63,7 @@ class SklearnCellClassifier(CellClassifier):
         if self.class_weights:
             err = "Class weights defined yet the specified model does not support this"
             assert "sample_weight" in signature(self.model.fit).parameters.keys(), err
+        return self
 
     @check_model_init
     def _predict(self,
