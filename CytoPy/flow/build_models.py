@@ -32,6 +32,7 @@ def build_keras_model(layers: list,
                       optimizer: str,
                       loss: str,
                       metrics: list,
+                      input_shape: tuple,
                       **kwargs):
     """
     Create and compile a Keras Sequential model using the given KerasClassifier object
@@ -55,7 +56,9 @@ def build_keras_model(layers: list,
         e = f"{layer_klass} is not a valid Keras Layer or is not currently supported by CytoPy"
         assert layer_klass in globals().keys(), e
     model = Sequential()
-    for layer_klass, lkwargs in zip(layers, layer_params):
+    input_layer = globals()[layers[0]](shape=input_shape, **layer_params[0])
+    model.add(input_layer)
+    for layer_klass, lkwargs in zip(layers[1:], layer_params[1:]):
         layer_klass = globals()[layer_klass](**lkwargs)
         model.add(layer_klass)
     model.compile(optimizer=optimizer,

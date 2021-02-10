@@ -36,9 +36,10 @@ from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
 from .population import Population, merge_multiple_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn, uniform_downsampling
 from ..flow.dim_reduction import dimensionality_reduction
-from ..flow.cell_classifier import build_sklearn_model
+from ..flow.build_models import build_sklearn_model
 from sklearn.cluster import *
 from sklearn.mixture import *
+from hdbscan import HDBSCAN
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
 from warnings import warn
@@ -743,7 +744,7 @@ class ThresholdGate(Gate):
         List
         """
         x_threshold = self.method_kwargs.get("x_threshold", None)
-        y_threshold = self.method_kwargs.get("x_threshold", None)
+        y_threshold = self.method_kwargs.get("y_threshold", None)
         assert x_threshold is not None, "Manual threshold gating requires the keyword argument 'x_threshold'"
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}

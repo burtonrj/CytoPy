@@ -2,6 +2,7 @@ from ..build_models import build_keras_model
 from .cell_classifier import CellClassifier, check_data_init, check_model_init
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.callbacks import History
 from matplotlib.pyplot import Axes
 import matplotlib.pyplot as plt
@@ -20,15 +21,21 @@ class KerasCellClassifier(CellClassifier):
         self.metrics = metrics
         super().__init__(**kwargs)
 
+    def inject_model(self, model: Sequential):
+        self._model = model
+
     def build_model(self,
                     layers: list,
                     layer_params: list,
+                    input_shape: tuple or None = None,
                     **compile_kwargs):
+        input_shape = input_shape or (len(self.features),)
         self._model = build_keras_model(layers=layers,
                                         layer_params=layer_params,
                                         optimizer=self.optimizer,
                                         loss=self.loss,
                                         metrics=self.metrics,
+                                        input_shape=input_shape,
                                         **compile_kwargs)
 
     @check_model_init
@@ -56,7 +63,7 @@ class KerasCellClassifier(CellClassifier):
         if self.multi_label:
             y_pred = list(map(lambda yi: [int(i > threshold) for i in yi], y_score))
         else:
-            y_pred = self.model.predict_classes(x)
+            y_pred = np.argmax(self.model.predict(x), axis=-1)
         return y_pred, y_score
 
     def _fit(self,
