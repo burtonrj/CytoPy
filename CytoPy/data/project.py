@@ -156,17 +156,18 @@ class Project(mongoengine.Document):
         self.save()
         return new_subject
 
-    def list_subjects(self) -> Generator:
+    def list_subjects(self) -> list:
         """
         Generate a list of subject ID for subjects associated to this project
 
         Returns
         --------
-        Generator
-            List of subject IDs
+        List of subject IDs
         """
-        for s in self.subjects:
-            yield s.subject_id
+        return [s.subject_id for s in self.subjects]
+
+    def list_experiments(self):
+        return [e.experiment_id for e in self.experiments]
 
     def get_subject(self,
                     subject_id: str) -> Subject:

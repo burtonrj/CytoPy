@@ -6,9 +6,6 @@ import numpy as np
 import inspect
 
 
-
-
-
 def calc_metrics(metrics: list,
                  y_true: np.array,
                  y_pred: np.array or None = None,

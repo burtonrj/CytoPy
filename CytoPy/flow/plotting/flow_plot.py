@@ -859,6 +859,7 @@ class FlowPlot:
                 self._ax.plot(d[simplex, 0],
                               d[simplex, 1],
                               '-',
+                              label=label,
                               **kwargs)
         else:
             if y is None:

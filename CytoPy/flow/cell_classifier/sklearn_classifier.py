@@ -287,7 +287,7 @@ class SklearnCellClassifier(CellClassifier):
         return utils.confusion_matrix_plots(classifier=self.model,
                                             x=x,
                                             y=y,
-                                            class_labels=self.target_populations,
+                                            class_labels=["Unclassified"] + self.target_populations,
                                             cmap=cmap,
                                             figsize=figsize,
                                             **kwargs)
