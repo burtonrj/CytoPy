@@ -40,13 +40,12 @@ from ...data.population import Population
 from ...data.subject import Subject
 from ...feedback import vprint, progress_bar
 from ..dim_reduction import dimensionality_reduction
-from ..explore import scatterplot
+from ..plotting import single_cell_plot, cluster_bubble_plot
+from ..transform import Scaler
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from sklearn.cluster import *
 from sklearn.metrics import calinski_harabasz_score, silhouette_score, davies_bouldin_score
-from sklearn.preprocessing import RobustScaler
-from scipy.stats.mstats import gmean
 from warnings import warn
 import seaborn as sns
 import pandas as pd
@@ -209,6 +208,8 @@ def _assign_metalabels(data: pd.DataFrame,
 
 def _summarise_clusters(data: pd.DataFrame,
                         features: list,
+                        scale: str or None = None,
+                        scale_kwargs: dict or None = None,
                         summary_method: str = "median"):
     """
 
@@ -222,14 +223,16 @@ def _summarise_clusters(data: pd.DataFrame,
     -------
 
     """
-    scale = RobustScaler()
     if summary_method == "median":
         data = data.groupby(["sample_id", "cluster_label"])[features].median().reset_index()
     elif summary_method == "mean":
         data = data.groupby(["sample_id", "cluster_label"])[features].mean().reset_index()
     else:
         raise ValueError("summary_method should be 'mean' or 'median'")
-    data[features] = scale.fit_transform(data[features].values)
+    scale_kwargs = scale_kwargs or {}
+    if scale is not None:
+        scaler = Scaler(method=scale, **scale_kwargs)
+        data = scaler(data=data, features=features)
     return data
 
 
@@ -239,6 +242,8 @@ def sklearn_metaclustering(data: pd.DataFrame,
                            summary_method: str = "median",
                            verbose: bool = True,
                            print_performance_metrics: bool = True,
+                           scale_method: str or None = None,
+                           scale_kwargs: dict or None = None,
                            **kwargs):
     """
     Meta-clustering with a Scikit-learn clustering/mixture model algorithm. This function
@@ -275,7 +280,7 @@ def sklearn_metaclustering(data: pd.DataFrame,
     model = globals()[method](**kwargs)
     vprint_(f"------ {method} meta-clustering ------")
     vprint_("...summarising clusters")
-    metadata = _summarise_clusters(data, features, summary_method)
+    metadata = _summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
     vprint_("...clustering the clusters")
     metadata["meta_label"] = model.fit_predict(metadata[features].values)
     if print_performance_metrics:
@@ -290,6 +295,8 @@ def phenograph_metaclustering(data: pd.DataFrame,
                               features: list,
                               verbose: bool = True,
                               summary_method: str = "median",
+                              scale_method: str or None = None,
+                              scale_kwargs: dict or None = None,
                               print_performance_metrics: bool = True,
                               **kwargs):
     """
@@ -320,7 +327,7 @@ def phenograph_metaclustering(data: pd.DataFrame,
     """
     vprint_ = vprint(verbose)
     vprint_("----- Phenograph meta-clustering ------")
-    metadata = _summarise_clusters(data, features, summary_method)
+    metadata = _summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
     vprint_("...summarising clusters")
     vprint_("...clustering the clusters")
     communities, graph, q = phenograph.cluster(metadata[features].values, **kwargs)
@@ -338,6 +345,8 @@ def consensus_metacluster(data: pd.DataFrame,
                           cluster_class: object,
                           verbose: bool = True,
                           summary_method: str = "median",
+                          scale_method: str or None = None,
+                          scale_kwargs: dict or None = None,
                           smallest_cluster_n: int = 5,
                           largest_cluster_n: int = 15,
                           n_resamples: int = 10,
@@ -386,7 +395,7 @@ def consensus_metacluster(data: pd.DataFrame,
         associations
     """
     vprint_ = vprint(verbose)
-    metadata = _summarise_clusters(data, features, summary_method)
+    metadata = _summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
     assert (metadata.shape[0] * resample_proportion) > largest_cluster_n, \
         f"Maximum number of meta clusters (largest_cluster_n) is currently set to {largest_cluster_n} but there are " \
         f"only {metadata.shape[0] * resample_proportion} clusters to cluster in each sample. Either decrease " \
@@ -645,7 +654,6 @@ class Clustering:
         kwargs:
             Additional keyword arguments passed to the given clustering function
 
-
         Returns
         -------
         None
@@ -666,6 +674,8 @@ class Clustering:
     def meta_cluster(self,
                      func: callable,
                      summary_method: str = "median",
+                     scale_method: str or None = None,
+                     scale_kwargs: dict or None = None,
                      **kwargs):
         """
         Perform meta-clustering using one of the meta-clustering functions from
@@ -702,10 +712,14 @@ class Clustering:
                                                    features=features,
                                                    verbose=self.verbose,
                                                    summary_method=summary_method,
+                                                   scale_method=scale_method,
+                                                   scale_kwargs=scale_kwargs,
                                                    **kwargs)
 
-    def rename_clusters(self):
-        pass
+    def rename_clusters(self,
+                        sample_id: str,
+                        mappings: dict):
+        self.data[self.data.sample_id == sample_id]["meta_label"].replace(mappings, inplace=True)
 
     def rename_meta_clusters(self,
                              mappings: dict):
@@ -723,89 +737,6 @@ class Clustering:
         None
         """
         self.data["meta_label"].replace(mappings, inplace=True)
-
-    def _cluster_counts(self):
-        """
-        Updates the data attribute with an additional column named 'cluster_size',
-        which corresponds to the proportion of events in each cluster relative to
-        the total events from the original FileGroup
-
-        Returns
-        -------
-        None
-        """
-        updated_data = list()
-        for _id, df in self.data.groupby("sample_id"):
-            cluster_counts = df.cluster_label.value_counts().to_dict()
-            df["cluster_size"] = df["cluster_label"].apply(lambda x: cluster_counts.get(x))
-            df["cluster_size"] = df["cluster_size"] / df.shape[0]
-            updated_data.append(df)
-        self.data = pd.concat(updated_data).reset_index(drop=True)
-
-    def scatterplot_sample(self,
-                           sample_id: str,
-                           method: str = "UMAP",
-                           dim_reduction_kwargs: dict or None = None,
-                           sample: int or None = None,
-                           **kwargs):
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
-        if sample:
-            data = self.data[self.data.sample_id == sample_id].sample(sample)
-        else:
-            data = self.data
-        data = dimensionality_reduction(data=data,
-                                        features=self.features,
-                                        method=method,
-                                        n_components=2,
-                                        **dim_reduction_kwargs)
-        kwargs = _scatterplot_defaults(**kwargs)
-        return scatterplot(data=data,
-                           method=method,
-                           label="cluster_label",
-                           discrete=True,
-                           **kwargs)
-
-    def _assign_labels(self, data: pd.DataFrame, label: str):
-        lookup = self.data.groupby(["sample_id", "cluster_label"])[label].unique().apply(_assert_unique_label)
-        data[label] = data[["sample_id", "cluster_label"]].apply(lambda x: lookup.loc[x[0], x[1]], axis=1)
-
-    def cluster_size(self,
-                     data: pd.DataFrame):
-        lookup = self._cluster_size_lookup()
-        cluster_n = data[["sample_id", "cluster_label"]].apply(lambda x: lookup.loc[x["sample_id"], x["cluster_label"]],
-                                                            axis=1)
-        lookup = self._sample_size_lookup()
-        sample_n = data["sample_id"].apply(lambda x: lookup.loc[x])
-        data["sample_n"], data["cluster_n"] = sample_n, cluster_n
-        data["cluster_size"] = cluster_n / sample_n * 100
-
-    def _cluster_size_lookup(self):
-        return self.data.groupby("sample_id")["cluster_label"].value_counts()
-
-    def _sample_size_lookup(self):
-        return self.data.sample_id.value_counts()
-
-    def scatterplot_meta(self,
-                         method: str = "UMAP",
-                         label: str = "sample_id",
-                         dim_reduction_kwargs: dict or None = None,
-                         **kwargs):
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
-        data = self.data.groupby(["sample_id", "meta_label"])[self.features].median().reset_index()
-        data = dimensionality_reduction(data=data,
-                                        features=self.features,
-                                        method=method,
-                                        n_components=2,
-                                        **dim_reduction_kwargs)
-        self._assign_labels(data=data, label=label)
-        self.cluster_size(data)
-        kwargs = _scatterplot_defaults(**kwargs)
-        return scatterplot(data=data,
-                           method=method,
-                           label=label,
-                           discrete=True,
-                           size="cluster_size",
-                           **kwargs)
 
     def load_meta_variable(self,
                            variable: str,
@@ -829,6 +760,45 @@ class Clustering:
                 warn(f'{_id} is missing meta-variable {variable}')
                 self.data.loc[self.data.subject_id == _id, variable] = None
 
+    def plot_sample_clusters(self,
+                             sample_id: str,
+                             method: str = "UMAP",
+                             dim_reduction_kwargs: dict or None = None,
+                             label: str = "cluster_label",
+                             discrete: bool = True,
+                             **kwargs):
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        df = self.data[self.data.sample_id == sample_id].copy()
+        df = dimensionality_reduction(data=df,
+                                      features=self.features,
+                                      n_components=2,
+                                      return_reducer=False,
+                                      return_embeddings_only=False,
+                                      method=method,
+                                      **dim_reduction_kwargs)
+        return single_cell_plot(data=df,
+                                x=f"{method}1",
+                                y=f"{method}2",
+                                label=label,
+                                discrete=discrete,
+                                **kwargs)
+
+    def plot_meta_clusters(self,
+                           colour_label: str = "meta_label",
+                           discrete: bool = True,
+                           method: str = "UMAP",
+                           dim_reduction_kwargs: dict or None = None,
+                           **kwargs):
+        return cluster_bubble_plot(data=self.data,
+                                   features=self.features,
+                                   cluster_label="cluster_label",
+                                   sample_label="sample_id",
+                                   colour_label=colour_label,
+                                   discrete=discrete,
+                                   dim_reduction_method=method,
+                                   dim_reduction_kwargs=dim_reduction_kwargs,
+                                   **kwargs)
+
     def clustered_heatmap(self,
                           features: list,
                           sample_id: str or None = None,
@@ -836,28 +806,25 @@ class Clustering:
         if sample_id is None:
             data = self.data.groupby(["meta_label"])[self.features].median()
         else:
-            data = self.data[self.data.sample_id == sample_id].set_index("cluster_label")
+            data = self.data[self.data.sample_id == sample_id].groupby(["cluster_label"]).median()
         data[features] = data[features].apply(pd.to_numeric)
-        kwargs = kwargs or {"col_cluster": True,
-                            "figsize": (10, 15),
-                            "standard_scale": 1,
-                            "cmap": "viridis"}
+        kwargs = kwargs or {}
+        kwargs["col_cluster"] = kwargs.get("col_cluster", True)
+        kwargs["figsize"] = kwargs.get("figsize", (10, 15))
+        kwargs["standard_scale"] = kwargs.get("standard_scale", 1)
+        kwargs["cmap"] = kwargs.get("cmap", "viridis")
         return sns.clustermap(data[features], **kwargs)
 
-    def save(self, verbose: bool = True, population_name: str = "meta"):
-        if population_name == "meta":
+    def save(self, verbose: bool = True, population_var: str = "meta_label"):
+        if population_var == "meta_label":
             assert not self.data.meta_label.isnull().all(), "Meta clustering has not been performed"
         for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
             fg = self.experiment.get_sample(sample_id)
             sample_data = self.data[self.data.sample_id == sample_id]
-            for cluster_label, cluster in sample_data.groupby("cluster_label"):
-                if population_name == "meta":
-                    meta_label = cluster.meta_label.unique()
-                    assert len(meta_label) == 1, "Meta labels should be unique within a single cluster"
-                    meta_label = meta_label[0]
-                    population_name = str(meta_label)
-                else:
-                    population_name = str(cluster_label)
+            for cluster_label, cluster in sample_data.groupby(population_var):
+                population_name = cluster_label
+                if self.population_prefix is not None:
+                    population_name = f"{self.population_prefix}_{cluster_label}"
                 pop = Population(population_name=population_name,
                                  n=cluster.shape[0],
                                  parent=self.root_population,

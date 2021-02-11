@@ -1054,6 +1054,7 @@ def load_subject_id(pop_data: pd.DataFrame,
 def load_population_data_from_experiment(experiment: Experiment,
                                          population: str,
                                          transform: str = "logicle",
+                                         transform_kwargs: dict or None = None,
                                          sample_ids: list or None = None,
                                          verbose: bool = True,
                                          additional_columns: list or None = None):
@@ -1077,6 +1078,7 @@ def load_population_data_from_experiment(experiment: Experiment,
     -------
     Pandas.DataFrame
     """
+    transform_kwargs = transform_kwargs or {}
     additional_columns = additional_columns or list()
     sample_ids = sample_ids or list(experiment.list_samples())
     population_data = list()
@@ -1084,6 +1086,7 @@ def load_population_data_from_experiment(experiment: Experiment,
         fg = experiment.get_sample(sample_id=_id)
         pop_data = fg.load_population_df(population=population,
                                          transform=transform,
+                                         transform_kwargs=transform_kwargs,
                                          label_downstream_affiliations=True)
 
         pop_data["sample_id"] = _id
