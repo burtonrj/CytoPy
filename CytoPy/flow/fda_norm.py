@@ -1,3 +1,4 @@
+from .transform import Scaler
 from skfda.preprocessing.registration import landmark_registration_warping, landmark_shift_deltas
 from skfda.representation.grid import FDataGrid
 from sklearn.cluster import KMeans
