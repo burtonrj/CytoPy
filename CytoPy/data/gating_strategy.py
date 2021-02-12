@@ -339,7 +339,6 @@ class GatingStrategy(mongoengine.Document):
                        population: str,
                        gate_name: str):
         if gate_name not in self.normalisation.keys():
-            warn(f"No normalisation criteria defined for {gate_name}")
             return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)[0]
         gate = self.get_gate(gate_name)
         if self.normalisation.get(gate_name).get("reference") == str(self.filegroup.id):
@@ -363,12 +362,17 @@ class GatingStrategy(mongoengine.Document):
                                                      return_transformer=True,
                                                      features=[d],
                                                      **tkwargs)
-            lr = LandmarkReg(target=target_df,
-                             ref=ref_df,
-                             var=d,
-                             **kwargs)
-            target_df[d] = lr().shift_data(target_df[d].values)
-            target_df = transformer.inverse_scale(data=target_df, features=[d])
+            try:
+                lr = LandmarkReg(target=target_df,
+                                 ref=ref_df,
+                                 var=d,
+                                 **kwargs)
+                target_df[d] = lr().shift_data(target_df[d].values)
+            except ValueError as e:
+                warn(f"Failed to normalise data in {d} dimension, continuing without normalisation; "
+                     f"{str(e)}")
+            if transformer is not None:
+                target_df = transformer.inverse_scale(data=target_df, features=[d])
             data[d] = target_df[d]
         return data
 
