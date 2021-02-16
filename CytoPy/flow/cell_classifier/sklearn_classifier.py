@@ -49,6 +49,9 @@ class SklearnCellClassifier(CellClassifier):
         self.klass = klass
         self.params = params
 
+    def inject_model(self, model: object):
+        self._model = model
+
     def build_model(self):
         """
         Call prior to fit or predict. Initiates model and associates

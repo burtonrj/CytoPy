@@ -45,6 +45,7 @@ from scipy.stats import entropy as kl
 from scipy.cluster import hierarchy
 from scipy.spatial import distance
 from collections import defaultdict
+from pingouin import compute_effsize, wilcoxon
 from KDEpy import FFTKDE
 from warnings import warn
 import matplotlib.pyplot as plt
@@ -807,7 +808,7 @@ class Harmony:
                                                       **sample_kwargs)
         self.data = self.data.dropna(axis=1, how="any")
         self.features = [x for x in features if x in self.data.columns]
-        self.meta = self.data[["sample_id"]]
+        self.meta = self.data[["sample_id"]].copy()
         self.harmony = None
         self._norms = None
         self._logging_level = logging_level
@@ -854,34 +855,64 @@ class Harmony:
                                              meta_data=self.meta,
                                              vars_use="sample_id",
                                              **kwargs)
-        return self
+        return
 
-    def hyperparameter_search(self,
-                              param_grid: list,
-                              **kwargs):
-        kwargs = kwargs or {}
-        kwargs["ci"] = kwargs.get("ci", "sd")
-        kwargs["estimator"] = kwargs.get("estimator", np.median)
-        kwargs["capsize"] = kwargs.get("capsize", .2)
-        lisi_values = dict()
-        for params in progress_bar(param_grid):
-            lisi_values[str(params)] = self.run(**params).batch_lisi()
-        lisi_values = (pd.DataFrame({k: v.reshape(-1) for k, v in lisi_values.items()})
-                       .melt(var_name="Params", value_name="LISI"))
-        return sns.pointplot(data=lisi_values, y="LISI", x="Params", **kwargs)
+    def plot_kde(self, var: str or list):
+        v = self.data[var].values
+        if isinstance(var, list):
+            v = np.sum([self.data[x].values for x in var], axis=0)
+        x, y = (FFTKDE(kernel="gaussian",
+                       bw="silverman")
+                .fit(v)
+                .evaluate())
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.plot(x, y)
+        ax.set_xlabel(var)
+        return fig, ax
 
-    def batch_lisi(self):
+    def add_meta_var(self,
+                     mask: pd.DataFrame,
+                     meta_var_name: str):
+        self.data[meta_var_name] = "N"
+        self.data.loc[mask, meta_var_name] = "P"
+        self.meta[meta_var_name] = self.data[meta_var_name]
+        self.data.drop(meta_var_name, axis=1, inplace=True)
+
+    def batch_lisi(self, meta_var: str = "sample_id"):
         return harmonypy.lisi.compute_lisi(self.batch_corrected()[self.features].values,
                                            metadata=self.meta,
-                                           label_colnames=["sample_id"])
+                                           label_colnames=[meta_var])
 
-    def batch_lisi_distribution(self, **kwargs):
+    def batch_lisi_table(self,
+                         meta_vars: list):
+        assert self.harmony is not None, "Call 'run' first"
+        results = {"Meta variable": [],
+                   "Average LISI before": [],
+                   "Std LISI before": [],
+                   "Average LISI after": [],
+                   "Std LISI after": []}
+        for m in meta_vars:
+            before = harmonypy.lisi.compute_lisi(self.data[self.features].values,
+                                                 metadata=self.meta,
+                                                 label_colnames=[m]).reshape(-1)
+            after = self.batch_lisi(meta_var=m).reshape(-1)
+            results["Meta variable"].append(m)
+            results["Average LISI before"].append(np.median(before))
+            results["Std LISI before"].append(np.std(before))
+            results["Average LISI after"].append(np.median(after))
+            results["Std LISI after"].append(np.std(after))
+        return pd.DataFrame(results)
+
+    def batch_lisi_distribution(self,
+                                meta_var: str = "sample_id", **kwargs):
         before = harmonypy.lisi.compute_lisi(self.data[self.features].values,
                                              metadata=self.meta,
-                                             label_colnames=["sample_id"])
+                                             label_colnames=[meta_var])
         data = pd.DataFrame({"Before": before.reshape(-1),
-                             "After": self.batch_lisi().reshape(-1)})
+                             "After": self.batch_lisi(meta_var=meta_var).reshape(-1)})
         data = data.melt(var_name="Data", value_name="LISI")
+        kwargs = kwargs or {}
+        kwargs["ax"] = kwargs.get("ax", plt.subplots(figsize=(5, 5))[1])
         return sns.histplot(data=data, x="LISI", hue="Data", **kwargs)
 
     def batch_corrected(self):
