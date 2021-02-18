@@ -34,7 +34,7 @@ from ..flow.transform import apply_transform, apply_transform_map
 from ..flow.sampling import uniform_downsampling
 from ..flow.build_models import build_sklearn_model
 from .geometry import create_convex_hull
-from .population import Population, merge_populations, PolygonGeom
+from .population import Population, merge_populations, merge_many_populations, PolygonGeom
 from sklearn.model_selection import StratifiedKFold, permutation_test_score
 from warnings import warn
 from typing import List, Generator
@@ -603,7 +603,7 @@ class FileGroup(mongoengine.Document):
         Population
         """
         if population_name not in list(self.list_populations()):
-            MissingPopulationError(f'Population {population_name} does not exist')
+            raise MissingPopulationError(f'Population {population_name} does not exist')
         return [p for p in self.populations if p.population_name == population_name][0]
 
     def get_population_by_parent(self,
@@ -648,8 +648,8 @@ class FileGroup(mongoengine.Document):
         return [p for p in dependencies if p != population]
 
     def merge_populations(self,
-                          left: Population,
-                          right: Population,
+                          left: Population or str,
+                          right: Population or str,
                           new_population_name: str or None = None):
         """
         Merge two populations present in the current population tree.
@@ -669,7 +669,24 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
+        if isinstance(left, str):
+            left = self.get_population(left)
+        if isinstance(right, str):
+            right = self.get_population(right)
         self.add_population(merge_populations(left=left, right=right, new_population_name=new_population_name))
+
+    def merge_many_populations(self,
+                               populations: list,
+                               new_population_name: str):
+        pops = list()
+        for p in populations:
+            if isinstance(p, str):
+                pops.append(self.get_population(p))
+            elif isinstance(p, Population):
+                pops.append(p)
+            else:
+                raise ValueError("populations should be a list of strings or list of Population objects")
+        self.add_population(merge_many_populations(populations=pops, new_population_name=new_population_name))
 
     def subtract_populations(self,
                              left: Population,
@@ -697,7 +714,7 @@ class FileGroup(mongoengine.Document):
         assert same_parent or downstream, "Right population should share the same parent as the " \
                                           "left population or be downstream of the left population"
         new_population_name = new_population_name or f"subtract_{left.population_name}_{right.population_name}"
-        new_idx = np.array([x for x in left.index if x not in right.index])
+        new_idx = np.setdiff1d(left.index, right.index)
         x, y = left.geom.x, left.geom.y
         transform_x, transform_y = left.geom.transform_x, left.geom.transform_y
         parent_data = self.load_population_df(population=left.parent,

@@ -29,17 +29,18 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ..data.fcs import population_stats, Population
+from ..feedback import progress_bar, setup_standard_logger
+from ..data.fcs import population_stats, Population, MissingPopulationError
 from ..data.experiment import Experiment, fetch_subject_meta, fetch_subject, FileGroup
-from ..feedback import progress_bar
 from collections import defaultdict
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
+from scipy import stats as scipy_stats
 from functools import partial
-from warnings import warn
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import re
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"
@@ -50,61 +51,110 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
-
-def _channel_stats(filegroup: FileGroup,
-                   population: str,
-                   channel: str,
-                   transform: str,
-                   stats: list,
-                   transform_kwargs: dict or None = None):
-    filegroup.load_population_df(population=population,
-                                 transform=transform,
-                                 features_to_transform=[channel],
-                                 transform_kwargs=transform_kwargs)
+STATS = {"mean": np.mean,
+         "SD": np.std,
+         "median": np.median,
+         "CV": scipy_stats.variation,
+         "skew": scipy_stats.skew,
+         "kurtosis": scipy_stats.kurtosis,
+         "gmean": scipy_stats.gmean}
 
 
-def generate_feature_space(experiment: Experiment,
-                           sample_ids: list or None = None,
-                           ratios: list or None = None,
-                           channel_descriptives: list or None = None,
-                           channel_stats: list or None = None,
-                           transform: list or None = None,
-                           transform_kwargs: list or None = None):
-    feature_space = defaultdict(list)
-    sample_ids = sample_ids or experiment.list_samples()
-    channel_stats = channel_stats or ["mean"]
-    channel_descriptives = channel_descriptives or []
-    populations = set([x.list_populations() for x in experiment.fcs_files])
-    for f in experiment.fcs_files:
-        feature_space["sample_id"].append(f.primary_id)
-        feature_space["subject_id"].append(fetch_subject(f).subject_id)
-        for pop in populations:
-            stats = f.population_stats(pop)
-            feature_space[f"{pop}_FOP"] = stats.get("frac_of_parent")
-            feature_space[f"{pop}_FOR"] = stats.get("frac_of_root")
-
-
+def _fetch_population_statistics(files: list,
+                                 populations: set):
+    return {f.primary_id: {p: f.population_stats(p) for p in populations}
+            for f in files}
 
 
 class FeatureSpace:
     def __init__(self,
                  experiment: Experiment,
-                 sample_ids: list):
-        pass
+                 sample_ids: list or None = None,
+                 logging_level: int or None = None,
+                 log: str or None = None):
+        sample_ids = sample_ids or experiment.list_samples()
+        self.logger = setup_standard_logger(name="FeatureSpace",
+                                            default_level=logging_level,
+                                            log=log)
+        self._fcs_files = [x for x in experiment.fcs_files
+                           if x.primary_id in sample_ids] or experiment.fcs_files
+        populations = [x.list_populations() for x in self._fcs_files]
+        self.populations = set([x for sl in populations for x in sl])
+        self.population_statistics = _fetch_population_statistics(files=self._fcs_files,
+                                                                  populations=self.populations)
+        self.ratios = defaultdict(dict)
+        self.channel_desc = defaultdict(dict)
+        self.meta_labels = dict()
 
-    def _fetch_population_statistics(self):
-        pass
+    def compute_ratios(self,
+                       pop1: str,
+                       pop2: str or None = None):
+        for f in self._fcs_files:
+            if pop1 not in f.list_populations():
+                self.logger.warn(f"{f.primary_id} missing population {pop1}")
+                if pop2 is None:
+                    for p in [q for q in self.populations if q != pop1]:
+                        self.ratios[f.primary_id][f"{pop1}:{p}"] = None
+                else:
+                    self.ratios[f.primary_id][f"{pop1}:{pop2}"] = None
+            else:
+                p1n = self.population_statistics[f.primary_id][pop1]["n"]
+                if pop2 is None:
+                    for p in [q for q in self.populations if q != pop1]:
+                        pn = self.population_statistics[f.primary_id][p]["n"]
+                        self.ratios[f.primary_id][f"{pop1}:{p}"] = p1n / pn
+                else:
+                    p2n = self.population_statistics[f.primary_id][pop2]["n"]
+                    self.ratios[f.primary_id][f"{pop1}:{pop2}"] = p1n / p2n
+        return self
 
-    def compute_ratios(self):
-        pass
+    def channel_desc_stats(self,
+                           channel: str,
+                           stats: list or None = None,
+                           transform: str or None = None,
+                           transform_kwargs: dict or None = None,
+                           populations: list or None = None,
+                           verbose: bool = True):
+        populations = populations or self.populations
+        stats = stats or ["mean", "SD"]
+        assert all([x in STATS.keys() for x in stats]), f"Invalid stats; valid stats are: {STATS.keys()}"
+        for f in progress_bar(self._fcs_files, verbose=verbose):
+            for p in populations:
+                if p not in f.list_populations():
+                    self.logger.warn(f"{f.primary_id} missing population {p}")
+                    for s in stats:
+                        self.channel_desc[f.primary_id][f"{p}_{s}"] = None
+                else:
+                    x = f.load_population_df(population=p,
+                                             transform=transform,
+                                             features_to_transform=[channel],
+                                             transform_kwargs=transform_kwargs)[channel].values
+                    for s in stats:
+                        self.channel_desc[f.primary_id][f"{p}_{s}"] = STATS.get(s)(x)
+        return self
 
-    def channel_desc_stats(self):
-        pass
+    def add_meta_labels(self,
+                        key: str or list):
+        for f in self._fcs_files:
+            subject = fetch_subject(f)
+            if subject is None:
+                continue
+            try:
+                if isinstance(key, str):
+                    self.meta_labels[f.primary_id] = subject[key]
+                else:
+                    node = subject[key[0]]
+                    for k in key[1:]:
+                        node = node[k]
+                    self.meta_labels[f.primary_id] = node
+            except KeyError:
+                self.logger.warn(f"{f.primary_id} missing meta variable {key} in Subject document")
+                self.meta_labels[f.primary_id] = None
+        return self
 
     def construct_dataframe(self):
-        pass
-
-
+        return [pd.DataFrame(self.ratios), pd.DataFrame(self.population_statistics),
+                pd.DataFrame(self.meta_labels), pd.DataFrame(self.channel_desc)]
 
 
 def meta_labelling(experiment: Experiment,
@@ -453,4 +503,3 @@ def population_subsets(experiment,
                                  search_terms=search_terms,
                                  experiment=experiment,
                                  group_var="population_name")
-

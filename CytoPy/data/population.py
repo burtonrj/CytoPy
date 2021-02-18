@@ -31,7 +31,6 @@ from .geometry import PopulationGeometry, ThresholdGeom, PolygonGeom
 from functools import reduce
 from shapely.ops import unary_union
 from typing import List
-from _warnings import warn
 import numpy as np
 import pandas as pd
 import mongoengine
@@ -266,6 +265,28 @@ def _merge_polygons(left: Population,
     return new_population
 
 
+def _merge_non_geom_populations(left: Population,
+                                right: Population,
+                                new_population_name: str):
+    new_idx = _merge_index(left, right)
+    new_population = Population(population_name=new_population_name,
+                                n=len(new_idx),
+                                parent=left.parent,
+                                warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
+                                index=new_idx,
+                                source=left.source,
+                                signature=_merge_signatures(left, right))
+    return new_population
+
+
+def merge_many_populations(populations: list,
+                           new_population_name: str):
+    err = "merge_many_populations currently only supports 'cluster' or 'classifier' source " \
+          "types. To merge populations from other sources, use merge_populations method"
+    assert all([x.source == "cluster" or x.source == "classifier" for x in populations]), err
+    new_idx = np.unique(np.concatenate([x.index for x in populations], axis=0), axis=0)
+
+
 def merge_populations(left: Population,
                       right: Population,
                       new_population_name: str or None = None):
@@ -286,6 +307,9 @@ def merge_populations(left: Population,
     _check_transforms_dimensions(left, right)
     new_population_name = new_population_name or f"merge_{left.population_name}_{right.population_name}"
     assert left.parent == right.parent, "Parent populations do not match"
+    assert left.source == right.source, "Populations must be from the same source"
+    if left.source == "cluster" or "classifier":
+        return _merge_non_geom_populations(left, right, new_population_name)
     assert isinstance(left.geom, type(
         right.geom)), f"Geometries must be of the same type; left={type(left.geom)}, right={type(right.geom)}"
     if isinstance(left.geom, ThresholdGeom):

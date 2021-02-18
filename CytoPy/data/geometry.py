@@ -312,7 +312,7 @@ def create_convex_hull(x_values: np.array,
     """
     xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
     try:
-        hull = ConvexHull(xy)
+        hull = ConvexHull(xy, incremental=True)
         x = [float(i) for i in xy[hull.vertices, 0]]
         y = [float(i) for i in xy[hull.vertices, 1]]
     except QhullError:

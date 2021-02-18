@@ -1,5 +1,21 @@
 from IPython import get_ipython
 from tqdm import tqdm_notebook, tqdm
+import logging
+
+
+def setup_standard_logger(name: str,
+                          default_level: int or None = None,
+                          log: str or None = None):
+    default_level = default_level or logging.INFO
+    logger = logging.getLogger(name)
+    logger.setLevel(default_level)
+    if log is not None:
+        handler = logging.FileHandler(filename=log)
+    else:
+        handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
+    return logger
 
 
 def progress_bar(x: iter,

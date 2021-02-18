@@ -689,8 +689,7 @@ class Experiment(mongoengine.Document):
 
     def filter_subjects(self,
                         key: str or list,
-                        value: str or int or float,
-                        verbose: bool = True):
+                        value: str or int or float):
         matches = list()
         if isinstance(key, list) and len(key) == 1:
             key = key[0]
@@ -1008,6 +1007,14 @@ class Experiment(mongoengine.Document):
                 df["sample_id"] = f.primary_id
                 data.append(df)
         return pd.concat(data).reset_index(drop=True)
+
+    def merge_populations(self,
+                          mergers: dict):
+        for new_population_name, targets in mergers.items():
+            for f in self.fcs_files:
+                if all([p in f.list_populations() for p in targets]):
+                    f.merge_many_populations(populations=targets, new_population_name=new_population_name)
+                    f.save()
 
     def delete(self,
                *args,
