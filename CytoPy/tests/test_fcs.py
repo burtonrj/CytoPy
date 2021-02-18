@@ -69,20 +69,6 @@ def test_h5_read_population_primary_index():
         assert x.shape[0] == 1000
 
 
-def test_h5_read_population_ctrl_index():
-    path = f"{os.getcwd()}/test_data/test.h5"
-    create_test_h5file(path=path, empty=True)
-    with h5py.File(path, "r") as f:
-        assert h5_read_population_ctrl_index("test_pop", f) is None
-    create_test_h5file(path=path, empty=False)
-    with h5py.File(path, "r") as f:
-        x = h5_read_population_ctrl_index("test_pop", f)
-        assert isinstance(x, dict)
-        assert len(x) == 2
-        assert x.get("test_ctrl1").shape[0] == 1000
-        assert x.get("test_ctrl2").shape[0] == 1000
-
-
 def test_set_column_names():
     channels = [None, None, None, "channel1", "channel2", "channel3"]
     markers = [f"marker{i + 1}" for i in range(6)]

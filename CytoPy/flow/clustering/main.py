@@ -594,6 +594,7 @@ class Clustering:
                  sample_ids: list or None = None,
                  root_population: str = "root",
                  transform: str = "logicle",
+                 transform_kwargs: dict or None = None,
                  verbose: bool = True,
                  population_prefix: str = "cluster"):
         self.experiment = experiment
@@ -609,6 +610,7 @@ class Clustering:
         self.data = load_population_data_from_experiment(experiment=experiment,
                                                          sample_ids=sample_ids,
                                                          transform=transform,
+                                                         transform_kwargs=transform_kwargs,
                                                          population=root_population)
         self.data["meta_label"] = None
         self.data["cluster_label"] = None
@@ -719,7 +721,7 @@ class Clustering:
     def rename_clusters(self,
                         sample_id: str,
                         mappings: dict):
-        self.data[self.data.sample_id == sample_id]["meta_label"].replace(mappings, inplace=True)
+        self.data[self.data.sample_id == sample_id]["cluster_label"].replace(mappings, inplace=True)
 
     def rename_meta_clusters(self,
                              mappings: dict):
