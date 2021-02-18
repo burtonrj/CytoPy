@@ -30,12 +30,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from ..data.fcs import population_stats, Population
-from ..data.experiment import Experiment, fetch_subject_meta, fetch_subject
+from ..data.experiment import Experiment, fetch_subject_meta, fetch_subject, FileGroup
 from ..feedback import progress_bar
 from collections import defaultdict
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from functools import partial
+from warnings import warn
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -48,6 +49,62 @@ __version__ = "1.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+
+
+def _channel_stats(filegroup: FileGroup,
+                   population: str,
+                   channel: str,
+                   transform: str,
+                   stats: list,
+                   transform_kwargs: dict or None = None):
+    filegroup.load_population_df(population=population,
+                                 transform=transform,
+                                 features_to_transform=[channel],
+                                 transform_kwargs=transform_kwargs)
+
+
+def generate_feature_space(experiment: Experiment,
+                           sample_ids: list or None = None,
+                           ratios: list or None = None,
+                           channel_descriptives: list or None = None,
+                           channel_stats: list or None = None,
+                           transform: list or None = None,
+                           transform_kwargs: list or None = None):
+    feature_space = defaultdict(list)
+    sample_ids = sample_ids or experiment.list_samples()
+    channel_stats = channel_stats or ["mean"]
+    channel_descriptives = channel_descriptives or []
+    populations = set([x.list_populations() for x in experiment.fcs_files])
+    for f in experiment.fcs_files:
+        feature_space["sample_id"].append(f.primary_id)
+        feature_space["subject_id"].append(fetch_subject(f).subject_id)
+        for pop in populations:
+            stats = f.population_stats(pop)
+            feature_space[f"{pop}_FOP"] = stats.get("frac_of_parent")
+            feature_space[f"{pop}_FOR"] = stats.get("frac_of_root")
+
+
+
+
+class FeatureSpace:
+    def __init__(self,
+                 experiment: Experiment,
+                 sample_ids: list):
+        pass
+
+    def _fetch_population_statistics(self):
+        pass
+
+    def compute_ratios(self):
+        pass
+
+    def channel_desc_stats(self):
+        pass
+
+    def construct_dataframe(self):
+        pass
+
+
 
 
 def meta_labelling(experiment: Experiment,

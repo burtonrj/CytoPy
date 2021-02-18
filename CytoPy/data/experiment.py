@@ -1171,10 +1171,9 @@ def fetch_subject_meta(sample_id: str,
     """
     fg = experiment.get_sample(sample_id=sample_id)
     subject = fetch_subject(filegroup=fg)
-    try:
+    if subject is not None:
         return subject[meta_label]
-    except KeyError:
-        return None
+    return None
 
 
 def fetch_subject(filegroup: FileGroup):
@@ -1194,3 +1193,9 @@ def fetch_subject(filegroup: FileGroup):
         warn(f"{filegroup.primary_id} is not associated to a Subject")
         return None
     return subject[0]
+
+
+def experiment_subject_search(experiment: Experiment,
+                              sample_id: str):
+    f = experiment.get_sample(sample_id=sample_id)
+    return fetch_subject(f)

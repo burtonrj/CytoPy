@@ -45,7 +45,6 @@ from scipy.stats import entropy as kl
 from scipy.cluster import hierarchy
 from scipy.spatial import distance
 from collections import defaultdict
-from pingouin import compute_effsize, wilcoxon
 from KDEpy import FFTKDE
 from warnings import warn
 import matplotlib.pyplot as plt
@@ -788,6 +787,8 @@ class Harmony:
                  sampling_method: str or None = "uniform",
                  transform: str = "logicle",
                  transform_kwargs: dict or None = None,
+                 scale: str or None = "standard",
+                 scale_kwargs: dict or None = None,
                  sample_kwargs: dict or None = None,
                  logging_level=None):
         """
@@ -810,7 +811,12 @@ class Harmony:
         self.features = [x for x in features if x in self.data.columns]
         self.meta = self.data[["sample_id"]].copy()
         self.harmony = None
-        self._norms = None
+        self.scaler = None
+        if scale is not None:
+            scale_kwargs = scale_kwargs or {}
+            scale = transform_module.Scaler(method=scale, **scale_kwargs)
+            self.data = scale(data=self.data, features=self.features)
+            self.scaler = scale
         self._logging_level = logging_level
         if logging_level:
             logging.getLogger("harmonypy").setLevel(logging_level)
@@ -823,18 +829,6 @@ class Harmony:
     def logging_level(self, value):
         logging.getLogger("harmonypy").setLevel(value)
         self._logging_level = value
-
-    def normalisation(self):
-        """
-        Perform L2 normalisation of columns (norms are stored internally in _norms parameter)
-
-        Returns
-        -------
-        None
-        """
-        normaliser = transform_module.Normalise()
-        self.data = normaliser(self.data, self.features)
-        self._norms = normaliser._norms
 
     def run(self, **kwargs):
         """
@@ -878,9 +872,12 @@ class Harmony:
         self.meta[meta_var_name] = self.data[meta_var_name]
         self.data.drop(meta_var_name, axis=1, inplace=True)
 
-    def batch_lisi(self, meta_var: str = "sample_id"):
-        return harmonypy.lisi.compute_lisi(self.batch_corrected()[self.features].values,
-                                           metadata=self.meta,
+    def batch_lisi(self,
+                   meta_var: str = "sample_id",
+                   sample: float = 1.):
+        idx = np.random.randint(self.data.shape[0], size=int(self.data.shape[0] * sample))
+        return harmonypy.lisi.compute_lisi(self.batch_corrected()[self.features].values[idx],
+                                           metadata=self.meta.iloc[idx],
                                            label_colnames=[meta_var])
 
     def batch_lisi_table(self,
@@ -904,12 +901,15 @@ class Harmony:
         return pd.DataFrame(results)
 
     def batch_lisi_distribution(self,
-                                meta_var: str = "sample_id", **kwargs):
-        before = harmonypy.lisi.compute_lisi(self.data[self.features].values,
-                                             metadata=self.meta,
+                                meta_var: str = "sample_id",
+                                sample: float or None = 0.1,
+                                **kwargs):
+        idx = np.random.randint(self.data.shape[0], size=int(self.data.shape[0]*sample))
+        before = harmonypy.lisi.compute_lisi(self.data[self.features].values[idx],
+                                             metadata=self.meta.iloc[idx],
                                              label_colnames=[meta_var])
         data = pd.DataFrame({"Before": before.reshape(-1),
-                             "After": self.batch_lisi(meta_var=meta_var).reshape(-1)})
+                             "After": self.batch_lisi(meta_var=meta_var, sample=sample).reshape(-1)})
         data = data.melt(var_name="Data", value_name="LISI")
         kwargs = kwargs or {}
         kwargs["ax"] = kwargs.get("ax", plt.subplots(figsize=(5, 5))[1])
@@ -955,6 +955,8 @@ class Harmony:
         for sample_id, df in progress_bar(self.batch_corrected().groupby("sample_id"),
                                           verbose=True,
                                           total=self.meta.sample_id.nunique()):
+            if self.scaler is not None:
+                df = self.scaler.inverse(data=df, features=self.features)
             if self.transformer is not None:
                 df = self.transformer.inverse_scale(data=df, features=self.features)
             experiment.add_dataframes(sample_id=str(prefix) + str(sample_id),

@@ -146,10 +146,16 @@ def create_example_populations(filegroup: FileGroup,
                        parent=parent,
                        index=idx.get("primary"),
                        source="gate")
-        p.set_ctrl_index(test_ctrl=idx.get("ctrl"))
         filegroup.add_population(population=p)
     filegroup.save()
     return filegroup
+
+
+def create_logicle_like(u: list, s: list, size: list):
+    assert len(u) == len(s), "s and u should be equal length"
+    lognormal = [np.random.lognormal(mean=u[i], sigma=s[i], size=int(size[i]))
+                 for i in range(len(u))]
+    return np.concatenate(lognormal)
 
 
 def create_linear_data():

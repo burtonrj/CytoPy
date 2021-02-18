@@ -602,7 +602,8 @@ class FileGroup(mongoengine.Document):
         -------
         Population
         """
-        assert population_name in list(self.list_populations()), f'Population {population_name} does not exist'
+        if population_name not in list(self.list_populations()):
+            MissingPopulationError(f'Population {population_name} does not exist')
         return [p for p in self.populations if p.population_name == population_name][0]
 
     def get_population_by_parent(self,
@@ -751,13 +752,20 @@ class FileGroup(mongoengine.Document):
         -------
         Dict
         """
-        pop = self.get_population(population_name=population)
-        parent = self.get_population(population_name=pop.parent)
-        root = self.get_population(population_name="root")
-        return {"population_name": population,
-                "n": pop.n,
-                "prop_of_parent": pop.n / parent.n,
-                "prop_of_root": pop.n / root.n}
+        try:
+            pop = self.get_population(population_name=population)
+            parent = self.get_population(population_name=pop.parent)
+            root = self.get_population(population_name="root")
+            return {"population_name": population,
+                    "n": pop.n,
+                    "frac_of_parent": pop.n / parent.n,
+                    "frac_of_root": pop.n / root.n}
+        except MissingPopulationError:
+            warn(f"{population} not present in {self.primary_id} FileGroup")
+            return {"population_name": population,
+                    "n": 0,
+                    "frac_of_parent": 0,
+                    "frac_of_root": 0}
 
     def quantile_clean(self,
                        upper: float = 0.999,
