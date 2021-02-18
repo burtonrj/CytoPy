@@ -101,7 +101,7 @@ class Project(mongoengine.Document):
     def add_experiment(self,
                        experiment_id: str,
                        data_directory: str,
-                       panel_definition: str) -> Experiment:
+                       panel_definition: str or dict) -> Experiment:
         """
         Add new experiment to project. Note you must provide either a path to an excel template for the panel
         definition (panel_definition) or the name of an existing panel (panel_name). If panel_definition is provided,
@@ -114,7 +114,7 @@ class Project(mongoengine.Document):
             experiment name
         data_directory: str
             Path where experiment events data files will be stored
-        panel_definition: str
+        panel_definition: str or dict
             Path to excel template for generating the panel
 
         Returns
