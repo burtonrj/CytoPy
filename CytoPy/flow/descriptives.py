@@ -34,63 +34,6 @@ sns.set(style="white", font_scale=1.3)
 sns.set_style("ticks", {"xtick.major.size": 8, "ytick.major.size": 8})
 
 
-def box_swarm_plot(plot_df: pd.DataFrame,
-                   x: str,
-                   y: str,
-                   hue: str or None = None,
-                   ax: plt.Axes or None = None,
-                   palette: str or None = None,
-                   boxplot_kwargs: dict or None = None,
-                   overlay_kwargs: dict or None = None):
-    """
-    Convenience function for generating a boxplot with a swarmplot/stripplot overlaid showing
-    individual datapoints (using tools from Seaborn library)
-
-    Parameters
-    ----------
-    plot_df: Pandas.DataFrame
-        Data to plot
-    x: str
-        Name of the column to use as x-axis variable
-    y: str
-        Name of the column to use as x-axis variable
-    hue: str, optional
-        Name of the column to use as factor to colour plot
-    ax: Matplotlib.Axes, optional
-        Axis object to plot on. If None, will generate new axis of figure size (10,5)
-    palette: str, optional
-        Palette to use
-    boxplot_kwargs: dict, optional
-        Additional keyword arguments passed to Seaborn.boxplot
-    overlay_kwargs: dict, optional
-        Additional keyword arguments passed to Seaborn.swarmplot/stripplot
-
-    Returns
-    -------
-    Matplotlib.Axes
-    """
-    boxplot_kwargs = boxplot_kwargs or {}
-    overlay_kwargs = overlay_kwargs or {}
-    ax = ax or plt.subplots(figsize=(10, 5))[1]
-    sns.boxplot(data=plot_df,
-                x=x,
-                y=y,
-                hue=hue,
-                ax=ax,
-                showfliers=False,
-                boxprops=dict(alpha=.3),
-                palette=palette,
-                **boxplot_kwargs)
-    sns.swarmplot(data=plot_df,
-                  x=x,
-                  y=y,
-                  hue=hue,
-                  ax=ax,
-                  dodge=True,
-                  palette=palette,
-                  **overlay_kwargs)
-
-
 def appropriate_stat(data: pd.DataFrame,
                      dv: str,
                      group: str):
