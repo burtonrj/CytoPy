@@ -756,7 +756,8 @@ class FileGroup(mongoengine.Document):
                 overwrite_or_create(file=f, data=p.index, key=f"/index/{p.population_name}/primary")
 
     def population_stats(self,
-                         population: str):
+                         population: str,
+                         warn_missing: bool = False):
         """
         Returns a dictionary of statistics (number of events, proportion of parent, and proportion of all events)
         for the requested population.
@@ -778,7 +779,8 @@ class FileGroup(mongoengine.Document):
                     "frac_of_parent": pop.n / parent.n,
                     "frac_of_root": pop.n / root.n}
         except MissingPopulationError:
-            warn(f"{population} not present in {self.primary_id} FileGroup")
+            if warn_missing:
+                warn(f"{population} not present in {self.primary_id} FileGroup")
             return {"population_name": population,
                     "n": 0,
                     "frac_of_parent": 0,

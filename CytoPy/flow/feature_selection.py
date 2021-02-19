@@ -30,17 +30,22 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from ..feedback import progress_bar, setup_standard_logger
-from ..data.fcs import population_stats, Population, MissingPopulationError
-from ..data.experiment import Experiment, fetch_subject_meta, fetch_subject, FileGroup
+from ..data.experiment import Experiment, fetch_subject
+from .plotting.embeddings_graphs import discrete_scatterplot, cont_scatterplot
+from . import transform
+from sklearn.linear_model import Lasso, LogisticRegression, SGDClassifier, SGDRegressor
+from sklearn.svm import LinearSVC, LinearSVR
+from sklearn.decomposition import PCA as SkPCA
 from collections import defaultdict
-from sklearn.preprocessing import StandardScaler
-from sklearn.svm import LinearSVC
 from scipy import stats as scipy_stats
-from functools import partial
+from matplotlib.collections import EllipseCollection
+from matplotlib.patches import Patch, Ellipse
+from warnings import warn
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 import numpy as np
-import re
+import pingouin
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"
@@ -58,6 +63,13 @@ STATS = {"mean": np.mean,
          "skew": scipy_stats.skew,
          "kurtosis": scipy_stats.kurtosis,
          "gmean": scipy_stats.gmean}
+
+L1MODELS = {"lasso": Lasso,
+            "log": LogisticRegression,
+            "SGDr": SGDRegressor,
+            "SGDc": SGDClassifier,
+            "SVMc": LinearSVC,
+            "SVMr": LinearSVR}
 
 
 def _fetch_population_statistics(files: list,
@@ -78,10 +90,11 @@ class FeatureSpace:
                                             log=log)
         self._fcs_files = [x for x in experiment.fcs_files
                            if x.primary_id in sample_ids] or experiment.fcs_files
+        self.subject_ids = {x.primary_id: fetch_subject(x) for x in self._fcs_files}
+        self.subject_ids = {k: v.subject_id for k, v in self.subject_ids.items() if v is not None}
         populations = [x.list_populations() for x in self._fcs_files]
         self.populations = set([x for sl in populations for x in sl])
-        self.population_statistics = _fetch_population_statistics(files=self._fcs_files,
-                                                                  populations=self.populations)
+        self.population_statistics = _fetch_population_statistics(files=self._fcs_files, populations=self.populations)
         self.ratios = defaultdict(dict)
         self.channel_desc = defaultdict(dict)
         self.meta_labels = dict()
@@ -101,8 +114,11 @@ class FeatureSpace:
                 p1n = self.population_statistics[f.primary_id][pop1]["n"]
                 if pop2 is None:
                     for p in [q for q in self.populations if q != pop1]:
-                        pn = self.population_statistics[f.primary_id][p]["n"]
-                        self.ratios[f.primary_id][f"{pop1}:{p}"] = p1n / pn
+                        if p in f.list_populations():
+                            pn = self.population_statistics[f.primary_id][p]["n"]
+                            self.ratios[f.primary_id][f"{pop1}:{p}"] = p1n / pn
+                        else:
+                            self.ratios[f.primary_id][f"{pop1}:{p}"] = None
                 else:
                     p2n = self.population_statistics[f.primary_id][pop2]["n"]
                     self.ratios[f.primary_id][f"{pop1}:{pop2}"] = p1n / p2n
@@ -153,152 +169,25 @@ class FeatureSpace:
         return self
 
     def construct_dataframe(self):
-        return [pd.DataFrame(self.ratios), pd.DataFrame(self.population_statistics),
-                pd.DataFrame(self.meta_labels), pd.DataFrame(self.channel_desc)]
-
-
-def meta_labelling(experiment: Experiment,
-                   dataframe: pd.DataFrame,
-                   meta_label: str):
-    """
-    Given a Pandas DataFrame containing a column of sample IDs from
-    an Experiment (column should be named 'sample_id') search the
-    related Subject of the samples and create a new column for
-    the chosen 'meta_label' contained in the related Subject.
-    If a sample does not have a related Subject or the 'meta_label'
-    cannot be found, the row will be populated with None. Returns
-    a mutated DataFrame.
-
-    Parameters
-    ----------
-    experiment: Experiment
-    dataframe: Pandas.DataFrame
-    meta_label: str
-
-    Returns
-    -------
-    Pandas.DataFrame
-    """
-    assert "sample_id" in dataframe.columns, "Expected column 'sample_id'"
-    assert all([s in experiment.list_samples() for s in dataframe["sample_id"]]), \
-        "One or more sample IDs not present in given Experiment"
-    search_func = partial(fetch_subject_meta,
-                          experiment=experiment,
-                          meta_label=meta_label)
-    df = dataframe.copy()
-    df[meta_label] = df["sample_id"].apply(search_func)
-    return df
-
-
-def experiment_statistics(experiment: Experiment,
-                          include_subject_id: bool = True):
-    """
-    Given an Experiment, generate a Pandas DataFrame detailing
-    statistics for every population captured in all FileGroups
-    contained within the Experiment.
-
-    Parameters
-    ----------
-    experiment: Experiment
-    include_subject_id: bool (default=True)
-
-    Returns
-    -------
-    Pandas.DataFrame
-    """
-    data = list()
-    for sample_id in experiment.list_samples():
-        fg = experiment.get_sample(sample_id)
-        df = population_stats(fg)
-        df["sample_id"] = sample_id
-        if include_subject_id:
-            subject = fetch_subject(filegroup=fg)
-            if subject is not None:
-                df["subject_id"] = subject.subject_id
-        data.append(df)
-    return pd.concat(data)
-
-
-def _population_cluster_statistics(pop: Population,
-                                   meta_label: str or None,
-                                   tag: str or None):
-    data = defaultdict(list)
-    clusters = pop.get_clusters(tag=tag, meta_labels=meta_label)
-    for c in clusters:
-        data["prop_of_population"].append(c.prop_of_events)
-        data["cluster_id"].append(c.cluster_id)
-        data["meta_label"].append(c.meta_label)
-        data["tag"].append(c.tag)
-        data["n"].append(c.n)
-    data = pd.DataFrame(data)
-    data["population"] = pop.population_name
-    return data
-
-
-def cluster_statistics(experiment: Experiment,
-                       population: str or None = None,
-                       meta_label: str or None = None,
-                       tag: str or None = None,
-                       include_subject_id: bool = True,
-                       sample_ids: list or None = None):
-    """
-    Given an Experiment and the name of a Population known
-    to contain clusters from some high-dimensional clustering
-    algorithm, this function generates a dataframe of
-    statistics. Details include the number of events
-    within the cluster and what proportion of the total events
-    in the Population this number represents.
-
-    Parameters
-    ----------
-    experiment: Experiment
-    population: str (optional)
-        If no population is provided, will search all
-        possible populations for clusters
-    meta_label: str (optional)
-        If given, will filter results to include only
-        those clusters with this meta ID
-    tag: str (optional)
-        If given, will filter results to include only
-        those clusters with this tag
-    include_subject_id: bool (default=True)
-        If True, includes a column for the subject ID in
-        the resulting dataframe
-    sample_ids: list, optional
-        Samples to include, if None will include all samples
-    Returns
-    -------
-    Pandas.DataFrame
-    """
-    sample_ids = sample_ids or list(experiment.list_samples())
-    all_cluster_data = list()
-    for sample_id in progress_bar(sample_ids, total=len(sample_ids)):
-        fg = experiment.get_sample(sample_id)
-        if population is not None:
-            data = _population_cluster_statistics(pop=fg.get_population(population_name=population),
-                                                  meta_label=meta_label,
-                                                  tag=tag)
-        else:
-            data = list()
-            for p in fg.list_populations():
-                df = _population_cluster_statistics(pop=fg.get_population(population_name=p),
-                                                    meta_label=meta_label,
-                                                    tag=tag)
-                data.append(df)
-            data = pd.concat(data)
-        data["sample_id"] = fg.primary_id
-        if include_subject_id:
-            subject = fetch_subject(filegroup=fg)
-            if subject is not None:
-                data["subject_id"] = subject.subject_id
-        all_cluster_data.append(data)
-    return pd.concat(all_cluster_data)
+        data = defaultdict(list)
+        for sample_id, populations in self.population_statistics.items():
+            data["sample_id"].append(sample_id)
+            data["subject_id"].append(self.subject_ids.get(sample_id, None))
+            for pop_name, pop_stats in populations.items():
+                data[f"{pop_name}_N"].append(pop_stats["n"])
+                data[f"{pop_name}_FOR"].append(pop_stats["frac_of_root"])
+                data[f"{pop_name}_FOP"].append(pop_stats["frac_of_parent"])
+            for n, r in self.ratios.get(sample_id).items():
+                data[n].append(r)
+            for n, s in self.channel_desc.get(sample_id).items():
+                data[n].append(s)
+        return pd.DataFrame(data)
 
 
 def sort_variance(summary: pd.DataFrame,
                   identifier_columns: list,
-                  value_name: str = "summary_stat",
-                  var_name: str = "population"):
+                  value_name: str = "value",
+                  var_name: str = "var"):
     """
     Given a dataframe generated by one of the many
     functions in this module, sort that dataframe
@@ -327,179 +216,426 @@ def sort_variance(summary: pd.DataFrame,
             .rename(columns={value_name: 'variance'}))
 
 
-def radar_plot(summary: pd.DataFrame,
-               features: list,
-               figsize: tuple = (10, 10)):
+def clustered_heatmap(data: pd.DataFrame,
+                      features: list,
+                      index: str,
+                      row_colours: str or None = None,
+                      row_colours_cmap: str = "tab10",
+                      **kwargs):
+    df = data.set_index(index)[features].copy()
+    if row_colours is not None:
+        row_colours_title = row_colours
+        lut = dict(zip(data[row_colours].unique(), row_colours_cmap))
+        row_colours = data[row_colours].map(lut)
+        handles = [Patch(facecolor=lut[name]) for name in lut]
+        g = sns.clustermap(df, row_colors=row_colours, **kwargs)
+        plt.legend(handles, lut,
+                   title=row_colours_title,
+                   bbox_to_anchor=(1, 1),
+                   bbox_transform=plt.gcf().transFigure,
+                   loc='upper right')
+    else:
+        g = sns.clustermap(df, **kwargs)
+    return g
+
+
+def box_swarm_plot(plot_df: pd.DataFrame,
+                   x: str,
+                   y: str,
+                   hue: str or None = None,
+                   ax: plt.Axes or None = None,
+                   palette: str or None = None,
+                   boxplot_kwargs: dict or None = None,
+                   overlay_kwargs: dict or None = None):
     """
-    Given a Pandas DataFrame where columns are features and each row is a different subject
-    (indexed by a column named 'subject_id'), generate a radar plot of all the features
+    Convenience function for generating a boxplot with a swarmplot/stripplot overlaid showing
+    individual datapoints (using tools from Seaborn library)
+
     Parameters
     ----------
-    summary: Pandas.DataFrame
-    features: List
-        Features to be included in the plot
-    figsize: tuple, (default=(10,10))
+    plot_df: Pandas.DataFrame
+        Data to plot
+    x: str
+        Name of the column to use as x-axis variable
+    y: str
+        Name of the column to use as x-axis variable
+    hue: str, optional
+        Name of the column to use as factor to colour plot
+    ax: Matplotlib.Axes, optional
+        Axis object to plot on. If None, will generate new axis of figure size (10,5)
+    palette: str, optional
+        Palette to use
+    boxplot_kwargs: dict, optional
+        Additional keyword arguments passed to Seaborn.boxplot
+    overlay_kwargs: dict, optional
+        Additional keyword arguments passed to Seaborn.swarmplot/stripplot
+
     Returns
     -------
-    Matplotlib.axes
+    Matplotlib.Axes
     """
-    summary = summary.melt(id_vars='subject_id',
-                           value_name='stat',
-                           var_name='feature')
-    summary = summary[summary.feature.isin(features)]
-    labels = summary.feature.values
-    stats = summary.stat.values
+    boxplot_kwargs = boxplot_kwargs or {}
+    overlay_kwargs = overlay_kwargs or {}
+    ax = ax or plt.subplots(figsize=(10, 5))[1]
+    sns.boxplot(data=plot_df,
+                x=x,
+                y=y,
+                hue=hue,
+                ax=ax,
+                showfliers=False,
+                boxprops=dict(alpha=.3),
+                palette=palette,
+                **boxplot_kwargs)
+    sns.swarmplot(data=plot_df,
+                  x=x,
+                  y=y,
+                  hue=hue,
+                  ax=ax,
+                  dodge=True,
+                  palette=palette,
+                  **overlay_kwargs)
 
-    angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False)
-    stats = np.concatenate((stats, [stats[0]]))  # Closed
-    angles = np.concatenate((angles, [angles[0]]))  # Closed
 
-    fig = plt.figure(figsize=figsize)
-    ax = fig.add_subplot(111, polar=True)  # Set polar axis
-    ax.plot(angles, stats, 'o-', linewidth=2, c='blue')
-    ax.set_thetagrids(angles * 180 / np.pi, labels)  # Set the label for each axis
-    ax.tick_params(pad=30)
-    ax.set_rlabel_position(145)
-    ax.grid(True)
+class InferenceTesting:
+    def __init__(self,
+                 data: pd.DataFrame,
+                 scale: str or None = None,
+                 scale_vars: list or None = None,
+                 scale_kwargs: dict or None = None):
+        self.data = data.copy()
+        self.scaler = None
+        if scale is not None:
+            scale_kwargs = scale_kwargs or {}
+            self.scaler = transform.Scaler(method=scale, **scale_kwargs)
+            assert scale_vars is not None, "Must provide variables to scale"
+            self.data = self.scaler(data=self.data, features=scale_vars)
+
+    def qq_plot(self,
+                var: str,
+                **kwargs):
+        return pingouin.qqplot(x=self.data[var].values, **kwargs)
+
+    def normality(self, var: list, method: str = "shapiro", alpha: float = 0.05):
+        results = {"Variable": list(), "Normal": list()}
+        for i in var:
+            results["Variable"].append(i)
+            results["Normal"].append(pingouin.normality(self.data[i].values, method=method, alpha=alpha)
+                                     .iloc[0]["normal"])
+        return pd.DataFrame(results)
+
+    def anova(self,
+              dep_var: str,
+              between: str,
+              post_hoc: bool = True,
+              post_hoc_kwargs: dict or None = None,
+              **kwargs):
+        post_hoc_kwargs = post_hoc_kwargs or {}
+        err = "Chosen dependent variable must be normally distributed"
+        assert all([pingouin.normality(df[dep_var].values).iloc[0]["normal"]
+                    for _, df in self.data.groupby(between)]), err
+        eq_var = all([pingouin.homoscedasticity(df[dep_var].values).iloc[0]["equal_var"]
+                      for _, df in self.data.groupby(between)])
+        if eq_var:
+            aov = pingouin.anova(data=self.data, dv=dep_var, between=between, **kwargs)
+            if post_hoc:
+                return aov, pingouin.pairwise_tukey(data=self.data, dv=dep_var, between=between, **post_hoc_kwargs)
+            return aov, None
+        aov = pingouin.welch_anova(data=self.data, dv=dep_var, between=between, **kwargs)
+        if post_hoc:
+            return aov, pingouin.pairwise_gameshowell(data=self.data, dv=dep_var, between=between, **post_hoc_kwargs)
+        return aov, None
+
+    def ttest(self,
+              between: str,
+              ind_var: list,
+              paried: bool = False,
+              multicomp: str = "holm",
+              multicomp_alpha: float = 0.05,
+              **kwargs):
+        assert self.data[between].nunique() == 2, "More than two groups, consider using 'anova' method"
+        x, y = self.data[between].unique()
+        x, y = self.data[self.data[between] == x].copy(), self.data[self.data[between] == y].copy()
+        results = list()
+        for i in ind_var:
+            assert all([pingouin.normality(df[i].values).iloc[0]["normal"]
+                        for _, df in self.data.groupby(between)]), f"Groups for {i} are not normally distributed"
+            eq_var = all([pingouin.homoscedasticity(df[i].values).iloc[0]["equal_var"]
+                          for _, df in self.data.groupby(between)])
+            if eq_var:
+                tstats = pingouin.ttest(x=x[i].values,
+                                        y=y[i].values,
+                                        paired=paried,
+                                        correction=False,
+                                        **kwargs)
+            else:
+                tstats = pingouin.ttest(x=x[i].values,
+                                        y=y[i].values,
+                                        paired=paried,
+                                        correction=True,
+                                        **kwargs)
+            tstats["Variable"] = i
+            results.append(tstats)
+        results = pd.concat(results)
+        results["p-val"] = pingouin.multicomp(results["p-val"].values, alpha=multicomp_alpha, method=multicomp)
+        return results
+
+    def non_parametric(self,
+                       between: str,
+                       ind_var: list,
+                       paired: bool = False,
+                       multicomp: str = "holm",
+                       multicomp_alpha: float = 0.05,
+                       **kwargs):
+        results = list()
+        if self.data[between].nunique() > 2:
+            if paired:
+                for i in ind_var:
+                    np_stats = pingouin.friedman(data=self.data,
+                                                 dv=i,
+                                                 within=between,
+                                                 **kwargs)
+                    np_stats["Variable"] = i
+                    results.append(np_stats)
+            else:
+                for i in ind_var:
+                    np_stats = pingouin.kruskal(data=self.data,
+                                                dv=i,
+                                                between=between,
+                                                **kwargs)
+                    np_stats["Variable"] = i
+                    results.append(np_stats)
+        else:
+            x, y = self.data[between].unique()
+            x, y = self.data[self.data[between] == x].copy(), self.data[self.data[between] == y].copy()
+            if paired:
+                for i in ind_var:
+                    np_stats = pingouin.wilcoxon(x, y, **kwargs)
+                    np_stats["Variable"] = i
+                    results.append(np_stats)
+            else:
+                for i in ind_var:
+                    np_stats = pingouin.mwu(x, y, **kwargs)
+                    np_stats["Variable"] = i
+                    results.append(np_stats)
+        results = pd.concat(results)
+        results["p-val"] = pingouin.multicomp(results["p-val"].values, alpha=multicomp_alpha, method=multicomp)
+        return results
+
+
+def plot_multicolinearity(data: pd.DataFrame,
+                          features: list,
+                          method: str = "spearman",
+                          ax: plt.Axes or None = None,
+                          **kwargs):
+    corr = data[features].corr(method=method)
+    ax = ax or plt.subplots(figsize=(8, 8), subplot_kw={'aspect': 'equal'})[1]
+    ax.set_xlim(-0.5, corr.shape[1] - 0.5)
+    ax.set_ylim(-0.5, corr.shape[0] - 0.5)
+    xy = np.indices(corr.shape)[::-1].reshape(2, -1).T
+    w = np.ones_like(corr.values).ravel()
+    h = 1 - np.abs(corr.values).ravel()
+    a = 45 * np.sign(corr.values).ravel()
+    ec = EllipseCollection(widths=w, heights=h, angles=a, units='x', offsets=xy,
+                           transOffset=ax.transData, array=corr.values.ravel(), **kwargs)
+    ax.add_collection(ec)
+    ax.set_xticks(np.arange(corr.shape[1]))
+    ax.set_xticklabels(corr.columns, rotation=90)
+    ax.set_yticks(np.arange(corr.shape[0]))
+    ax.set_yticklabels(corr.index)
     return ax
 
 
-def l1_feature_selection(feature_space: pd.DataFrame,
-                         features: list,
-                         label: str,
-                         scale: bool = True,
-                         search_space: tuple = (-2, 0, 50),
-                         model: callable or None = None,
-                         figsize: tuple = (10, 5)):
-    """
-    Perform L1 regularised classification over a defined search space for the L1 parameter and plot the
-    coefficient of each feature in respect to the change in L1 parameter.
-    Parameters
-    ----------
-    feature_space: Pandas.DataFrame
-        A dataframe of features where each column is a feature, each row a subject, and a column whom's name is equal
-        to the value of the label argument is the target label for prediction
-    features: List
-        List of features to include in model
-    label: str
-        The target label to predict
-    scale: bool, (default=True)
-        if True, features are scaled (standard scale) prior to analysis
-    search_space: tuple, (default=(-2, 0, 50))
-        Search range for L1 parameter
-    model: callable, optional
-        Must be a Scikit-Learn classifier that accepts an L1 regularisation parameter named 'C'. If left as None,
-        a linear SVM is used
-    figsize: tuple, (default=(10,5))
-    Returns
-    -------
-    Matplotlib.axes
-    """
+class PCA:
+    def __init__(self,
+                 data: pd.DataFrame,
+                 features: list,
+                 scale: str or None = "standard",
+                 scale_kwargs: dict or None = None,
+                 **kwargs):
+        self.scaler = None
+        self.data = data
+        self.features = features
+        if scale is None:
+            warn("PCA requires that input variables have unit variance and therefore scaling is recommended",
+                 stacklevel=2)
+        else:
+            scale_kwargs = scale_kwargs or {}
+            self.scaler = transform.Scaler(method=scale, **scale_kwargs)
+            self.data = self.scaler(self.data, self.features)
+        kwargs = kwargs or dict()
+        kwargs["random_stats"] = kwargs.get("random_state", 42)
+        self.pca = SkPCA(**kwargs)
+        self.embeddings = None
 
-    y = feature_space[label].values
-    feature_space = feature_space[features].drop_na()
-    if scale:
-        scaler = StandardScaler()
-        feature_space = pd.DataFrame(scaler.fit_transform(feature_space.values),
-                                     columns=feature_space.columns,
-                                     index=feature_space.index)
-    x = feature_space.values
-    cs = np.logspace(*search_space)
-    coefs = []
-    if model is None:
-        model = LinearSVC(penalty='l1',
-                          loss='squared_hinge',
-                          dual=False,
-                          tol=1e-3)
-    for c in cs:
-        model.set_params(C=c)
-        model.fit(x, y)
-        coefs.append(list(model.coef_[0]))
-    coefs = np.array(coefs)
+    def fit(self):
+        self.embeddings = self.pca.fit_transform(self.data[self.features])
 
-    # Plot result
-    fig, ax = plt.subplots(figsize=figsize)
-    for i, col in enumerate(range(len(features))):
-        ax.plot(cs, coefs[:, col], label=features[i])
-    ax.xscale('log')
-    ax.title('L1 penalty')
-    ax.xlabel('C')
-    ax.ylabel('Coefficient value')
-    ax.legend(bbox_to_anchor=(1, 1), loc='upper left', ncol=1)
-    return ax
+    def scree_plot(self, **kwargs):
+        assert self.embeddings is not None, "Call fit first"
+        var = pd.DataFrame({"Variance Explained": self.pca.explained_variance_ratio_,
+                            "PC": [f"PC{i + 1}" for i in range(len(self.pca.explained_variance_ratio_))]})
+        return sns.barplot(data=var, x="PC", y="Variance Explained", ci=None, **kwargs)
+
+    def loadings(self):
+        assert self.embeddings is not None, "Call fit first"
+        return pd.DataFrame({"Feature": self.features,
+                             "EV Magnitude": abs(self.pca.components_)[0]})
+
+    def plot(self,
+             label: str,
+             size: int = 5,
+             components: list or None = None,
+             discrete: bool = True,
+             cmap: str = "tab10",
+             loadings: bool = False,
+             limit_loadings: list or None = None,
+             arrow_kwargs: dict or None = None,
+             ellipse: bool = False,
+             ellipse_kwargs: dict or None = None,
+             figsize: tuple or None = (5, 5),
+             cbar_kwargs: dict or None = None,
+             **kwargs):
+        assert 2 <= len(components) <= 3, "Components should be of length 2 or 3"
+        assert self.embeddings is not None, "Call fit first"
+        components = components or [0, 1]
+        plot_df = pd.DataFrame({f"PC{i + 1}": self.embeddings[:, i] for i in components})
+        fig = plt.figure(figsize=figsize)
+        z = None
+        if len(components) == 3:
+            z = f"PC{components[2] + 1}"
+        if discrete:
+            ax = discrete_scatterplot(data=plot_df,
+                                      x=f"PC{components[0] + 1}",
+                                      y=f"PC{components[1] + 1}",
+                                      z=z,
+                                      label=label,
+                                      cmap=cmap,
+                                      size=size,
+                                      fig=fig,
+                                      **kwargs)
+        else:
+            cbar_kwargs = cbar_kwargs or {}
+            ax = cont_scatterplot(data=plot_df,
+                                  x=f"PC{components[0] + 1}",
+                                  y=f"PC{components[1] + 1}",
+                                  z=z,
+                                  label=label,
+                                  cmap=cmap,
+                                  size=size,
+                                  fig=fig,
+                                  cbar_kwargs=cbar_kwargs,
+                                  **kwargs)
+        if loadings:
+            assert len(components) == 2, "CytoPy only supports 2D byplots"
+            arrow_kwargs = arrow_kwargs or {}
+            arrow_kwargs["color"] = arrow_kwargs.get("color", "r")
+            arrow_kwargs["alpha"] = arrow_kwargs.get("alpha", 0.5)
+            features_i = list(range(len(self.features)))
+            if limit_loadings:
+                features_i = [i for i, x in enumerate(self.features) if x in limit_loadings]
+            ax = self._add_loadings(pca=self.pca,
+                                    components=components,
+                                    ax=ax,
+                                    features_i=features_i,
+                                    **arrow_kwargs)
+        if ellipse:
+            assert len(components) == 2, "CytoPy only supports confidence ellipse for 2D plots"
+            assert discrete, "Ellipse only value for discrete label"
+            ax = self._add_ellipse(components=components,
+                                   label=label,
+                                   cmap=cmap,
+                                   ax=ax,
+                                   **ellipse_kwargs)
+        return fig, ax
+
+    def _add_loadings(self,
+                      components: list,
+                      ax: plt.Axes,
+                      features_i: list,
+                      **kwargs):
+        coeffs = np.transpose(self.pca.components_[np.array(components), :])
+        for i in features_i:
+            ax.arrow(0, 0, coeffs[i, 0], coeffs[i, 1], **kwargs)
+            ax.text(coeffs[i, 0] * 1.15, coeffs[i, 1] * 1.15, self.features[i], color='b', ha='center', va='center')
+        return ax
+
+    def _add_ellipse(self,
+                     components: list,
+                     label: str,
+                     cmap: str,
+                     ax: plt.Axes,
+                     **kwargs):
+        kwargs = kwargs or {}
+        s = kwargs.pop("s", 3)
+        kwargs["linewidth"] = kwargs.get("linewidth", 2)
+        kwargs["edgecolor"] = kwargs.get("edgecolor", "#383838")
+        kwargs["alpha"] = kwargs.get("alpha", 0.2)
+        colours = plt.get_cmap(cmap).colors
+        assert len(colours) == self.data[label].nunique(), "Chosen cmap doesn't contain enough unique colours"
+        for l, c in zip(self.data[label].unique(), colours):
+            idx = self.data[self.data[label] == l].index.values
+            x, y = self.embeddings[idx, components[0]], self.embeddings[idx, components[1]]
+            cov = np.cov(x, y)
+            v, w = np.linalg.eig(cov)
+            v = np.sqrt(v)
+            ellipse = Ellipse(xy=(np.mean(x), np.mean(y)),
+                              width=v[0] * s * 2,
+                              height=v[1] * s * 2,
+                              angle=np.rad2deg(np.arccos(w[0, 0])),
+                              facecolor=c,
+                              **kwargs)
+            ax.add_artist(ellipse)
+        return ax
 
 
-def _prop_of_parent(x: dict,
-                    parent: str,
-                    experiment: Experiment):
-    parent_n = experiment.get_sample(x["sample_id"]).get_population(parent).n
-    return x["sample_id"], x["n"] / parent_n
+class L1Selection:
+    def __init__(self,
+                 model: str,
+                 scale: str):
+        self.model = {""}
 
 
-def _subset_and_summarise(data: pd.DataFrame,
-                          search_terms: list,
-                          parent: str,
-                          group_var: str,
-                          experiment: Experiment):
-    subset_data = [data[data[group_var].str.contains(s, regex=False)] for s in search_terms]
-    total_n = {i: x.groupby("sample_id")["n"].sum() for i, x in zip(search_terms, subset_data)}
-    proportions = {k: v.reset_index().apply(lambda x: _prop_of_parent(x,
-                                                                      parent=parent,
-                                                                      experiment=experiment),
-                                            axis=1).values
-                   for k, v in total_n.items()}
-    subsets = pd.DataFrame({subset: {sample_id: v for sample_id, v in x}
-                            for subset, x in proportions.items()})
-    return subsets
+    def build_model(self):
+        pass
+
+    def plot(self):
+        pass
 
 
-def cluster_subsets(experiment,
-                    population,
-                    tag,
-                    search_terms,
-                    sample_ids: list or None,
-                    exclusion_terms: list or None):
-    """
+class MixedEffects:
+    def __init__(self,
+                 scale: str):
+        pass
 
-    Parameters
-    ----------
-    experiment
-    population
-    tag
-    search_terms
-    sample_ids
-    exclusion_terms
+    def fit(self):
+        # Warn if fixed effects have less than 5 unique values, consider treating them as fixed effects
+        # Warn if spearman rank colinearity > 0.5 for one or more pairs of variables
+        pass
 
-    Returns
-    -------
+    def plot_residuals_fixed(self):
+        pass
 
-    """
-    exp_data = cluster_statistics(experiment=experiment,
-                                  population=population,
-                                  tag=tag,
-                                  sample_ids=sample_ids)
-    if exclusion_terms is not None:
-        for e in exclusion_terms:
-            exp_data = exp_data[~exp_data.meta_label.str.contains(e)]
-    return _subset_and_summarise(data=exp_data,
-                                 search_terms=search_terms,
-                                 parent=population,
-                                 experiment=experiment,
-                                 group_var="meta_label")
+    def plot_residuals_random(self):
+        pass
+
+    def plot_conditional_means(self):
+        pass
+
+    def model_outputs(self):
+        pass
 
 
-def population_subsets(experiment,
-                       population,
-                       search_terms,
-                       sample_ids: list or None,
-                       exclude: list or None):
-    pop_stats = experiment_statistics(experiment)
-    sample_ids = sample_ids or list(experiment.list_samples())
-    pop_stats = pop_stats[pop_stats.sample_id.isin(sample_ids)]
-    if exclude is not None:
-        pop_stats = pop_stats[~pop_stats.population_name.isin(exclude)]
-    return _subset_and_summarise(data=pop_stats,
-                                 parent=population,
-                                 search_terms=search_terms,
-                                 experiment=experiment,
-                                 group_var="population_name")
+class DecisionTree:
+    def __init__(self,
+                 scale: str):
+        pass
+
+
+class FeatureImportance:
+    def __init__(self):
+        pass
+
+
+class ModelExplainer:
+    def __init__(self):
+        pass

@@ -1012,9 +1012,12 @@ class Experiment(mongoengine.Document):
                           mergers: dict):
         for new_population_name, targets in mergers.items():
             for f in self.fcs_files:
-                if all([p in f.list_populations() for p in targets]):
-                    f.merge_many_populations(populations=targets, new_population_name=new_population_name)
+                pops = [p for p in targets if p in f.list_populations()]
+                try:
+                    f.merge_many_populations(populations=pops, new_population_name=new_population_name)
                     f.save()
+                except AssertionError as e:
+                    warn(f"Failed to merge populations for {f.primary_id}: {str(e)}", stacklevel=2)
 
     def delete(self,
                *args,

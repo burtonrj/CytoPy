@@ -20,15 +20,15 @@ def _scatterplot_defaults(**kwargs):
     return updated_kwargs
 
 
-def _discrete_scatterplot(data: pd.DataFrame,
-                          x: str,
-                          y: str,
-                          z: str or None,
-                          label: str,
-                          cmap: str,
-                          size: int or str or None,
-                          fig: plt.Figure,
-                          **kwargs):
+def discrete_scatterplot(data: pd.DataFrame,
+                         x: str,
+                         y: str,
+                         z: str or None,
+                         label: str,
+                         cmap: str,
+                         size: int or str or None,
+                         fig: plt.Figure,
+                         **kwargs):
     colours = cycle(plt.get_cmap(cmap).colors)
     data[label] = data[label].astype(str)
     if z is not None:
@@ -59,16 +59,16 @@ def _discrete_scatterplot(data: pd.DataFrame,
     return ax
 
 
-def _cont_scatterplot(data: pd.DataFrame,
-                      x: str,
-                      y: str,
-                      z: str or None,
-                      label: str,
-                      cmap: str,
-                      size: int or str or None,
-                      fig: plt.Figure,
-                      cbar_kwargs: dict,
-                      **kwargs):
+def cont_scatterplot(data: pd.DataFrame,
+                     x: str,
+                     y: str,
+                     z: str or None,
+                     label: str,
+                     cmap: str,
+                     size: int or str or None,
+                     fig: plt.Figure,
+                     cbar_kwargs: dict,
+                     **kwargs):
     if isinstance(size, str):
         size = data[size].values
     if z is not None:
@@ -114,30 +114,30 @@ def single_cell_plot(data: pd.DataFrame,
     fig = plt.figure(figsize=figsize)
     if label is not None:
         if discrete:
-            ax = _discrete_scatterplot(data=data,
-                                       x=x,
-                                       y=y,
-                                       z=z,
-                                       label=label,
-                                       size=size,
-                                       cmap=cmap,
-                                       fig=fig,
-                                       **kwargs)
+            ax = discrete_scatterplot(data=data,
+                                      x=x,
+                                      y=y,
+                                      z=z,
+                                      label=label,
+                                      size=size,
+                                      cmap=cmap,
+                                      fig=fig,
+                                      **kwargs)
         else:
             if scale == "zscore":
                 data[label] = StandardScaler().fit_transform(data[label].values.reshape(-1, 1))
             elif scale == "minmax":
                 data[label] = MinMaxScaler().fit_transform(data[label].values.reshape(-1, 1))
-            ax = _cont_scatterplot(data=data,
-                                   x=x,
-                                   y=y,
-                                   z=z,
-                                   label=label,
-                                   size=size,
-                                   cmap=cmap,
-                                   fig=fig,
-                                   cbar_kwargs=cbar_kwargs,
-                                   **kwargs)
+            ax = cont_scatterplot(data=data,
+                                  x=x,
+                                  y=y,
+                                  z=z,
+                                  label=label,
+                                  size=size,
+                                  cmap=cmap,
+                                  fig=fig,
+                                  cbar_kwargs=cbar_kwargs,
+                                  **kwargs)
     else:
         if isinstance(size, str):
             size = data[size].values
@@ -277,15 +277,15 @@ def cluster_bubble_plot(data: pd.DataFrame,
                                  size="cluster_size",
                                  **kwargs)
         else:
-            ax = _discrete_scatterplot(data=centroids,
-                                       x=f"{dim_reduction_method}1",
-                                       y=f"{dim_reduction_method}2",
-                                       z=f"{dim_reduction_method}3",
-                                       size="cluster_size",
-                                       label=colour_label,
-                                       cmap=cmap,
-                                       fig=fig,
-                                       **kwargs)
+            ax = discrete_scatterplot(data=centroids,
+                                      x=f"{dim_reduction_method}1",
+                                      y=f"{dim_reduction_method}2",
+                                      z=f"{dim_reduction_method}3",
+                                      size="cluster_size",
+                                      label=colour_label,
+                                      cmap=cmap,
+                                      fig=fig,
+                                      **kwargs)
     else:
         if n_components == 2:
             ax = fig.add_subplot(111)
@@ -296,16 +296,16 @@ def cluster_bubble_plot(data: pd.DataFrame,
                                  size="cluster_size",
                                  **kwargs)
         else:
-            ax = _cont_scatterplot(data=data,
-                                   x=f"{dim_reduction_method}1",
-                                   y=f"{dim_reduction_method}2",
-                                   z=f"{dim_reduction_method}3",
-                                   label=colour_label,
-                                   size="cluster_size",
-                                   cmap=cmap,
-                                   fig=fig,
-                                   cbar_kwargs=cbar_kwargs,
-                                   **kwargs)
+            ax = cont_scatterplot(data=data,
+                                  x=f"{dim_reduction_method}1",
+                                  y=f"{dim_reduction_method}2",
+                                  z=f"{dim_reduction_method}3",
+                                  label=colour_label,
+                                  size="cluster_size",
+                                  cmap=cmap,
+                                  fig=fig,
+                                  cbar_kwargs=cbar_kwargs,
+                                  **kwargs)
     legend_kwargs = legend_kwargs or {}
     legend_kwargs["bbox_to_anchor"] = legend_kwargs.get("bbox_to_anchor", (1.1, 1.0))
     ax.legend(*ax.get_legend_handles_labels(), **legend_kwargs)

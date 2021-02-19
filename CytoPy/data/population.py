@@ -284,7 +284,18 @@ def merge_many_populations(populations: list,
     err = "merge_many_populations currently only supports 'cluster' or 'classifier' source " \
           "types. To merge populations from other sources, use merge_populations method"
     assert all([x.source == "cluster" or x.source == "classifier" for x in populations]), err
+    assert len(set([x.parent for x in populations])) == 1, "Populations for merging should share the same parent"
+    assert len(populations) > 1, "Provide two or more populations for merging"
     new_idx = np.unique(np.concatenate([x.index for x in populations], axis=0), axis=0)
+    warnings = [i for sl in [x.warnings for x in populations] for i in sl] + ["MERGED POPULATIONS"]
+    new_population = Population(population_name=new_population_name,
+                                n=len(new_idx),
+                                parent=populations[0].parent,
+                                warnings=warnings,
+                                index=new_idx,
+                                source=populations[0].source,
+                                signature=pd.DataFrame([x.signature for x in populations]).mean().to_dict())
+    return new_population
 
 
 def merge_populations(left: Population,
