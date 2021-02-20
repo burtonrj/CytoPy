@@ -30,6 +30,7 @@ snowballstemmer~=2.0.0
 sphinx~=3.2.1
 sphinx-theme~=1.0
 sphinx-rtd-theme~=0.4.3
+statsmodels=~0.12
 autodocsumm~=0.2.1
 tables~=3.6.1
 tensorflow~=2.4
