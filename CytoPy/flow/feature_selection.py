@@ -32,10 +32,15 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from ..feedback import progress_bar, setup_standard_logger
 from ..data.experiment import Experiment, fetch_subject
 from .plotting.embeddings_graphs import discrete_scatterplot, cont_scatterplot
+from .cell_classifier import utils as classifier_utils
 from . import transform
 from sklearn.linear_model import Lasso, LogisticRegression, SGDClassifier, SGDRegressor
-from sklearn.svm import LinearSVC, LinearSVR
+from sklearn.model_selection import train_test_split, BaseCrossValidator, StratifiedShuffleSplit
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree
+from sklearn.inspection import permutation_importance
 from sklearn.decomposition import PCA as SkPCA
+from sklearn.svm import LinearSVC, LinearSVR
+from imblearn.over_sampling import RandomOverSampler
 from collections import defaultdict
 from scipy import stats as scipy_stats
 from matplotlib.collections import EllipseCollection
@@ -64,12 +69,13 @@ STATS = {"mean": np.mean,
          "kurtosis": scipy_stats.kurtosis,
          "gmean": scipy_stats.gmean}
 
-L1MODELS = {"lasso": Lasso,
-            "log": LogisticRegression,
-            "SGDr": SGDRegressor,
-            "SGDc": SGDClassifier,
-            "SVMc": LinearSVC,
-            "SVMr": LinearSVR}
+L1CLASSIFIERS = {"log": [LogisticRegression, dict(penalty="l1")],
+                 "SGD": [SGDClassifier, dict(penalty="l1")],
+                 "SVM": [LinearSVC, dict(penalty="l1")]}
+
+L1REGRESSORS = {"lasso": [Lasso, dict()],
+                "SGD": [SGDRegressor, dict(penalty="l1")],
+                "SVM": [LinearSVR, dict(loss="epsilon_insensitive")]}
 
 
 def _fetch_population_statistics(files: list,
@@ -426,23 +432,26 @@ def plot_multicolinearity(data: pd.DataFrame,
                           features: list,
                           method: str = "spearman",
                           ax: plt.Axes or None = None,
+                          plot_type: str = "ellipse",
                           **kwargs):
     corr = data[features].corr(method=method)
-    ax = ax or plt.subplots(figsize=(8, 8), subplot_kw={'aspect': 'equal'})[1]
-    ax.set_xlim(-0.5, corr.shape[1] - 0.5)
-    ax.set_ylim(-0.5, corr.shape[0] - 0.5)
-    xy = np.indices(corr.shape)[::-1].reshape(2, -1).T
-    w = np.ones_like(corr.values).ravel()
-    h = 1 - np.abs(corr.values).ravel()
-    a = 45 * np.sign(corr.values).ravel()
-    ec = EllipseCollection(widths=w, heights=h, angles=a, units='x', offsets=xy,
-                           transOffset=ax.transData, array=corr.values.ravel(), **kwargs)
-    ax.add_collection(ec)
-    ax.set_xticks(np.arange(corr.shape[1]))
-    ax.set_xticklabels(corr.columns, rotation=90)
-    ax.set_yticks(np.arange(corr.shape[0]))
-    ax.set_yticklabels(corr.index)
-    return ax
+    if plot_type == "ellipse":
+        ax = ax or plt.subplots(figsize=(8, 8), subplot_kw={'aspect': 'equal'})[1]
+        ax.set_xlim(-0.5, corr.shape[1] - 0.5)
+        ax.set_ylim(-0.5, corr.shape[0] - 0.5)
+        xy = np.indices(corr.shape)[::-1].reshape(2, -1).T
+        w = np.ones_like(corr.values).ravel()
+        h = 1 - np.abs(corr.values).ravel()
+        a = 45 * np.sign(corr.values).ravel()
+        ec = EllipseCollection(widths=w, heights=h, angles=a, units='x', offsets=xy,
+                               transOffset=ax.transData, array=corr.values.ravel(), **kwargs)
+        ax.add_collection(ec)
+        ax.set_xticks(np.arange(corr.shape[1]))
+        ax.set_xticklabels(corr.columns, rotation=90)
+        ax.set_yticks(np.arange(corr.shape[0]))
+        ax.set_yticklabels(corr.index)
+        return ax
+    return sns.clustermap(data=corr, **kwargs)
 
 
 class PCA:
@@ -590,52 +599,292 @@ class PCA:
 
 class L1Selection:
     def __init__(self,
+                 data: pd.DataFrame,
+                 target: str,
+                 features: list,
                  model: str,
-                 scale: str):
-        self.model = {""}
+                 category: str = "classification",
+                 scale: str or None = "standard",
+                 scale_kwargs: dict or None = None,
+                 **kwargs):
+        scale_kwargs = scale_kwargs or {}
 
+        if category == "classification":
+            self._category = "classification"
+            assert model in L1CLASSIFIERS.keys(), f"Invalid model must be one of: {L1CLASSIFIERS.keys()}"
+            assert data[target].nunique() == 2, "L1Selection only supports binary classification"
+            klass, req_kwargs = L1CLASSIFIERS.get(model)
+        elif category == "regression":
+            self._category = "regression"
+            assert model in L1REGRESSORS.keys(), f"Invalid model must be one of: {L1REGRESSORS.keys()}"
+            klass, req_kwargs = L1REGRESSORS.get(model)
+        else:
+            raise ValueError("Category should be 'classification' or 'regression'")
 
-    def build_model(self):
-        pass
+        for k, v in req_kwargs:
+            kwargs[k] = v
 
-    def plot(self):
-        pass
+        self.model = klass(**kwargs)
+        self._reg_param = "C"
+        if "alpha" in klass.get_params().keys():
+            self._reg_param = "alpha"
 
+        data = data.copy()
+        self.scaler = None
 
-class MixedEffects:
-    def __init__(self,
-                 scale: str):
-        pass
+        if scale:
+            self.scaler = transform.Scaler(method=scale, **scale_kwargs)
+            data = self.scaler(data=data, features=features)
+        self.x, self.y = data[features], data[target].values
+        self.features = features
 
-    def fit(self):
-        # Warn if fixed effects have less than 5 unique values, consider treating them as fixed effects
-        # Warn if spearman rank colinearity > 0.5 for one or more pairs of variables
-        pass
+        self.scores = None
 
-    def plot_residuals_fixed(self):
-        pass
+    def fit(self,
+            search_space: tuple = (-2, 0, 50),
+            cross_val: BaseCrossValidator or None = None,
+            verbose: bool = True,
+            **kwargs):
+        scores = dict()
+        search_space = np.logspace(*search_space)
+        cv = cross_val or StratifiedShuffleSplit(n_splits=10, test_size=0.5, random_state=42)
+        for i, (train_idx, test_idx) in progress_bar(enumerate(cv.split(self.x, self.y)), verbose=verbose):
+            scores["Round"].append(i + 1)
+            x, y = self.x.iloc[train_idx].values, self.y[test_idx]
+            for r in search_space:
+                scores[self._reg_param].append(r)
+                self.model.set_params(**{self._reg_param: r})
+                self.model.fit(x, y, **kwargs)
+                for fi, f in enumerate(self.features):
+                    if self._category == "classification":
+                        scores[f].append(self.model.coef_[0, fi])
+                    else:
+                        scores[f].append(self.model.coef_[fi])
+        self.scores = pd.DataFrame(scores).melt(id_vars=["Round", self._reg_param],
+                                                var_name="Feature",
+                                                value_name="Coefficient")
+        return self
 
-    def plot_residuals_random(self):
-        pass
-
-    def plot_conditional_means(self):
-        pass
-
-    def model_outputs(self):
-        pass
+    def plot(self,
+             ax: plt.Axes or None = None,
+             title: str = "L1 Penalty",
+             xlabel: str = "Regularisation parameter",
+             ylabel: str = "Coefficient",
+             **kwargs):
+        ax = ax or plt.subplots(figsize=(10, 5))[1]
+        assert self.scores is not None, "Call fit prior to plot"
+        average_scores = self.scores.groupby([self._reg_param, "Feature"])["Coefficient"].mean().reset_index()
+        ax = sns.lineplot(data=average_scores,
+                          x=self._reg_param,
+                          y="Coefficient",
+                          hue="Feature",
+                          ax=ax,
+                          **kwargs)
+        ax.xscale("log")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        return ax
 
 
 class DecisionTree:
     def __init__(self,
-                 scale: str):
-        pass
+                 data: pd.DataFrame,
+                 target: str,
+                 features: list,
+                 tree_type: str = "classification",
+                 balance_classes: str = "sample",
+                 sampling_kwargs: dict or None = None,
+                 **kwargs):
+        self.x, self.y = data[features], data[target].values
+        self.features = features
+        self._balance = None
+        if data.shape[0] < len(features):
+            warn("Decision trees tend to overfit when the feature space is large but there are a limited "
+                 "number of samples. Consider limiting the number of features or setting max_depth accordingly",
+                 stacklevel=2)
+        if tree_type == "classification":
+            self.tree_builder = DecisionTreeClassifier(**kwargs)
+            if balance_classes == "balanced":
+                self._balance = "balanced"
+            else:
+                sampling_kwargs = sampling_kwargs or {}
+                sampler = RandomOverSampler(**sampling_kwargs)
+                self.x, self.y = sampler.fit_resample(self.x, self.y)
+        else:
+            self.tree_builder = DecisionTreeRegressor(**kwargs)
+
+    def _fit(self,
+             x: np.ndarray,
+             y: np.ndarray,
+             params: dict or None = None,
+             **kwargs):
+        params = params or {}
+        if isinstance(self.tree_builder, DecisionTreeClassifier):
+            if self._balance == "balanced":
+                params["class_weight"] = "balanced"
+        self.tree_builder.set_params(**params)
+        self.tree_builder.fit(x, y, **kwargs)
+
+    def fit_predict(self,
+                    validation_frac: float = 0.5,
+                    params: dict or None = None,
+                    performance_metrics: list or None = None,
+                    **kwargs):
+        performance_metrics = performance_metrics or ["accuracy_score"]
+        x_train, x_test, y_train, y_test = train_test_split(self.x.values, self.y,
+                                                            test_size=validation_frac,
+                                                            random_state=42)
+        self._fit(x_train, y_train, params, **kwargs)
+        y_pred_train = self.tree_builder.predict(x_train, y_train)
+        y_pred_test = self.tree_builder.predict(x_test, y_test)
+        y_score_train, y_score_test = None, None
+        if isinstance(self.tree_builder, DecisionTreeClassifier):
+            y_score_train = self.tree_builder.predict_proba(x_train, y_train)
+            y_score_test = self.tree_builder.predict_proba(x_test, y_test)
+        train_score = pd.DataFrame(classifier_utils.calc_metrics(metrics=performance_metrics,
+                                                                 y_true=y_train,
+                                                                 y_pred=y_pred_train,
+                                                                 y_score=y_score_train))
+        train_score["Dataset"] = "Training"
+        test_score = pd.DataFrame(classifier_utils.calc_metrics(metrics=performance_metrics,
+                                                                y_true=y_test,
+                                                                y_pred=y_pred_test,
+                                                                y_score=y_score_test))
+        test_score["Dataset"] = "Testing"
+        return pd.concat([train_score, test_score])
+
+    def prune(self,
+              depth: tuple = (3,),
+              verbose: bool = True,
+              metric: str = "accuracy_score",
+              validation_frac: float = 0.5,
+              ax: plt.Axes or None = None,
+              fit_kwargs: dict or None = None,
+              **kwargs):
+        fit_kwargs = fit_kwargs or {}
+        if len(depth) == 1:
+            depth = np.arange(depth[0], len(self.x.shape[1]), 1)
+        else:
+            depth = np.arange(depth[0], depth[1], 1)
+        depth_performance = list()
+        for d in progress_bar(depth, verbose=verbose):
+            performance = self.fit_predict(validation_frac=validation_frac,
+                                           params={"max_depth": d, "random_state": 42},
+                                           performance_metrics=[metric],
+                                           **fit_kwargs)
+            performance["Max depth"] = d
+            depth_performance.append(performance)
+        depth_performance = pd.concat(depth_performance)
+        return sns.lineplot(data=depth_performance,
+                            x="Max depth",
+                            y=metric,
+                            ax=ax,
+                            hue="Dataset",
+                            **kwargs)
+
+    def plot_tree(self,
+                  ax: plt.Axes or None = None,
+                  **kwargs):
+        return plot_tree(decision_tree=self.tree_builder,
+                         feature_names=self.features,
+                         ax=ax,
+                         **kwargs)
+
+    def plot_importance(self,
+                        ax: plt.Axes or None = None,
+                        params: dict or None = None,
+                        fit_kwargs: dict or None = None,
+                        **kwargs):
+        warn("Impurity-based feature importances can be misleading for high cardinality features "
+             "(many unique values). Consider FeatureImportance class to perform more robust permutation "
+             "feature importance")
+        fit_kwargs = fit_kwargs or {}
+        kwargs["color"] = kwargs.get("color", "#688bc4")
+        self._fit(self.x, self.y, params=params, **fit_kwargs)
+        tree_importance_sorted_idx = np.argsort(self.tree_builder.feature_importances_)
+        features = np.array(self.features)[tree_importance_sorted_idx]
+        return sns.barplot(y=features,
+                           x=self.tree_builder.feature_importances_[tree_importance_sorted_idx],
+                           ax=ax,
+                           **kwargs)
 
 
 class FeatureImportance:
-    def __init__(self):
-        pass
+    def __init__(self,
+                 classifier,
+                 data: pd.DataFrame,
+                 features: list,
+                 target: str,
+                 validation_frac: float = 0.5,
+                 balance_by_resampling: bool = False,
+                 sampling_kwargs: dict or None = None,
+                 **kwargs):
+        self.classifier = classifier
+        self.features = features
+        self.x, self.y = data[features], data[target].values
+        if balance_by_resampling:
+            sampling_kwargs = sampling_kwargs or {}
+            sampler = RandomOverSampler(**sampling_kwargs)
+            self.x, self.y = sampler.fit_resample(self.x, self.y)
+        tt = train_test_split(self.x.values, self.y,
+                              test_size=validation_frac,
+                              random_state=42)
+        self.x_train, self.x_test, self.y_train, self.y_test = tt
+        self.classifier.fit(self.x_train, self.y_train, **kwargs)
 
+    def validation_performance(self,
+                               performance_metrics: list or None = None,
+                               **kwargs):
+        performance_metrics = performance_metrics or ["accuracy_score"]
+        y_pred_train = self.classifier.predict(self.x_train, self.y_train, **kwargs)
+        y_pred_test = self.classifier.predict(self.x_test, self.y_test, **kwargs)
+        train_score = pd.DataFrame(classifier_utils.calc_metrics(metrics=performance_metrics,
+                                                                 y_true=self.y_train,
+                                                                 y_pred=y_pred_train))
+        train_score["Dataset"] = "Training"
+        test_score = pd.DataFrame(classifier_utils.calc_metrics(metrics=performance_metrics,
+                                                                y_true=self.y_test,
+                                                                y_pred=y_pred_test))
+        test_score["Dataset"] = "Testing"
+        return pd.concat([train_score, test_score])
 
-class ModelExplainer:
-    def __init__(self):
-        pass
+    def importance(self,
+                   ax: plt.Axes or None = None,
+                   **kwargs):
+        tree_importance_sorted_idx = np.argsort(self.classifier.feature_importances_)
+        features = np.array(self.features)[tree_importance_sorted_idx]
+        return sns.barplot(y=features,
+                           x=self.classifier.feature_importances_[tree_importance_sorted_idx],
+                           ax=ax,
+                           **kwargs)
+
+    def permutation_importance(self,
+                               use_validation: bool = True,
+                               permutation_kwargs: dict or None = None,
+                               boxplot_kwargs: dict or None = None,
+                               overlay_kwargs: dict or None = None):
+        permutation_kwargs = permutation_kwargs or {}
+        if use_validation:
+            result = permutation_importance(self.classifier,
+                                            self.x_test,
+                                            self.y_test,
+                                            **permutation_kwargs)
+        else:
+            result = permutation_importance(self.classifier,
+                                            self.x_train,
+                                            self.y_train,
+                                            **permutation_kwargs)
+        result = pd.DataFrame(result.importances, columns=self.features)
+        result = result.melt(var_name="Feature", value_name="Permutation importance")
+        perm_sorted_idx = result.importances_mean.argsort()
+        boxplot_kwargs = boxplot_kwargs or {}
+        overlay_kwargs = overlay_kwargs or {}
+        boxplot_kwargs["order"] = list(np.array(self.features)[perm_sorted_idx])
+        overlay_kwargs["order"] = list(np.array(self.features)[perm_sorted_idx])
+        return box_swarm_plot(plot_df=result,
+                              x="Permutation importance",
+                              y="Feature",
+                              boxplot_kwargs=boxplot_kwargs,
+                              overlay_kwargs=overlay_kwargs)
+
