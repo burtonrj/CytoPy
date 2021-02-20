@@ -69,9 +69,9 @@ STATS = {"mean": np.mean,
          "kurtosis": scipy_stats.kurtosis,
          "gmean": scipy_stats.gmean}
 
-L1CLASSIFIERS = {"log": [LogisticRegression, dict(penalty="l1")],
+L1CLASSIFIERS = {"log": [LogisticRegression, dict(penalty="l1", solver="liblinear")],
                  "SGD": [SGDClassifier, dict(penalty="l1")],
-                 "SVM": [LinearSVC, dict(penalty="l1")]}
+                 "SVM": [LinearSVC, dict(penalty="l1", loss="squared_hinge", dual=False)]}
 
 L1REGRESSORS = {"lasso": [Lasso, dict()],
                 "SGD": [SGDRegressor, dict(penalty="l1")],
@@ -103,7 +103,7 @@ class FeatureSpace:
         self.population_statistics = _fetch_population_statistics(files=self._fcs_files, populations=self.populations)
         self.ratios = defaultdict(dict)
         self.channel_desc = defaultdict(dict)
-        self.meta_labels = dict()
+        self.meta_labels = defaultdict(dict)
 
     def compute_ratios(self,
                        pop1: str,
@@ -133,7 +133,7 @@ class FeatureSpace:
     def channel_desc_stats(self,
                            channel: str,
                            stats: list or None = None,
-                           transform: str or None = None,
+                           channel_transform: str or None = None,
                            transform_kwargs: dict or None = None,
                            populations: list or None = None,
                            verbose: bool = True):
@@ -145,14 +145,14 @@ class FeatureSpace:
                 if p not in f.list_populations():
                     self.logger.warn(f"{f.primary_id} missing population {p}")
                     for s in stats:
-                        self.channel_desc[f.primary_id][f"{p}_{s}"] = None
+                        self.channel_desc[f.primary_id][f"{p}_{channel}_{s}"] = None
                 else:
                     x = f.load_population_df(population=p,
-                                             transform=transform,
+                                             transform=channel_transform,
                                              features_to_transform=[channel],
                                              transform_kwargs=transform_kwargs)[channel].values
                     for s in stats:
-                        self.channel_desc[f.primary_id][f"{p}_{s}"] = STATS.get(s)(x)
+                        self.channel_desc[f.primary_id][f"{p}_{channel}_{s}"] = STATS.get(s)(x)
         return self
 
     def add_meta_labels(self,
@@ -163,15 +163,15 @@ class FeatureSpace:
                 continue
             try:
                 if isinstance(key, str):
-                    self.meta_labels[f.primary_id] = subject[key]
+                    self.meta_labels[f.primary_id][key] = subject[key]
                 else:
                     node = subject[key[0]]
                     for k in key[1:]:
                         node = node[k]
-                    self.meta_labels[f.primary_id] = node
+                    self.meta_labels[f.primary_id][key] = node
             except KeyError:
                 self.logger.warn(f"{f.primary_id} missing meta variable {key} in Subject document")
-                self.meta_labels[f.primary_id] = None
+                self.meta_labels[f.primary_id][key] = None
         return self
 
     def construct_dataframe(self):
@@ -183,10 +183,15 @@ class FeatureSpace:
                 data[f"{pop_name}_N"].append(pop_stats["n"])
                 data[f"{pop_name}_FOR"].append(pop_stats["frac_of_root"])
                 data[f"{pop_name}_FOP"].append(pop_stats["frac_of_parent"])
-            for n, r in self.ratios.get(sample_id).items():
-                data[n].append(r)
-            for n, s in self.channel_desc.get(sample_id).items():
-                data[n].append(s)
+            if self.ratios:
+                for n, r in self.ratios.get(sample_id).items():
+                    data[n].append(r)
+            if self.channel_desc:
+                for n, s in self.channel_desc.get(sample_id).items():
+                    data[n].append(s)
+            if self.meta_labels:
+                for m, v in self.meta_labels.get(sample_id).items():
+                    data[m].append(v)
         return pd.DataFrame(data)
 
 
@@ -228,13 +233,13 @@ def clustered_heatmap(data: pd.DataFrame,
                       row_colours: str or None = None,
                       row_colours_cmap: str = "tab10",
                       **kwargs):
-    df = data.set_index(index)[features].copy()
+    df = data.set_index(index, drop=True)[features].copy()
     if row_colours is not None:
         row_colours_title = row_colours
         lut = dict(zip(data[row_colours].unique(), row_colours_cmap))
         row_colours = data[row_colours].map(lut)
         handles = [Patch(facecolor=lut[name]) for name in lut]
-        g = sns.clustermap(df, row_colors=row_colours, **kwargs)
+        g = sns.clustermap(df, row_colors=row_colours.values, **kwargs)
         plt.legend(handles, lut,
                    title=row_colours_title,
                    bbox_to_anchor=(1, 1),
@@ -300,6 +305,7 @@ def box_swarm_plot(plot_df: pd.DataFrame,
                   dodge=True,
                   palette=palette,
                   **overlay_kwargs)
+    return ax
 
 
 class InferenceTesting:
@@ -415,16 +421,16 @@ class InferenceTesting:
             x, y = self.data[self.data[between] == x].copy(), self.data[self.data[between] == y].copy()
             if paired:
                 for i in ind_var:
-                    np_stats = pingouin.wilcoxon(x, y, **kwargs)
+                    np_stats = pingouin.wilcoxon(x[i].values, y[i].values, **kwargs)
                     np_stats["Variable"] = i
                     results.append(np_stats)
             else:
                 for i in ind_var:
-                    np_stats = pingouin.mwu(x, y, **kwargs)
+                    np_stats = pingouin.mwu(x[i].values, y[i].values, **kwargs)
                     np_stats["Variable"] = i
                     results.append(np_stats)
         results = pd.concat(results)
-        results["p-val"] = pingouin.multicomp(results["p-val"].values, alpha=multicomp_alpha, method=multicomp)
+        results["p-val"] = pingouin.multicomp(results["p-val"].values, alpha=multicomp_alpha, method=multicomp)[1]
         return results
 
 
@@ -450,8 +456,8 @@ def plot_multicolinearity(data: pd.DataFrame,
         ax.set_xticklabels(corr.columns, rotation=90)
         ax.set_yticks(np.arange(corr.shape[0]))
         ax.set_yticklabels(corr.index)
-        return ax
-    return sns.clustermap(data=corr, **kwargs)
+        return ax, ec
+    return sns.clustermap(data=corr, **kwargs), None
 
 
 class PCA:
@@ -472,12 +478,13 @@ class PCA:
             self.scaler = transform.Scaler(method=scale, **scale_kwargs)
             self.data = self.scaler(self.data, self.features)
         kwargs = kwargs or dict()
-        kwargs["random_stats"] = kwargs.get("random_state", 42)
+        kwargs["random_state"] = kwargs.get("random_state", 42)
         self.pca = SkPCA(**kwargs)
         self.embeddings = None
 
     def fit(self):
         self.embeddings = self.pca.fit_transform(self.data[self.features])
+        return self
 
     def scree_plot(self, **kwargs):
         assert self.embeddings is not None, "Call fit first"
@@ -504,10 +511,11 @@ class PCA:
              figsize: tuple or None = (5, 5),
              cbar_kwargs: dict or None = None,
              **kwargs):
+        components = components or [0, 1]
         assert 2 <= len(components) <= 3, "Components should be of length 2 or 3"
         assert self.embeddings is not None, "Call fit first"
-        components = components or [0, 1]
         plot_df = pd.DataFrame({f"PC{i + 1}": self.embeddings[:, i] for i in components})
+        plot_df[label] = self.data[label]
         fig = plt.figure(figsize=figsize)
         z = None
         if len(components) == 3:
@@ -542,14 +550,14 @@ class PCA:
             features_i = list(range(len(self.features)))
             if limit_loadings:
                 features_i = [i for i, x in enumerate(self.features) if x in limit_loadings]
-            ax = self._add_loadings(pca=self.pca,
-                                    components=components,
+            ax = self._add_loadings(components=components,
                                     ax=ax,
                                     features_i=features_i,
                                     **arrow_kwargs)
         if ellipse:
             assert len(components) == 2, "CytoPy only supports confidence ellipse for 2D plots"
             assert discrete, "Ellipse only value for discrete label"
+            ellipse_kwargs = ellipse_kwargs or {}
             ax = self._add_ellipse(components=components,
                                    label=label,
                                    cmap=cmap,
@@ -580,7 +588,7 @@ class PCA:
         kwargs["edgecolor"] = kwargs.get("edgecolor", "#383838")
         kwargs["alpha"] = kwargs.get("alpha", 0.2)
         colours = plt.get_cmap(cmap).colors
-        assert len(colours) == self.data[label].nunique(), "Chosen cmap doesn't contain enough unique colours"
+        assert len(colours) >= self.data[label].nunique(), "Chosen cmap doesn't contain enough unique colours"
         for l, c in zip(self.data[label].unique(), colours):
             idx = self.data[self.data[label] == l].index.values
             x, y = self.embeddings[idx, components[0]], self.embeddings[idx, components[1]]
@@ -621,12 +629,12 @@ class L1Selection:
         else:
             raise ValueError("Category should be 'classification' or 'regression'")
 
-        for k, v in req_kwargs:
+        for k, v in req_kwargs.items():
             kwargs[k] = v
 
         self.model = klass(**kwargs)
         self._reg_param = "C"
-        if "alpha" in klass.get_params().keys():
+        if "alpha" in self.model.get_params().keys():
             self._reg_param = "alpha"
 
         data = data.copy()
@@ -642,27 +650,18 @@ class L1Selection:
 
     def fit(self,
             search_space: tuple = (-2, 0, 50),
-            cross_val: BaseCrossValidator or None = None,
-            verbose: bool = True,
             **kwargs):
-        scores = dict()
         search_space = np.logspace(*search_space)
-        cv = cross_val or StratifiedShuffleSplit(n_splits=10, test_size=0.5, random_state=42)
-        for i, (train_idx, test_idx) in progress_bar(enumerate(cv.split(self.x, self.y)), verbose=verbose):
-            scores["Round"].append(i + 1)
-            x, y = self.x.iloc[train_idx].values, self.y[test_idx]
-            for r in search_space:
-                scores[self._reg_param].append(r)
-                self.model.set_params(**{self._reg_param: r})
-                self.model.fit(x, y, **kwargs)
-                for fi, f in enumerate(self.features):
-                    if self._category == "classification":
-                        scores[f].append(self.model.coef_[0, fi])
-                    else:
-                        scores[f].append(self.model.coef_[fi])
-        self.scores = pd.DataFrame(scores).melt(id_vars=["Round", self._reg_param],
-                                                var_name="Feature",
-                                                value_name="Coefficient")
+        coefs = list()
+        for r in search_space:
+            self.model.set_params(**{self._reg_param: r})
+            self.model.fit(self.x, self.y, **kwargs)
+            if self._category == "classification":
+                coefs.append(list(self.model.coef_[0]))
+            else:
+                coefs.append(list(self.model.coef_))
+        self.scores = pd.DataFrame(np.array(coefs), columns=self.features)
+        self.scores[self._reg_param] = search_space
         return self
 
     def plot(self,
@@ -670,20 +669,19 @@ class L1Selection:
              title: str = "L1 Penalty",
              xlabel: str = "Regularisation parameter",
              ylabel: str = "Coefficient",
+             cmap: str = "tab10",
              **kwargs):
         ax = ax or plt.subplots(figsize=(10, 5))[1]
         assert self.scores is not None, "Call fit prior to plot"
-        average_scores = self.scores.groupby([self._reg_param, "Feature"])["Coefficient"].mean().reset_index()
-        ax = sns.lineplot(data=average_scores,
-                          x=self._reg_param,
-                          y="Coefficient",
-                          hue="Feature",
-                          ax=ax,
-                          **kwargs)
-        ax.xscale("log")
+        colours = plt.get_cmap(cmap).colors
+        for i, feature in enumerate(self.features):
+            ax.plot(self.scores[self._reg_param], self.scores[feature], label=feature,
+                    color=colours[i], **kwargs)
+        ax.set_xscale("log")
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         ax.set_title(title)
+        ax.legend(bbox_to_anchor=(1.1, 1))
         return ax
 
 
