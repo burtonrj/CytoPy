@@ -36,7 +36,7 @@ from .cell_classifier import utils as classifier_utils
 from . import transform
 from sklearn.linear_model import Lasso, LogisticRegression, SGDClassifier, SGDRegressor
 from sklearn.model_selection import train_test_split, BaseCrossValidator, StratifiedShuffleSplit
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree, export_graphviz
 from sklearn.inspection import permutation_importance
 from sklearn.decomposition import PCA as SkPCA
 from sklearn.svm import LinearSVC, LinearSVR
@@ -50,6 +50,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
+import graphviz
 import pingouin
 
 __author__ = "Ross Burton"
@@ -724,32 +725,34 @@ class DecisionTree:
         self.tree_builder.set_params(**params)
         self.tree_builder.fit(x, y, **kwargs)
 
-    def fit_predict(self,
-                    validation_frac: float = 0.5,
-                    params: dict or None = None,
-                    performance_metrics: list or None = None,
-                    **kwargs):
+    def validate_tree(self,
+                      validation_frac: float = 0.5,
+                      params: dict or None = None,
+                      performance_metrics: list or None = None,
+                      **kwargs):
         performance_metrics = performance_metrics or ["accuracy_score"]
         x_train, x_test, y_train, y_test = train_test_split(self.x.values, self.y,
                                                             test_size=validation_frac,
                                                             random_state=42)
         self._fit(x_train, y_train, params, **kwargs)
-        y_pred_train = self.tree_builder.predict(x_train, y_train)
-        y_pred_test = self.tree_builder.predict(x_test, y_test)
+        y_pred_train = self.tree_builder.predict(x_train)
+        y_pred_test = self.tree_builder.predict(x_test)
         y_score_train, y_score_test = None, None
         if isinstance(self.tree_builder, DecisionTreeClassifier):
-            y_score_train = self.tree_builder.predict_proba(x_train, y_train)
-            y_score_test = self.tree_builder.predict_proba(x_test, y_test)
-        train_score = pd.DataFrame(classifier_utils.calc_metrics(metrics=performance_metrics,
-                                                                 y_true=y_train,
-                                                                 y_pred=y_pred_train,
-                                                                 y_score=y_score_train))
+            y_score_train = self.tree_builder.predict_proba(x_train)
+            y_score_test = self.tree_builder.predict_proba(x_test)
+        train_score = classifier_utils.calc_metrics(metrics=performance_metrics,
+                                                    y_true=y_train,
+                                                    y_pred=y_pred_train,
+                                                    y_score=y_score_train)
         train_score["Dataset"] = "Training"
-        test_score = pd.DataFrame(classifier_utils.calc_metrics(metrics=performance_metrics,
-                                                                y_true=y_test,
-                                                                y_pred=y_pred_test,
-                                                                y_score=y_score_test))
+        train_score = pd.DataFrame(train_score, index=[0])
+        test_score = classifier_utils.calc_metrics(metrics=performance_metrics,
+                                                   y_true=y_test,
+                                                   y_pred=y_pred_test,
+                                                   y_score=y_score_test)
         test_score["Dataset"] = "Testing"
+        test_score = pd.DataFrame(test_score, index=[1])
         return pd.concat([train_score, test_score])
 
     def prune(self,
@@ -767,10 +770,10 @@ class DecisionTree:
             depth = np.arange(depth[0], depth[1], 1)
         depth_performance = list()
         for d in progress_bar(depth, verbose=verbose):
-            performance = self.fit_predict(validation_frac=validation_frac,
-                                           params={"max_depth": d, "random_state": 42},
-                                           performance_metrics=[metric],
-                                           **fit_kwargs)
+            performance = self.validate_tree(validation_frac=validation_frac,
+                                             params={"max_depth": d, "random_state": 42},
+                                             performance_metrics=[metric],
+                                             **fit_kwargs)
             performance["Max depth"] = d
             depth_performance.append(performance)
         depth_performance = pd.concat(depth_performance)
@@ -782,12 +785,28 @@ class DecisionTree:
                             **kwargs)
 
     def plot_tree(self,
+                  plot_type: str = "graphviz",
                   ax: plt.Axes or None = None,
+                  graphviz_outfile: str or None = None,
+                  fit_kwargs: dict or None = None,
                   **kwargs):
-        return plot_tree(decision_tree=self.tree_builder,
-                         feature_names=self.features,
-                         ax=ax,
-                         **kwargs)
+        fit_kwargs = fit_kwargs or {}
+        self._fit(x=self.x, y=self.y, **fit_kwargs)
+        if plot_type == "graphviz":
+            kwargs["feature_names"] = kwargs.get("feature_names", self.features)
+            kwargs["filled"] = kwargs.get("filled", True)
+            kwargs["rounded"] = kwargs.get("rounded", True)
+            kwargs["special_characters"] = kwargs.get("special_characters", True)
+            graph = export_graphviz(self.tree_builder,
+                                    out_file=graphviz_outfile,
+                                    **kwargs)
+            graph = graphviz.Source(graph)
+            return graph
+        else:
+            return plot_tree(decision_tree=self.tree_builder,
+                             feature_names=self.features,
+                             ax=ax,
+                             **kwargs)
 
     def plot_importance(self,
                         ax: plt.Axes or None = None,
@@ -885,4 +904,3 @@ class FeatureImportance:
                               y="Feature",
                               boxplot_kwargs=boxplot_kwargs,
                               overlay_kwargs=overlay_kwargs)
-
