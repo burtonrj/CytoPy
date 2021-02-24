@@ -1,5 +1,6 @@
-from IPython import get_ipython
 from tqdm import tqdm_notebook, tqdm
+from IPython import get_ipython
+import warnings
 import logging
 
 
@@ -89,3 +90,16 @@ def vprint(verbose: bool):
     callable
     """
     return print if verbose else lambda *a, **k: None
+
+
+def _warning(message: str,
+             category: int = UserWarning,
+             filename: str = "",
+             lineno: int = -1):
+    """
+    Monkeypatch to surpress excessive text in warnings.
+    """
+    print(message)
+
+
+warnings.showwarning = _warning

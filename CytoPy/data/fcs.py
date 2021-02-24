@@ -35,6 +35,8 @@ from ..flow.sampling import uniform_downsampling
 from ..flow.build_models import build_sklearn_model
 from .geometry import create_convex_hull
 from .population import Population, merge_populations, merge_many_populations, PolygonGeom
+from .subject import Subject
+from .errors import *
 from sklearn.model_selection import StratifiedKFold, permutation_test_score
 from warnings import warn
 from typing import List, Generator
@@ -56,16 +58,7 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-class MissingControlError(Exception):
-    """Raised when control file missing from FileGroup"""
-    pass
-
-
-class MissingPopulationError(Exception):
-    """Raised when population requested is missing from FileGroup"""
-
-
-def h5file_exists(func: callable) -> callable:
+def data_loaded(func: callable) -> callable:
     """
     Decorator that asserts the h5 file corresponding to the FileGroup exists.
 
@@ -81,7 +74,8 @@ def h5file_exists(func: callable) -> callable:
     """
 
     def wrapper(*args, **kwargs):
-        assert os.path.isfile(args[0].h5path), f"Could not locate FileGroup HDF5 record {args[0].h5path}"
+        assert args[0].h5path is not None, "Data directory and therefore HDF5 path has not been defined."
+        assert os.path.isfile(args[0].h5path), f"Could not locate FileGroup HDF5 record {args[0].h5path}."
         return func(*args, **kwargs)
 
     return wrapper
@@ -149,6 +143,11 @@ def set_column_names(df: pd.DataFrame,
     Returns
     -------
     Pandas.DataFrame
+
+    Raises
+    ------
+    AssertionError
+        Preference must be either 'markers' or 'channels'
     """
     mappings = [{"channels": c, "markers": m} for c, m in zip(channels, markers)]
     assert preference in ["markers", "channels"], "preference should be either 'markers' or 'channels'"
@@ -158,7 +157,7 @@ def set_column_names(df: pd.DataFrame,
     return df
 
 
-class FileGroup(mongoengine.EmbeddedDocument):
+class FileGroup(mongoengine.Document):
     """
     Document representation of a file group; a selection of related fcs files (e.g. a sample and it's associated
     controls).
@@ -183,7 +182,6 @@ class FileGroup(mongoengine.EmbeddedDocument):
         Date and time of sample processing
     """
     primary_id = mongoengine.StringField(required=True)
-    data_directory = mongoengine.StringField(required=True)
     controls = mongoengine.ListField()
     compensated = mongoengine.BooleanField(default=False)
     collection_datetime = mongoengine.DateTimeField(required=False)
@@ -192,39 +190,41 @@ class FileGroup(mongoengine.EmbeddedDocument):
     gating_strategy = mongoengine.ListField()
     valid = mongoengine.BooleanField(default=True)
     notes = mongoengine.StringField(required=False)
+    subject = mongoengine.ReferenceField(Subject)
     meta = {
         'db_alias': 'core',
         'collection': 'fcs_files'
     }
 
     def __init__(self, *args, **values):
-        data = values.pop("data", None)
-        channels = values.pop("channels", None)
-        markers = values.pop("markers", None)
-        self.columns_default = values.pop("columns_default", "markers")
-        assert self.columns_default in ["markers", "channels"], \
-            "columns_default must be one of: 'markers', 'channels'"
         super().__init__(*args, **values)
+        self._columns_default = "markers"
         self.cell_meta_labels = {}
-        if data is not None:
-            assert not self.id, "This FileGroup has already been defined"
-            assert channels is not None, "Must provide channels to create new FileGroup"
-            assert markers is not None, "Must provide markers to create new FileGroup"
-            self.save()
-            self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
-            self._init_new_file(data=data, channels=channels, markers=markers)
-        else:
-            assert self.id is not None, "FileGroup has not been previously defined. Please provide primary data."
-            self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
-            try:
-                self._load_cell_meta_labels()
-                self._load_population_indexes()
-                self.tree = construct_tree(populations=self.populations)
-            except AssertionError as err:
-                warn(f"Failed to load data for {self.primary_id} ({self.id}); "
-                     f"data may be corrupt or missing; {str(err)}")
+        self._data_directory = None
+        self.h5path = None
+        self.tree = construct_tree(populations=self.populations)
 
-    @h5file_exists
+    @property
+    def columns_default(self):
+        return self._columns_default
+
+    @columns_default.setter
+    def columns_default(self, value: str):
+        assert value in ["markers", "channels"], "columns_default must be either 'markers' or 'channels'"
+        self._columns_default = value
+
+    @property
+    def data_directory(self):
+        return self._data_directory
+
+    @data_directory.setter
+    def data_directory(self, path: str):
+        self._data_directory = path
+        self.h5path = os.path.join(self._data_directory, f"{self.id.__str__()}.hdf5")
+        self._load_cell_meta_labels()
+        self._load_population_indexes()
+
+    @data_loaded
     def data(self,
              source: str,
              sample_size: int or float or None = None) -> pd.DataFrame:
@@ -237,9 +237,15 @@ class FileGroup(mongoengine.EmbeddedDocument):
             Name of the file to load from e.g. either "primary" or the name of a control
         sample_size: int or float (optional)
             Sample the DataFrame
+
         Returns
         -------
         Pandas.DataFrame
+
+        Raises
+        ------
+        AssertionError
+            Invalid source
         """
         with h5py.File(self.h5path, "r") as f:
             assert source in f.keys(), f"Invalid source, expected one of: {f.keys()}"
@@ -254,10 +260,10 @@ class FileGroup(mongoengine.EmbeddedDocument):
                                         sample_size=sample_size)
         return data
 
-    def _init_new_file(self,
-                       data: np.array,
-                       channels: List[str],
-                       markers: List[str]):
+    def init_new_file(self,
+                      data: np.array,
+                      channels: List[str],
+                      markers: List[str]):
         """
         Under the assumption that this FileGroup has not been previously defined,
         generate a HDF5 file and initialise the root Population
@@ -307,9 +313,15 @@ class FileGroup(mongoengine.EmbeddedDocument):
             List of channel names
         markers: list
             List of marker names
+
         Returns
         -------
         None
+
+        Raises
+        ------
+        AssertionError
+            If control already exists
         """
         with h5py.File(self.h5path, "a") as f:
             assert ctrl_id not in self.controls, f"Entry for {ctrl_id} already exists"
@@ -320,7 +332,7 @@ class FileGroup(mongoengine.EmbeddedDocument):
         self.controls.append(ctrl_id)
         self.save()
 
-    @h5file_exists
+    @data_loaded
     def _load_cell_meta_labels(self):
         """
         Load single cell meta labels from disk
@@ -335,7 +347,7 @@ class FileGroup(mongoengine.EmbeddedDocument):
                     self.cell_meta_labels[meta] = np.array(f[f"cell_meta_labels/{meta}"][:],
                                                            dtype="U")
 
-    @h5file_exists
+    @data_loaded
     def _load_population_indexes(self):
         """
         Load population level event index data from disk
@@ -364,9 +376,18 @@ class FileGroup(mongoengine.EmbeddedDocument):
         Returns
         -------
         None
+
+        Raises
+        ------
+        DuplicatePopulationError
+            Population already exists
+
+        AssertionError
+            Population is missing index
         """
-        err = f"Population with name '{population.population_name}' already exists"
-        assert population.population_name not in self.tree.keys(), err
+        if population.population_name in self.tree.keys():
+            err = f"Population with name '{population.population_name}' already exists"
+            raise DuplicatePopulationError(err)
         assert population.index is not None, "Population index is empty"
         if population.n is None:
             population.n = len(population.index)
