@@ -157,7 +157,8 @@ class FeatureSpace:
         return self
 
     def add_meta_labels(self,
-                        key: str or list):
+                        key: str or list,
+                        meta_label: str or None = None):
         for f in self._fcs_files:
             subject = fetch_subject(f)
             if subject is None:
@@ -169,7 +170,8 @@ class FeatureSpace:
                     node = subject[key[0]]
                     for k in key[1:]:
                         node = node[k]
-                    self.meta_labels[f.primary_id][key] = node
+                    meta_label = meta_label or k
+                    self.meta_labels[f.primary_id][meta_label] = node
             except KeyError:
                 self.logger.warn(f"{f.primary_id} missing meta variable {key} in Subject document")
                 self.meta_labels[f.primary_id][key] = None
@@ -469,7 +471,7 @@ class PCA:
                  scale_kwargs: dict or None = None,
                  **kwargs):
         self.scaler = None
-        self.data = data
+        self.data = data.dropna(axis=0).reset_index(drop=True)
         self.features = features
         if scale is None:
             warn("PCA requires that input variables have unit variance and therefore scaling is recommended",
@@ -493,10 +495,11 @@ class PCA:
                             "PC": [f"PC{i + 1}" for i in range(len(self.pca.explained_variance_ratio_))]})
         return sns.barplot(data=var, x="PC", y="Variance Explained", ci=None, **kwargs)
 
-    def loadings(self):
+    def loadings(self,
+                 component: int = 0):
         assert self.embeddings is not None, "Call fit first"
         return pd.DataFrame({"Feature": self.features,
-                             "EV Magnitude": abs(self.pca.components_)[0]})
+                             "EV Magnitude": abs(self.pca.components_)[component]})
 
     def plot(self,
              label: str,
@@ -638,7 +641,7 @@ class L1Selection:
         if "alpha" in self.model.get_params().keys():
             self._reg_param = "alpha"
 
-        data = data.copy()
+        data = data.dropna(axis=0).reset_index(drop=True)
         self.scaler = None
 
         if scale:
@@ -695,6 +698,7 @@ class DecisionTree:
                  balance_classes: str = "sample",
                  sampling_kwargs: dict or None = None,
                  **kwargs):
+        data = data.dropna(axis=0).reset_index(drop=True)
         self.x, self.y = data[features], data[target].values
         self.features = features
         self._balance = None
@@ -839,6 +843,7 @@ class FeatureImportance:
                  **kwargs):
         self.classifier = classifier
         self.features = features
+        data = data.dropna(axis=0).reset_index(drop=True)
         self.x, self.y = data[features], data[target].values
         if balance_by_resampling:
             sampling_kwargs = sampling_kwargs or {}
