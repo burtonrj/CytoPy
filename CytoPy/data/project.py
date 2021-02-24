@@ -32,7 +32,6 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from .aws_tools import list_available_buckets
 from .experiment import Experiment
 from .subject import Subject
 from warnings import warn
@@ -40,7 +39,6 @@ from .errors import *
 import mongoengine
 import datetime
 import shutil
-import boto3
 import os
 
 __author__ = "Ross Burton"
@@ -64,15 +62,10 @@ class Project(mongoengine.Document):
 
     Single cell data is stored in HDF5 files and the meta-data stored in MongoDB.
     When creating a Project you should specify where to store these HDF5 files.
-    They can either be stored locally, but passing a local path to the data_directory
-    argument (this should be an existing folder on your system), or can be stored
-    in an AWS S3 bucket.
+    This data is stored locally and the local path is stored in 'data_directory'.
+    This will be checked each time the object is initiated but can be changed
+    using the 'update_data_directory' method.
 
-    To use AWS you must first ensure that you have an AWS account and this is configured
-    for your computer (see https://boto3.amazonaws.com/v1/documentation/api/latest/guide/quickstart.html).
-    Once setup, simply set the 's3' parameter to True when creating your project. The
-    'data_directory' in this case will correspond to the bucket name. If the bucket does
-    not exist, it will automatically be created.
 
     Attributes
     ----------
@@ -87,10 +80,7 @@ class Project(mongoengine.Document):
     experiments: list
         List of references for associated fcs files
     data_directory: str, required
-        Name of the local directory for storing HDF5 files. If s3 is True,
-        data_directory corresponds to the bucket name
-    s3: bool (default=False)
-        Whether to store HDF5 data on AWS S3
+        Path to the local directory for storing HDF5 files.
     """
     project_id = mongoengine.StringField(required=True, unique=True)
     subjects = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
@@ -98,7 +88,6 @@ class Project(mongoengine.Document):
     owner = mongoengine.StringField(requred=True)
     experiments = mongoengine.EmbeddedDocumentListField(Experiment)
     data_directory = mongoengine.StringField(required=True)
-    s3 = mongoengine.BooleanField(default=False)
 
     meta = {
         'db_alias': 'core',
@@ -106,22 +95,37 @@ class Project(mongoengine.Document):
     }
 
     def __init__(self,
-                 data_directory: str or None = None,
                  *args,
                  **values):
         super().__init__(*args, **values)
-        self.s3_connection = None
-        if self.s3:
-            self.s3_connection = boto3.resource("s3")
-            if data_directory not in list_available_buckets():
-                warn(f"Not such bucket {data_directory}, bucket will be created automatically")
-                self.s3_connection.create_bucket(data_directory)
-                self.data_directory = data_directory
-        else:
-            if data_directory:
-                if not os.path.isdir(data_directory):
-                    raise InvalidDataDirectory(f"Could not locate data directory at path {data_directory}")
-                self.data_directory = data_directory
+        if not os.path.isdir(self.data_directory):
+            warn(f"Could not locate data directory at path {self.data_directory}, all further operations "
+                 f"will likely resolve in errors as single cell data will not be attainable. Update the "
+                 f"data directory before continuing using the 'update_data_directory' method.")
+
+    def update_data_directory(self,
+                              data_directory: str):
+        """
+        Update the data directory for this Project.
+
+        Parameters
+        ----------
+        data_directory: str
+            Local path to HDF5 data
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        InvalidDataDirectory
+            If provided path does not exist
+        """
+        if not os.path.isdir(data_directory):
+            raise InvalidDataDirectory(f"Could not find directory at path {data_directory}")
+        self.data_directory = data_directory
+        self.save()
 
     def get_experiment(self, experiment_id: str) -> Experiment:
         """
@@ -141,10 +145,10 @@ class Project(mongoengine.Document):
         MissingExperimentError
             If requested experiment does not exist in this project
         """
-        for exp in self.experiments:
-            if exp.experiment_id == experiment_id:
-                return exp
-        raise MissingExperimentError(f"Invalid experiment; {experiment_id} does not exist")
+        try:
+            return self.experiments.get(experiment_id=experiment_id)
+        except mongoengine.DoesNotExist:
+            raise MissingExperimentError(f"Invalid experiment; {experiment_id} does not exist")
 
     def add_experiment(self,
                        experiment_id: str,
@@ -259,6 +263,14 @@ class Project(mongoengine.Document):
             raise MissingSubjectError(f"Invalid subject ID {subject_id}, does not exist")
         return Subject.objects(subject_id=subject_id).get()
 
+    def delete_experiment(self, experiment_id: str):
+        if experiment_id not in self.list_experiments():
+            raise MissingExperimentError(f"No such experiment {experiment_id}")
+        exp = self.get_experiment(experiment_id)
+        for f in exp.fcs_files:
+            f.delete()
+        self.experiments = [e for e in self.experiments if e.experiment_id != experiment_id]
+
     def delete(self,
                delete_h5_data: bool = True,
                *args,
@@ -280,13 +292,7 @@ class Project(mongoengine.Document):
         None
         """
         if delete_h5_data:
-            if self.s3:
-                bucket = self.s3_connection.Bucket(self.data_directory)
-                for key in bucket.objects.all():
-                    key.delete()
-                bucket.delete()
-            else:
-                shutil.rmtree(self.data_directory)
+            shutil.rmtree(self.data_directory)
         for p in self.subjects:
             p.delete()
         super().delete(*args, **kwargs)
