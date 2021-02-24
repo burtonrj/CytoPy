@@ -49,7 +49,7 @@ def test_load_experiment(create_project):
     p.add_experiment(experiment_id="test1",
                      data_directory=f"{os.getcwd()}/test_data",
                      panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx")
-    e = p.load_experiment(experiment_id="test1")
+    e = p.get_experiment(experiment_id="test1")
     assert e.experiment_id == "test1"
 
 

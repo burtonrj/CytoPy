@@ -32,11 +32,15 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+from .aws_tools import list_available_buckets
 from .experiment import Experiment
 from .subject import Subject
-from typing import Generator
+from warnings import warn
 import mongoengine
 import datetime
+import shutil
+import boto3
+import os
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"
@@ -46,6 +50,14 @@ __version__ = "1.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+
+
+class MissingExperimentError(Exception):
+    pass
+
+
+class InvalidDataDirectory(Exception):
+    pass
 
 
 class Project(mongoengine.Document):
@@ -74,14 +86,34 @@ class Project(mongoengine.Document):
     subjects = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
     start_date = mongoengine.DateTimeField(default=datetime.datetime.now)
     owner = mongoengine.StringField(requred=True)
-    experiments = mongoengine.ListField(mongoengine.ReferenceField(Experiment, reverse_delete_rule=4))
+    experiments = mongoengine.EmbeddedDocumentListField(Experiment)
+    data_directory = mongoengine.StringField(required=True)
+    s3 = mongoengine.BooleanField(default=False)
 
     meta = {
         'db_alias': 'core',
         'collection': 'projects'
     }
 
-    def load_experiment(self, experiment_id: str) -> Experiment:
+    def __init__(self,
+                 data_directory: str or None = None,
+                 *args,
+                 **values):
+        super().__init__(*args, **values)
+        self.s3_connection = None
+        if self.s3:
+            self.s3_connection = boto3.resource("s3")
+            if data_directory not in list_available_buckets():
+                warn(f"Not such bucket {data_directory}, bucket will be created automatically")
+                self.s3_connection.create_bucket(data_directory)
+                self.data_directory = data_directory
+        else:
+            if data_directory:
+                if not os.path.isdir(data_directory):
+                    raise InvalidDataDirectory(f"Could not locate data directory at path {data_directory}")
+                self.data_directory = data_directory
+
+    def get_experiment(self, experiment_id: str) -> Experiment:
         """
         Load the experiment object for a given experiment ID
 
@@ -94,9 +126,10 @@ class Project(mongoengine.Document):
         --------
         Experiment
         """
-        assert experiment_id in [x.experiment_id for x in self.experiments], \
-            f'Error: no experiment {experiment_id} found'
-        return Experiment.objects(experiment_id=experiment_id).get()
+        for exp in self.experiments:
+            if exp.experiment_id == experiment_id:
+                return exp
+        raise MissingExperimentError(f"Invalid experiment; {experiment_id} does not exist")
 
     def add_experiment(self,
                        experiment_id: str,
@@ -127,7 +160,6 @@ class Project(mongoengine.Document):
         exp = Experiment(experiment_id=experiment_id,
                          panel_definition=panel_definition,
                          data_directory=data_directory)
-        exp.save()
         self.experiments.append(exp)
         self.save()
         return exp
@@ -187,12 +219,17 @@ class Project(mongoengine.Document):
                                                          f'{list(self.list_subjects())}'
         return Subject.objects(subject_id=subject_id).get()
 
-    def delete(self, *args, **kwargs) -> None:
+    def delete(self,
+               delete_h5_data: bool = True,
+               *args,
+               **kwargs) -> None:
         """
         Delete project (wrapper function of mongoengine.Document.delete)
 
         Parameters
         -----------
+        delete_h5_data: bool (default=True)
+            Delete associated HDF5 data
         args:
             positional arguments to pass to parent call (see mongoengine.Document.delete)
         kwargs:
@@ -202,11 +239,14 @@ class Project(mongoengine.Document):
         --------
         None
         """
-        for e in self.experiments:
-            samples = e.list_samples()
-            for s in samples:
-                e.remove_sample(s)
-            e.delete()
+        if delete_h5_data:
+            if self.s3:
+                bucket = self.s3_connection.Bucket(self.data_directory)
+                for key in bucket.objects.all():
+                    key.delete()
+                bucket.delete()
+            else:
+                shutil.rmtree(self.data_directory)
         for p in self.subjects:
             p.delete()
         super().delete(*args, **kwargs)

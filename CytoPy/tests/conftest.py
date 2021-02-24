@@ -68,7 +68,7 @@ def reload_filegroup(project_id: str,
     """
     fg = (Project.objects(project_id=project_id)
           .get()
-          .load_experiment(exp_id)
+          .get_experiment(exp_id)
           .get_sample(sample_id))
     return fg
 

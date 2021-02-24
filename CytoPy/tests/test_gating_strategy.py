@@ -278,7 +278,7 @@ def test_apply_all(example_populated_experiment):
         gs.apply_all()
     assert str(err.value) == "No gates to apply"
     gs = apply_some_gates(gs)
-    exp = Project.objects(project_id="test").get().load_experiment("test experiment")
+    exp = Project.objects(project_id="test").get().get_experiment("test experiment")
     gs.load_data(experiment=exp,
                  sample_id="test sample")
     gs.apply_all()
@@ -382,7 +382,7 @@ def test_delete(example_experiment, remove_associations):
         assert len(gate.objects()) == n_
     fg = (Project.objects(project_id="test")
           .get()
-          .load_experiment("test experiment")
+          .get_experiment("test experiment")
           .get_sample("test sample"))
     if remove_associations:
         assert len(fg.gating_strategy) == 0

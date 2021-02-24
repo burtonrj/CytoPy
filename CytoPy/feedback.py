@@ -5,7 +5,22 @@ import logging
 
 def setup_standard_logger(name: str,
                           default_level: int or None = None,
-                          log: str or None = None):
+                          log: str or None = None) -> logging.Logger:
+    """
+    Convenience function for setting up logging.
+
+    Parameters
+    ----------
+    name: str
+        Name of the logger
+    default_level: int
+        Default level at which data is logged (defaults to INFO)
+    log: str, optional
+        Optional filepath to print logs too, if not provided, logging is printed to stdout
+    Returns
+    -------
+    logging.Logger
+    """
     default_level = default_level or logging.INFO
     logger = logging.getLogger(name)
     logger.setLevel(default_level)

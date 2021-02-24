@@ -89,7 +89,7 @@ def test_set_column_names():
 def test_init_new_fcs_file(example_populated_experiment):
     fg = example_populated_experiment.get_sample("test sample")
     assert os.path.isfile(f"{os.getcwd()}/test_data/{fg.id}.hdf5")
-    experiment = Project.objects(project_id="test").get().load_experiment("test experiment")
+    experiment = Project.objects(project_id="test").get().get_experiment("test experiment")
     fg = experiment.get_sample("test sample")
     primary_data = fg.data("primary")
     ctrl_data = fg.data("test_ctrl")

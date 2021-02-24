@@ -158,7 +158,7 @@ def set_column_names(df: pd.DataFrame,
     return df
 
 
-class FileGroup(mongoengine.Document):
+class FileGroup(mongoengine.EmbeddedDocument):
     """
     Document representation of a file group; a selection of related fcs files (e.g. a sample and it's associated
     controls).
