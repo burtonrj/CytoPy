@@ -305,7 +305,7 @@ def test_add_cluster_and_save(example_experiment):
         assert np.array_equal(f["clusters/root/test_test_tag"][:], np.arange(0, 10))
     fg = (Project.objects(project_id="test").
           get()
-          .load_experiment("test experiment")
+          .get_experiment("test experiment")
           .get_sample("test sample 1"))
     assert len(fg.get_population("root").clusters) == 1
     assert np.array_equal(fg.get_population("root").clusters[0].index, np.arange(0, 10))
