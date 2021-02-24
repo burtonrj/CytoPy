@@ -6,6 +6,7 @@ cytometry based experiments that can consist of one or more biological
 specimens. An experiment should be defined for each cytometry staining
 panel used in your analysis and the single cell data (contained in
 *.fcs files) added to the experiment using the 'add_new_sample' method.
+Experiments should be created using the Project class (see CytoPy.data.projects).
 All functionality for experiments and Panels are housed within this
 module.
 
@@ -73,7 +74,6 @@ def _check_sheet_names(path: str) -> (pd.DataFrame, pd.DataFrame):
     -------
     Pandas.DataFrame, Pandas.DataFrame
     """
-    # Check sheet names
     xls = xlrd.open_workbook(path, on_demand=True)
     err = f"Template must contain two sheets: nomenclature and mappings"
     assert all([x in ['nomenclature', 'mappings'] for x in xls.sheet_names()]), err
@@ -274,7 +274,7 @@ def check_pairing(channel_marker: dict,
 def _standardise(x: str or None,
                  ref: List[NormalisedName],
                  mappings: List[ChannelMap],
-                 alt: str):
+                 alt: str) -> str:
     """
     Given a channel/marker, either return the corresponding standard name
     according to a list of standards (ref) or if the channel/marker is None,

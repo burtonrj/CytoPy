@@ -36,6 +36,7 @@ from .aws_tools import list_available_buckets
 from .experiment import Experiment
 from .subject import Subject
 from warnings import warn
+from .errors import *
 import mongoengine
 import datetime
 import shutil
@@ -52,14 +53,6 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-class MissingExperimentError(Exception):
-    pass
-
-
-class InvalidDataDirectory(Exception):
-    pass
-
-
 class Project(mongoengine.Document):
     """
     A project is the highest controlling structure of an analysis and houses
@@ -68,6 +61,18 @@ class Project(mongoengine.Document):
 
     Project can be used to create new experiments and to load existing experiments
     to interact with.
+
+    Single cell data is stored in HDF5 files and the meta-data stored in MongoDB.
+    When creating a Project you should specify where to store these HDF5 files.
+    They can either be stored locally, but passing a local path to the data_directory
+    argument (this should be an existing folder on your system), or can be stored
+    in an AWS S3 bucket.
+
+    To use AWS you must first ensure that you have an AWS account and this is configured
+    for your computer (see https://boto3.amazonaws.com/v1/documentation/api/latest/guide/quickstart.html).
+    Once setup, simply set the 's3' parameter to True when creating your project. The
+    'data_directory' in this case will correspond to the bucket name. If the bucket does
+    not exist, it will automatically be created.
 
     Attributes
     ----------
@@ -81,6 +86,11 @@ class Project(mongoengine.Document):
         user name of owner
     experiments: list
         List of references for associated fcs files
+    data_directory: str, required
+        Name of the local directory for storing HDF5 files. If s3 is True,
+        data_directory corresponds to the bucket name
+    s3: bool (default=False)
+        Whether to store HDF5 data on AWS S3
     """
     project_id = mongoengine.StringField(required=True, unique=True)
     subjects = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
@@ -125,6 +135,11 @@ class Project(mongoengine.Document):
         Returns
         --------
         Experiment
+
+        Raises
+        -------
+        MissingExperimentError
+            If requested experiment does not exist in this project
         """
         for exp in self.experiments:
             if exp.experiment_id == experiment_id:
@@ -154,9 +169,14 @@ class Project(mongoengine.Document):
         --------
         Experiment
             Newly created FCSExperiment
+
+        Raises
+        -------
+        DuplicateExperimentError
+            If given experiment ID already exists
         """
-        err = f'Error: Experiment with id {experiment_id} already exists!'
-        assert experiment_id not in [x.experiment_id for x in self.experiments], err
+        if experiment_id in [x.experiment_id for x in self.experiments]:
+            raise DuplicateExperimentError(f"Experiment with id {experiment_id} already exists!")
         exp = Experiment(experiment_id=experiment_id,
                          panel_definition=panel_definition,
                          data_directory=data_directory)
@@ -181,7 +201,14 @@ class Project(mongoengine.Document):
         Returns
         --------
         None
+
+        Raises
+        -------
+        DuplicateSubjectError
+            If subject already exists
         """
+        if subject_id in [x.subject_id for x in self.subjects]:
+            raise DuplicateSubjectError(f"Subject with ID {subject_id} already exists")
         new_subject = Subject(subject_id=subject_id, **kwargs)
         new_subject.save()
         self.subjects.append(new_subject)
@@ -194,11 +221,19 @@ class Project(mongoengine.Document):
 
         Returns
         --------
-        List of subject IDs
+        List
+            List of subject IDs
         """
         return [s.subject_id for s in self.subjects]
 
-    def list_experiments(self):
+    def list_experiments(self) -> list:
+        """
+        Lists experiments in project
+
+        Returns
+        -------
+        List
+        """
         return [e.experiment_id for e in self.experiments]
 
     def get_subject(self,
@@ -214,9 +249,14 @@ class Project(mongoengine.Document):
         Returns
         --------
         Subject
+
+        Raises
+        -------
+        MissingSubjectError
+            If desired subject does not exist
         """
-        assert subject_id in list(self.list_subjects()), f'Invalid subject ID, valid subjects: ' \
-                                                         f'{list(self.list_subjects())}'
+        if subject_id not in self.list_subjects():
+            raise MissingSubjectError(f"Invalid subject ID {subject_id}, does not exist")
         return Subject.objects(subject_id=subject_id).get()
 
     def delete(self,
