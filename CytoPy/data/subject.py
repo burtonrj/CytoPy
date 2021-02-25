@@ -6,10 +6,6 @@ represented by a Subject document that can then be associated to
 specimens in an Experiment. This Subject document is dynamic and can
 house any relating meta-data.
 
-Projects also house the subjects (represented by the Subject class;
-see CytoPy.data.subject) of an analysis which can contain multiple
-meta-data.
-
 Copyright 2020 Ross Burton
 
 Permission is hereby granted, free of charge, to any person
@@ -54,14 +50,6 @@ class Subject(mongoengine.DynamicDocument):
     -----------
     subject_id: str, required
         Unique identifier for subject
-    files: ListField
-        List of references to files associated to subject
-    drug_data: EmbeddedDocListField
-        Associated drug data
-    infection_data: EmbeddedDocListField
-        Associated infection data
-    patient_biology: EmbeddedDocListField
-        Associated biological data
     notes: str
         Additional notes
     """
@@ -74,21 +62,6 @@ class Subject(mongoengine.DynamicDocument):
         'db_alias': 'core',
         'collection': 'subjects'
     }
-
-    def delete(self, *args, **kwargs):
-        """
-        Delete the Subject. The subject will automatically be pulled from associated Projects (reference field in
-        Project model has reverse_delete_rile=4; see mongoengine API for info).
-
-        WARNING: deletion of a subject will result in the automatic removal of all associated FCS data!
-
-        Returns
-        -------
-        None
-        """
-        for f in self.files:
-            f.delete()
-        super().delete(*args, **kwargs)
 
 
 def safe_search(subject_id: str):

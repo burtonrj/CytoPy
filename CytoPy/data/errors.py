@@ -18,6 +18,10 @@ class DuplicatePopulationError(Exception):
     pass
 
 
+class DuplicateGateError(Exception):
+    pass
+
+
 class InvalidDataDirectory(Exception):
     pass
 
@@ -31,9 +35,13 @@ class MissingSampleError(Exception):
 
 
 class MissingControlError(Exception):
-    """Raised when control file missing from FileGroup"""
     pass
 
 
 class MissingPopulationError(Exception):
-    """Raised when population requested is missing from FileGroup"""
+    pass
+
+
+class InsufficientEventsError(Exception):
+    pass
+
