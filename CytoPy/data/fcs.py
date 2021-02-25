@@ -38,6 +38,7 @@ from .population import Population, merge_populations, merge_many_populations, P
 from .subject import Subject
 from .errors import *
 from sklearn.model_selection import StratifiedKFold, permutation_test_score
+from imblearn.over_sampling import RandomOverSampler
 from warnings import warn
 from typing import List, Generator
 import pandas as pd
@@ -407,7 +408,63 @@ class FileGroup(mongoengine.Document):
                                 evaluate_classifier: bool = True,
                                 kfolds: int = 5,
                                 n_permutations: int = 25,
-                                sample_size: int = 10000):
+                                sample_size: int = 10000) -> pd.DataFrame:
+        """
+        Load a population from an associated control. The assumption here is that control files
+        have been collected at the same time as primary staining and differ by the absence or
+        permutation of a marker/channel/stain. Therefore the population of interest in the
+        primary staining will be used as training data to identify the equivalent population in
+        the control.
+
+        The user should specify the control file, the population they want (which MUST already exist
+        in the primary staining) and the type of classifier to use. Additional parameters can be
+        passed to control the classifier and stratified cross validation with permutation testing
+        will be performed if evalidate_classifier is set to True.
+
+        Parameters
+        ----------
+        ctrl: str
+            Control file to estimate population for
+        population: str
+            Population of interest. MUST already exist in the primary staining.
+        classifier: str (default='XGBClassifier')
+            Classifier to use. String value should correspond to a valid Scikit-Learn classifier class
+            name or XGBClassifier for XGBoost.
+        classifier_params: dict, optional
+            Additional keyword arguments passed when initiating the classifier
+        scoring: str (default='balanced_accuracy')
+            Method used to evaluate the performance of the classifier if evaluate_classifier is True.
+            String value should be one of the functions of Scikit-Learn's classification metrics:
+            https://scikit-learn.org/stable/modules/model_evaluation.html.
+        transform: str (defaylt='logicle')
+            Transformation to be applied to data prior to classification
+        transform_kwargs: dict, optional
+            Additional keyword arguments applied to Transformer
+        verbose: bool (default=True)
+            Whether to provide feedback
+        evaluate_classifier: bool (default=True)
+            If True, stratified cross validation with permutating testing is applied prior to
+            predicting control population,  feeding back to stdout the performance of the classifier
+            across k folds and n permutations
+        kfolds: int (default=5)
+            Number of cross validation rounds to perform if evaluate_classifier is True
+        n_permutations: int (default=25)
+            Number of rounds of permutation testing to perform if evaluate_classifier is True
+        sample_size: int (default=10000)
+            Number of events to sample from primary data for training
+
+        Returns
+        -------
+        Pandas.DataFrame
+
+        Raises
+        ------
+        AssertionError
+            If desired population is not found in the primary staining
+
+        MissingControlError
+            If the chosen control does not exist
+        """
         transform_kwargs = transform_kwargs or {}
         if ctrl not in self.controls:
             raise MissingControlError(f"No such control {ctrl} associated to this FileGroup")
@@ -468,7 +525,7 @@ class FileGroup(mongoengine.Document):
         features_to_transform: list, optional
             Features (columns) to be transformed. If not provied, all columns transformed
         transform_kwargs: dict, optional
-            Additional keyword arguments passed to transform method
+            Additional keyword arguments passed to Transformer
         label_downstream_affiliations: bool (default=False)
             If True, an additional column will be generated named "population_label" containing
             the end node membership of each event e.g. if you choose CD4+ population and
@@ -480,6 +537,11 @@ class FileGroup(mongoengine.Document):
         Returns
         -------
         Pandas.DataFrame
+
+        Raises
+        ------
+        AssertionError
+            Invalid population, does not exist
         """
         assert population in self.tree.keys(), f"Invalid population, {population} does not exist"
         idx = self.get_population(population_name=population).index
@@ -540,10 +602,11 @@ class FileGroup(mongoengine.Document):
 
     def list_populations(self) -> list:
         """
-        Yields list of population names
+        List population names
+
         Returns
         -------
-        Generator
+        List
         """
         return [p.population_name for p in self.populations]
 
@@ -587,6 +650,11 @@ class FileGroup(mongoengine.Document):
         Returns
         -------
         None
+
+        Raises
+        ------
+        AssertionError
+            If invalid value given for populations
         """
         if populations == "all":
             for p in self.populations:
@@ -622,6 +690,11 @@ class FileGroup(mongoengine.Document):
         Returns
         -------
         Population
+
+        Raises
+        ------
+        MissingPopulationError
+            If population doesn't exist
         """
         if population_name not in list(self.list_populations()):
             raise MissingPopulationError(f'Population {population_name} does not exist')
@@ -660,6 +733,10 @@ class FileGroup(mongoengine.Document):
         list or None
             List of populations dependent on given population
 
+        Raises
+        ------
+        AssertionError
+            If Population does not exist
         """
         assert population in self.tree.keys(), f'population {population} does not exist; ' \
                                                f'valid population names include: {self.tree.keys()}'
@@ -699,6 +776,26 @@ class FileGroup(mongoengine.Document):
     def merge_many_populations(self,
                                populations: list,
                                new_population_name: str):
+        """
+        Merge multiple populations that are sourced either for classification or clustering methods.
+        (Not supported for populations from autonomous gates)
+
+        Parameters
+        ----------
+        populations: list
+            List of populations to merge
+        new_population_name: str
+            Name of the new population
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            If populations is invalid
+        """
         pops = list()
         for p in populations:
             if isinstance(p, str):
@@ -728,10 +825,20 @@ class FileGroup(mongoengine.Document):
 
         Returns
         -------
+        None
 
+        Raises
+        ------
+        ValueError
+            If left and right population are not sourced from root or Gate
+        AssertionError
+            If left and right population do not share the same parent or the right population
+            is not downstream of the left population
         """
         same_parent = left.parent == right.parent
         downstream = right.population_name in list(self.list_downstream_populations(left.population_name))
+        if left.source not in ["root", "gate"] or right.source not in ["root", "gate"]:
+            raise ValueError("Population source must be either 'root' or 'gate'")
         assert same_parent or downstream, "Right population should share the same parent as the " \
                                           "left population or be downstream of the left population"
         new_population_name = new_population_name or f"subtract_{left.population_name}_{right.population_name}"
@@ -786,6 +893,7 @@ class FileGroup(mongoengine.Document):
         Parameters
         ----------
         population: str
+        warn_missing: bool (default=False)
 
         Returns
         -------
@@ -833,6 +941,13 @@ class FileGroup(mongoengine.Document):
         self.add_population(clean_pop)
 
     def save(self, *args, **kwargs):
+        """
+        Save FileGroup and associated populations
+
+        Returns
+        -------
+        None
+        """
         # Calculate meta and save indexes to disk
         if self.populations:
             # Populate h5path for populations
@@ -843,6 +958,17 @@ class FileGroup(mongoengine.Document):
                delete_hdf5_file: bool = True,
                *args,
                **kwargs):
+        """
+        Delete FileGroup
+
+        Parameters
+        ----------
+        delete_hdf5_file: bool (default=True)
+
+        Returns
+        -------
+        None
+        """
         super().delete(*args, **kwargs)
         if delete_hdf5_file:
             if os.path.isfile(self.h5path):
@@ -891,32 +1017,35 @@ def population_stats(filegroup: FileGroup) -> pd.DataFrame:
                          for p in list(filegroup.list_populations())])
 
 
-def _sampling_for_class_imbalance(data: pd.DataFrame,
-                                  sample_size: int):
-    assert "label" in data.columns, "Missing label column"
-    label_count = data["label"].value_counts().to_dict()
-    n = int(sample_size/2)
-    if label_count.get(0) > n and label_count.get(1) > n:
-        data = pd.concat([data[data.label == 1].sample(n),
-                          data[data.label == 0].sample(n)])
-    elif label_count.get(0) > n:
-        data = pd.concat([data[data.label == 1].sample(n, replace=True),
-                          data[data.label == 0].sample(n)])
-    elif label_count.get(1) > n:
-        data = pd.concat([data[data.label == 1].sample(n),
-                          data[data.label == 0].sample(n, replace=True)])
-    else:
-        data = pd.concat([data[data.label == 1].sample(n, replace=True),
-                          data[data.label == 0].sample(n, replace=True)])
-    return data
-
-
 def _load_data_for_ctrl_estimate(filegroup: FileGroup,
                                  target_population: str,
                                  ctrl: str,
                                  transform: str,
                                  sample_size: int,
                                  **transform_kwargs):
+    """
+    Utility function for loading dataframes for estimating a control population. Given the FileGroup
+    of interest, the target population, and the name of the control, the population from the primary
+    staining will be loaded, class imbalance accounted for using random over sampling (resampling
+    all classes except the majority) and down sampling performed if necessary (if sample_size <
+    total population size). The root population of the control will also be loaded into a DataFrame.
+    Both DataFrames are transformed and the training data (primary stain population) control root population,
+    and the Transformer returned.
+
+    Parameters
+    ----------
+    filegroup: FileGroup
+    target_population: str
+    ctrl: str
+    transform: str
+    sample_size: int
+    transform_kwargs:
+        Additional keyword arguments passed to apply_transform call
+
+    Returns
+    -------
+    Pandas.DataFrame, Pandas.DataFrame, Transformer
+    """
     training = filegroup.data(source="primary")
     population_idx = filegroup.get_population(target_population).index
     training["label"] = 0
@@ -927,7 +1056,12 @@ def _load_data_for_ctrl_estimate(filegroup: FileGroup,
         training.drop(t, axis=1, inplace=True)
         ctrl.drop(t, axis=1, inplace=True)
     features = [x for x in training.columns if x != "label"]
-    training = _sampling_for_class_imbalance(data=training, sample_size=sample_size)
+    sampler = RandomOverSampler(random_state=42)
+    x_resampled, y_resampled = sampler.fit_resample(training[features].values, training["label"].values)
+    training = pd.DataFrame(x_resampled, columns=features)
+    training["label"] = y_resampled
+    if training.shape[0] > sample_size:
+        training = training.sample(n=sample_size)
     training = apply_transform(data=training, features=features, method=transform, **transform_kwargs)
     ctrl, transformer = apply_transform(data=ctrl,
                                         features=[x for x in features if x in ctrl.columns],

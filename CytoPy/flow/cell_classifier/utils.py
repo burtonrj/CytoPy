@@ -41,7 +41,11 @@ def calc_metrics(metrics: list,
     results = dict()
     for m in metrics:
         if "f1" in m:
-            avg = m.split("_")[1]
+            avg = m.split("_")
+            if len(avg) == 2:
+                avg = m.split("_")[1]
+            else:
+                avg = None
             f = getattr(skmetrics, "f1_score")
             assert y_pred is not None, "For F1 score predictions must be provided;`y_pred` is None"
             results[m] = f(y_true=y_true, y_pred=y_pred, average=avg)
