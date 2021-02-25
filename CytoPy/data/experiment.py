@@ -1096,28 +1096,6 @@ class Experiment(mongoengine.EmbeddedDocument):
                     warn(f"Failed to merge populations for {f.primary_id}: {str(e)}")
 
 
-def load_subject_id(pop_data: pd.DataFrame,
-                    filegroup: FileGroup):
-    """
-    Given a FileGroup and a a DataFrame of population level data (where each row is a single cell),
-    reverse search the Subjects to populate each row with the subject ID linked to this FileGroup.
-
-    Parameters
-    ----------
-    pop_data: Pandas.DataFrame
-    filegroup: FileGroup
-
-    Returns
-    -------
-    Pandas.DataFrame
-    """
-    subject = fetch_subject(filegroup)
-    if subject is not None:
-        subject = subject.subject_id
-    pop_data["subject_id"] = subject
-    return pop_data
-
-
 def load_population_data_from_experiment(experiment: Experiment,
                                          population: str,
                                          transform: str = "logicle",
@@ -1158,7 +1136,9 @@ def load_population_data_from_experiment(experiment: Experiment,
                                          label_downstream_affiliations=True)
 
         pop_data["sample_id"] = _id
-        pop_data = load_subject_id(pop_data, fg)
+        pop_data["subject_id"] = None
+        if fg.subject:
+            pop_data["subject_id"] = fg.subject.subject_id
         population_data.append(pop_data)
     data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
                       for df in population_data]).reset_index(drop=True)
@@ -1207,8 +1187,9 @@ def load_control_population_from_experiment(experiment: Experiment,
                                               transform_kwargs=transform_kwargs,
                                               ctrl=ctrl)
         pop_data["sample_id"] = _id
-        pop_data["meta_label"] = None
-        pop_data = load_subject_id(pop_data, fg)
+        pop_data["subject_id"] = None
+        if fg.subject:
+            pop_data["subject_id"] = fg.subject.subject_id
         population_data.append(pop_data)
     data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
                       for df in population_data]).reset_index(drop=True)
