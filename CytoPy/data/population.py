@@ -47,11 +47,11 @@ __status__ = "Production"
 
 class Population(mongoengine.EmbeddedDocument):
     """
-    A population of cells identified by either a gate or supervised algorithm. Stores the
+    A population of cells identified by either a gate, clustering or supervised algorithm. Stores the
     index of events corresponding to a single population, where the index relates back
     to the primary data in the FileGroup in which a population is embedded.
 
-    Parameters
+    Attributes
     ----------
     population_name: str, required
         name of population
@@ -76,6 +76,9 @@ class Population(mongoengine.EmbeddedDocument):
     signature: dict
         average of a population feature space (median of each channel); used to match
         children to newly identified populations for annotating
+    source: str, required
+        Source of the population i.e. what method was used to generate it. Valid choices are:
+        "gate", "cluster", "root", or "classifier"
     """
     population_name = mongoengine.StringField()
     n = mongoengine.IntField()
@@ -89,7 +92,7 @@ class Population(mongoengine.EmbeddedDocument):
     signature = mongoengine.DictField()
 
     def __init__(self, *args, **kwargs):
-        # If the Population existed previously, fetched the index
+        # If the Population existed previously, fetch the index
         self._index = kwargs.pop("index", None)
         super().__init__(*args, **kwargs)
 
@@ -121,6 +124,11 @@ def _check_overlap(left: Population,
     Returns
     -------
     bool or None
+
+    Raises
+    ------
+    AssertionError
+        If left or right population do not have a Polygon geometry or are not overlapping
     """
     assert all(
         [isinstance(x.geom, PolygonGeom) for x in [left, right]]), "Only Polygon geometries can be checked for overlap"
@@ -143,6 +151,11 @@ def _check_transforms_dimensions(left: Population,
     Returns
     -------
     None
+
+    Raises
+    ------
+    AssertionError
+        If geometries are incompatible
     """
     assert left.geom.transform_x == right.geom.transform_x, \
         "X dimension transform differs between left and right populations"
@@ -201,6 +214,11 @@ def _merge_thresholds(left: Population,
     Returns
     -------
     Population
+
+    Raises
+    ------
+    AssertionError
+        If geometries do not match
     """
     assert left.geom.x_threshold == right.geom.x_threshold, \
         "Threshold merge assumes that the populations are derived " \
@@ -265,22 +283,26 @@ def _merge_polygons(left: Population,
     return new_population
 
 
-def _merge_non_geom_populations(left: Population,
-                                right: Population,
-                                new_population_name: str):
-    new_idx = _merge_index(left, right)
-    new_population = Population(population_name=new_population_name,
-                                n=len(new_idx),
-                                parent=left.parent,
-                                warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
-                                index=new_idx,
-                                source=left.source,
-                                signature=_merge_signatures(left, right))
-    return new_population
+def merge_non_geom_populations(populations: list,
+                               new_population_name: str):
+    """
+    Merge populations arising from classification or clustering. Takes a list of Population objects
+    and the name for the new population and merges their indexes, forming a new Population object.
 
+    Parameters
+    ----------
+    populations: list
+    new_population_name: str
 
-def merge_many_populations(populations: list,
-                           new_population_name: str):
+    Returns
+    -------
+    Population
+
+    Raises
+    ------
+    AssertionError
+        Invalid populations provided
+    """
     err = "merge_many_populations currently only supports 'cluster' or 'classifier' source " \
           "types. To merge populations from other sources, use merge_populations method"
     assert all([x.source == "cluster" or x.source == "classifier" for x in populations]), err
@@ -298,9 +320,9 @@ def merge_many_populations(populations: list,
     return new_population
 
 
-def merge_populations(left: Population,
-                      right: Population,
-                      new_population_name: str or None = None):
+def merge_gate_populations(left: Population,
+                           right: Population,
+                           new_population_name: str or None = None):
     """
     Merge two Population's. The indexes and signatures of these populations will be merged.
     The populations must have the same geometries.
@@ -314,13 +336,16 @@ def merge_populations(left: Population,
     Returns
     -------
     Population
+
+    Raises
+    ------
+    AssertionError
+        Invalid populations provided
     """
     _check_transforms_dimensions(left, right)
     new_population_name = new_population_name or f"merge_{left.population_name}_{right.population_name}"
     assert left.parent == right.parent, "Parent populations do not match"
     assert left.source == right.source, "Populations must be from the same source"
-    if left.source == "cluster" or "classifier":
-        return _merge_non_geom_populations(left, right, new_population_name)
     assert isinstance(left.geom, type(
         right.geom)), f"Geometries must be of the same type; left={type(left.geom)}, right={type(right.geom)}"
     if isinstance(left.geom, ThresholdGeom):
@@ -328,8 +353,8 @@ def merge_populations(left: Population,
     return _merge_polygons(left, right, new_population_name)
 
 
-def merge_multiple_populations(populations: List[Population],
-                               new_population_name: str or None = None):
+def merge_multiple_gate_populations(populations: List[Population],
+                                    new_population_name: str or None = None):
     """
     Merge multiple Population's. The indexes and signatures of these populations will be merged.
     The populations must have the same geometries.
@@ -342,11 +367,16 @@ def merge_multiple_populations(populations: List[Population],
     Returns
     -------
     Population
+
+    Raises
+    ------
+    AssertionError
+        Invalid populations provided
     """
     if new_population_name is None:
         assert len(set([p.population_name for p in populations])) == 1, \
             "If a new population name is not given the populations are expected to have the same population name"
     new_population_name = new_population_name or populations[0].population_name
-    merged_pop = reduce(lambda p1, p2: merge_populations(p1, p2), populations)
+    merged_pop = reduce(lambda p1, p2: merge_gate_populations(p1, p2), populations)
     merged_pop.population_name = new_population_name
     return merged_pop

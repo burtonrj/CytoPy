@@ -34,7 +34,7 @@ from ..flow.transform import apply_transform, apply_transform_map
 from ..flow.sampling import uniform_downsampling
 from ..flow.build_models import build_sklearn_model
 from .geometry import create_convex_hull
-from .population import Population, merge_populations, merge_many_populations, PolygonGeom
+from .population import Population, merge_gate_populations, merge_non_geom_populations, PolygonGeom
 from .subject import Subject
 from .errors import *
 from sklearn.model_selection import StratifiedKFold, permutation_test_score
@@ -163,7 +163,7 @@ class FileGroup(mongoengine.Document):
     Document representation of a file group; a selection of related fcs files (e.g. a sample and it's associated
     controls).
 
-    Parameters
+    Attributes
     ----------
     primary_id: str, required
         Unique ID to associate to group
@@ -181,6 +181,11 @@ class FileGroup(mongoengine.Document):
         Date and time of sample collection
     processing_datetime: DateTime, optional
         Date and time of sample processing
+    valid: BooleanField (default=True)
+        True if FileGroup is valid
+    subject: ReferenceField
+        Reference to Subject. If Subject is deleted, this field is nullified but
+        the FileGroup will persist
     """
     primary_id = mongoengine.StringField(required=True)
     controls = mongoengine.ListField()
@@ -191,7 +196,7 @@ class FileGroup(mongoengine.Document):
     gating_strategy = mongoengine.ListField()
     valid = mongoengine.BooleanField(default=True)
     notes = mongoengine.StringField(required=False)
-    subject = mongoengine.ReferenceField(Subject)
+    subject = mongoengine.ReferenceField(Subject, reverse_delete_rule=mongoengine.NULLIFY)
     meta = {
         'db_alias': 'core',
         'collection': 'fcs_files'
@@ -745,10 +750,10 @@ class FileGroup(mongoengine.Document):
         dependencies = [x.name for x in anytree.findall(root, filter_=lambda n: node in n.path)]
         return [p for p in dependencies if p != population]
 
-    def merge_populations(self,
-                          left: Population or str,
-                          right: Population or str,
-                          new_population_name: str or None = None):
+    def merge_gate_populations(self,
+                               left: Population or str,
+                               right: Population or str,
+                               new_population_name: str or None = None):
         """
         Merge two populations present in the current population tree.
         The merged population will have the combined index of both populations but
@@ -771,11 +776,11 @@ class FileGroup(mongoengine.Document):
             left = self.get_population(left)
         if isinstance(right, str):
             right = self.get_population(right)
-        self.add_population(merge_populations(left=left, right=right, new_population_name=new_population_name))
+        self.add_population(merge_gate_populations(left=left, right=right, new_population_name=new_population_name))
 
-    def merge_many_populations(self,
-                               populations: list,
-                               new_population_name: str):
+    def merge_non_geom_populations(self,
+                                   populations: list,
+                                   new_population_name: str):
         """
         Merge multiple populations that are sourced either for classification or clustering methods.
         (Not supported for populations from autonomous gates)
@@ -804,7 +809,7 @@ class FileGroup(mongoengine.Document):
                 pops.append(p)
             else:
                 raise ValueError("populations should be a list of strings or list of Population objects")
-        self.add_population(merge_many_populations(populations=pops, new_population_name=new_population_name))
+        self.add_population(merge_non_geom_populations(populations=pops, new_population_name=new_population_name))
 
     def subtract_populations(self,
                              left: Population,
