@@ -68,7 +68,6 @@ class Subject(mongoengine.DynamicDocument):
     subject_id = mongoengine.StringField(required=True, unique=True)
 
     # Associated FCS Files
-    files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=mongoengine.PULL))
     notes = mongoengine.StringField(required=False)
 
     meta = {

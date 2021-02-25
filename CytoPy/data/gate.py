@@ -33,7 +33,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from CytoPy.flow.transform import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
     create_convex_hull, create_polygon, ellipse_to_polygon, probablistic_ellipse
-from .population import Population, merge_multiple_populations
+from .population import Population, merge_multiple_gate_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn, uniform_downsampling
 from ..flow.dim_reduction import dimensionality_reduction
 from ..flow.build_models import build_sklearn_model
@@ -555,7 +555,7 @@ class ThresholdGate(Gate):
             if len(matching_populations) == 0:
                 continue
             elif len(matching_populations) > 1:
-                pop = merge_multiple_populations(matching_populations, new_population_name=c.name)
+                pop = merge_multiple_gate_populations(matching_populations, new_population_name=c.name)
             else:
                 pop = matching_populations[0]
                 pop.population_name = c.name

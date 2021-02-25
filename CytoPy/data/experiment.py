@@ -571,16 +571,12 @@ class Experiment(mongoengine.EmbeddedDocument):
         Unique identifier for experiment
     panel: ReferenceField, required
         Panel object describing associated channel/marker pairs
-    data_directory: str
-        Address to drive for storage of single cell data
     fcs_files: ListField
         Reference field for associated files
     flags: str, optional
         Warnings associated to experiment
     notes: str, optional
         Additional free text comments
-    gating_templates: ListField
-        Reference to gating templates associated to this experiment
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
     panel = mongoengine.EmbeddedDocumentField(Panel)
@@ -1090,7 +1086,7 @@ class Experiment(mongoengine.EmbeddedDocument):
             for f in self.fcs_files:
                 pops = [p for p in targets if p in f.list_populations()]
                 try:
-                    f.merge_many_populations(populations=pops, new_population_name=new_population_name)
+                    f.merge_non_geom_populations(populations=pops, new_population_name=new_population_name)
                     f.save()
                 except AssertionError as e:
                     warn(f"Failed to merge populations for {f.primary_id}: {str(e)}")

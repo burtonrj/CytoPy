@@ -655,9 +655,9 @@ class GatingStrategy(mongoengine.Document):
         left = self.filegroup.get_population(action.left)
         right = self.filegroup.get_population(action.right)
         if action.method == "merge":
-            self.filegroup.merge_populations(left=left,
-                                             right=right,
-                                             new_population_name=action.new_population_name)
+            self.filegroup.merge_gate_populations(left=left,
+                                                  right=right,
+                                                  new_population_name=action.new_population_name)
         else:
             self.filegroup.subtract_populations(left=left,
                                                 right=right,
