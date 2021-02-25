@@ -254,8 +254,8 @@ class FCSFile:
     """
     Utilising FlowIO to generate an object for representing an FCS file
 
-    Parameters
-    -----------
+    Attributes
+    ----------
     filepath: str
         location of fcs file to parse
     comp_matrix: str
@@ -326,12 +326,3 @@ class FCSFile:
         comp_data = self.event_data[:, channel_idx]
         comp_data = np.linalg.solve(self.spill.values.T, comp_data.T).T
         self.event_data[:, channel_idx] = comp_data
-
-
-def export_database(path: str):
-    pass
-
-
-def import_database(path: str,
-                    data_directories: dict):
-    pass

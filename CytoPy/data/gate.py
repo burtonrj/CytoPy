@@ -42,10 +42,10 @@ from sklearn.mixture import *
 from hdbscan import HDBSCAN
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
-from warnings import warn
 from string import ascii_uppercase
 from collections import Counter
 from typing import List, Dict
+from functools import reduce
 from KDEpy import FFTKDE
 from detecta import detect_peaks
 from scipy.signal import savgol_filter
@@ -153,7 +153,14 @@ class Gate(mongoengine.Document):
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
         is applied to
-    # TODO add transform params
+    transform_x: str, optional
+        Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
+    transform_y: str, optional
+        Method used to transform the Y-axis dimension, supported methods are: logicle, hyperlog, asinh or log
+    transform_x_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
+    transform_y_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
     sampling: dict (optional)
          Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
@@ -164,10 +171,21 @@ class Gate(mongoengine.Document):
         applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in CytoPy.flow.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
-    ctrl: str (optional)
+    ctrl_x: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
-        to the samples in an Experiment. When given this signals that the gate is designed to
-        be applied to the control data not the primary data.
+        to the samples in an Experiment. When given this signals that the gate should use the control
+        data for the x-axis dimension when predicting population geometry.
+    ctrl_y: str (optional)
+        If a value is given here it should be the name of a control specimen commonly associated
+        to the samples in an Experiment. When given this signals that the gate should use the control
+        data for the y-axis dimension when predicting population geometry.
+    ctrl_classifier: str (default='XGBClassifier')
+        Ignored if both ctrl_x and ctrl_y are None. Specifies which Scikit-Learn or sklearn-like classifier
+        to use when estimating the control population (see CytoPy.data.fcs.FileGroup.load_ctrl_population_df)
+    ctrl_classifier_params: dict, optional
+        Parameters used when creating control population classifier
+    ctrl_prediction_kwargs: dict, optional
+        Additional keyword arguments passed to CytoPy.data.fcs.FileGroup.load_ctrl_population_df call
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", "density",
         "quantile" or correspond to the name of an existing class in Scikit-Learn or HDBSCAN.
@@ -258,6 +276,11 @@ class Gate(mongoengine.Document):
         Returns
         -------
         Pandas.DataFrame or None
+
+        Raises
+        ------
+        AssertionError
+            If sampling kwargs are missing
         """
         data = data.copy()
         if self.sampling.get("method", None) == "uniform":
@@ -366,6 +389,7 @@ class Gate(mongoengine.Document):
         Raises
         -------
         AssertionError
+            If required columns missing from provided data
         """
         assert self.x in data.columns, f"{self.x} missing from given dataframe"
         if self.y:
@@ -421,6 +445,9 @@ class ThresholdGate(Gate):
         * inflection_point_kwargs - dictionary; see CytoPy.data.gate.find_inflection_point
         * smoothed_peak_finding_kwargs - dictionary; see CytoPy.data.gate.smoothed_peak_finding
 
+    ThresholdGate supports control gating, whereby thresholds are fitted to control data
+    and then applied to primary data.
+
     Attributes
     -----------
     gate_name: str (required)
@@ -433,14 +460,14 @@ class ThresholdGate(Gate):
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
         is applied to
-    transformations: dict (optional)
-        Transform method to be applied to each dimension, should be a dictionary with
-        keys corresponding to each variable (e.g. "x" and/or "y") and values the
-        transform to apply (e.g. {"x": "logicle"} for logicle transform of x-axis)
-    transform_kwargs: dict (optional)
-        Additional keyword arguments to be passed to transformation method. Should be a
-        dictionary with keys "x" or "y" and value of each of these keys being a dictionary
-         of keyword arguments to pass to transform method applied to this dimension.
+    transform_x: str, optional
+        Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
+    transform_y: str, optional
+        Method used to transform the Y-axis dimension, supported methods are: logicle, hyperlog, asinh or log
+    transform_x_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
+    transform_y_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
     sampling: dict (optional)
          Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
@@ -451,10 +478,21 @@ class ThresholdGate(Gate):
         applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in CytoPy.flow.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
-    ctrl: str (optional)
+    ctrl_x: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
-        to the samples in an Experiment. When given this signals that the gate is designed to
-        be applied to the control data not the primary data.
+        to the samples in an Experiment. When given this signals that the gate should use the control
+        data for the x-axis dimension when predicting population geometry.
+    ctrl_y: str (optional)
+        If a value is given here it should be the name of a control specimen commonly associated
+        to the samples in an Experiment. When given this signals that the gate should use the control
+        data for the y-axis dimension when predicting population geometry.
+    ctrl_classifier: str (default='XGBClassifier')
+        Ignored if both ctrl_x and ctrl_y are None. Specifies which Scikit-Learn or sklearn-like classifier
+        to use when estimating the control population (see CytoPy.data.fcs.FileGroup.load_ctrl_population_df)
+    ctrl_classifier_params: dict, optional
+        Parameters used when creating control population classifier
+    ctrl_prediction_kwargs: dict, optional
+        Additional keyword arguments passed to CytoPy.data.fcs.FileGroup.load_ctrl_population_df call
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", "density",
         or "quantile"
@@ -475,6 +513,11 @@ class ThresholdGate(Gate):
         Returns
         -------
         None
+
+        Raises
+        ------
+        AssertionError
+            If invalid definition
         """
         if self.y is not None:
             definition = child.definition.split(",")
@@ -575,6 +618,11 @@ class ThresholdGate(Gate):
         -------
         list
             List of thresholds (one for each dimension)
+
+        Raises
+        ------
+        AssertionError
+            If 'q' argument not found in method kwargs and method is 'qunatile'
         """
         q = self.method_kwargs.get("q", None)
         assert q is not None, "Must provide a value for 'q' in method kwargs when using quantile gate"
@@ -605,6 +653,11 @@ class ThresholdGate(Gate):
         Returns
         -------
         float
+
+        Raises
+        ------
+        AssertionError
+            If 'q' argument not found in method kwargs and method is 'qunatile'
         """
         use_inflection_point = self.method_kwargs.get("use_inflection_point", True)
         if not use_inflection_point:
@@ -659,6 +712,11 @@ class ThresholdGate(Gate):
         Returns
         -------
         float
+
+        Raises
+        ------
+        AssertionError
+            If no peaks are detected
         """
         peaks, x_grid, p = self._density_peak_finding(x)
         assert len(peaks) > 0, "No peaks detected"
@@ -742,6 +800,11 @@ class ThresholdGate(Gate):
         Returns
         -------
         List
+
+        Raises
+        ------
+        AssertionError
+            If x or y threshold is None when required
         """
         x_threshold = self.method_kwargs.get("x_threshold", None)
         y_threshold = self.method_kwargs.get("y_threshold", None)
@@ -818,12 +881,15 @@ class ThresholdGate(Gate):
             Population data to fit threshold
         ctrl_data: Pandas.DataFrame, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
-        transform: bool (default=True)
-            Whether to apply transformations prior to fitting data
 
         Returns
         -------
         None
+
+        Raises
+        ------
+        AssertionError
+            If gate Children have already been defined i.e. fit has been called previously
         """
         data = data.copy()
         data = self.transform(data=data)
@@ -868,6 +934,11 @@ class ThresholdGate(Gate):
         -------
         List
             List of predicted Population objects, labelled according to the gates child objects
+
+        Raises
+        ------
+        AssertionError
+            If fit has not been called prior to fit_predict
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
         data = data.copy()
@@ -907,6 +978,11 @@ class ThresholdGate(Gate):
         -------
         List
             List of Population objects
+
+        Raises
+        ------
+        AssertionError
+            If fit has not been called prior to predict
         """
         assert len(self.children) > 0, "Must call 'fit' prior to predict"
         self._xy_in_dataframe(data=data)
@@ -982,6 +1058,8 @@ class PolygonGate(Gate):
     provide x_values and y_values (if two-dimensional) to "method_kwargs" as two arrays,
     this will be interpreted as the x and y coordinates of the polygon to fit to the data.
 
+    DOES NOT SUPPORT CONTROL GATING.
+
     Attributes
     -----------
     gate_name: str (required)
@@ -991,13 +1069,17 @@ class PolygonGate(Gate):
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
         is applied to
-    y: str (required)
+    y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
         is applied to
-    transformations: dict (optional)
-        Transform method to be applied to each dimension, should be a dictionary with
-        keys corresponding to each variable (e.g. "x" and/or "y") and values the
-        transform to apply (e.g. {"x": "logicle"} for logicle transform of x-axis)
+    transform_x: str, optional
+        Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
+    transform_y: str, optional
+        Method used to transform the Y-axis dimension, supported methods are: logicle, hyperlog, asinh or log
+    transform_x_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
+    transform_y_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
     sampling: dict (optional)
          Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
@@ -1008,10 +1090,6 @@ class PolygonGate(Gate):
         applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in CytoPy.flow.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
-    ctrl: str (optional)
-        If a value is given here it should be the name of a control specimen commonly associated
-        to the samples in an Experiment. When given this signals that the gate is designed to
-        be applied to the control data not the primary data.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
         to the name of an existing class in Scikit-Learn or HDBSCAN.
@@ -1083,6 +1161,11 @@ class PolygonGate(Gate):
         Returns
         -------
         None
+
+        Raises
+        ------
+        AssertionError
+            If duplicate labels are provided
         """
         assert len(set(labels.values())) == len(labels.values()), \
             "Duplicate labels provided. Child merging not available for polygon gates"
@@ -1103,6 +1186,11 @@ class PolygonGate(Gate):
         Returns
         -------
         None
+
+        Raises
+        ------
+        TypeError
+            x_values or y_values is not type list
         """
         child.geom.x = self.x
         child.geom.y = self.y
@@ -1110,8 +1198,10 @@ class PolygonGate(Gate):
         child.geom.transform_y = self.transform_y
         child.geom.transform_x_kwargs = self.transform_x_kwargs
         child.geom.transform_y_kwargs = self.transform_y_kwargs
-        assert isinstance(child.geom.x_values, list), "ChildPolygon x_values should be of type list"
-        assert isinstance(child.geom.y_values, list), "ChildPolygon y_values should be of type list"
+        if not isinstance(child.geom.x_values, list):
+            raise TypeError("ChildPolygon x_values should be of type list")
+        if not isinstance(child.geom.y_values, list):
+            raise TypeError("ChildPolygon y_values should be of type list")
         self.children.append(child)
 
     def _match_to_children(self,
@@ -1148,6 +1238,11 @@ class PolygonGate(Gate):
         Returns
         -------
         Shapely.geometry.Polygon
+
+        Raises
+        ------
+        AssertionError
+            x_values or y_values missing from method kwargs
         """
         x_values, y_values = self.method_kwargs.get("x_values", None), self.method_kwargs.get("y_values", None)
         assert x_values is not None and y_values is not None, "For manual polygon gate must provide x_values and " \
@@ -1205,10 +1300,18 @@ class PolygonGate(Gate):
         ----------
         data: Pandas.DataFrame
             Population data to fit gate to
+        ctrl_data: None
+            Redundant parameter, necessary for Gate signature. Ignore.
 
         Returns
         -------
         None
+
+        Raises
+        ------
+        AssertionError
+            If Children have already been defined i.e. fit has been called previously without calling
+            'reset_gate'
         """
         assert len(self.children) == 0, "Gate is already defined, call 'reset_gate' to clear children"
         data = self.transform(data=data)
@@ -1231,11 +1334,18 @@ class PolygonGate(Gate):
         ----------
         data: Pandas.DataFrame
             Population data to fit gate to
+        ctrl_data: None
+            Redundant parameter, necessary for Gate signature. Ignore.
 
         Returns
         -------
         List
             List of predicted Population objects, labelled according to the gates child objects
+
+        Raises
+        ------
+        AssertionError
+            If fit has not been previously called
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
         data = self.transform(data=data)
@@ -1260,6 +1370,11 @@ class PolygonGate(Gate):
         -------
         List
             List of Population objects
+
+        Raises
+        ------
+        AssertionError
+            If fit has not been previously called
         """
         data = self.transform(data=data)
         data = self._dim_reduction(data=data)
@@ -1284,6 +1399,8 @@ class EllipseGate(PolygonGate):
     from the Scikit-Learn mixture module. Keyword arguments for the initiation of a class
     from this module can be given in "method_kwargs".
 
+    DOES NOT SUPPORT CONTROL GATING.
+
     Attributes
     -----------
     gate_name: str (required)
@@ -1293,13 +1410,17 @@ class EllipseGate(PolygonGate):
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
         is applied to
-    y: str (required)
+    y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
         is applied to
-    transformations: dict (optional)
-        Transform method to be applied to each dimension, should be a dictionary with
-        keys corresponding to each variable (e.g. "x" and/or "y") and values the
-        transform to apply (e.g. {"x": "logicle"} for logicle transform of x-axis)
+    transform_x: str, optional
+        Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
+    transform_y: str, optional
+        Method used to transform the Y-axis dimension, supported methods are: logicle, hyperlog, asinh or log
+    transform_x_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
+    transform_y_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
     sampling: dict (optional)
          Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
@@ -1338,6 +1459,15 @@ class EllipseGate(PolygonGate):
         Returns
         -------
         Shapely.geometry.Polygon
+
+        Raises
+        ------
+        AssertionError
+            If axis transformations do not match
+        TypeError
+            If centroid, width, height, or angle are of invalid type
+        ValueError
+            If centroid, width, height, or angle are missing from method kwargs
         """
         centroid = self.method_kwargs.get("centroid", None)
         width = self.method_kwargs.get("width", None)
@@ -1356,12 +1486,13 @@ class EllipseGate(PolygonGate):
                                  method=self.transform_x,
                                  **kwargs)
             width, height, angle = df["w"].values[0], df["h"].values[0], df["a"].values[0]
-        assert all([x is not None for x in [centroid, width, height, angle]]), \
-            "Manual elliptical gate requires the following keyword arguments; width, height, angle and centroid"
-        assert len(centroid) == 2 and all(isinstance(x, float) for x in centroid), \
-            "Centroid should be a list of two float values"
-        assert all(isinstance(x, float) for x in [width, height, angle]), \
-            "Width, height, and angle should be of type float"
+        if not all([x is not None for x in [centroid, width, height, angle]]):
+            raise ValueError("Manual elliptical gate requires the following keyword arguments; "
+                             "width, height, angle and centroid")
+        if not len(centroid) == 2 and not all(isinstance(x, float) for x in centroid):
+            raise TypeError("Centroid should be a list of two float values")
+        if not all(isinstance(x, float) for x in [width, height, angle]):
+            raise TypeError("Width, height, and angle should be of type float")
         return ellipse_to_polygon(centroid=centroid,
                                   width=width,
                                   height=height,
@@ -1397,106 +1528,177 @@ class EllipseGate(PolygonGate):
         return polygons
 
 
-class TimeGate(PolygonGate):
+class BooleanGate(PolygonGate):
+    """
+    The BooleanGate is a special class of Gate that allows for merging, subtraction, and intersection methods.
+    A BooleanGate should be defined with one of the following string values as its 'method' and a set of
+    population names as 'populations' in method_kwargs:
 
-    def __init__(self, method="time", *args, **kwargs):
-        super().__init__(method=method, *args, **kwargs)
+    * AND - generates a new population containing only events present in every population of a given
+    set of populations
+    * OR - generates a new population that is a merger of all unique events from all populations in a given
+    set of populations
+    * NOT - generates a new population that contains all events in some target population that are not
+    present in some set of other populations (requires that user specifies 'target' in method kwargs)
 
-    def _fit(self,
-             data: pd.DataFrame) -> List[ShapelyPoly]:
+    BooleanGate inherits from the PolygonGate and generates a Population with Polygon geometry. This
+    allows the user to view the resulting 'gate' as a polygon structure. This means
+    """
+    def __init__(self,
+                 method: str,
+                 method_kwargs: dict,
+                 *args,
+                 **kwargs):
+        if method not in ["AND", "OR", "NOT"]:
+            raise ValueError("method must be one of: 'OR', 'AND' or 'NOT'")
+        if method == "NOT":
+            assert "target" in method_kwargs.keys(), "target required for NOT boolean gate; remember NOT is " \
+                                                     "equivalent to subtraction, so requires a target population " \
+                                                     "to subtract from."
+        assert "populations" in method_kwargs.keys(), "Method kwargs missing 'populations'"
+        super().__init__(*args, method=method, method_kwargs=method_kwargs, **kwargs)
+
+    def _or(self, data: List[pd.DataFrame]) -> pd.DataFrame:
         """
-        Internal method for fitting gate to the given data and returning geometric polygons for
-        captured populations.
+        OR operation, generates index of events that is a merger of all unique events from all populations in a given
+        set of populations.
 
         Parameters
         ----------
-        data: Pandas.DataFrame
+        data: list
+            List of Pandas DataFrames
 
         Returns
         -------
-        List
-            List of Shapely polygon's
+        Pandas.DataFrame
+            New population dataframe
         """
-        if self.method == "manual":
-            return [self._manual()]
-        start = self.method_kwargs.get("start", 0.05)
-        end = self.method_kwargs.get("end", 0.95)
-        self._xy_in_dataframe(data=data)
-        xs, xe = data[self.x].max() * start, data[self.x].max() * end
-        ys, ye = data[self.y].min(), data[self.y].max()
-        x_values = [xs, xe, xe, xs, xs]
-        y_values = [ys, ys, ye, ye, ys]
-        return [create_polygon(x_values, y_values)]
+        idx = np.unique(np.concatenate([df.index.values for df in data], axis=0), axis=0)
+        return pd.concat(data).drop_duplicates().loc[idx].copy()
 
-    def fit(self,
-            data: pd.DataFrame,
-            ctrl_data: None = None) -> None:
+    def _and(self, data: List[pd.DataFrame]) -> pd.DataFrame:
         """
-        Fit the gate using a given dataframe. This will generate new children using the calculated
-        polygons. If children already exist will raise an AssertionError and notify user to call
-        `fit_predict`.
+        AND operation, generates index of events that are present in every population of a given
+        set of populations
 
         Parameters
         ----------
-        data: Pandas.DataFrame
-            Population data to fit gate to
+        data: list
+            List of Pandas DataFrames
+
+        Returns
+        -------
+        Pandas.DataFrame
+            New population dataframe
+        """
+        idx = reduce(np.intersect1d, [df.index.values for df in data])
+        return pd.concat(data).drop_duplicates().loc[idx].copy()
+
+    def _not(self,
+             target: pd.DataFrame,
+             data: List[pd.DataFrame]) -> pd.DataFrame:
+        """
+        NOT operation, generates index of events that contains all events in some target population that are not
+        present in some set of other populations (requires that user specifies 'target' in method kwargs)
+
+        Parameters
+        ----------
+        target: Pandas.DataFrame
+            DataFrame to subtract from
+        data: list
+            List of Pandas DataFrames
+
+        Returns
+        -------
+        Pandas.DataFrame
+            New population dataframe
+        """
+        subtraction_index = np.unique(np.concatenate([df.index.values for df in data], axis=0), axis=0)
+        idx = np.setdiff1d(target.index.values, subtraction_index)
+        return pd.concat(data).drop_duplicates().loc[idx].copy()
+
+    def _fit(self,
+             data: List[pd.DataFrame],
+             target: pd.DataFrame or None = None) -> (ShapelyPoly, pd.DataFrame):
+        """
+        Perform boolean operation on given DataFrames of population data
+
+        Parameters
+        ----------
+        data: list
+            List of population dataframes
+        target: Pandas.DataFrame
+            Required for NOT method
+
+        Returns
+        -------
+        Polygon, Pandas.DataFrame
+
+        Raises
+        ------
+        AssertionError
+            If target not provided and method is NOT
+        """
+        if self.method == "NOT":
+            assert target is not None, "target required for NOT boolean gate; remember NOT is equivalent to " \
+                                       "subtraction, so requires a target population to subtract from."
+            data = self._not(target=target, data=data)
+        elif self.method == "OR":
+            data = self._or(data=data)
+        else:
+            data = self._and(data=data)
+        poly = create_polygon(*create_convex_hull(x_values=data[self.x].values, y_values=data[self.y].values))
+        return poly, data
+
+    def fit(self,
+            data: List[pd.DataFrame],
+            target: pd.DataFrame or None = None):
+        """
+        Perform boolean operation on given DataFrames of population data. Will generate
+        a population with dummy name 'A'. Call 'label_children' to assign a simple name.
+
+        Parameters
+        ----------
+        data: list
+            List of Pandas DataFrames, one for each population
+        target: Pandas.DataFrame
 
         Returns
         -------
         None
         """
-        assert len(self.children) == 0, "Gate is already defined, call 'reset_gate' to clear children"
-        poly = self._fit(data=data)[0]
-        self.add_child(ChildPolygon(name="Time filter",
+        poly, _ = self._fit(data=data, target=target)
+        self.add_child(ChildPolygon(name="A",
                                     geom=PolygonGeom(x_values=poly.exterior.xy[0].tolist(),
                                                      y_values=poly.exterior.xy[1].tolist())))
 
     def fit_predict(self,
-                    data: pd.DataFrame,
-                    ctrl_data: None = None) -> List[Population]:
+                    data: List[pd.DataFrame],
+                    target: pd.DataFrame or None = None):
         """
-        Fit the gate using a given dataframe and then associate predicted Population objects to
-        existing children. If no children exist, an AssertionError will be raised prompting the
-        user to call 'fit' method.
+        Perform boolean operation on given DataFrames of population data
 
         Parameters
         ----------
-        data: Pandas.DataFrame
-            Population data to fit gate to
+        data: list
+            List of Pandas DataFrames
+        target: Pandas.DataFrame
+            Required for NOT method and used to subtract from
 
         Returns
         -------
         List
-            List of predicted Population objects, labelled according to the gates child objects
-        """
-        assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
-        return self._match_to_children(self._generate_populations(data=data.copy(),
-                                                                  polygons=self._fit(data=data)))
+            [New population object]
 
-    def predict(self,
-                data: pd.DataFrame) -> List[Population]:
+        Raises
+        ------
+        AssertionError
+            If target is not provided and method is NOT
         """
-        Using existing children associated to this gate, the previously calculated polygons of
-        these children will be applied to the given data and then Population objects created and
-        labelled to match the children of this gate. NOTE: the data will not be fitted and polygons
-        applied will be STATIC not data driven. For data driven gates call `fit_predict` method.
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-            Data to apply static polygons to
-
-        Returns
-        -------
-        List
-            List of Population objects
-        """
-        c = self.children[0]
-        poly = create_polygon(c.geom.x_values, c.geom.y_values)
-        populations = self._generate_populations(data=data, polygons=[poly])
-        for p, name in zip(populations, [c.name for c in self.children]):
-            p.population_name = name
-        return populations
+        poly, pop_data = self._fit(data=data, target=target)
+        pop = self._generate_populations(data=pop_data, polygons=[poly])[0]
+        pop.population_name = self.children[0].name
+        return [pop]
 
 
 def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
@@ -1510,6 +1712,11 @@ def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
     Returns
     -------
     Child or ChildThreshold or ChildPolygon
+
+    Raises
+    ------
+    AssertionError
+        Invalid Children provided
     """
     assert len(set([type(x) for x in children])) == 1, \
         f"Children must be of same type; not, {[type(x) for x in children]}"
@@ -1684,6 +1891,12 @@ def smoothed_peak_finding(p: np.array,
     -------
     np.array, np.array
         Smooth probability vector and index of peaks
+
+    Raises
+    ------
+    ValueError
+        Exceeded a safe number of iterations when expanding window of savgol filter. Likely
+        means that there is a lack of data for correct estimation of peaks.
     """
     smoothed = p.copy()
     window = starting_window_length
@@ -1797,6 +2010,11 @@ def update_threshold(population: Population,
     Returns
     -------
     None
+
+    Raises
+    ------
+    AssertionError
+        If y_threshold is missing despite population y_threshold being defined
     """
     if population.geom.y_threshold is None:
         new_data = threshold_1d(data=parent_data,
@@ -1826,16 +2044,17 @@ def update_polygon(population: Population,
     Given an existing population and some new definition for it's polygon gate
     (different to what is already associated to the Population), update the Population
     index and geom accordingly. Any controls will have to be estimated again.
+
     Parameters
     ----------
-    population
-    parent_data
-    x_values
-    y_values
+    population: Population
+    parent_data: Pandas.DataFrame
+    x_values: list
+    y_values: list
 
     Returns
     -------
-
+    None
     """
     poly = create_polygon(x=x_values, y=y_values)
     new_data = inside_polygon(df=parent_data,
