@@ -62,7 +62,11 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
     transform_x: str
         Transformation method applied to the x-axis
     transform_y: str
-        Transformation method applied to the x-axis
+        Transformation method applied to the y-axis
+    transform_x_kwargs: dict
+        Transformation keyword arguments for transform method applied to the x-axis
+    transform_y_kwargs: str
+        Transformation keyword arguments for transform method applied to the y-axis
     """
     x = mongoengine.StringField()
     y = mongoengine.StringField()
@@ -88,6 +92,15 @@ class ThresholdGeom(PopulationGeometry):
     y_threshold = mongoengine.FloatField()
 
     def transform_to_linear(self):
+        """
+        Thresholds are transformed to their equivalent value in linear space
+        according to the transform defined. If transform is None, thresholds
+        are returned as saved.
+
+        Returns
+        -------
+        float, float
+        """
         x, y = self.x_threshold, self.y_threshold
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
@@ -121,6 +134,15 @@ class PolygonGeom(PopulationGeometry):
         return create_polygon(self.x_values, self.y_values)
 
     def transform_to_linear(self):
+        """
+        x,y coordinates are transformed to their equivalent value in linear space
+        according to the transform defined. If transform is None, coordinates
+        are returned as saved.
+
+        Returns
+        -------
+        Numpy.Array, Numpy.Array
+        """
         x_values, y_values = self.x_values, self.y_values
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
