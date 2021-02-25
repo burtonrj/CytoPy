@@ -3,7 +3,7 @@
   <h1 align="center">CytoPy: a cytometry analysis framework for Python</h1>
 </p>
 
-<b>CytoPy is under peer-review and active development. A stable release is scheduled for 2021 but in the meantime some functionality may change</b>
+<b>CytoPy is under peer-review and active development. A stable release is scheduled for March 2021 but in the meantime some functionality may change</b>
 
 In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community.
 This expansion is looking to soon replace traditional methods such as manual gating with sophisticated automated algorithms.
