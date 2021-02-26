@@ -35,7 +35,7 @@ np.random.seed(42)
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"
-__credits__ = ["Ross Burton", "Žiga Sajovic", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__credits__ = ["Žiga Sajovic", "Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
 __license__ = "MIT"
 __version__ = "1.0.0"
 __maintainer__ = "Ross Burton"
