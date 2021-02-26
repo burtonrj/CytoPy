@@ -1,3 +1,30 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+This module contains the base class KerasCellClassifier for using deep learning methods,
+trained on some labeled FileGroup (has existing Populations), to predict single cell classifications.
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from ..build_models import build_keras_model
 from .cell_classifier import CellClassifier, check_data_init, check_model_init
 from sklearn.model_selection import train_test_split
@@ -11,32 +38,113 @@ import numpy as np
 
 
 class KerasCellClassifier(CellClassifier):
+    """
+    Use Keras deep learning models to predict the classification of single cell data.
+    Training data should be provided in the form of a FileGroup with existing Populations.
+    Supports multi-class and multi-label classification; if multi-label classification is chosen,
+    the tree structure of training data is NOT conserved - all resulting populations
+    will have the same parent population.
+
+    Note, this class assumes you use the Keras Sequential API. Objects can be constructed using
+    a pre-built model, or the model designed through the parameters 'optimizer', 'loss' and 'metrics,
+    and then a model constructed using the 'build_model' method.
+
+    Parameters
+    ----------
+    model: Sequential, optional
+        Pre-compiled Keras Sequential model
+    optimizer: str, optional
+        Provide if you intend to compile a model with the 'build_model' method.
+        See https://keras.io/api/optimizers/ for optimizers
+    loss: str, optional
+        Provide if you intend to compile a model with the 'build_model' method.
+        See https://keras.io/api/losses/ for valid loss functions
+    metrics: list, optional
+        Provide if you intend to compile a model with the 'build_model' method.
+        See https://keras.io/api/metrics/ for valid metrics
+    features: list
+        List of channels/markers to use as features in prediction
+    target_populations: list
+        List of populations from training data to predict
+    multi_label: bool (default=False)
+        If True, single cells can belong to more than one population. The tree structure of training data is
+        NOT conserved - all resulting populations will have the same parent population.
+    logging_level: int (default=logging.INFO)
+        Level to log events at
+    log: str, optional
+        Path to log output to; if not given, will log to stdout
+    population_prefix: str (default="CellClassifier_")
+        Prefix applied to populations generated
+
+    Attributes
+    ----------
+    scaler: Scaler
+        Scaler object
+    transformer: Transformer
+        Transformer object
+    class_weights: dict
+        Sample class weights; key is sample index, value is weight. Set by calling compute_class_weights.
+    x: Pandas.DataFrame
+        Training feature space
+    y: Numpy.Array
+        Target labels
+    logger: logging.Logger
+    features: list
+    target_populations: list
+    """
     def __init__(self,
-                 optimizer: str,
-                 loss: str,
-                 metrics: list,
+                 model: Sequential or None = None,
+                 optimizer: str or None = None,
+                 loss: str or None = None,
+                 metrics: list or None = None,
                  **kwargs):
         self.optimizer = optimizer
         self.loss = loss
         self.metrics = metrics
+        if model is not None:
+            self.model = model
+        else:
+            if any([x is None for x in [optimizer, loss, metrics]]):
+                raise ValueError("If model is not provided, must provide optimizer, loss and metrics, and "
+                                 "call 'build_model' prior to fit")
         super().__init__(**kwargs)
-
-    def inject_model(self, model: Sequential):
-        self._model = model
 
     def build_model(self,
                     layers: list,
                     layer_params: list,
                     input_shape: tuple or None = None,
                     **compile_kwargs):
+        """
+        If Sequential model is not constructed and provided at object construction, this method
+        can be used to specify a sequential model to be built.
+
+        Parameters
+        ----------
+        layers: list
+            List of keras layer class names (see https://keras.io/api/layers/)
+        layer_params: list
+            List of parameters to use when constructing layers (order must match layers)
+        input_shape: tuple, optional
+            Shape of input data to first layer, if None, then passed as (N, ) where N is the number
+            of features
+        compile_kwargs:
+            Additional keyword arguments passed when calling compile
+
+        Returns
+        -------
+        self
+        """
+        if self.model is not None:
+            raise ValueError("Model already defined.")
         input_shape = input_shape or (len(self.features),)
-        self._model = build_keras_model(layers=layers,
-                                        layer_params=layer_params,
-                                        optimizer=self.optimizer,
-                                        loss=self.loss,
-                                        metrics=self.metrics,
-                                        input_shape=input_shape,
-                                        **compile_kwargs)
+        self.model = build_keras_model(layers=layers,
+                                       layer_params=layer_params,
+                                       optimizer=self.optimizer,
+                                       loss=self.loss,
+                                       metrics=self.metrics,
+                                       input_shape=input_shape,
+                                       **compile_kwargs)
+        return self
 
     @check_model_init
     def _predict(self,
@@ -97,6 +205,11 @@ class KerasCellClassifier(CellClassifier):
         -------
         Keras.callbacks.History
             Keras History object
+
+        Raises
+        ------
+        AssertionError
+            validation_y not provided but validation_x is
         """
         if validation_x is not None:
             assert validation_y is not None, "validation_y cannot be None if validation_x given"

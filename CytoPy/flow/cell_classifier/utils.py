@@ -12,7 +12,8 @@ def calc_metrics(metrics: list,
                  y_score: np.array or None = None) -> dict:
     """
     Given a list of Scikit-Learn supported metrics (https://scikit-learn.org/stable/modules/model_evaluation.html)
-    return a dictionary of results after checking that the required inputs are provided.
+    or callable functions with signature 'y_true', 'y_pred' and 'y_score', return a dictionary of results after
+    checking that the required inputs are provided.
 
     Parameters
     ----------
@@ -28,18 +29,34 @@ def calc_metrics(metrics: list,
         Target scores. In the binary and multilabel cases, these can be either probability
         estimates or non-thresholded decision values (as returned by decision_function on
         some classifiers). In the multiclass case, these must be probability estimates which
-         sum to 1. The binary case expects a shape (n_samples,), and the scores must be the
-         scores of the class with the greater label. The multiclass and multilabel cases expect
-         a shape (n_samples, n_classes). In the multiclass case, the order of the class scores must
-         correspond to the order of labels, if provided, or else to the numerical or
-         lexicographical order of the labels in y_true.
+        sum to 1. The binary case expects a shape (n_samples,), and the scores must be the
+        scores of the class with the greater label. The multiclass and multilabel cases expect
+        a shape (n_samples, n_classes). In the multiclass case, the order of the class scores must
+        correspond to the order of labels, if provided, or else to the numerical or
+        lexicographical order of the labels in y_true.
     Returns
     -------
     dict
         Dictionary of performance metrics
+
+    Raises
+    ------
+    AssertionError
+        F1 score requested yet y_pred is missing
+
+    AttributeError
+        Requested metric requires probability scores and y_score is None
+
+    ValueError
+        Invalid metric provided; possibly missing signatures: 'y_true', 'y_score' or 'y_pred'
     """
     results = dict()
+    i = 1
     for m in metrics:
+        if callable(m):
+            results[f"custom_metric_{i}"] = m(y_true=y_true, y_pred=y_pred, y_score=y_score)
+            i += 1
+            continue
         if "f1" in m:
             avg = m.split("_")
             if len(avg) == 2:
@@ -58,13 +75,15 @@ def calc_metrics(metrics: list,
         else:
             f = getattr(skmetrics, m)
             if "y_score" in inspect.signature(f).parameters.keys():
-                assert y_score is not None, f"Metric requested ({m}) requires probabilities of positive class but " \
-                                            f"y_score not provided; y_score is None."
+                if y_score is None:
+                    raise AttributeError(f"Metric requested ({m}) requires probabilities of positive class but "
+                                         f"y_score not provided; y_score is None.")
                 results[m] = f(y_true=y_true, y_score=y_score)
             elif "y_pred" in inspect.signature(f).parameters.keys():
                 results[m] = f(y_true=y_true, y_pred=y_pred)
             else:
                 raise ValueError("Unexpected metric. Signature should contain either 'y_score' or 'y_pred'")
+
     return results
 
 
@@ -101,7 +120,7 @@ def confusion_matrix_plots(classifier,
     -------
     Matplotlib.Figure
     """
-    cmap = cmap or plt.cm.Blues
+    cmap = cmap or plt.get_cmap("Blues")
     fig, axes = plt.subplots(2, 1, figsize=figsize)
     titles = ["Confusion matrix, without normalisation", "Confusion matrix; normalised"]
     for i, (title, norm) in enumerate(zip(titles, [None, 'true'])):
@@ -133,6 +152,11 @@ def assert_population_labels(ref, expected_labels: list):
     Returns
     -------
     List
+
+    Raises
+    -------
+    AssertionError
+        Ref missing expected populations
     """
     assert len(ref.populations) >= 2, "Reference sample does not contain any gated populations"
     for x in expected_labels:
@@ -143,7 +167,7 @@ def check_downstream_populations(ref,
                                  root_population: str,
                                  population_labels: list) -> None:
     """
-    Check that in the ordered list of population labels, all populaitons are downstream
+    Check that in the ordered list of population labels, all populations are downstream
     of the given 'root' population.
 
     Parameters
@@ -155,6 +179,11 @@ def check_downstream_populations(ref,
     Returns
     -------
     None
+
+    Raises
+    ------
+    AssertionError
+        One or more populations not downstream of root
     """
     downstream = ref.list_downstream_populations(root_population)
     assert all([x in downstream for x in population_labels]), \
@@ -175,6 +204,7 @@ def multilabel(ref,
     Parameters
     ----------
     ref: FileGroup
+    root_population: str
     population_labels: list
     features: list
 
@@ -206,7 +236,6 @@ def singlelabel(ref,
     root_population
     ref: FileGroup
     population_labels: list
-    transform: str
     features: list
 
     Returns

@@ -1,6 +1,32 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+This module contains the SklearnCellClassifier for using supervised classification methods,
+trained on some labeled FileGroup (has existing Populations) to predict single cell classifications.
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
 from ...data.experiment import Experiment
-from ..build_models import build_sklearn_model
-from .cell_classifier import CellClassifier, check_data_init, check_model_init
+from .cell_classifier import CellClassifier, check_data_init
 from . import utils
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, learning_curve
 from matplotlib.pyplot import Axes
@@ -12,18 +38,24 @@ import numpy as np
 import pickle
 
 
-def _valid_multi_label(klass: str):
+def _valid_multi_label(model):
     """
     Checks if the specified Scikit-Learn class is valid for
     multi-label classification. If not, raises AssertionError.
 
     Parameters
     ----------
-    klass: str
+    model: Classifier
+        Scikit-learn classifier
 
     Returns
     -------
     None
+
+    Raises
+    ------
+    AssertionError
+        Not a valid multi-label classifier
     """
     valid = ["DescisionTreeClassifier",
              "ExtraTreeClassifier",
@@ -34,41 +66,79 @@ def _valid_multi_label(klass: str):
              "RandomForestClassifier",
              "RidgeClassifierCV"]
     err = f"Invalid Scikit-Learn class for multi-label classification, should be one of: {valid}"
-    assert klass in valid, err
+    assert model.__class__.__name__ in valid, err
+
+
+def _valid_classifier(model):
+    for x in ["fit", "fit_predict", "predict"]:
+        try:
+            getattr(model, x)
+        except AttributeError:
+            raise AttributeError("Invalid classifier provided to SklearnCellClassifier, must be a "
+                                 "valid Scikit-Learn class or follow the conventions of the Scikit-Learn "
+                                 "ecosystem; that is, contains methods 'fit', 'fit_predict' and 'predict'")
 
 
 class SklearnCellClassifier(CellClassifier):
+    """
+    Use supervised machine learning to predict the classification of single cell data. This class
+    allows the user to apply an Scikit-Learn classifier or classifier that follows the conventions of
+    Scikit-Learn i.e. contains the methods 'fit', 'fit_predict' and 'predict'.
+    Training data should be provided in the form of a FileGroup with existing Populations.
+    Supports multi-class and multi-label classification; if multi-label classification is chosen,
+    the tree structure of training data is NOT conserved - all resulting populations will have the same
+    parent population.
+
+    Parameters
+    ----------
+    model: Scikit-Learn Classifier
+        Should be a valid Scikit-Learn class or similar e.g. XGBClassifier
+    params: dict
+        Parameters to initiate class with
+    features: list
+        List of channels/markers to use as features in prediction
+    target_populations: list
+        List of populations from training data to predict
+    multi_label: bool (default=False)
+        If True, single cells can belong to more than one population. The tree structure of training data is
+        NOT conserved - all resulting populations will have the same parent population.
+    logging_level: int (default=logging.INFO)
+        Level to log events at
+    log: str, optional
+        Path to log output to; if not given, will log to stdout
+    population_prefix: str (default="CellClassifier_")
+        Prefix applied to populations generated
+
+    Attributes
+    ----------
+    scaler: Scaler
+        Scaler object
+    transformer: Transformer
+        Transformer object
+    class_weights: dict
+        Sample class weights; key is sample index, value is weight. Set by calling compute_class_weights.
+    x: Pandas.DataFrame
+        Training feature space
+    y: Numpy.Array
+        Target labels
+    logger: logging.Logger
+    features: list
+    target_populations: list
+    """
     def __init__(self,
-                 klass: str,
+                 model,
                  params: dict,
                  multi_label: bool = False,
                  **kwargs):
-        if multi_label:
-            _valid_multi_label(klass)
         super().__init__(multi_label=multi_label, **kwargs)
-        self.klass = klass
-        self.params = params
-
-    def inject_model(self, model: object):
-        self._model = model
-
-    def build_model(self):
-        """
-        Call prior to fit or predict. Initiates model and associates
-        to self.model.
-
-        Returns
-        -------
-        None
-        """
-        params = self.params or {}
-        self._model = build_sklearn_model(klass=self.klass, **params)
+        _valid_classifier(model)
+        self.model = model(**params)
+        if multi_label:
+            _valid_multi_label(model)
         if self.class_weights:
             err = "Class weights defined yet the specified model does not support this"
             assert "sample_weight" in signature(self.model.fit).parameters.keys(), err
-        return self
 
-    @check_model_init
     def _predict(self,
                  x: pd.DataFrame,
                  threshold: float = 0.5):
@@ -104,7 +174,6 @@ class SklearnCellClassifier(CellClassifier):
             y_pred = self.model.predict(x[self.features])
         return y_pred, y_score
 
-    @check_model_init
     def _fit(self, x: pd.DataFrame, y: np.ndarray, **kwargs):
         """
         Fits the model to loaded training data. If "load_data" is not
@@ -136,7 +205,6 @@ class SklearnCellClassifier(CellClassifier):
         else:
             self.model.fit(x, y, **kwargs)
 
-    @check_model_init
     @check_data_init
     def hyperparameter_tuning(self,
                               param_grid: dict,
@@ -158,6 +226,11 @@ class SklearnCellClassifier(CellClassifier):
         Returns
         -------
         GridSearchCV or RandomizedSearchCV
+
+        Raises
+        ------
+        AssertionError
+            Invalid method
         """
         assert method in ["grid_search", "random"], "Method should either be 'grid_search' for " \
                                                     "exhaustive search or 'random' for randomised " \
@@ -173,7 +246,6 @@ class SklearnCellClassifier(CellClassifier):
         search_cv.fit(self.x, self.y)
         return search_cv
 
-    @check_model_init
     def plot_learning_curve(self,
                             experiment: Experiment or None = None,
                             validation_id: str or None = None,
@@ -208,12 +280,20 @@ class SklearnCellClassifier(CellClassifier):
             Y-axis labels
         train_sizes: Numpy.Array (optional)
             Defaults to linear range between 0.1 and 1.0, with 10 steps
+        verbose: int (default=1)
+            Passed to learning_curve function
         kwargs:
             Additional keyword arguments passed to sklearn.model_selection.learning_curve
 
         Returns
         -------
         Matplotlib.Axes
+
+        Raises
+        ------
+        AssertionError
+            If plotting learning curve for validation and Experiment, validation_id or root_population not
+            provided
         """
         x, y = self.x, self.y
         if validation_id is not None:
@@ -280,7 +360,12 @@ class SklearnCellClassifier(CellClassifier):
 
         Returns
         -------
+        Matplotlib.Figure
 
+        Raises
+        ------
+        AssertionError
+            Invalid x, y input
         """
         assert not sum([x is not None, y is not None]) == 1, "Cannot provide x without y and vice-versa"
         if x is None:
@@ -330,7 +415,5 @@ class SklearnCellClassifier(CellClassifier):
         -------
         None
         """
-        model = pickle.load(open(path, "rb"), **kwargs)
-        assert self.klass in str(type(model)), \
-            f"Loaded model does not match Classifier, expected type: {self.klass}"
-        self._model = model
+        self.model = pickle.load(open(path, "rb"), **kwargs)
+
