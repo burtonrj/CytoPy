@@ -29,6 +29,26 @@ def discrete_scatterplot(data: pd.DataFrame,
                          size: int or str or None,
                          fig: plt.Figure,
                          **kwargs):
+    """
+    Scatterplot with discrete label
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    x: str
+    y: str
+    z: str, optional
+    label: str
+    cmap: str
+    size: int or str, optional
+    fig: Matplotlib.Figure
+    kwargs:
+        Additional keyword arguments passed to Matplotlib.Axes.scatter call
+
+    Returns
+    -------
+    Matplotlib.Axes
+    """
     colours = cycle(plt.get_cmap(cmap).colors)
     data[label] = data[label].astype(str)
     if z is not None:
@@ -69,6 +89,28 @@ def cont_scatterplot(data: pd.DataFrame,
                      fig: plt.Figure,
                      cbar_kwargs: dict,
                      **kwargs):
+    """
+    Scatterplot with continuous label
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    x: str
+    y: str
+    z: str, optional
+    label: str
+    cmap: str
+    size: int or str, optional
+    fig: Matplotlib.Figure
+    cbar_kwargs: dict
+        Keyword arguments passed to colorbar
+    kwargs:
+        Additional keyword arguments passed to Matplotlib.Axes.scatter call
+
+    Returns
+    -------
+    Matplotlib.Axes
+    """
     if isinstance(size, str):
         size = data[size].values
     if z is not None:
@@ -106,6 +148,47 @@ def single_cell_plot(data: pd.DataFrame,
                      legend_kwargs: dict or None = None,
                      cbar_kwargs: dict or None = None,
                      **kwargs):
+    """
+    Single cell plot, to be used with a dimensionality reduction method for example. Takes a
+    DataFrame of single cell data and the name of two or three columns (generates a 3D plot if third
+    is given). Specify discrete as True to treat label (column used to colour data points) as
+    categorical, otherwise treated as continuous; be sure to supply a suitable colourmap, we
+    recommend 'tab20' for discrete plots and 'coolwarm' for continuous.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    x: str
+        X-axis variable
+    y: str
+        Y-axis variable
+    z: str, optional
+        Z-axis variable (induces 3D plot)
+    label: str
+        Variable used to colour data points
+    discrete: bool (default=True)
+        Treat label as categorical
+    cmap: str (default="tab20")
+        Colourmap (must be a valid Matplotlib colourmap)
+    scale: str, optional
+        Scale data prior to plotting. Valid methods are 'zscore' or 'minmax'.
+    figsize: tuple (default=(8,8))
+        Figure size
+    size: int or str, optional
+        Size of the data points. Either an integer for uniform size or name of the column
+        to infer datapoint size from
+    include_legend: bool (default=False)
+    legend_kwargs: dict, optional
+        Keyword arguments passed to legend
+    cbar_kwargs: dict, optional
+        Keyword arguments passed to colorbar
+    kwargs:
+        Additional keyword arguments passed to Matplotlib.Axes.scatter call
+
+    Returns
+    -------
+    Matplotlib.Axes
+    """
     data = data.copy()
     kwargs = _scatterplot_defaults(**kwargs)
     cbar_kwargs = cbar_kwargs or {}
@@ -208,6 +291,38 @@ def _generate_cluster_centroids(data: pd.DataFrame,
                                 dim_reduction_method: str or None,
                                 n_components: int = 2,
                                 dim_reduction_kwargs: dict or None = None):
+    """
+    Generate centroids for clusters in given dataframe
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+        DataFrame of single cell data
+    features: list
+        List of features
+    cluster_label: str
+        Column that corresponds to the name of cluster
+    sample_label: str
+        Column that contains sample unique identifiers
+    colour_label: str, optional
+        Column that contains variable used to colour data points
+    dim_reduction_method: str, optional
+        Dimension reduction method to be applied
+    n_components: int (default=2)
+        Number of components to generate in dimension reduction
+    dim_reduction_kwargs: dict, optional
+        Additional keyword arguments to pass to dimension reduction method
+
+    Returns
+    -------
+    Pandas.DataFrame
+        Centroids
+
+    Raises
+    ------
+    AssertionError
+        Invalid number of components, should be 2 or 3
+    """
     dim_reduction_kwargs = dim_reduction_kwargs or {}
     assert n_components in [2, 3], "n_components must be 2 or 3"
     data = data.dropna(axis=1, how="any")
@@ -249,6 +364,48 @@ def cluster_bubble_plot(data: pd.DataFrame,
                         legend_kwargs: dict or None = None,
                         cbar_kwargs: dict or None = None,
                         **kwargs):
+    """
+    Generate a cluster 'bubble' plot where each data point (bubble) is a single cluster centroid
+    from a unique patient. Size of the data points represents the fraction of events with membership
+    to the sample relative to the total number of events in that sample.
+    By default data points are coloured by meta label membership.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+        Single cell data
+    features: list
+        Features to include in dimension reduction and cluster centroid summarisation
+    cluster_label: str
+        Name of the column containing cluster identifier
+    sample_label: str
+        Name of the column containing sample unique identifiers
+    colour_label: str, optional (default='meta_label')
+        Column used to assign colours to data points
+    zscore: bool (default=False)
+        z-score normalisation performed
+    discrete: bool (default=True)
+        Treat label as categorical
+    cmap: str (default="tab20")
+        Colourmap (must be a valid Matplotlib colourmap)
+    dim_reduction_method: str, optional (default="UMAP")
+        Dimensionality reduction technique; available methods are: UMAP, PCA, PHATE, KernelPCA or tSNE
+    n_components: int (default=2)
+        Number of components to generate from dimension reduction
+    dim_reduction_kwargs: dict, optional
+        Additional keyword arguments passed to dimension reduction (see CytoPy.flow.dim_reduction)
+    figsize: tuple (default=(8,8))
+    legend_kwargs: dict, optional
+        Keyword arguments passed to legend
+    cbar_kwargs: dict, optional
+        Keyword arguments passed to colorbar
+    kwargs:
+        Additional keyword arguments passed to Matplotlib.Axes.scatter call
+
+    Returns
+    -------
+    Matplotlib.Axes
+    """
     fig = plt.figure(figsize=figsize)
     legend_kwargs = legend_kwargs or {}
     cbar_kwargs = cbar_kwargs or {}
@@ -330,6 +487,28 @@ def plot_min_spanning_tree(data: pd.DataFrame,
                            sample_label: str,
                            colour_label: str or None = "meta_label",
                            **kwargs):
+    """
+    Experimental method in version 2.0. Generates a minimum spanning tree of cluster centroids.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+        Single cell data
+    features: list
+        Features to include in dimension reduction and cluster centroid summarisation
+    cluster_label: str
+        Name of the column containing cluster identifier
+    sample_label: str
+        Name of the column containing sample unique identifiers
+    colour_label: str, optional (default='meta_label')
+        Column used to assign colours to data points
+    kwargs:
+        Keyword arguments passed to NetworkX.draw
+
+    Returns
+    -------
+    Matplotlib.Axes
+    """
     centroids = _generate_cluster_centroids(data=data,
                                             features=features,
                                             cluster_label=cluster_label,

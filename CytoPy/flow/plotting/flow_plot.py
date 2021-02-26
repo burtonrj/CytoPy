@@ -4,12 +4,15 @@
 Central to the analysis of Cytometry data is visualisation. For exploratory
 analysis and 'gating' this normally comes in the form of bi-axial plots of
 different cell surface markers or intracellular stains. This module contains
-the CreatePlot class which houses the functionality for all one and two
+the FlowPlot class which houses the functionality for all one and two
 dimensional plotting of cytometry data. This class interacts with Population
 objects to present the data in multiple ways. This can be as standard 2D histograms
 as is common in software like FlowJo, but also allows for plotting of Population
 geometries (the shapes that define the gates that generated a Population) or
-overlaying downstream populations for 'back-gating' purposes.
+overlaying downstream populations for 'back-gating' purposes. Common transformations
+are available such as logicle and hyperbolic arcsine and Matplotlib transforms
+have been defined to generate familiar logarithmic axis like those seen in
+software like FlowJo.
 
 Copyright 2020 Ross Burton
 
@@ -32,10 +35,10 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from CytoPy.data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, Population
-from CytoPy.data.geometry import ThresholdGeom, PolygonGeom
-from CytoPy.flow import transform
 from . import hlog_transform, asinh_transform, logicle_transform
+from ...data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, Population
+from ...data.geometry import ThresholdGeom, PolygonGeom
+from ...flow import transform
 from KDEpy import FFTKDE
 from warnings import warn
 from typing import List, Generator, Dict
@@ -61,11 +64,34 @@ __status__ = "Production"
 TRANSFORMS = ["log", "logicle", "hyperlog", "asinh", None]
 
 
-def kde_plot(data: pd.DataFrame,
-             x: str,
-             transform_method: str or None = None,
-             bw: str or float = "silverman",
-             **transform_kwargs):
+def kde1d(data: pd.DataFrame,
+          x: str,
+          transform_method: str or None = None,
+          bw: str or float = "silverman",
+          **transform_kwargs):
+    """
+    Uses a fast convolution based KDE algorithm (KDEpy.FFTKDE) to estimate the
+    PDF for a single dimension (column) of a dataframe. Gaussian kernel used for
+    KDE.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    x: str
+        Column name
+    transform_method: str, optional
+        How to transform data prior to KDE (data is returned to the same scale as inputed)
+    bw: str or float (default='silverman')
+        Bandwidth for KDE
+    transform_kwargs:
+        Additional keyword arguments passed to Transformer
+
+    Returns
+    -------
+    Pandas.DataFrame
+        DataFrame with columns 'x' and 'y'. 'x' contains the grid space along which the PDF, 'y'
+        is estimated.
+    """
     if transform_method:
         data, transformer = transform.apply_transform(data=data,
                                                       features=[x],
@@ -87,7 +113,7 @@ class FlowPlot:
     populations, single or multiple gates, "backgating" (plotting child populations overlaid on parent) and
     overlaying populations from control samples on their equivalent in the primary sample.
 
-    Attributes
+    Parameters
     -----------
     transform_x: str (default = "logicle")
         How to transform the x-axis. Method 'plot_gate' overwrites this value with the value associated with
@@ -95,6 +121,8 @@ class FlowPlot:
     transform_y: str (default = "logicle")
         How to transform the y-axis. Method 'plot_gate' overwrites this value with the value associated with
         the gate
+    title: str, optional
+        Optional axis title
     xlabel: str, optional
         x-axis label
     ylabel: str, optional
@@ -113,17 +141,11 @@ class FlowPlot:
         use a given method to estimate suitable bin size
     cmap: str, (default="jet")
         Colormap for 2D histogram
-    style: str, optional (default="white")
-        Plotting style (passed to seaborn.set_style)
     autoscale: bool (default=True)
         Allow matplotlib to calculate optimal view
         (https://matplotlib.org/3.1.1/api/_as_gen/matplotlib.pyplot.autoscale.html)
-    font_scale: float, optional (default=1.2)
-        Font scale (passed to seaborn.set_context)
     bw: str or float, (default="scott")
         Bandwidth for 1D KDE (see seaborn.kdeplot)
-    axis_ticks: bool (default=True)
-        Show axis ticks with axis labels
     """
 
     def __init__(self,
@@ -193,7 +215,7 @@ class FlowPlot:
         """
         self.transform_y = None
         kwargs = kwargs or {}
-        data = kde_plot(data=data, x=x, transform_method=self.transform_x, bw=self.bw, **self.transform_x_kwargs)
+        data = kde1d(data=data, x=x, transform_method=self.transform_x, bw=self.bw, **self.transform_x_kwargs)
         self._ax.plot(data["x"].values,
                       data["y"].values,
                       linewidth=kwargs.get("linewidth", 2),
@@ -207,6 +229,20 @@ class FlowPlot:
                             data: pd.DataFrame,
                             x: str,
                             y: str):
+        """
+        Set axis limits for 2D histogram.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        x: str
+        y: str
+
+        Returns
+        -------
+        Pandas.DataFrame, Pandas.DataFrame
+            X limit, y limit
+        """
         if self.transform_x == "log":
             xlim = transform.safe_range(data, "x")
         else:
@@ -223,6 +259,19 @@ class FlowPlot:
                                limits: pd.DataFrame,
                                axis: str,
                                transform_method: str):
+        """
+        Transform axis limits to the same scale as data
+
+        Parameters
+        ----------
+        limits: Pandas.DataFrame
+        axis: str
+        transform_method: str
+
+        Returns
+        -------
+        Pandas.DataFrame, Transformer
+        """
         transform_kwargs = {"x": self.transform_x_kwargs, "y": self.transform_y_kwargs}
         lim, transformer = transform.apply_transform(data=limits,
                                                      features=["Min", "Max"],
@@ -397,10 +446,6 @@ class FlowPlot:
            Overrides the plotting configurations for the gate if y is missing
            and allows user to plot a two-dimensional instead of one dimensional plot.
            Only value for ThresholdGate.
-       transform_x: str (optional)
-           Overrides the transformation to the x-axis variable
-       transform_y: str (optional)
-           Overrides the transformation to the x-axis variable
 
        Returns
        -------
@@ -477,6 +522,14 @@ class FlowPlot:
         -------
         Matplotlib.pyplot.axes
             Axis object
+
+        Raises
+        ------
+        AssertionError
+            Invalid geometries; must all be the same amongst children
+
+        ValueError
+            Attempt to override y-axis variable for a Population with Polygon geometry
         """
         gate_colours = cycle(["#c92c2c",
                               "#2df74e",
@@ -486,8 +539,8 @@ class FlowPlot:
                               "#9e3657"])
         assert len(set(str(type(x.geom) for x in children))), "Children geometries must all be of the same type"
         if y is not None:
-            assert isinstance(children[0].geom, ThresholdGeom), "Can only override y-axis variable for Threshold " \
-                                                                "geometries"
+            if not isinstance(children[0].geom, ThresholdGeom):
+                raise ValueError("Can only override y-axis variable for Threshold geometries")
         plot_kwargs = plot_kwargs or {}
         legend_kwargs = legend_kwargs or dict()
         # Plot the parent population
@@ -648,6 +701,22 @@ class FlowPlot:
         self._ax.add_patch(ellipse)
 
     def _2dthreshold_annotations(self, labels: dict or None = None):
+        """
+        Annotate a 2D threshold plot
+
+        Parameters
+        ----------
+        labels: dict, optional
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        KeyError
+            Definition is invalid for 2D threshold geometry
+        """
         labels = labels or {"-+": "-+", "++": "++", "--": "--", "+-": "+-"}
         legend_labels = {}
         for definition, label in labels.items():
@@ -661,7 +730,7 @@ class FlowPlot:
                 elif "+-" == d:
                     legend_labels["D"] = label
                 else:
-                    raise ValueError(f"Definition {d} is invalid for a 2D threshold gate.")
+                    raise KeyError(f"Definition {d} is invalid for a 2D threshold gate.")
         self._threshold_annotation(0.05, 0.95, "A")
         self._threshold_annotation(0.95, 0.95, "B")
         self._threshold_annotation(0.05, 0.05, "C")
@@ -676,6 +745,22 @@ class FlowPlot:
                       backgroundcolor="white", bbox=dict(facecolor='white', edgecolor='black', pad=5.0))
 
     def _1dthreshold_annotations(self, labels: dict or None = None):
+        """
+        Annotate a 1D threshold plot
+
+        Parameters
+        ----------
+        labels: dict, optional
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        KeyError
+            Definition is invalid for 2D threshold geometry
+        """
         try:
             legend_labels = {"A": labels["-"], "B": labels["+"]}
         except KeyError:
@@ -842,6 +927,11 @@ class FlowPlot:
         Returns
         -------
         None
+
+        Raises
+        ------
+        AssertionError
+            Invalid method
         """
         assert method in ["scatter", "kde", "polygon"], "Overlay method should be 'scatter' or 'kde'"
         if y is None and method == "scatter":
