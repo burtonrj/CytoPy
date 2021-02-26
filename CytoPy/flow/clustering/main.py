@@ -5,14 +5,24 @@ High-dimensional clustering offers the advantage of an unbiased approach
 to classification of single cells whilst also exploiting all available variables
 in your data (all your fluorochromes/isotypes). In CytoPy, the clustering is
 performed on a Population of a FileGroup. The resulting clusters are saved
-to that Population. Multiple clustering methods can be tried on a single
-Population and be tracked with a 'tag'. Additionally, we can compare the
-clustering results of many FileGroup's by 'clustering the clusters', to do
+as new Populations.
+
+We can compare the clustering results of many FileGroup's by 'clustering the clusters', to do
 this we summarise their clusters and perform meta-clustering. In this module
 you will find the Clustering class, which is the apparatus to apply a
 clustering method in CytoPy and save the results to the database. We also
 provide implementations of PhenoGraph, FlowSOM and provide access to any
-of the clustering methods available throught the Scikit-Learn API.
+of the clustering methods available through the Scikit-Learn API.
+
+The Clustering class is algorithm agnostic and only requires that a function be
+provided that accepts a Pandas DataFrame with a column name 'sample_id' as the
+sample identifier, 'cluster_label' as the clustering results, and 'meta_label'
+as the meta clustering results. The function should also accept 'features' as
+a list of columns to use to construct the input space to the clustering algorithm.
+This function must return a Pandas DataFrame with the cluster_label/meta_label
+columns populated accordingly. It should also return two null value OR can optionally
+return a graph object, and modularity or equivalent score. These will be saved
+to the Clustering attributes.
 
 Copyright 2020 Ross Burton
 
@@ -109,6 +119,11 @@ def sklearn_clustering(data: pd.DataFrame,
     -------
     Pandas.DataFrame and None and None
         Modified dataframe with clustering IDs assigned to the column 'cluster_label'
+
+    Raises
+    ------
+    AssertionError
+        Invalid Scikit-Learn or equivalent class provided in method
     """
     assert method in globals().keys(), \
         "Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN"
@@ -212,16 +227,30 @@ def _summarise_clusters(data: pd.DataFrame,
                         scale_kwargs: dict or None = None,
                         summary_method: str = "median"):
     """
+    Average cluster parameters along columns average to generated a centroid for
+    meta-clustering
 
     Parameters
     ----------
-    data
-    features
-    summary_method
+    data: Pandas.DataFrame
+        Clustering results to average
+    features: list
+        List of features to use when generating centroid
+    summary_method: str (default='median')
+        Average method, should be mean or median
+    scale: str, optional
+        Perform scaling of centroids; see CytoPy.transform.Scaler
+    scale_kwargs: dict, optional
+        Additional keyword arguments passed to Scaler
 
     Returns
     -------
+    Pandas.DataFrame
 
+    Raises
+    ------
+    ValueError
+        If invalid method provided
     """
     if summary_method == "median":
         data = data.groupby(["sample_id", "cluster_label"])[features].median().reset_index()
@@ -265,6 +294,10 @@ def sklearn_metaclustering(data: pd.DataFrame,
         (see https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation)
     verbose: bool (default=True)
         Whether to provide feedback to stdout
+    scale_method: str, optional
+        Perform scaling of centroids; see CytoPy.transform.Scaler
+    scale_kwargs: dict, optional
+        Additional keyword arguments passed to Scaler
     kwargs:
         Keyword arguments for initialising Scikit-learn class
 
@@ -273,6 +306,11 @@ def sklearn_metaclustering(data: pd.DataFrame,
     Pandas.DataFrame and None and None
         Updated dataframe with a new column named 'meta_label' with the meta-clustering
         associations
+
+    Raises
+    ------
+    AssertionError
+        Invalid Scikit-Learn or equivalent class provided in method
     """
     vprint_ = vprint(verbose)
     assert method in globals().keys(), \
@@ -316,6 +354,10 @@ def phenograph_metaclustering(data: pd.DataFrame,
         (see https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation)
     verbose: bool (default=True)
         Whether to provide feedback to stdout
+    scale_method: str, optional
+        Perform scaling of centroids; see CytoPy.transform.Scaler
+    scale_kwargs: dict, optional
+        Additional keyword arguments passed to Scaler
     kwargs:
         Keyword arguments passed to phenograph.cluster
 
@@ -386,13 +428,24 @@ def consensus_metacluster(data: pd.DataFrame,
     print_performance_metrics: bool = True
         Print Calinski-Harabasz Index, Silhouette Coefficient, and Davies-Bouldin Index
         (see https://scikit-learn.org/stable/modules/clustering.html#clustering-performance-evaluation)
+    scale_method: str, optional
+        Perform scaling of centroids; see CytoPy.transform.Scaler
+    scale_kwargs: dict, optional
+        Additional keyword arguments passed to Scaler
     kwargs:
         Additional keyword arguments to pass to ConsensusCluster
+
     Returns
     -------
     Pandas.DataFrame
         Updated dataframe with a new column named 'meta_label' with the meta-clustering
         associations
+
+    Raises
+    ------
+    AssertionError
+        If maximum number of meta clusters exceeds the maximum number of clusters identified in any
+        one sample
     """
     vprint_ = vprint(verbose)
     metadata = _summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
@@ -549,10 +602,8 @@ class Clustering:
     to classification of single cells whilst also exploiting all available variables
     in your data (all your fluorochromes/isotypes). In CytoPy, the clustering is
     performed on a Population of a FileGroup. The resulting clusters are saved
-    to that Population. Multiple clustering methods can be tried on a single
-    Population and be tracked with a 'tag'. Additionally, we can compare the
-    clustering results of many FileGroup's by 'clustering the clusters', to do
-    this we summarise their clusters and perform meta-clustering.
+    as new Populations. We can compare the clustering results of many FileGroup's
+    by 'clustering the clusters', to do this we summarise their clusters and perform meta-clustering.
 
     The Clustering class provides all the apparatus to perform high-dimensional clustering
     using any of the following functions from the CytoPy.flow.clustering.main module:
@@ -568,13 +619,21 @@ class Clustering:
     * phenograph_metaclustering
     * consensus_metaclustering
 
-    Attributes
+    The Clustering class is algorithm agnostic and only requires that a function be
+    provided that accepts a Pandas DataFrame with a column name 'sample_id' as the
+    sample identifier, 'cluster_label' as the clustering results, and 'meta_label'
+    as the meta clustering results. The function should also accept 'features' as
+    a list of columns to use to construct the input space to the clustering algorithm.
+    This function must return a Pandas DataFrame with the cluster_label/meta_label
+    columns populated accordingly. It should also return two null value OR can optionally
+    return a graph object, and modularity or equivalent score. These will be saved
+    to the Clustering attributes.
+
+
+    Parameters
     ----------
     experiment: Experiment
         Experiment to access for FileGroups to be clustered
-    tag: str
-        General identify associated to all clusters produced by this object. Can be
-        used to retrieve specific clusters from database at later date
     features: list
         Features (fluorochromes/cell markers) to use for clustering
     sample_ids: list, optional
@@ -583,9 +642,30 @@ class Clustering:
     root_population: str (default="root")
         Name of the Population to use as input data for clustering
     transform: str (default="logicle")
-        How to transform the data prior to clustering
+        How to transform the data prior to clustering, see CytoPy.flow.transform for valid methods
+    transform_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer
     verbose: bool (default=True)
         Whether to provide output to stdout
+    population_prefix: str (default='cluster')
+        Prefix added to populations generated from clustering results
+
+    Attributes
+    ----------
+    features: list
+        Features (fluorochromes/cell markers) to use for clustering
+    experiment: Experiment
+        Experiment to access for FileGroups to be clustered
+    graph: scipy.sparse
+        NxN matrix representing a weighted graph. Populated by Phenograph method
+    metrics: float or int
+        Metric values such as modularity score from Phenograph
+    data: Pandas.DataFrame
+        Feature space and clustering results. Contains features and additional columns:
+        - sample_id: sample identifier
+        - subject_id: subject identifier
+        - cluster_label: cluster label (within sample)
+        - meta_label: meta cluster label (between samples)
     """
 
     def __init__(self,
@@ -658,20 +738,37 @@ class Clustering:
 
         Returns
         -------
-        None
+        self
         """
         features = self._check_null()
         self.data, self.graph, self.metrics = func(data=self.data,
                                                    features=features,
                                                    verbose=self.verbose,
                                                    **kwargs)
+        return self
 
     def reset_clusters(self):
+        """
+        Resets cluster and meta cluster labels to None
+
+        Returns
+        -------
+        self
+        """
         self.data["cluster_label"] = None
         self.data["meta_label"] = None
+        return self
 
     def reset_meta_clusters(self):
+        """
+        Reset meta clusters to None
+
+        Returns
+        -------
+        self
+        """
         self.data["meta_label"] = None
+        return  self
 
     def meta_cluster(self,
                      func: callable,
@@ -685,6 +782,8 @@ class Clustering:
         * sklearn_metaclustering
         * phenograph_metaclustering
         * consensus_metaclustering
+
+        Or a valid function as defined in the developer docs.
 
         See documentation for specific function parameters. Parameters can be provided in kwargs. Results
         will be stored in self.data under the 'meta_label' column. If the function given uses PhenoGraph,
@@ -702,6 +801,10 @@ class Clustering:
         ----------
         func: callable
         summary_method: str (default="median")
+        scale_method: str, optional
+            Perform scaling of centroids; see CytoPy.transform.Scaler
+        scale_kwargs: dict, optional
+            Additional keyword arguments passed to Scaler
         kwargs:
             Additional keyword arguments passed to func
 
@@ -721,6 +824,20 @@ class Clustering:
     def rename_clusters(self,
                         sample_id: str,
                         mappings: dict):
+        """
+        Given a dictionary of mappings, replace the current IDs stored
+        in cluster_label column for a particular sample
+
+        Parameters
+        ----------
+        sample_id: str
+        mappings: dict
+            Mappings; {current ID: new ID}
+
+        Returns
+        -------
+        None
+        """
         self.data[self.data.sample_id == sample_id]["cluster_label"].replace(mappings, inplace=True)
 
     def rename_meta_clusters(self,
@@ -744,6 +861,23 @@ class Clustering:
                            variable: str,
                            verbose: bool = True,
                            embedded: list or None = None):
+        """
+        Load a meta-variable for each Subject, adding this variable as a new column. If a sample
+        is not associated to a Subject or the meta variable is missing from a Subject, value will be
+        None.
+        Parameters
+        ----------
+        variable: str
+            Name of the meta-variable
+        verbose: bool (default=True)
+        embedded: list
+            If the meta-variable is embedded, this should be a list of keys that
+            preceed the variable
+
+        Returns
+        -------
+        None
+        """
         self.data[variable] = None
         for _id in progress_bar(self.data.subject_id.unique(),
                                 verbose=verbose):
@@ -769,6 +903,28 @@ class Clustering:
                              label: str = "cluster_label",
                              discrete: bool = True,
                              **kwargs):
+        """
+        Generate a single cell plot (see CytoPy.flow.plotting.single_cell_plot) for a single sample,
+        with cells coloured by cluster membership (default)
+
+        Parameters
+        ----------
+        sample_id: str
+        method: str
+            Dimensionality reduction technique; available methods are: UMAP, PCA, PHATE, KernelPCA or tSNE
+        dim_reduction_kwargs: dict, optional
+            Additional keyword arguments passed to dimension reduction (see CytoPy.flow.dim_reduction)
+        label: str, (default='cluster_label')
+            How to colour single cells
+        discrete: bool (default=True)
+            If True, label is treated as a discrete variable. If False, continuous colourmap will be applied.
+        kwargs:
+            Additional keyword arguments passed to CytoPy.flow.plotting.single_cell_plot
+
+        Returns
+        -------
+        Matplotlib.Axes
+        """
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         df = self.data[self.data.sample_id == sample_id].copy()
         df = dimensionality_reduction(data=df,
@@ -791,6 +947,29 @@ class Clustering:
                            method: str = "UMAP",
                            dim_reduction_kwargs: dict or None = None,
                            **kwargs):
+        """
+        Generate a cluster bubble plot (see CytoPy.flow.plotting.cluster_bubble_plot) where each
+        data point (bubble) is a single cluster centroid from a unique patient. Size of the data points represents
+        the fraction of cells with membership to the sample relative to the total number of events
+        in that sample. By default data points are coloured by meta label membership.
+
+        Parameters
+        ----------
+        method: str
+            Dimensionality reduction technique; available methods are: UMAP, PCA, PHATE, KernelPCA or tSNE
+        dim_reduction_kwargs: dict, optional
+            Additional keyword arguments passed to dimension reduction (see CytoPy.flow.dim_reduction)
+        colour_label: str, (default='meta_label')
+            How to colour cluster centroids
+        discrete: bool (default=True)
+            If True, label is treated as a discrete variable. If False, continuous colourmap will be applied.
+        kwargs:
+            Additional keyword arguments passed to CytoPy.flow.plotting.cluster_bubble_plot
+
+        Returns
+        -------
+        Matplotlib.Axes
+        """
         return cluster_bubble_plot(data=self.data,
                                    features=self.features,
                                    cluster_label="cluster_label",
@@ -805,6 +984,28 @@ class Clustering:
                           features: list,
                           sample_id: str or None = None,
                           **kwargs):
+        """
+        Generate a clustered heatmap (using Seaborn Clustermap function). If sample_id is provided,
+        rows are individual clusters from a single sample, otherwise rows are meta clusters. Columns
+        shown the median intensity of each feature.
+
+        Default parameters passed to clustermap (overwrite using kwargs):
+        * col_cluster = True
+        * figsize = (10, 15)
+        * standard_scale = 1
+        * cmap = "viridis"
+
+        Parameters
+        ----------
+        features: list
+        sample_id: str, optional
+        kwargs:
+            Additional keyword arguments passed to Seaborn.clustermap
+
+        Returns
+        -------
+        Seaborn.ClusterGrid
+        """
         if sample_id is None:
             data = self.data.groupby(["meta_label"])[self.features].median()
         else:
@@ -818,6 +1019,25 @@ class Clustering:
         return sns.clustermap(data[features], **kwargs)
 
     def save(self, verbose: bool = True, population_var: str = "meta_label"):
+        """
+        Clusters are saved as new Populations in each FileGroup in the attached Experiment
+        according to the sample_id in data.
+
+        Parameters
+        ----------
+        verbose: bool (default=True)
+        population_var: str (default='meta_label')
+            Variable in data that should be used to identify individual Populations
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        AssertionError
+            If population_var is 'meta_label' and meta clustering has not been previously performed
+        """
         if population_var == "meta_label":
             assert not self.data.meta_label.isnull().all(), "Meta clustering has not been performed"
         for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
