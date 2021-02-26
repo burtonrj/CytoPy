@@ -30,12 +30,12 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from ..feedback import progress_bar, setup_standard_logger
-from ..data.experiment import Experiment, fetch_subject
+from ..data.experiment import Experiment
 from .plotting.embeddings_graphs import discrete_scatterplot, cont_scatterplot
 from .cell_classifier import utils as classifier_utils
 from . import transform
 from sklearn.linear_model import Lasso, LogisticRegression, SGDClassifier, SGDRegressor
-from sklearn.model_selection import train_test_split, BaseCrossValidator, StratifiedShuffleSplit
+from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree, export_graphviz
 from sklearn.inspection import permutation_importance
 from sklearn.decomposition import PCA as SkPCA

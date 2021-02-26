@@ -47,10 +47,12 @@ def build_keras_model(layers: list,
         See https://keras.io/api/optimizers/
     layers: list
         List of Layer objects (see https://keras.io/api/layers/)
+    layer_params: list
+    input_shape: tuple
 
     Returns
     -------
-    object
+    Sequential
     """
     for layer_klass in layers:
         e = f"{layer_klass} is not a valid Keras Layer or is not currently supported by CytoPy"
