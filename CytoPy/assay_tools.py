@@ -144,7 +144,7 @@ def generalised_hill_equation(concentration: np.ndarray,
 
     Parameters
     ----------
-    concentration: Numpy.Array
+    concentration: numpy.ndarray
         X-axis variable
     a: float
         Bottom asymptote
@@ -159,7 +159,7 @@ def generalised_hill_equation(concentration: np.ndarray,
 
     Returns
     -------
-    Numpy.Array
+    numpy.ndarray
     """
     assert slope > 0, "parameter 'slope' must be greater than 0"
     assert symmetry > 0, "parameter 'symmetry' must be greater than 0"
@@ -184,7 +184,7 @@ def inverse_generalised_hill_equation(response: np.ndarray,
 
     Parameters
     ----------
-    response: Numpy.Array
+    response: numpy.ndarray
         Y-axis variable
     a: float
         Bottom asymptote
@@ -199,7 +199,7 @@ def inverse_generalised_hill_equation(response: np.ndarray,
 
     Returns
     -------
-    Numpy.Array
+    numpy.ndarray
     """
     assert slope > 0, "parameter 'slope' must be greater than 0"
     assert symmetry > 0, "parameter 'symmetry' must be greater than 0"
@@ -217,8 +217,8 @@ def estimate_inflection_point(concentration: np.ndarray,
 
     Parameters
     ----------
-    concentration: Numpy.Array
-    response: Numpy.Array
+    concentration: numpy.ndarray
+    response: numpy.ndarray
 
     Returns
     -------
@@ -242,10 +242,10 @@ def rsquared(func: callable,
     Parameters
     ----------
     func: callable
-    params: Numpy.Array
+    params: numpy.ndarray
         Estimated optimal parameters
-    conc: Numpy.Array
-    response: Numpy.Array
+    conc: numpy.ndarray
+    response: numpy.ndarray
 
     Returns
     -------
@@ -268,13 +268,13 @@ def confidence_band(xspace: np.ndarray,
 
     Parameters
     ----------
-    xspace: Numpy.Array
+    xspace: numpy.ndarray
         Linear space in which the regression curve is to be plotted
-    conc: Numpy.Array
+    conc: numpy.ndarray
         Concentrations (x-axis) variable
-    response: Numpy.Array
+    response: numpy.ndarray
         Response (y-axis) variable
-    optimal_parameters: Numpy.Array
+    optimal_parameters: numpy.ndarray
         Estimated optimal parmameters for func
     func: callable
         Some regression function
@@ -327,22 +327,22 @@ class LogisticCurveFit:
 
     Attributes
     -----------
-    starting_params: Numpy.Array
+    starting_params: numpy.ndarray
         Starting parameters passed to generalised hill equation during curve fitting
-    optimal_params: Numpy.Array
+    optimal_params: numpy.ndarray
         Optimal parameters estimated using least squares regression and populated by the 'fit' method
-    pcov: Numpy.Array
+    pcov: numpy.ndarray
         The estimated covariance of optimal parameters
         (see https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.curve_fit.html)
-    perr: Numpy.Array
+    perr: numpy.ndarray
         Standard errors on the estimated parameters
         (see https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.curve_fit.html)
-    parameter_bounds: tuple (Numpy.Array, Numpy.Array)
+    parameter_bounds: tuple (numpy.ndarray, numpy.ndarray)
         The first of these arrays are the lower bounds and the second the upper bounds. The order in each array must match
         the order in 'starting_params'
     rsquared: float
         R^2 value for fit (populated by 'fit' method). See CytoPy.assay_tools.rsquared.
-    parameter_unc: Numpy.Array
+    parameter_unc: numpy.ndarray
         Parameter confidence intervals
     """
 
@@ -397,9 +397,9 @@ class LogisticCurveFit:
 
         Parameters
         ----------
-        conc: Numpy.Array
+        conc: numpy.ndarray
             Concentration (x-axis variable)
-        response: Numpy.Array
+        response: numpy.ndarray
             Response (y-axis variable)
         a_min: float, optional
             Overwrites minimum bound for 'a'
@@ -436,9 +436,9 @@ class LogisticCurveFit:
 
         Parameters
         ----------
-        conc: Numpy.Array
+        conc: numpy.ndarray
             Concentration variable (x-axis)
-        response: Numpy.Array
+        response: numpy.ndarray
             Response variable (x-axis)
         maxfev: int (default=15000)
             Maximum number of epochs (fits) to attempt
@@ -470,11 +470,11 @@ class LogisticCurveFit:
 
         Parameters
         ----------
-        response: Numpy.Array
+        response: numpy.ndarray
 
         Returns
         -------
-        Numpy.Array
+        numpy.ndarray
 
         Raises
         ------
@@ -505,7 +505,7 @@ class LogisticCurveFit:
         ----------
         ax: Matplotlib.axes.Axes, optional
             Axes to plot data on. If not provided, a figure will be generated of size 5x5
-        fit_response: Numpy.Array, optional
+        fit_response: numpy.ndarray, optional
             If a numpy array is provided, it is assumed to be the response of some sample with unknown
             concentrations. The concentrations will be predicted using the 'predict' method and plotted
             on the standard curve.
@@ -584,16 +584,16 @@ class LinearFit:
 
     Attributes
     -----------
-    starting_params: Numpy.Array
-    optimal_params: Numpy.Array
+    starting_params: numpy.ndarray
+    optimal_params: numpy.ndarray
         Optimal parameters estimated using least squares regression and populated by the 'fit' method
-    pcov: Numpy.Array
+    pcov: numpy.ndarray
         The estimated covariance of optimal parameters
         (see https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.curve_fit.html)
-    perr: Numpy.Array
+    perr: numpy.ndarray
         Standard errors on the estimated parameters
         (see https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.curve_fit.html)
-    parameter_bounds: tuple (Numpy.Array, Numpy.Array)
+    parameter_bounds: tuple (numpy.ndarray, numpy.ndarray)
         The first of these arrays are the lower bounds and the second the upper bounds. The order in each array must match
         the order in 'starting_params'
     """
@@ -635,9 +635,9 @@ class LinearFit:
 
         Parameters
         ----------
-        conc: Numpy.Array
+        conc: numpy.ndarray
             Concentration variable (x-axis)
-        response: Numpy.Array
+        response: numpy.ndarray
             Response variable (x-axis)
         log_conc: bool (default=True)
             Log10 transform concentrations prior to fit
@@ -680,11 +680,11 @@ class LinearFit:
 
         Parameters
         ----------
-        response: Numpy.Array
+        response: numpy.ndarray
 
         Returns
         -------
-        Numpy.Array
+        numpy.ndarray
 
         Raises
         ------
@@ -714,7 +714,7 @@ class LinearFit:
         ----------
         ax: Matplotlib.axes.Axes, optional
             Axes to plot data on. If not provided, a figure will be generated of size 5x5
-        fit_response: Numpy.Array, optional
+        fit_response: numpy.ndarray, optional
             If a numpy array is provided, it is assumed to be the response of some sample with unknown
             concentrations. The concentrations will be predicted using the 'predict' method and plotted
             on the standard curve.

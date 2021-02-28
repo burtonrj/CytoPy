@@ -101,7 +101,7 @@ class CellClassifier:
         Sample class weights; key is sample index, value is weight. Set by calling compute_class_weights.
     x: Pandas.DataFrame
         Training feature space
-    y: Numpy.Array
+    y: numpy.ndarray
         Target labels
     logger: logging.Logger
     features: list
@@ -350,7 +350,7 @@ class CellClassifier:
         Parameters
         ----------
         x: Pandas.DataFrame
-        y: Numpy.Array
+        y: numpy.ndarray
         kwargs
 
         Returns
@@ -375,7 +375,7 @@ class CellClassifier:
 
         Returns
         -------
-        Numpy.Array, Numpy.Array or None
+        numpy.ndarray, numpy.ndarray or None
             Predictions, probabilities (if supported)
         """
         predict_proba = getattr(self.model, "predict_proba", None)
@@ -531,7 +531,7 @@ class CellClassifier:
         Parameters
         ----------
         x: Pandas.DataFrame
-        y_pred: Numpy.Array
+        y_pred: numpy.ndarray
         root_population: str
         target: FileGroup
 
@@ -626,7 +626,7 @@ class CellClassifier:
 
         Returns
         -------
-        Pandas.DataFrame, Numpy.Array
+        Pandas.DataFrame, numpy.ndarray
             Feature space, labels
 
         Raises

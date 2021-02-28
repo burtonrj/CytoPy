@@ -19,7 +19,7 @@ def signature_to_vector(signature: dict,
 
     Returns
     -------
-    Numpy.Array
+    numpy.ndarray
     """
     return np.array([v for k, v in signature.items() if k in filter])
 

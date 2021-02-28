@@ -19,13 +19,13 @@ def calc_metrics(metrics: list,
     ----------
     metrics: list
         List of string values; names of required metrics
-    y_true: Numpy.Array
+    y_true: numpy.ndarray
         True labels or binary label indicators. The binary and multiclass cases expect labels
         with shape (n_samples,) while the multilabel case expects binary label indicators with
         shape (n_samples, n_classes).
-    y_pred: Numpy.Array
+    y_pred: numpy.ndarray
         Estimated targets as returned by a classifier
-    y_score: Numpy.Array
+    y_score: numpy.ndarray
         Target scores. In the binary and multilabel cases, these can be either probability
         estimates or non-thresholded decision values (as returned by decision_function on
         some classifiers). In the multiclass case, these must be probability estimates which
@@ -105,7 +105,7 @@ def confusion_matrix_plots(classifier,
         Scikit-Learn classifier
     x: Pandas.DataFrame
         Feature space
-    y: Numpy.Array
+    y: numpy.ndarray
         Labels
     class_labels: list
         Class labels (as they should be displayed on the axis)
@@ -240,7 +240,7 @@ def singlelabel(ref,
 
     Returns
     -------
-    (Pandas.DataFrame, Numpy.Array)
+    (Pandas.DataFrame, numpy.ndarray)
         Root population flourescent intensity values, labels
     """
     root = ref.load_population_df(population=root_population,
@@ -260,7 +260,7 @@ def auto_weights(y: np.ndarray):
 
     Parameters
     ----------
-    y: Numpy.Array
+    y: numpy.ndarray
 
     Returns
     -------

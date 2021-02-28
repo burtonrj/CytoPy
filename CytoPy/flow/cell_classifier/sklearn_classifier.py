@@ -119,7 +119,7 @@ class SklearnCellClassifier(CellClassifier):
         Sample class weights; key is sample index, value is weight. Set by calling compute_class_weights.
     x: Pandas.DataFrame
         Training feature space
-    y: Numpy.Array
+    y: numpy.ndarray
         Target labels
     logger: logging.Logger
     features: list
@@ -161,7 +161,7 @@ class SklearnCellClassifier(CellClassifier):
 
         Returns
         -------
-        Numpy.Array, Numpy.Array
+        numpy.ndarray, numpy.ndarray
             Predicted labels, prediction probabilities
         """
         if callable(getattr(self.model, "predict_proba", None)):
@@ -186,7 +186,7 @@ class SklearnCellClassifier(CellClassifier):
         ----------
         x: Pandas.DataFrame
             Feature space
-        y: Numpy.Array
+        y: numpy.ndarray
             Target labels
         kwargs
             Additional keyword arguments pass to "fit"
@@ -278,7 +278,7 @@ class SklearnCellClassifier(CellClassifier):
             X-axis labels
         y_label: str (default="Score")
             Y-axis labels
-        train_sizes: Numpy.Array (optional)
+        train_sizes: numpy.ndarray (optional)
             Defaults to linear range between 0.1 and 1.0, with 10 steps
         verbose: int (default=1)
             Passed to learning_curve function
@@ -352,7 +352,7 @@ class SklearnCellClassifier(CellClassifier):
         x: Pandas.DataFrame (optional)
             Feature space. If not given, will use associated training data. To use a validation
             dataset, use the 'load_validation' method to get relevant data.
-        y: Numpy.Array (optional)
+        y: numpy.ndarray (optional)
             Target labels. If not given, will use associated training data. To use a validation
             dataset, use the 'load_validation' method to get relevant data.
         kwargs:

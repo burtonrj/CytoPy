@@ -645,9 +645,9 @@ class ThresholdGate(Gate):
             Name of the dimension (feature) under investigation. Must be a column in data.
         data: Pandas.DataFrame
             Events dataframe
-        x_grid: Numpy.array
+        x_grid: numpy.ndarray
             x grid upon which probability vector is estimated by KDE
-        p: Numpy.array
+        p: numpy.ndarray
             probability vector as estimated by KDE
 
         Returns
@@ -1848,7 +1848,7 @@ def find_peaks(p: np.array,
 
     Returns
     -------
-    Numpy.array
+    numpy.ndarray
         Index of peaks
     """
     peaks = detect_peaks(p,
@@ -1916,11 +1916,11 @@ def find_local_minima(p: np.array,
 
     Parameters
     -----------
-    p: Numpy.array
+    p: numpy.ndarray
         probability vector as generated from KDE
-    x: Numpy.array
+    x: numpy.ndarray
         Grid space for probability vector
-    peaks: Numpy.array
+    peaks: numpy.ndarray
         array of indices for identified peaks
 
     Returns

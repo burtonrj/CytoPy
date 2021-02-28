@@ -86,7 +86,7 @@ class KerasCellClassifier(CellClassifier):
         Sample class weights; key is sample index, value is weight. Set by calling compute_class_weights.
     x: Pandas.DataFrame
         Training feature space
-    y: Numpy.Array
+    y: numpy.ndarray
         Target labels
     logger: logging.Logger
     features: list
@@ -164,7 +164,7 @@ class KerasCellClassifier(CellClassifier):
 
         Returns
         -------
-        Numpy.Array, Numpy.Array
+        numpy.ndarray, numpy.ndarray
             Predicted labels, prediction probabilities
         """
         y_score = self.model.predict(x)
@@ -190,13 +190,13 @@ class KerasCellClassifier(CellClassifier):
         ----------
         x: Pandas.DataFrame
             Training feature space to fit
-        y: Numpy.Array
+        y: numpy.ndarray
             Training labels
         epochs: int (default=100)
             Number of training rounds
         validation_x: Pandas.DataFrame
             Validation feature space
-        validation_y: Numpy.Array
+        validation_y: numpy.ndarray
             Validation labels
         kwargs:
             Additional keyword arguments passed to fit method of Keras sequential API

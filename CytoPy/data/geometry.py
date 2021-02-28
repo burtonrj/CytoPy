@@ -141,7 +141,7 @@ class PolygonGeom(PopulationGeometry):
 
         Returns
         -------
-        Numpy.Array, Numpy.Array
+        numpy.ndarray, numpy.ndarray
         """
         x_values, y_values = self.x_values, self.y_values
         if self.transform_x:
@@ -249,7 +249,7 @@ def inside_ellipse(data: np.array,
 
     Parameters
     -----------
-    data: Numpy.array
+    data: numpy.ndarray
         two dimensional matrix (x,y)
     center: tuple
         x,y coordinate corresponding to center of elipse
@@ -262,7 +262,7 @@ def inside_ellipse(data: np.array,
 
     Returns
     --------
-    Numpy.array
+    numpy.ndarray
         numpy array of indices for values inside specified ellipse
     """
     cos_angle = np.cos(np.radians(180. - angle))
@@ -325,12 +325,12 @@ def create_convex_hull(x_values: np.array,
 
     Parameters
     ----------
-    x_values: Numpy.array
-    y_values: Numpy.array
+    x_values: numpy.ndarray
+    y_values: numpy.ndarray
 
     Returns
     -------
-    Numpy.array, Numpy.array
+    numpy.ndarray, numpy.ndarray
     """
     xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
     try:
