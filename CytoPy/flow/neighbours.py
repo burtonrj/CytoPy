@@ -91,7 +91,7 @@ def knn(data: pd.DataFrame,
     Parameters
     ----------
     data: Pandas.DataFrame
-    labels: Numpy.Array
+    labels: numpy.ndarray
     features: list
     n_neighbours: int
     holdout_size: float (default=0.2)

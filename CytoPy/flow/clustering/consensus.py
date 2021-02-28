@@ -93,13 +93,13 @@ class ConsensusCluster:
         """Resampling array
         Parameters
         ----------
-        data : Numpy.array
+        data : numpy.ndarray
             data to be resampled
         proportion : float
             percentage to resample
         Returns
         -------
-        Numpy.array, Numpy.array
+        numpy.ndarray, numpy.ndarray
             Resampled indices and numpy array of resampled data
         """
         resampled_indices = np.random.choice(
@@ -110,7 +110,7 @@ class ConsensusCluster:
         """Fits a consensus matrix for each number of clusters
         Parameters
         ----------
-        data : Numpy.array
+        data : numpy.ndarray
             numpy array to fit clustering algorithm too
         Returns
         -------

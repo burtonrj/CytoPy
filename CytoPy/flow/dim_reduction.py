@@ -81,7 +81,7 @@ def dimensionality_reduction(data: pd.DataFrame,
 
     Returns
     --------
-    (Pandas.DataFrame or Numpy.array) or (Pandas.DataFrame or Numpy.array, Reducer)
+    (Pandas.DataFrame or numpy.ndarray) or (Pandas.DataFrame or numpy.ndarray, Reducer)
         Embeddings as numpy array or original DataFrame with new columns for embeddings
     """
     data = data.copy()

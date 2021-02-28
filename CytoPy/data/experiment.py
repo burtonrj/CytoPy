@@ -539,12 +539,12 @@ def compenstate(x: np.ndarray,
 
     Parameters
     ----------
-    x: Numpy.Array
-    spill_matrix: Numpy.Array
+    x: numpy.ndarray
+    spill_matrix: numpy.ndarray
 
     Returns
     -------
-    Numpy.Array
+    numpy.ndarray
     """
     return np.linalg.solve(spill_matrix.T, x.T).T
 

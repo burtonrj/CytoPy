@@ -200,7 +200,7 @@ class FlowSOM:
         ----------
         Returns
         -------
-        Numpy.array
+        numpy.ndarray
             Predicted labels
         """
         err_msg = 'SOM must be trained prior to predicting cell clustering allegation; call train followed ' \

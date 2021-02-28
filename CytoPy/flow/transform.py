@@ -61,7 +61,7 @@ def _get_dataframe_column_index(data: pd.DataFrame,
 
     Returns
     -------
-    Numpy.Array
+    numpy.ndarray
         Index of columns of interest
     """
     return np.array([data.columns.get_loc(f) for f in features if f in data.columns])

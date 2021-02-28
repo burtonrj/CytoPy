@@ -121,8 +121,8 @@ def test_population_get_clusters(params, n):
     assert len(x.get_clusters(**params)) == n
 
 
-@pytest.mark.parametrize("ctrl_idx,err", [(("x", "x"), "ctrl_idx should be type numpy.array"),
-                                          (("x", [0, 1, 2, 3, 4]), "ctrl_idx should be type numpy.array")])
+@pytest.mark.parametrize("ctrl_idx,err", [(("x", "x"), "ctrl_idx should be type numpy.ndarray"),
+                                          (("x", [0, 1, 2, 3, 4]), "ctrl_idx should be type numpy.ndarray")])
 def test_population_ctrl_idx_error(ctrl_idx, err):
     x = population.Population(population_name="test",
                               parent="test_parent")

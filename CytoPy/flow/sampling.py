@@ -89,14 +89,14 @@ def faithful_downsampling(data: np.array,
 
     Parameters
     -----------
-    data: Numpy.array
+    data: numpy.ndarray
         numpy array to be down-sampled
     h: float
         radius for nearest neighbours search
 
     Returns
     --------
-    Numpy.array
+    numpy.ndarray
         Down-sampled array
     """
     communities = None
@@ -260,7 +260,7 @@ def density_probability_assignment(sample: pd.DataFrame,
 
     Returns
     -------
-    Numpy.Array
+    numpy.ndarray
     """
     if njobs < 0:
         njobs = cpu_count()
@@ -381,7 +381,7 @@ def upsample_knn(sample: pd.DataFrame,
 
     Returns
     -------
-    numpy.Array
+    numpy.ndarray
         Array of labels for original data
     """
     feedback = vprint(verbose)

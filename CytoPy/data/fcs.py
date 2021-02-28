@@ -120,7 +120,7 @@ def h5_read_population_primary_index(population_name: str,
 
     Returns
     -------
-    Numpy.Array
+    numpy.ndarray
     """
     return h5file[f"/index/{population_name}/primary"][:]
 
@@ -276,7 +276,7 @@ class FileGroup(mongoengine.Document):
 
         Parameters
         ----------
-        data: Numpy.Array
+        data: numpy.ndarray
         channels: list
         markers: list
 
@@ -313,7 +313,7 @@ class FileGroup(mongoengine.Document):
         ----------
         ctrl_id: str
             Name of the control e.g ("CD45RA FMO" or "HLA-DR isotype control"
-        data: Numpy.Array
+        data: numpy.ndarray
             Single cell events data obtained for this control
         channels: list
             List of channel names
