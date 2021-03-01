@@ -68,6 +68,11 @@ def uniform_downsampling(data: pd.DataFrame,
     Returns
     -------
     Pandas.DataFrame
+
+    Raises
+    ------
+    TypeError
+        Sample size type is invalid; should be either int or float
     """
     if isinstance(sample_size, int):
         if sample_size >= data.shape[0]:
@@ -77,7 +82,7 @@ def uniform_downsampling(data: pd.DataFrame,
         return data.sample(n=sample_size, **kwargs)
     if isinstance(sample_size, float):
         return data.sample(frac=sample_size, **kwargs)
-    raise ValueError("sample_size should be an int or float value")
+    raise TypeError("sample_size should be an int or float value")
 
 
 def faithful_downsampling(data: np.array,
@@ -397,7 +402,7 @@ def upsample_knn(sample: pd.DataFrame,
     feedback("Training...")
     train_acc, val_acc, model = knn(data=sample,
                                     features=features,
-                                    labels=labels,
+                                    labels=np.array(labels),
                                     n_neighbours=n,
                                     holdout_size=0.2,
                                     random_state=42,

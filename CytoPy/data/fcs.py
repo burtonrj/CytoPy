@@ -284,6 +284,8 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
+        if os.path.isfile(self.h5path):
+            os.remove(self.h5path)
         with h5py.File(self.h5path, "w") as f:
             f.create_dataset(name="primary", data=data)
             f.create_group("mappings")

@@ -1,3 +1,38 @@
+#!/usr/bin.env/python
+# -*- coding: utf-8 -*-
+"""
+This module provides functionality for hyperparameter search for autonomous gates
+
+[1] Hahne F, Khodabakhshi AH, Bashashati A, Wong CJ, Gascoyne RD,
+Weng AP, Seyfert-Margolis V, Bourcier K, Asare A, Lumley T, Gentleman R,
+Brinkman RR. Per-channel basis normalization methods for flow cytometry data.
+Cytometry A. 2010 Feb;77(2):121-31. doi: 10.1002/cyto.a.20823. PMID: 19899135; PMCID: PMC3648208.
+
+[2] Finak G, Jiang W, Krouse K, et al. High-throughput flow cytometry data normalization
+for clinical trials. Cytometry A. 2014;85(3):277-286. doi:10.1002/cyto.a.22433
+
+Copyright 2020 Ross Burton
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the
+Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
+
 from ..data.gate import PolygonGate, ThresholdGate, EllipseGate, ChildPolygon, ChildThreshold
 from ..feedback import vprint, progress_bar
 from sklearn.model_selection import ParameterGrid
@@ -7,21 +42,31 @@ from warnings import warn
 import pandas as pd
 import numpy as np
 
+__author__ = "Ross Burton"
+__copyright__ = "Copyright 2020, CytoPy"
+__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__license__ = "MIT"
+__version__ = "2.0.0"
+__maintainer__ = "Ross Burton"
+__email__ = "burtonrj@cardiff.ac.uk"
+__status__ = "Production"
+
 
 def signature_to_vector(signature: dict,
-                        filter: list):
+                        filter_: list):
     """
     Convert a signature (dictionary of average parameters) to Numpy array
 
     Parameters
     ----------
     signature: dict
+    filter_: list
 
     Returns
     -------
     numpy.ndarray
     """
-    return np.array([v for k, v in signature.items() if k in filter])
+    return np.array([v for k, v in signature.items() if k in filter_])
 
 
 def common_features(target_signature: dict,
@@ -29,16 +74,37 @@ def common_features(target_signature: dict,
     return list(set(target_signature.keys()).intersection(pop_signature.keys()))
 
 
-def signature_distance(method: str,
-                       search_space: list,
-                       target: ChildPolygon or ChildThreshold):
+def closest_signature_to_target(method: str,
+                                search_space: list,
+                                target: ChildPolygon or ChildThreshold):
+    """
+    Returns population (in search_space) who's signature is closest to some given target population signature
+
+    Parameters
+    ----------
+    method: str
+        Distance metric; should be 'euclidean' or 'manhattan'
+    search_space: list
+        List of signatures to search
+    target: ChildPolygon or ChildThreshold
+        Target geometry containing signature
+
+    Returns
+    -------
+    Population
+
+    Raises
+    ------
+    AssertionError
+        Target does not contain a signature
+    """
     assert hasattr(target, "signature"), "Invalid child populations for manhattan or euclidean dist; " \
                                          "requires 'signature' attribute"
     f = {"euclidean": euclidean, "manhattan": cityblock}.get(method, cityblock)
     idx = np.argmin([f(signature_to_vector(target.signature,
-                                           filter=common_features(target.signature, p.signature)),
+                                           filter_=common_features(target.signature, p.signature)),
                        signature_to_vector(p.signature,
-                                           filter=common_features(target.signature, p.signature)))
+                                           filter_=common_features(target.signature, p.signature)))
                      for p in search_space])
     return search_space[int(idx)]
 
@@ -81,6 +147,11 @@ def cost_func(target: ChildPolygon or ChildThreshold,
     Returns
     -------
     Population
+
+    Raises
+    ------
+    ValueError
+        Invalid method
     """
     search_space = [[x for x in pops if x.population_name == target.name]
                     for pops in populations]
@@ -89,7 +160,7 @@ def cost_func(target: ChildPolygon or ChildThreshold,
         warn(f"No populations generated for target population {target.name}")
         return None
     if method in ["euclidean", "manhattan"]:
-        return signature_distance(method=method, search_space=search_space, target=target)
+        return closest_signature_to_target(method=method, search_space=search_space, target=target)
     if method == "threshold_dist":
         if target.geom.y_threshold:
             idx = np.argmin([abs(target.geom.x_threshold - p.geom.x_threshold) +
@@ -113,7 +184,7 @@ def fit_gate(updated_params: dict,
     """
     Update the Gate method parameters and fit to the given data, predicting matching
     Populations that are returned as a list
-children
+
     Parameters
     ----------
     updated_params: dict

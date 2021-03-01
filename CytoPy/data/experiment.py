@@ -607,6 +607,9 @@ class Experiment(mongoengine.EmbeddedDocument):
         err = "Panel definition is not a valid Excel document"
         assert os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"], err
 
+    def get_data_directory(self):
+        return self._instance.data_directory
+
     def generate_panel(self,
                        panel_definition: str or dict) -> None:
         """
@@ -1090,6 +1093,9 @@ class Experiment(mongoengine.EmbeddedDocument):
                     f.save()
                 except AssertionError as e:
                     warn(f"Failed to merge populations for {f.primary_id}: {str(e)}")
+
+    def save(self):
+        self._instance.save()
 
 
 def load_population_data_from_experiment(experiment: Experiment,

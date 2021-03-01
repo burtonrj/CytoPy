@@ -152,7 +152,6 @@ class Project(mongoengine.Document):
 
     def add_experiment(self,
                        experiment_id: str,
-                       data_directory: str,
                        panel_definition: str or dict) -> Experiment:
         """
         Add new experiment to project. Note you must provide either a path to an excel template for the panel
@@ -164,8 +163,6 @@ class Project(mongoengine.Document):
         -----------
         experiment_id: str
             experiment name
-        data_directory: str
-            Path where experiment events data files will be stored
         panel_definition: str or dict
             Path to excel template for generating the panel
 
@@ -181,9 +178,8 @@ class Project(mongoengine.Document):
         """
         if experiment_id in [x.experiment_id for x in self.experiments]:
             raise DuplicateExperimentError(f"Experiment with id {experiment_id} already exists!")
-        exp = Experiment(experiment_id=experiment_id,
-                         panel_definition=panel_definition,
-                         data_directory=data_directory)
+        exp = Experiment(experiment_id=experiment_id)
+        exp.generate_panel(panel_definition=panel_definition)
         self.experiments.append(exp)
         self.save()
         return exp

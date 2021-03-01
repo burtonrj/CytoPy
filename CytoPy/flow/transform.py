@@ -71,7 +71,7 @@ class Transformer:
     """
     Base class for Transformer object.
 
-    Attributes
+    Parameters
     ----------
     transform: callable
         Transform function
@@ -79,6 +79,12 @@ class Transformer:
         Inverse transformation function
     kwargs:
         Keyword arguments passed to transform/inverse transform
+
+    Attributes
+    ----------
+    transform: callable
+    inverse: callable
+    kwargs: dict
     """
 
     def __init__(self,
@@ -190,7 +196,7 @@ class LogicleTransformer(Transformer):
     Moore WA and Parks DR. Update for the logicle data scale including operational
     code implementations. Cytometry A., 2012:81A(4):273–277.
 
-    Attributes
+    Parameters
     ----------
     w: float (default=0.5)
         Approximate number of decades in the linear region
@@ -231,7 +237,7 @@ class HyperlogTransformer(Transformer):
     Bagwell CB. Hyperlog-a flexible log-like transform for negative, zero, and
     positive valued data. Cytometry A., 2005:64(1):34–42.
 
-    Attributes
+    Parameters
     ----------
     w: float (default=0.5)
         Approximate number of decades in the linear region
@@ -260,7 +266,7 @@ class AsinhTransformer(Transformer):
     """
     Implementation of inverse hyperbolic sine function, authored by Scott White (FlowUtils v0.8).
 
-    Attributes
+    Parameters
     ----------
     m: float (default=4.5)
         Number of decades the true logarithmic scale approaches at the high end of the scale
@@ -286,7 +292,7 @@ class LogTransformer(Transformer):
     Apply log transform to data, either using parametrized log transform as defined in GatingML 2.0 specification
     (implemented by Scott White in FlowUtils v0.8) or using natural log, base 2 or base 10.
 
-    Attributes
+    Parameters
     ----------
     base: str or int (default="parametrized")
         Method to be used, should either be 'parametrized', 10, 2, or 'natural'
@@ -294,6 +300,11 @@ class LogTransformer(Transformer):
         Number of decades the true logarithmic scale approaches at the high end of the scale
     t: int (default=262144)
         Top of the linear scale
+
+    Raises
+    ------
+    TransformError
+        Invalid LogTransformer method
     """
 
     def __init__(self,
@@ -365,7 +376,7 @@ class Normalise:
     Norms are stored in the attribute 'norms' and normalisation reversed
     by passing the transformed data to the 'inverse' method.
 
-    Attributes
+    Parameters
     ----------
     norm: Numpy Array
         An array of norms along given axis for X
@@ -422,11 +433,18 @@ class Normalise:
         Returns
         -------
         Pandas.DataFrame
+
+        Raises
+        ------
+        AssertionError
+            Shape of given dataframe does not match the data
+        ValueError
+            Inverse called prior to normalisation
         """
         assert data[features].shape == self._shape, "Shape of given dataframe does not match the data " \
                                                     f"transformed originally: {self._shape} != {data.shape}"
-        assert self._norms is not None, "Call Normalise object to first normalise target data prior to attempting " \
-                                        "inverse"
+        if self._norms is None:
+            "Call Normalise object to first normalise target data prior to attempting inverse"
         data[features] = data[features] * self._norms
         return data
 
@@ -506,7 +524,7 @@ class Scaler:
 
         Returns
         -------
-
+        Pandas.DataFrame
         """
         data = data.copy()
         data[features] = self._scaler.fit_transform(data[features].values)
@@ -614,6 +632,22 @@ def apply_transform(data: pd.DataFrame,
 def apply_transform_map(data: pd.DataFrame,
                         feature_method: dict,
                         kwargs: dict or None = None):
+    """
+    Wrapper function to CytoPy.flow.transform.apply_transform; takes a dictionary (feature_method) where
+    each key is the name of a feature and the value the transform to be applied to that feature.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    feature_method: dict
+    kwargs: dict
+        Additional keyword arguments passed to apply_transform
+
+    Returns
+    -------
+    Pandas.DataFrame
+        DataFrame with feature transformed
+    """
     kwargs = kwargs or {}
     for feature, method in feature_method.items():
         transform_kwargs = kwargs.get(feature, {})
@@ -627,6 +661,25 @@ def apply_transform_map(data: pd.DataFrame,
 
 def remove_negative_values(data: pd.DataFrame,
                            features: list):
+    """
+    For each feature (as given in 'features') in data, check for negative values and
+    replace with minimum value in range for that feature.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    features: list
+
+    Returns
+    -------
+    Pandas.DataFrame
+        Modified DataFrame without negative values
+
+    Raises
+    ------
+    TransformError
+        All values for a given feature are negative
+    """
     data = data.copy()
     for f in features:
         if (data[f] <= 0).any():
@@ -641,6 +694,25 @@ def remove_negative_values(data: pd.DataFrame,
 
 
 def safe_range(data: pd.DataFrame, x: str):
+    """
+    Return the minimum and maximum values in a range, ignore negative values
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    x: str
+        Column of interest
+
+    Returns
+    -------
+    float, float
+        Min, max
+
+    Raises
+    ------
+    AssertionError
+        If all values in x are negative
+    """
     valid_range = data[data[x] > 0][x].values
     assert len(valid_range) > 0, f"All values for {x} <= 0"
     return np.min(valid_range), np.max(valid_range)
