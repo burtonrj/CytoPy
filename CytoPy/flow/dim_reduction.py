@@ -83,6 +83,11 @@ def dimensionality_reduction(data: pd.DataFrame,
     --------
     (Pandas.DataFrame or numpy.ndarray) or (Pandas.DataFrame or numpy.ndarray, Reducer)
         Embeddings as numpy array or original DataFrame with new columns for embeddings
+
+    Raises
+    ------
+    ValueError
+        Invalid method requested
     """
     data = data.copy()
     if method == 'UMAP':

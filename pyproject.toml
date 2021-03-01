@@ -32,6 +32,7 @@ scipy = "^1.6.0"
 scprep = "^1.0"
 seaborn = "^0.11.0"
 shapely = "1.7.1"
+shap = "0.38.1"
 snowballstemmer = "^2.0.0"
 statsmodels = "^0.12"
 autodocsumm = "^0.2.1"
@@ -49,6 +50,7 @@ pingouin = "^0.3.8"
 setuptools = "^49.6.0"
 shap="^0.38"
 uncertainties="^3.1"
+flowutils = { git = "https://github.com/whitews/FlowUtils.git"}
 
 [tool.poetry.dev-dependencies]
 

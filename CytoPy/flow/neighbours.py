@@ -62,16 +62,21 @@ def calculate_optimal_neighbours(x: pd.DataFrame,
     Returns
     -------
     int, float
+
+    Raises
+    ------
+    AssertionError
+        Less than 5 observations provided
     """
     assert x.shape[0] > 5, "Less than 5 observations in data provided for fit"
-    max = 500
-    if (max - 5) > x.shape[0]:
-        max = 250
+    max_ = 500
+    if (max_ - 5) > x.shape[0]:
+        max_ = 250
     n = np.arange(5,
-                  max,
+                  max_,
                   10, dtype=np.int64)
-    knn = KNeighborsClassifier(**kwargs)
-    grid_cv = GridSearchCV(knn, {"n_neighbors": n}, scoring=scoring, n_jobs=-1, cv=10)
+    knn_ = KNeighborsClassifier(**kwargs)
+    grid_cv = GridSearchCV(knn_, {"n_neighbors": n}, scoring=scoring, n_jobs=-1, cv=10)
     grid_cv.fit(x, y)
     return grid_cv.best_params_.get("n_neighbors"), grid_cv.best_score_
 
@@ -106,14 +111,14 @@ def knn(data: pd.DataFrame,
         Training balanced accuracy score, Validation balanced accuracy score,
         Classifier (if return_model is True)
     """
-    X_train, X_test, y_train, y_test = train_test_split(data[features].values,
+    x_train, x_test, y_train, y_test = train_test_split(data[features].values,
                                                         labels,
                                                         test_size=holdout_size,
                                                         random_state=random_state)
-    knn = KNeighborsClassifier(n_neighbors=n_neighbours, **kwargs)
-    knn.fit(X_train, y_train)
-    train_acc = balanced_accuracy_score(y_pred=knn.predict(X_train), y_true=y_train)
-    val_acc = balanced_accuracy_score(y_pred=knn.predict(X_test), y_true=y_test)
+    knn_ = KNeighborsClassifier(n_neighbors=n_neighbours, **kwargs)
+    knn_.fit(x_train, y_train)
+    train_acc = balanced_accuracy_score(y_pred=knn_.predict(x_train), y_true=y_train)
+    val_acc = balanced_accuracy_score(y_pred=knn_.predict(x_test), y_true=y_test)
     if return_model:
-        return train_acc, val_acc, knn
+        return train_acc, val_acc, knn_
     return train_acc, val_acc

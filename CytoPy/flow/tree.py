@@ -80,7 +80,7 @@ def _grow_tree(tree: Dict[str, anytree.Node],
 
     Returns
     -------
-
+    dict
     """
     i = 0
     while len(database_populations) > 0:
@@ -106,10 +106,16 @@ def construct_tree(populations: List[Population]) -> Dict[str, anytree.Node]:
     ----------
     populations: List[Population]
         List of Population objects
+
     Returns
     -------
     dict
         Dictionary of Node objects
+
+    Raises
+    ------
+    AssertionError
+        Root population is missing
     """
     err = "Invalid FileGroup, must contain 'root' population"
     assert "root" in [p.population_name for p in populations], err
