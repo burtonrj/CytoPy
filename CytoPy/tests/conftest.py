@@ -47,6 +47,7 @@ def example_populated_experiment():
     yield exp
     test_project.reload()
     test_project.delete()
+    os.mkdir(f"{os.getcwd()}/test_data")
 
 
 def reload_filegroup(project_id: str,
@@ -72,47 +73,7 @@ def reload_filegroup(project_id: str,
     return fg
 
 
-def create_example_population_indexes(filegroup: FileGroup,
-                                      initial_population_prop: float = 0.8,
-                                      downstream_population_prop: float = 0.5,
-                                      n_populations: int = 3):
-    """
-    Create example index data for a specified number of example populations.
-
-    Parameters
-    ----------
-    filegroup: FileGroup
-    initial_population_prop: float (default=0.8)
-        Fraction of events to sample for the first population
-    downstream_population_prop: float (default=0.5)
-        Fraction of events to sample from n-1 population to form downstream population
-    cluster_frac: float (default=0.25)
-        Fraction of events to sample from primary to use as example Cluster
-    n_populations: int (default=3)
-        Total number of populations to generate (must be at least 2)
-
-    Returns
-    -------
-    List
-        List of dictionary objects with keys 'primary', 'cluster' and 'ctrl' corresponding to events for
-        primary data and "test_ctrl"
-    """
-    assert n_populations > 1, "n_populations must be equal to or greater than 2"
-    primary = filegroup.data("primary", sample_size=initial_population_prop)
-    populations = [{"primary": primary,
-                    "ctrl": filegroup.data("test_ctrl", sample_size=initial_population_prop)}]
-    for i in range(n_populations - 1):
-        primary = populations[i].get("primary").sample(frac=downstream_population_prop)
-        populations.append({"primary": primary,
-                            "ctrl": populations[i].get("ctrl").sample(frac=downstream_population_prop)})
-    return list(map(lambda x: {"primary": x["primary"].index.values,
-                               "ctrl": x["ctrl"].index.values},
-                    populations))
-
-
 def create_example_populations(filegroup: FileGroup,
-                               initial_population_prop: float = 0.8,
-                               downstream_population_prop: float = 0.5,
                                n_populations: int = 3):
     """
     Given a FileGroup add the given number of example populations.
@@ -120,12 +81,6 @@ def create_example_populations(filegroup: FileGroup,
     Parameters
     ----------
     filegroup: FileGroup
-    initial_population_prop: float (default=0.8)
-        Fraction of events to sample for the first population
-    downstream_population_prop: float (default=0.5)
-        Fraction of events to sample from n-1 population to form downstream population
-    cluster_frac: float (default=0.25)
-        Fraction of events to sample from primary to use as example Cluster
     n_populations: int (default=3)
         Total number of populations to generate (must be at least 2)
 
@@ -133,17 +88,16 @@ def create_example_populations(filegroup: FileGroup,
     -------
     FileGroup
     """
-    pop_idx = create_example_population_indexes(filegroup=filegroup,
-                                                initial_population_prop=initial_population_prop,
-                                                downstream_population_prop=downstream_population_prop,
-                                                n_populations=n_populations)
-    for pname, parent, idx in zip([f"pop{i + 1}" for i in range(n_populations)],
-                                  ["root"] + [f"pop{i + 1}" for i in range(n_populations - 1)],
-                                  pop_idx):
+    for pname, parent in zip([f"pop{i + 1}" for i in range(n_populations)],
+                             ["root"] + [f"pop{i + 1}" for i in range(n_populations - 1)]):
+        parent_df = filegroup.load_population_df(population=parent,
+                                                 transform="logicle")
+        x = parent_df["FS Lin"].median()
+        idx = parent_df[parent_df["FS Lin"] >= x].index.values
         p = Population(population_name=pname,
-                       n=len(idx.get("primary")),
+                       n=len(idx),
                        parent=parent,
-                       index=idx.get("primary"),
+                       index=idx,
                        source="gate")
         filegroup.add_population(population=p)
     filegroup.save()

@@ -134,7 +134,8 @@ def sklearn_clustering(data: pd.DataFrame,
             clustering_performance(data[features], data["cluster_label"].values)
         return data, None, None
     for _id, df in progress_bar(data.groupby("sample_id"), verbose=verbose):
-        data.loc[df.index, ["cluster_label"]] = model.fit_predict(df[features])
+        df["cluster_label"] = model.fit_predict(df[features])
+        data.loc[df.index, ["cluster_label"]] = df["cluster_label"].values
         if print_performance_metrics:
             clustering_performance(df[features], df["cluster_label"].values)
     return data, None, None
@@ -1042,9 +1043,9 @@ class Clustering:
             assert not self.data.meta_label.isnull().all(), "Meta clustering has not been performed"
         for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
             fg = self.experiment.get_sample(sample_id)
-            sample_data = self.data[self.data.sample_id == sample_id]
+            sample_data = self.data[self.data.sample_id == sample_id].copy()
             for cluster_label, cluster in sample_data.groupby(population_var):
-                population_name = cluster_label
+                population_name = str(cluster_label)
                 if self.population_prefix is not None:
                     population_name = f"{self.population_prefix}_{cluster_label}"
                 pop = Population(population_name=population_name,

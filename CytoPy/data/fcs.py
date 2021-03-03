@@ -445,7 +445,7 @@ class FileGroup(mongoengine.Document):
             Method used to evaluate the performance of the classifier if evaluate_classifier is True.
             String value should be one of the functions of Scikit-Learn's classification metrics:
             https://scikit-learn.org/stable/modules/model_evaluation.html.
-        transform: str (defaylt='logicle')
+        transform: str (default='logicle')
             Transformation to be applied to data prior to classification
         transform_kwargs: dict, optional
             Additional keyword arguments applied to Transformer

@@ -1,5 +1,5 @@
-from CytoPy.data.gating_strategy import GatingStrategy, Action
-from CytoPy.data.gate import ThresholdGate, PolygonGate, EllipseGate, PolygonGeom
+from CytoPy.data.gating_strategy import GatingStrategy, DuplicatePopulationError
+from CytoPy.data.gate import ThresholdGate, PolygonGate, EllipseGate
 from CytoPy.data.project import Project
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -20,8 +20,8 @@ def create_poly_gate():
                        parent="root",
                        x="FS Lin",
                        y="IgG1-FITC",
-                       transformations={"x": None,
-                                        "y": "logicle"},
+                       transform_x=None,
+                       transform_y="logicle",
                        method="manual",
                        method_kwargs={"x_values": x,
                                       "y_values": y})
@@ -33,8 +33,8 @@ def create_threshold_gate():
                               parent="root",
                               x="FS Lin",
                               y="IgG1-FITC",
-                              transformations={"x": None,
-                                               "y": "logicle"},
+                              transform_x=None,
+                              transform_y="logicle",
                               method="density")
     return threshold
 
@@ -44,8 +44,8 @@ def create_ellipse_gate():
                           parent="root",
                           x="FS Lin",
                           y="IgG1-FITC",
-                          transformations={"x": None,
-                                           "y": "logicle"},
+                          transform_x=None,
+                          transform_y="logicle",
                           method="GaussianMixture",
                           method_kwargs={"n_components": 2,
                                          "random_state": 42,
@@ -71,7 +71,7 @@ def apply_some_gates(gs: GatingStrategy):
     gate.gate_name = "test threshold 2"
     gate.parent = "pop2"
     gate.x, gate.y = "IgG1-PC5", None
-    gate.transformations = {"x": "logicle", "y": None}
+    gate.transform_x, gate.transform_y = "logicle", None
     gs.preview_gate(gate=gate)
     gate.label_children({"+": "pop3", "-": "pop4"})
     gs.apply_gate(gate=gate)
@@ -199,79 +199,6 @@ def test_apply_downstream(example_populated_experiment):
     assert_expected_gated_pops(gs)
 
 
-@pytest.mark.parametrize("action,err",
-                         [("not an action", "not an action does not exist"),
-                          (Action(action_name="merge test",
-                                  method="merge",
-                                  left="invalid",
-                                  right="pop4"), "invalid does not exist"),
-                          (Action(action_name="merge test",
-                                  method="subtract",
-                                  left="pop4",
-                                  right="invalid"), "invalid does not exist"),
-                          (Action(action_name="merge test",
-                                  method="merge",
-                                  left="pop4",
-                                  right="invalid"), "invalid does not exist"),
-                          (Action(action_name="merge test",
-                                  method="invalid method",
-                                  left="pop4",
-                                  right="invalid"), "Accepted methods are: merge, subtract")])
-def test_apply_action_errors(example_populated_experiment, action, err):
-    gs = create_gatingstrategy_and_load(example_populated_experiment)
-    gs = apply_some_gates(gs)
-    with pytest.raises(AssertionError) as e:
-        gs.apply_action(action=action)
-    assert str(e.value) == err
-
-
-def test_apply_action_merge(example_populated_experiment):
-    gs = create_gatingstrategy_and_load(example_populated_experiment)
-    gs = apply_some_gates(gs)
-    action = Action(action_name="test merge",
-                    method="merge",
-                    left="pop3",
-                    right="pop4")
-    gs.apply_action(action=action, add_to_strategy=True, print_stats=True)
-    assert "test merge" in [a.action_name for a in gs.actions]
-    assert len(gs.actions) == 1
-    new_pop = gs.filegroup.get_population(population_name="merge_pop3_pop4")
-    pop2 = gs.filegroup.get_population(population_name="pop2")
-    pop3 = gs.filegroup.get_population(population_name="pop3")
-    assert new_pop.parent == "pop2"
-    assert new_pop.n == pop2.n
-    assert len(new_pop.index) == len(pop2.index)
-    assert isinstance(new_pop.geom, type(pop3.geom))
-    assert new_pop.geom.x == pop3.geom.x
-    assert new_pop.geom.y == pop3.geom.y
-    assert new_pop.geom.transform_x == pop3.geom.transform_x
-    assert new_pop.geom.transform_y == pop3.geom.transform_y
-    assert all([x in gs.filegroup.tree.keys() for x in ["merge_pop3_pop4", "pop3", "pop4"]])
-
-
-def test_apply_action_subtract(example_populated_experiment):
-    gs = create_gatingstrategy_and_load(example_populated_experiment)
-    gs = apply_some_gates(gs)
-    action = Action(action_name="test subtract",
-                    method="subtract",
-                    left="pop2",
-                    right="pop4")
-    gs.apply_action(action=action, add_to_strategy=True, print_stats=True)
-    assert "test subtract" in [a.action_name for a in gs.actions]
-    assert len(gs.actions) == 1
-    new_pop = gs.filegroup.get_population(population_name="subtract_pop2_pop4")
-    pop2 = gs.filegroup.get_population(population_name="pop2")
-    assert new_pop.parent == "pop1"
-    assert new_pop.n == 14315
-    assert len(new_pop.index) == 14315
-    assert isinstance(new_pop.geom, PolygonGeom)
-    assert new_pop.geom.x == pop2.geom.x
-    assert new_pop.geom.y == pop2.geom.y
-    assert new_pop.geom.transform_x == pop2.geom.transform_x
-    assert new_pop.geom.transform_y == pop2.geom.transform_y
-    assert all([x in gs.filegroup.tree.keys() for x in ["subtract_pop2_pop4", "pop3", "pop4"]])
-
-
 def test_apply_all(example_populated_experiment):
     gs = create_gatingstrategy_and_load(example_populated_experiment)
     with pytest.raises(AssertionError) as err:
@@ -283,7 +210,7 @@ def test_apply_all(example_populated_experiment):
                  sample_id="test sample")
     gs.apply_all()
     assert_expected_gated_pops(gs)
-    with pytest.raises(AssertionError) as err:
+    with pytest.raises(DuplicatePopulationError) as err:
         gs.apply_all()
     assert str(err.value) == "One or more of the populations generated from this gating strategy are already " \
                              "presented in the population tree"
@@ -315,7 +242,7 @@ def test_plot_gate_by_name(example_populated_experiment):
 def test_plot_gate_invalid(example_populated_experiment):
     gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
-    with pytest.raises(AssertionError) as err:
+    with pytest.raises(ValueError) as err:
         gs.plot_gate(gate="test ellipse", y="FS Lin")
     assert str(err.value) == "Can only override y-axis variable for Threshold geometries"
 
@@ -350,8 +277,8 @@ def test_population_stats(example_populated_experiment):
     assert isinstance(stats, dict)
     assert stats.get("population_name") == "root"
     assert stats.get("n") == 30000
-    assert stats.get("prop_of_parent") == 1.0
-    assert stats.get("prop_of_root") == 1.0
+    assert stats.get("prop_of_parent") is None
+    assert stats.get("prop_of_root") is None
 
 
 def test_save(example_populated_experiment):
@@ -365,8 +292,8 @@ def test_save(example_populated_experiment):
 
 
 @pytest.mark.parametrize("remove_associations", [True, False])
-def test_delete(example_experiment, remove_associations):
-    gs = create_gatingstrategy_and_load(example_experiment)
+def test_delete(example_populated_experiment, remove_associations):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
     gs = apply_some_gates(gs)
     gs.save()
     gs = GatingStrategy.objects(name="test").get()

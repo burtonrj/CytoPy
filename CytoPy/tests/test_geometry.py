@@ -1,5 +1,5 @@
 from CytoPy.data.geometry import PopulationGeometry, ThresholdGeom, PolygonGeom, create_polygon, \
-    polygon_overlap, create_convex_hull, probablistic_ellipse, inside_ellipse, inside_polygon
+    polygon_overlap, create_convex_hull, probablistic_ellipse, inside_ellipse
 from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs
 from sklearn.mixture import GaussianMixture

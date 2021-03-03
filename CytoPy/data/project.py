@@ -273,6 +273,17 @@ class Project(mongoengine.Document):
         return Subject.objects(subject_id=subject_id).get()
 
     def delete_experiment(self, experiment_id: str):
+        """
+        Delete experiment
+
+        Parameters
+        ----------
+        experiment_id: str
+
+        Returns
+        -------
+        None
+        """
         if experiment_id not in self.list_experiments():
             raise MissingExperimentError(f"No such experiment {experiment_id}")
         exp = self.get_experiment(experiment_id)

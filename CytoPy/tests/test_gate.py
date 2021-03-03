@@ -1,5 +1,4 @@
 from CytoPy.data import gate
-from CytoPy.data.population import *
 from CytoPy.data.geometry import *
 from scipy.spatial.distance import euclidean
 from shapely.geometry import Polygon
@@ -617,8 +616,8 @@ def test_polygon_add_child():
     assert g.children[0].name == "test"
     assert g.children[0].geom.x == g.x
     assert g.children[0].geom.y == g.y
-    assert g.children[0].geom.transform_x == g.transformations.get("x", None)
-    assert g.children[0].geom.transform_y == g.transformations.get("y", None)
+    assert g.children[0].geom.transform_x == g.transform_x
+    assert g.children[0].geom.transform_y == g.transform_y
 
 
 def test_polygon_generate_populations():
@@ -640,8 +639,8 @@ def test_polygon_generate_populations():
     for p in pops:
         assert p.geom.x == g.x
         assert p.geom.y == g.y
-        assert p.geom.transform_x == g.transformations.get("x", None)
-        assert p.geom.transform_y == g.transformations.get("y", None)
+        assert p.geom.transform_x == g.transform_x
+        assert p.geom.transform_y == g.transform_y
         assert p.parent == "test parent"
     for name, n in zip(["A", "B", "C"], [2000, 1000, 1000]):
         p = [p for p in pops if p.population_name == name][0]
@@ -657,7 +656,7 @@ def test_polygon_match_to_children():
                               centers=[(1., 1.), (10., 6.2), (1.5, 2.), (11, 7.), (11.5, 7.5)],
                               random_state=42)
     data_dict = [{"data": data[np.where(labels == i)],
-                  "signature": create_signature(pd.DataFrame(data[np.where(labels == i)], columns=["X", "Y"])),
+                  "signature": pd.DataFrame(data[np.where(labels == i)], columns=["X", "Y"]).mean().to_dict(),
                   "poly": create_polygon(
                       *create_convex_hull(data[np.where(labels == i)][:, 0], data[np.where(labels == i)][:, 1]))}
                  for i in range(5)]

@@ -50,7 +50,7 @@ def test_create_lognormal_data():
 
 
 def test_valid_transform():
-    valid = ["log_scale", "logicle", "hyperlog", "asinh", None]
+    valid = ["log", "logicle", "hyperlog", "asinh", None]
     invalid = ["LOG", "hyper-log", "Sine"]
     for x in valid:
         plotter = FlowPlot(transform_x=x, transform_y=x)
@@ -66,15 +66,16 @@ def test_create_flowplot_object():
     plotter = FlowPlot()
     assert plotter.transform_x == "logicle"
     assert plotter.transform_y == "logicle"
-    assert plotter.transform_kwargs == {}
+    assert plotter.transform_x_kwargs == {}
+    assert plotter.transform_y_kwargs == {}
     assert plotter.labels.get("x", None) is None
     assert plotter.labels.get("y", None) is None
     assert plotter.autoscale
     assert plotter.lims.get("x") == [None, None]
     assert plotter.lims.get("y") == [None, None]
     assert plotter.title is None
-    assert plotter.bw == "scott"
-    assert plotter.bins == "sqrt"
+    assert plotter.bw == "silverman"
+    assert plotter.bins is None
     assert isinstance(plotter._ax, plt.Axes)
     assert isinstance(plotter.cmap, LinearSegmentedColormap)
     assert plotter._ax.xaxis.labelpad == 20

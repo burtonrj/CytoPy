@@ -1,10 +1,10 @@
 from sklearn.datasets import make_blobs
 from CytoPy.data.experiment import *
+from CytoPy.data.errors import *
 from CytoPy.tests.conftest import create_example_populations
 from CytoPy.tests import assets
 import pandas as pd
 import pytest
-import shutil
 import h5py
 import os
 
@@ -17,9 +17,9 @@ def test_check_excel_template():
 
 def test_check_duplicates():
     x = ["Marker1", "Marker1", "Marker2", "Marker3"]
-    with pytest.warns(UserWarning) as warn:
+    with pytest.warns(UserWarning) as warn_:
         y = check_duplication(x)
-    assert str(warn.list[0].message) == "Duplicate channel/markers identified: ['Marker1']"
+    assert str(warn_.list[0].message) == "Duplicate channel/markers identified: ['Marker1']"
     assert y
 
 
@@ -133,7 +133,7 @@ def test_missing_channels():
 
 
 def test_panel_create_from_excel():
-    test = Panel(panel_name="Test Panel")
+    test = Panel()
     test.create_from_excel(f"{assets.__path__._path[0]}/test_panel.xlsx")
     assert all(x in [cm.marker for cm in test.mappings] for x in
                ["FS Lin", "SS Log", "IgG1-FITC", "IgG1-PE", "CD45-ECD", "IgG1-PC5", "IgG1-PC7"])
@@ -145,31 +145,12 @@ def test_panel_create_from_excel():
                ["FS Lin", "SS Log", "FL1 Log", "FL2 Log", "FL3 Log", "FL4 Log", "FL5 Log"])
 
 
-def test_data_dir_append_leading_char():
-    assert data_dir_append_leading_char("C:\\some\\path\\") == "C:\\some\path\\"
-    assert data_dir_append_leading_char("C:\\some\\path") == "C:\\some\path\\"
-    assert data_dir_append_leading_char("/some/path/") == "/some/path/"
-    assert data_dir_append_leading_char("/some/path") == "/some/path/"
-
-
 def test_exp_init(example_populated_experiment):
     print(os.getcwd())
     exp = example_populated_experiment
-    assert exp.panel.panel_name == "test_panel"
-
-
-def example_update_data_directory(exp: Experiment,
-                                  path: str):
-    exp.update_data_directory(new_path=path, move=False)
-
-
-def test_exp_update_data_dir(example_populated_experiment):
-    with pytest.raises(AssertionError) as ex:
-        example_update_data_directory(example_populated_experiment, "not_a_path")
-    assert str(ex.value) == "Invalid directory given for new_path"
-    example_update_data_directory(example_populated_experiment, assets.__path__._path[0])
-    assert example_populated_experiment.data_directory == assets.__path__._path[0]
-    shutil.rmtree(f"{assets.__path__._path[0]}/test_data", ignore_errors=True)
+    exp.generate_panel(panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx")
+    assert exp.panel is not None
+    assert exp.get_data_directory() == f"{os.getcwd()}/test_data"
 
 
 def test_exp_delete_all_populations(example_populated_experiment):
@@ -204,12 +185,12 @@ def test_exp_remove_sample(example_populated_experiment):
 
 
 def test_add_new_sample_exists_error(example_populated_experiment):
-    with pytest.raises(AssertionError) as err:
+    with pytest.raises(DuplicateSampleError) as err:
         example_populated_experiment.add_dataframes(sample_id="test sample",
                                                     primary_data="dummy path",
                                                     mappings=[])
     assert str(err.value) == "A file group with id test sample already exists"
-    with pytest.raises(AssertionError) as err:
+    with pytest.raises(DuplicateSampleError) as err:
         example_populated_experiment.add_fcs_files(sample_id="test sample",
                                                    primary="dummy path")
     assert str(err.value) == "A file group with id test sample already exists"
@@ -219,8 +200,8 @@ def assert_h5_setup_correctly(filepath: str,
                               exp: Experiment):
     assert os.path.isfile(filepath)
     with h5py.File(filepath, "r") as f:
-        assert len(f["index/root/primary"][:]) == 30000
-        assert len(f["index/root/test_ctrl"][:]) == 30000
+        assert f["index/root/primary"][:].shape[0] == 30000
+        assert f["test_ctrl"][:].shape[0] == 30000
         assert set([x.decode("utf-8") for x in f["mappings/primary/channels"][:]]) == set(exp.panel.list_channels())
         assert set([x.decode("utf-8") for x in f["mappings/primary/markers"][:]]) == set(exp.panel.list_markers())
 
@@ -262,8 +243,7 @@ def test_exp_add_fcs_files(example_populated_experiment):
 
 def test_exp_delete(example_populated_experiment):
     exp = example_populated_experiment
-    exp.delete()
-    assert len(Experiment.objects()) == 0
+    exp._instance.delete_experiment(exp.experiment_id)
     assert len(FileGroup.objects()) == 0
 
 
@@ -275,17 +255,6 @@ def test_exp_standardise_mappings(example_populated_experiment):
     assert set([x["marker"] for x in standardised_mappings]) == set(exp.panel.list_markers())
 
 
-@pytest.mark.parametrize("pop_name", ["pop1", "pop2", "pop3"])
-def test_load_clusters(example_populated_experiment, pop_name):
-    fg = create_example_populations(example_populated_experiment.get_sample("test sample"))
-    pop_df = fg.load_population_df(population=pop_name)
-    clusters_df = load_clusters(pop_data=pop_df,
-                                tag="testing",
-                                filegroup=fg,
-                                population=pop_name)
-    assert clusters_df.dropna().shape[0] == (0.25 * clusters_df.shape[0])
-
-
 def test_load_data(example_populated_experiment):
     exp = example_populated_experiment
     exp.add_fcs_files(sample_id="test sample 2",
@@ -295,9 +264,8 @@ def test_load_data(example_populated_experiment):
     create_example_populations(exp.get_sample("test sample"))
     create_example_populations(exp.get_sample("test sample 2"))
     data = load_population_data_from_experiment(experiment=exp,
-                                                population="pop1",
-                                                include_clusters="testing")
-    assert all([x in data.columns for x in ["sample_id", "cluster_id", "meta_label", "original_index"]])
+                                                population="pop1")
+    assert all([x in data.columns for x in ["sample_id", "subject_id", "original_index"]])
     assert data.shape[0] == ((30000 * 0.8) + (30000 * 0.8))
     assert set(data["sample_id"].unique()) == {"test sample", "test sample 2"}
     test_sample_pop1 = exp.get_sample("test sample").get_population("pop1")
@@ -307,20 +275,6 @@ def test_load_data(example_populated_experiment):
                           test_sample_pop1.index)
     assert np.array_equal(data[data.sample_id == "test sample 2"]["original_index"].values,
                           test_sample2_pop1.index)
-    # Check clusters
-    test_sample_pop1_cluster = test_sample_pop1.get_clusters(cluster_ids=["test cluster"],
-                                                             tag="testing")[0]
-    test_sample2_pop1_cluster = test_sample_pop1.get_clusters(cluster_ids=["test cluster"],
-                                                              tag="testing")[0]
-    np.array_equal(data[(data.sample_id == "test sample") & (data.cluster_id == "test cluster")]["original_index"],
-                   test_sample_pop1_cluster.index)
-    np.array_equal(data[(data.sample_id == "test sample 2") & (data.cluster_id == "test cluster")]["original_index"],
-                   test_sample2_pop1_cluster.index)
-    # Check meta cluster labels
-    assert (data[(data.sample_id == "test sample") &
-                 (data.cluster_id == "test cluster")]["meta_label"] == "meta testing").all()
-    assert (data[(data.sample_id == "test sample 2") &
-                 (data.cluster_id == "test cluster")]["meta_label"] == "meta testing").all()
     # Check that the population furthest from the root is populated correctly i.e. pop3
     test_sample_pop = exp.get_sample("test sample").get_population("pop3")
     test_sample2_pop = exp.get_sample("test sample 2").get_population("pop3")
@@ -345,27 +299,3 @@ def test_load_data(example_populated_experiment):
                                (data.population_label == "pop2")]["original_index"].sort_values().values,
                           np.sort(idx))
 
-
-def test_fetch_subject_meta(example_populated_experiment):
-    exp = example_populated_experiment
-    Subject(subject_id="test subject",
-            files=[exp.get_sample("test sample")],
-            test_var=True).save()
-    assert fetch_subject_meta(sample_id="test sample",
-                              experiment=exp,
-                              meta_label="test_var")
-    assert fetch_subject_meta(sample_id="test sample",
-                              experiment=exp,
-                              meta_label="invalid") is None
-    Subject.objects(subject_id="test subject").get().delete()
-
-
-def test_fetch_subject(example_populated_experiment):
-    exp = example_populated_experiment
-    with pytest.warns(UserWarning) as warning:
-        assert fetch_subject(exp.get_sample("test sample")) is None
-    assert str(warning[0].message) == "Requested sample is not associated to a Subject"
-    Subject(subject_id="test subject",
-            files=[exp.get_sample("test sample")],
-            test_var=True).save()
-    assert isinstance(fetch_subject(exp.get_sample("test sample")), Subject)
