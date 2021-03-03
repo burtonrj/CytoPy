@@ -700,9 +700,7 @@ class Experiment(mongoengine.EmbeddedDocument):
         """
         if not self.sample_exists(sample_id):
             raise MissingSampleError(f"Invalid sample: {sample_id} not associated with this experiment")
-        f = [f for f in self.fcs_files if f.primary_id == sample_id][0]
-        f.set_data_path(data_directory=self._instance.data_directory)
-        return f
+        return [f for f in self.fcs_files if f.primary_id == sample_id][0]
 
     def filter_samples_by_subject(self,
                                   query: str or mongoengine.queryset.visitor.Q) -> list:

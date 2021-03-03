@@ -12,5 +12,7 @@ temp_data
 deepcytof_local
 BatchEffectRemoval_Local
 *.bin
+*.tree
+*.weights
 <<<<<<< HEAD
 *.ipynb

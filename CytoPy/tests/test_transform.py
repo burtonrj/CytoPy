@@ -1,4 +1,4 @@
-from .conftest import create_lognormal_data, create_linear_data
+from .conftest import create_lognormal_data
 from ..flow import transform
 import pytest
 

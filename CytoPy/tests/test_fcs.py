@@ -51,7 +51,7 @@ def add_dummy_ctrl(fg: FileGroup, ctrl_id: str):
     """
     data = pd.DataFrame([np.random.random(size=1000) for _ in range(6)]).T
     fg.add_ctrl_file(ctrl_id=ctrl_id,
-                     data=data,
+                     data=data.values,
                      channels=[f"channel{i + 1}" for i in range(6)],
                      markers=[f"marker{i + 1}" for i in range(6)])
     fg.save()
@@ -101,23 +101,23 @@ def test_init_new_fcs_file(example_populated_experiment):
     assert root.parent == "root"
     assert root.population_name == "root"
     assert np.array_equal(primary_data.index.values, root.index)
-    assert np.array_equal(ctrl_data.index.values, root.ctrl_index.get("test_ctrl"))
     assert primary_data.shape == (30000, 7)
     assert ctrl_data.shape == (30000, 7)
 
 
-@pytest.mark.parametrize("source,sample_size", [("primary", None),
-                                                ("primary", 1000),
-                                                ("test_ctrl", None),
-                                                ("test_ctrl", 1000)])
-def test_access_data(example_populated_experiment, source, sample_size):
-    fg = example_populated_experiment.get_sample("test sample")
-    df = fg.data(source, sample_size)
-    assert isinstance(df, pd.DataFrame)
-    if sample_size is not None:
-        assert df.shape == (1000, 7)
-    else:
-        assert df.shape == (30000, 7)
+def test_access_data(example_populated_experiment):
+    exp = example_populated_experiment
+    fg = exp.get_sample("test sample")
+    for key, sample in [("primary", None),
+                        ("primary", 1000),
+                        ("test_ctrl", None),
+                        ("test_ctrl", 1000)]:
+        df = fg.data(key, sample)
+        assert isinstance(df, pd.DataFrame)
+        if sample is not None:
+            assert df.shape == (1000, 7)
+        else:
+            assert df.shape == (30000, 7)
 
 
 def test_add_ctrl_file_already_exists_error(example_populated_experiment):
@@ -136,8 +136,7 @@ def test_add_ctrl_file(example_populated_experiment):
     add_dummy_ctrl(fg, "test_ctrl2")
     assert "test_ctrl2" in fg.controls
     with h5py.File(fg.h5path, "r") as f:
-        assert "test_ctrl2" in f["index/root"].keys()
-        assert f["index/root/test_ctrl2"][:].shape[0] == 1000
+        assert f["test_ctrl2"][:].shape[0] == 1000
 
 
 def test_load_population_indexes(example_populated_experiment):
@@ -145,7 +144,6 @@ def test_load_population_indexes(example_populated_experiment):
     add_dummy_ctrl(fg, "test_ctrl2")
     fg._load_population_indexes()
     assert fg.get_population("root").index.shape[0] == 30000
-    assert fg.get_population("root").ctrl_index.get("test_ctrl2").shape[0] == 1000
 
 
 def test_add_population(example_populated_experiment):
@@ -159,11 +157,9 @@ def test_add_population(example_populated_experiment):
                 for x in ["root", "pop1", "pop2", "pop3"]])
     # Check indexes
     pop_idx = {p.population_name: p.index for p in fg.populations}
-    pop_ctrl_idx = {p.population_name: p.ctrl_index.get("test_ctrl") for p in fg.populations}
-    for data_dict in [pop_idx, pop_ctrl_idx]:
-        for name, expected_n in zip(["root", "pop1", "pop2", "pop3"],
-                                    [30000, 24000, 12000, 6000]):
-            assert len(data_dict.get(name)) == expected_n
+    for name, expected_n in zip(["root", "pop1", "pop2", "pop3"],
+                                [30000, 24000, 12000, 6000]):
+        assert len(pop_idx.get(name)) == expected_n
     # Check trees
     assert all([x in fg.tree.keys() for x in ["root", "pop1", "pop2", "pop3"]])
     assert not fg.tree.get("root").parent
@@ -172,7 +168,7 @@ def test_add_population(example_populated_experiment):
     assert fg.tree.get("pop3").parent == fg.tree.get("pop2")
 
 
-@pytest.mark.parametrize("pop_name,n", [("pop1", 24000), ("pop2", 12000), ("pop3", 6000)])
+@pytest.mark.parametrize("pop_name,n", [("pop1", 15042), ("pop2", 7565), ("pop3", 3804)])
 def test_load_population_df(example_populated_experiment, pop_name, n):
     create_example_populations(example_populated_experiment.get_sample("test sample")).save()
     fg = reload_filegroup(project_id="test",
@@ -183,36 +179,17 @@ def test_load_population_df(example_populated_experiment, pop_name, n):
     assert df.shape == (n, 7)
 
 
-@pytest.mark.parametrize("pop_name,n", [("pop1", 24000), ("pop2", 12000), ("pop3", 6000)])
+@pytest.mark.parametrize("pop_name,n", [("pop1", 15042), ("pop2", 7565), ("pop3", 3804)])
 def test_load_ctrl_population_df(example_populated_experiment, pop_name, n):
     create_example_populations(example_populated_experiment.get_sample("test sample")).save()
     fg = reload_filegroup(project_id="test",
                           exp_id="test experiment",
                           sample_id="test sample")
-    df = fg.load_ctrl_population_df(ctrl="test_ctrl", population=pop_name, transform="logicle")
+    df = fg.load_ctrl_population_df(ctrl="test_ctrl",
+                                    population=pop_name,
+                                    transform="logicle")
     assert isinstance(df, pd.DataFrame)
     assert df.shape == (n, 7)
-
-
-@pytest.mark.parametrize("pop_name,n", [("pop1", 24000), ("pop2", 12000), ("pop3", 6000)])
-def test_estimate_ctrl_population(example_populated_experiment, pop_name, n):
-    create_example_populations(example_populated_experiment.get_sample("test sample")).save()
-    fg = reload_filegroup(project_id="test",
-                          exp_id="test experiment",
-                          sample_id="test sample")
-    pop = fg.get_population(pop_name)
-    pop.ctrl_index.pop("test_ctrl")
-    transforms = {"FS Lin": None, "SS Log": None}
-    mappings = {x: {"transformations": transforms, "features": ["FS Lin", "SS Log"]}
-                for x in ["pop1", "pop2", "pop3"]}
-    fg.estimate_ctrl_population(ctrl="test_ctrl",
-                                population=pop_name,
-                                downsample=0.9,
-                                population_mappings=mappings)
-    pop = fg.get_population(pop_name)
-    assert "test_ctrl" in pop.ctrl_index.keys()
-    assert isinstance(pop.ctrl_index.get("test_ctrl"), np.ndarray)
-    assert pop.ctrl_index.get("test_ctrl").shape[0] > 0
 
 
 def assert_correct_label(labels: pd.Series, expected_label: str):
@@ -351,11 +328,10 @@ def test_subtract_populations(example_populated_experiment):
 
 
 def test_delete(example_populated_experiment):
-    fg = create_example_populations(example_populated_experiment.get_sample("test sample"))
-    fg.save()
+    fg = example_populated_experiment.get_sample("test sample")
+    example_populated_experiment.remove_sample("test sample")
     path = fg.h5path
-    fg.delete()
     assert not os.path.isfile(path=path)
-    with pytest.raises(AssertionError) as err:
+    with pytest.raises(MissingSampleError) as err:
         reload_filegroup(project_id="test", exp_id="test experiment", sample_id="test sample")
     assert str(err.value) == f"Invalid sample: test sample not associated with this experiment"

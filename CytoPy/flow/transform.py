@@ -705,7 +705,7 @@ def safe_range(data: pd.DataFrame, x: str):
 
     Returns
     -------
-    float, float
+    (float, float)
         Min, max
 
     Raises
