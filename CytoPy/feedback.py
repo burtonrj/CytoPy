@@ -92,10 +92,7 @@ def vprint(verbose: bool):
     return print if verbose else lambda *a, **k: None
 
 
-def _warning(message: str,
-             category: int = UserWarning,
-             filename: str = "",
-             lineno: int = -1):
+def _warning(message: str, *args, **kwargs):
     """
     Monkeypatch to surpress excessive text in warnings.
     """

@@ -197,18 +197,31 @@ class FileGroup(mongoengine.Document):
     valid = mongoengine.BooleanField(default=True)
     notes = mongoengine.StringField(required=False)
     subject = mongoengine.ReferenceField(Subject, reverse_delete_rule=mongoengine.NULLIFY)
+    data_directory = mongoengine.StringField()
     meta = {
         'db_alias': 'core',
         'collection': 'fcs_files'
     }
 
-    def __init__(self, *args, **values):
-        super().__init__(*args, **values)
+    def __init__(self, *args, **kwargs):
+        data = kwargs.pop("data", None)
+        channels = kwargs.pop("channels", None)
+        markers = kwargs.pop("markers", None)
+        super().__init__(*args, **kwargs)
         self._columns_default = "markers"
         self.cell_meta_labels = {}
-        self._data_directory = None
-        self.h5path = None
-        self.tree = construct_tree(populations=self.populations)
+        if self.id:
+            self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
+            self.tree = construct_tree(populations=self.populations)
+            self._load_cell_meta_labels()
+            self._load_population_indexes()
+        else:
+            if any([x is None for x in [data, channels, markers]]):
+                raise ValueError("New instance of FileGroup requires that data, channels, and markers "
+                                 "be provided to the constructor")
+            self.save()
+            self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
+            self.init_new_file(data=data, channels=channels, markers=markers)
 
     @property
     def columns_default(self):
@@ -218,17 +231,6 @@ class FileGroup(mongoengine.Document):
     def columns_default(self, value: str):
         assert value in ["markers", "channels"], "columns_default must be either 'markers' or 'channels'"
         self._columns_default = value
-
-    @property
-    def data_directory(self):
-        return self._data_directory
-
-    @data_directory.setter
-    def data_directory(self, path: str):
-        self._data_directory = path
-        self.h5path = os.path.join(self._data_directory, f"{self.id.__str__()}.hdf5")
-        self._load_cell_meta_labels()
-        self._load_population_indexes()
 
     @data_loaded
     def data(self,

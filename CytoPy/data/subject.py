@@ -26,9 +26,7 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from .fcs import FileGroup
 import mongoengine
-import numpy as np
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, CytoPy"
@@ -54,8 +52,6 @@ class Subject(mongoengine.DynamicDocument):
         Additional notes
     """
     subject_id = mongoengine.StringField(required=True, unique=True)
-
-    # Associated FCS Files
     notes = mongoengine.StringField(required=False)
 
     meta = {

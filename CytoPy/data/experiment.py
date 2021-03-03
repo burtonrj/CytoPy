@@ -848,15 +848,14 @@ class Experiment(mongoengine.EmbeddedDocument):
             del controls
             gc.collect()
             return
-
-        filegrp = FileGroup(primary_id=sample_id,
+        filegrp = FileGroup(data=primary_data.values,
+                            channels=[x.get("channel") for x in mappings],
+                            markers=[x.get("marker") for x in mappings],
+                            primary_id=sample_id,
                             compensated=compensated,
                             collection_datetime=collection_datetime,
-                            processing_datetime=processing_datetime)
-        filegrp.data_directory = self._instance.data_directory
-        filegrp.init_new_file(data=primary_data.values,
-                              channels=[x.get("channel") for x in mappings],
-                              markers=[x.get("marker") for x in mappings])
+                            processing_datetime=processing_datetime,
+                            data_directory=self._instance.data_directory)
 
         for ctrl_id, ctrl_data in controls.items():
             feedback(f"Adding control file {ctrl_id}...")
@@ -954,14 +953,14 @@ class Experiment(mongoengine.EmbeddedDocument):
         mappings = self._standardise_mappings(fcs_file.channel_mappings,
                                               missing_error=missing_error)
 
-        filegrp = FileGroup(primary_id=sample_id,
+        filegrp = FileGroup(data=fcs_file.event_data,
+                            channels=[x.get("channel") for x in mappings],
+                            markers=[x.get("marker") for x in mappings],
+                            primary_id=sample_id,
                             compensated=compensate,
                             collection_datetime=collection_datetime,
-                            processing_datetime=processing_datetime)
-        filegrp.data_directory = self._instance.data_directory
-        filegrp.init_new_file(data=fcs_file.event_data,
-                              channels=[x.get("channel") for x in mappings],
-                              markers=[x.get("marker") for x in mappings])
+                            processing_datetime=processing_datetime,
+                            data_directory=self._instance.data_directory)
         for ctrl_id, path in controls.items():
             feedback(f"Adding control file {ctrl_id}...")
             if isinstance(path, str):
