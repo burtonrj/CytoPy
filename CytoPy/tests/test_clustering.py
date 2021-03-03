@@ -7,28 +7,29 @@ import os
 FEATURES = ["FS Lin", "SS Log", "IgG1-FITC", "IgG1-PE", "CD45-ECD", "IgG1-PC5", "IgG1-PC7"]
 
 
-def dummy_data(example_experiment):
-    return example_experiment.get_sample("test sample").load_population_df("root")
+def dummy_data(example_populated_experiment):
+    return example_populated_experiment.get_sample("test sample").load_population_df("root")
 
 
-def multisample_experiment(example_experiment):
+def multisample_experiment(example_populated_experiment):
     for i in range(3):
-        example_experiment.add_fcs_files(sample_id=f"test sample {i + 1}",
-                                         primary=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
-                                         controls={"test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
-                                         compensate=False)
-    return example_experiment
+        example_populated_experiment.add_fcs_files(sample_id=f"test sample {i + 1}",
+                                                   primary=f"{os.getcwd()}/CytoPy/tests/assets/test.FCS",
+                                                   controls={
+                                                       "test_ctrl": f"{os.getcwd()}/CytoPy/tests/assets/test.FCS"},
+                                                   compensate=False)
+    return example_populated_experiment
 
 
-def multi_sample_data(example_experiment):
-    return load_population_data_from_experiment(experiment=multisample_experiment(example_experiment),
+def multi_sample_data(example_populated_experiment):
+    return load_population_data_from_experiment(experiment=multisample_experiment(example_populated_experiment),
                                                 population="root",
                                                 transform="logicle",
                                                 verbose=True)
 
 
-def test_load_data(example_experiment):
-    data = load_population_data_from_experiment(experiment=multisample_experiment(example_experiment),
+def test_load_data(example_populated_experiment):
+    data = load_population_data_from_experiment(experiment=multisample_experiment(example_populated_experiment),
                                                 population="root",
                                                 transform="logicle",
                                                 verbose=True)
@@ -36,26 +37,26 @@ def test_load_data(example_experiment):
     assert all([x in data.columns for x in ["sample_id", "cluster_id", "meta_label", "original_index", "subject_id"]])
     assert all([all(pd.isnull(data[x])) for x in ["subject_id", "cluster_id", "meta_label"]])
     for _id in data.sample_id.unique():
-        fg = example_experiment.get_sample(_id)
+        fg = example_populated_experiment.get_sample(_id)
         df = fg.load_population_df(population="root",
                                    transform="logicle",
                                    label_downstream_affiliations=True)
         assert np.array_equal(df.index.values, data[data.sample_id == _id]["original_index"].values)
-    assert data.shape[0] == 30000 * len(list(example_experiment.list_samples()))
-    assert set(data["sample_id"].values) == set(list(example_experiment.list_samples()))
+    assert data.shape[0] == 30000 * len(list(example_populated_experiment.list_samples()))
+    assert set(data["sample_id"].values) == set(list(example_populated_experiment.list_samples()))
 
 
-def test_sklearn_clustering_invalid_method(example_experiment):
+def test_sklearn_clustering_invalid_method(example_populated_experiment):
     with pytest.raises(AssertionError) as err:
-        sklearn_clustering(data=dummy_data(example_experiment),
+        sklearn_clustering(data=dummy_data(example_populated_experiment),
                            features=FEATURES,
                            method="INVALID",
                            verbose=False)
     assert str(err.value) == "Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN"
 
 
-def test_sklearn_clustering(example_experiment):
-    data = multi_sample_data(example_experiment)
+def test_sklearn_clustering(example_populated_experiment):
+    data = multi_sample_data(example_populated_experiment)
     data, _, _ = sklearn_clustering(data=data,
                                     features=FEATURES,
                                     method="MiniBatchKMeans",
@@ -68,8 +69,8 @@ def test_sklearn_clustering(example_experiment):
         assert len(df.cluster_id.unique()) > 1
 
 
-def test_sklearn_global_clustering(example_experiment):
-    data = multi_sample_data(example_experiment)
+def test_sklearn_global_clustering(example_populated_experiment):
+    data = multi_sample_data(example_populated_experiment)
     data, _, _ = sklearn_clustering(data=data,
                                     features=FEATURES,
                                     method="MiniBatchKMeans",
@@ -81,8 +82,8 @@ def test_sklearn_global_clustering(example_experiment):
     assert len(data.cluster_id.unique()) > 1
 
 
-def test_phenograph_clustering(example_experiment):
-    data = multi_sample_data(example_experiment)
+def test_phenograph_clustering(example_populated_experiment):
+    data = multi_sample_data(example_populated_experiment)
     data, graph, q = phenograph_clustering(data=data,
                                            features=FEATURES,
                                            verbose=True,
@@ -93,8 +94,8 @@ def test_phenograph_clustering(example_experiment):
         assert len(df.cluster_id.unique()) > 1
 
 
-def test_phenograph_global_clustering(example_experiment):
-    data = multi_sample_data(example_experiment)
+def test_phenograph_global_clustering(example_populated_experiment):
+    data = multi_sample_data(example_populated_experiment)
     data, graph, q = phenograph_clustering(data=data,
                                            features=FEATURES,
                                            verbose=True,
@@ -103,8 +104,8 @@ def test_phenograph_global_clustering(example_experiment):
     assert len(data.cluster_id.unique()) > 1
 
 
-def test_sklearn_metaclustering_invalid(example_experiment):
-    data = dummy_data(example_experiment)
+def test_sklearn_metaclustering_invalid(example_populated_experiment):
+    data = dummy_data(example_populated_experiment)
     with pytest.raises(AssertionError) as err:
         sklearn_metaclustering(data=data,
                                features=FEATURES,
@@ -112,8 +113,8 @@ def test_sklearn_metaclustering_invalid(example_experiment):
     assert str(err.value) == "Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN"
 
 
-def test_sklearn_metaclustering(example_experiment):
-    data = multi_sample_data(example_experiment)
+def test_sklearn_metaclustering(example_populated_experiment):
+    data = multi_sample_data(example_populated_experiment)
     clustered, _, _ = sklearn_clustering(data=data,
                                          features=FEATURES,
                                          verbose=True,
@@ -131,8 +132,8 @@ def test_sklearn_metaclustering(example_experiment):
         assert len(meta.meta_label.unique()) == 5
 
 
-def test_phenograph_metaclustering(example_experiment):
-    data = multi_sample_data(example_experiment)
+def test_phenograph_metaclustering(example_populated_experiment):
+    data = multi_sample_data(example_populated_experiment)
     clustered, _, _ = phenograph_clustering(data=data,
                                             features=FEATURES,
                                             verbose=True,
@@ -145,8 +146,8 @@ def test_phenograph_metaclustering(example_experiment):
         assert len(meta.meta_label.unique()) > 1
 
 
-def test_consensus_metaclustering_cluster_num_err(example_experiment):
-    data = multi_sample_data(example_experiment)
+def test_consensus_metaclustering_cluster_num_err(example_populated_experiment):
+    data = multi_sample_data(example_populated_experiment)
     clustered, _, _ = sklearn_clustering(data=data,
                                          features=FEATURES,
                                          verbose=True,
@@ -165,8 +166,8 @@ def test_consensus_metaclustering_cluster_num_err(example_experiment):
     assert err.value
 
 
-def test_consensus_metaclustering(example_experiment):
-    data = multi_sample_data(example_experiment)
+def test_consensus_metaclustering(example_populated_experiment):
+    data = multi_sample_data(example_populated_experiment)
     clustered, _, _ = sklearn_clustering(data=data,
                                          features=FEATURES,
                                          verbose=True,
@@ -186,8 +187,8 @@ def test_consensus_metaclustering(example_experiment):
         assert len(meta.meta_label.unique()) > 1
 
 
-def test_flowsom_clustering(example_experiment):
-    data = multi_sample_data(example_experiment)
+def test_flowsom_clustering(example_populated_experiment):
+    data = multi_sample_data(example_populated_experiment)
     data, _, _ = flowsom_clustering(data=data,
                                     features=FEATURES,
                                     meta_cluster_class=AgglomerativeClustering,
@@ -200,8 +201,8 @@ def test_flowsom_clustering(example_experiment):
         assert len(df.cluster_id.unique()) > 1
 
 
-def test_flowsom_global_clustering(example_experiment):
-    data = multi_sample_data(example_experiment)
+def test_flowsom_global_clustering(example_populated_experiment):
+    data = multi_sample_data(example_populated_experiment)
     data, _, _ = flowsom_clustering(data=data,
                                     features=FEATURES,
                                     meta_cluster_class=AgglomerativeClustering,
@@ -212,16 +213,16 @@ def test_flowsom_global_clustering(example_experiment):
     assert len(data.cluster_id.unique()) > 1
 
 
-def test_init_clustering(example_experiment):
-    exp = multisample_experiment(example_experiment)
+def test_init_clustering(example_populated_experiment):
+    exp = multisample_experiment(example_populated_experiment)
     c = Clustering(experiment=exp,
                    tag="test",
                    features=FEATURES)
     assert c.data.shape[0] == 30000 * len(list(exp.list_samples()))
 
 
-def test_clustering_check_null(example_experiment):
-    exp = multisample_experiment(example_experiment)
+def test_clustering_check_null(example_populated_experiment):
+    exp = multisample_experiment(example_populated_experiment)
     c = Clustering(experiment=exp,
                    tag="test",
                    features=FEATURES)
@@ -234,8 +235,8 @@ def test_clustering_check_null(example_experiment):
     assert len(features) == len(FEATURES) - 1
 
 
-def test_clustering_cluster(example_experiment):
-    exp = multisample_experiment(example_experiment)
+def test_clustering_cluster(example_populated_experiment):
+    exp = multisample_experiment(example_populated_experiment)
     c = Clustering(experiment=exp,
                    tag="test",
                    features=FEATURES)
@@ -243,8 +244,8 @@ def test_clustering_cluster(example_experiment):
     assert len(c.data["cluster_id"].unique()) > 1
 
 
-def test_clustering_meta_cluster(example_experiment):
-    exp = multisample_experiment(example_experiment)
+def test_clustering_meta_cluster(example_populated_experiment):
+    exp = multisample_experiment(example_populated_experiment)
     c = Clustering(experiment=exp,
                    tag="test",
                    features=FEATURES)
@@ -253,8 +254,8 @@ def test_clustering_meta_cluster(example_experiment):
     assert len(c.data["meta_label"].unique()) == 5
 
 
-def test_clustering_rename_meta_clusters(example_experiment):
-    exp = multisample_experiment(example_experiment)
+def test_clustering_rename_meta_clusters(example_populated_experiment):
+    exp = multisample_experiment(example_populated_experiment)
     c = Clustering(experiment=exp,
                    tag="test",
                    features=FEATURES)
@@ -270,25 +271,25 @@ def test_clustering_rename_meta_clusters(example_experiment):
     assert c.data.loc[20, "meta_label"] is None
 
 
-def test_clustering_cluster_counts(example_experiment):
-    exp = multisample_experiment(example_experiment)
+def test_clustering_cluster_counts(example_populated_experiment):
+    exp = multisample_experiment(example_populated_experiment)
     c = Clustering(experiment=exp,
                    tag="test",
                    features=FEATURES)
     for _id in c.data.sample_id.unique():
         idx = c.data[c.data.sample_id == _id].index.values
-        x = np.concatenate([np.array([f"c{i+1}" for _ in range(10000)]) for i in range(3)])
+        x = np.concatenate([np.array([f"c{i + 1}" for _ in range(10000)]) for i in range(3)])
         c.data.loc[idx, "cluster_id"] = x
     c._cluster_counts()
     assert "cluster_size" in c.data.columns
     for i in range(3):
-        df = c.data[c.data.cluster_id == f"c{i+1}"]
+        df = c.data[c.data.cluster_id == f"c{i + 1}"]
         assert len(df.cluster_size.unique()) == 1
         assert df.cluster_size.unique()[0] == pytest.approx(0.33, 0.1)
 
 
-def test_add_cluster_and_save(example_experiment):
-    exp = multisample_experiment(example_experiment)
+def test_add_cluster_and_save(example_populated_experiment):
+    exp = multisample_experiment(example_populated_experiment)
     fg = exp.get_sample("test sample 1")
     fg.get_population("root").add_cluster(Cluster(cluster_id="test",
                                                   meta_label="meta_test",
@@ -311,8 +312,8 @@ def test_add_cluster_and_save(example_experiment):
     assert np.array_equal(fg.get_population("root").clusters[0].index, np.arange(0, 10))
 
 
-def test_clustering_save(example_experiment):
-    exp = multisample_experiment(example_experiment)
+def test_clustering_save(example_populated_experiment):
+    exp = multisample_experiment(example_populated_experiment)
     c = Clustering(experiment=exp,
                    tag="test",
                    features=FEATURES)
@@ -343,8 +344,8 @@ def test_clustering_save(example_experiment):
             assert cluster.meta_label == str(cluster_df.meta_label.unique()[0])
 
 
-def test_clustering_reload_clusters(example_experiment):
-    exp = multisample_experiment(example_experiment)
+def test_clustering_reload_clusters(example_populated_experiment):
+    exp = multisample_experiment(example_populated_experiment)
     c = Clustering(experiment=exp,
                    tag="test",
                    features=FEATURES)

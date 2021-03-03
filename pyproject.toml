@@ -48,7 +48,6 @@ MiniSom = "^2.2.6"
 PhenoGraph = "^1.5.6"
 pingouin = "^0.3.8"
 setuptools = "^49.6.0"
-shap="^0.38"
 uncertainties="^3.1"
 flowutils = { git = "https://github.com/whitews/FlowUtils.git"}
 

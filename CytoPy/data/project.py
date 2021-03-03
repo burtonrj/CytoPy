@@ -104,14 +104,18 @@ class Project(mongoengine.Document):
                  f"data directory before continuing using the 'update_data_directory' method.")
 
     def update_data_directory(self,
-                              data_directory: str):
+                              data_directory: str,
+                              move: bool = True):
         """
-        Update the data directory for this Project.
+        Update the data directory for this Project. It is recommended that you let CytoPy migrate the
+        existing directory by letting 'move' equal True.
 
         Parameters
         ----------
         data_directory: str
             Local path to HDF5 data
+        move: bool (default=True)
+            If True, will attempt to move the existing data_directory
 
         Returns
         -------
@@ -124,6 +128,15 @@ class Project(mongoengine.Document):
         """
         if not os.path.isdir(data_directory):
             raise InvalidDataDirectory(f"Could not find directory at path {data_directory}")
+        for e in self.experiments:
+            for f in e.fcs_files:
+                f.data_directory = data_directory
+                f.save()
+        if move:
+            for f in os.listdir(self.data_directory):
+                shutil.move(os.path.join(self.data_directory, f),
+                            data_directory)
+            shutil.rmtree(self.data_directory)
         self.data_directory = data_directory
         self.save()
 

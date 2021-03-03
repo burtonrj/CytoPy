@@ -37,9 +37,8 @@ def example_populated_experiment():
     -------
     Experiment
     """
-    test_project = Project(project_id="test")
+    test_project = Project(project_id="test", data_directory=f"{os.getcwd()}/test_data")
     exp = test_project.add_experiment(experiment_id="test experiment",
-                                      data_directory=f"{os.getcwd()}/test_data",
                                       panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx")
     exp.add_fcs_files(sample_id="test sample",
                       primary=f"{assets.__path__._path[0]}/test.FCS",
