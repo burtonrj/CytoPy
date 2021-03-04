@@ -558,7 +558,7 @@ def panel_defined(func):
     return wrapper
 
 
-class Experiment(mongoengine.EmbeddedDocument):
+class Experiment(mongoengine.Document):
     """
     Container for Cytometry experiment. The correct way to generate and load these objects is using the
     Project.add_experiment method (see CytoPy.data.project.Project). This object provides access
@@ -580,9 +580,15 @@ class Experiment(mongoengine.EmbeddedDocument):
     """
     experiment_id = mongoengine.StringField(required=True, unique=True)
     panel = mongoengine.EmbeddedDocumentField(Panel)
-    fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup))
+    fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4))
+    data_directory = mongoengine.StringField(required=True)
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
+
+    meta = {
+        'db_alias': 'core',
+        'collection': 'experiments'
+    }
 
     @staticmethod
     def _check_panel(panel_definition: str or None):
@@ -606,9 +612,6 @@ class Experiment(mongoengine.EmbeddedDocument):
         assert os.path.isfile(panel_definition), f"{panel_definition} does not exist"
         err = "Panel definition is not a valid Excel document"
         assert os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"], err
-
-    def get_data_directory(self):
-        return self._instance.data_directory
 
     def generate_panel(self,
                        panel_definition: str or dict) -> None:
@@ -659,7 +662,7 @@ class Experiment(mongoengine.EmbeddedDocument):
         for f in self.fcs_files:
             if sample_id == 'all' or f.primary_id == sample_id:
                 f.populations = [p for p in f.populations if p.population_name == "root"]
-        self._instance.save()
+                f.save()
 
     def sample_exists(self, sample_id: str) -> bool:
         """
@@ -762,7 +765,7 @@ class Experiment(mongoengine.EmbeddedDocument):
         filegrp = self.get_sample(sample_id)
         self.fcs_files = [f for f in self.fcs_files if f.primary_id != sample_id]
         filegrp.delete()
-        self._instance.save()
+        self.save()
 
     @panel_defined
     def add_dataframes(self,
@@ -853,7 +856,7 @@ class Experiment(mongoengine.EmbeddedDocument):
                             compensated=compensated,
                             collection_datetime=collection_datetime,
                             processing_datetime=processing_datetime,
-                            data_directory=self._instance.data_directory)
+                            data_directory=self.data_directory)
 
         for ctrl_id, ctrl_data in controls.items():
             feedback(f"Adding control file {ctrl_id}...")
@@ -872,7 +875,7 @@ class Experiment(mongoengine.EmbeddedDocument):
 
         feedback(f'Successfully created {sample_id} and associated to {self.experiment_id}')
         self.fcs_files.append(filegrp)
-        self._instance.save()
+        self.save()
         del filegrp
         gc.collect()
 
@@ -958,7 +961,7 @@ class Experiment(mongoengine.EmbeddedDocument):
                             compensated=compensate,
                             collection_datetime=collection_datetime,
                             processing_datetime=processing_datetime,
-                            data_directory=self._instance.data_directory)
+                            data_directory=self.data_directory)
         for ctrl_id, path in controls.items():
             feedback(f"Adding control file {ctrl_id}...")
             if isinstance(path, str):
@@ -984,7 +987,7 @@ class Experiment(mongoengine.EmbeddedDocument):
 
         feedback(f'Successfully created {sample_id} and associated to {self.experiment_id}')
         self.fcs_files.append(filegrp)
-        self._instance.save()
+        self.save()
         del filegrp
         gc.collect()
 
@@ -1091,8 +1094,18 @@ class Experiment(mongoengine.EmbeddedDocument):
                 except AssertionError as e:
                     warn(f"Failed to merge populations for {f.primary_id}: {str(e)}")
 
-    def save(self):
-        self._instance.save()
+    def delete(self, signal_kwargs=None, **write_concern):
+        """
+        Delete Experiment; will delete all associated FileGroups.
+
+        Returns
+        -------
+        None
+        """
+        for f in self.fcs_files:
+            f.delete()
+        self.save()
+        super().delete(signal_kwargs=signal_kwargs, **write_concern)
 
 
 def load_population_data_from_experiment(experiment: Experiment,

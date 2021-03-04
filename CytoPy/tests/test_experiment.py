@@ -150,7 +150,7 @@ def test_exp_init(example_populated_experiment):
     exp = example_populated_experiment
     exp.generate_panel(panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx")
     assert exp.panel is not None
-    assert exp.get_data_directory() == f"{os.getcwd()}/test_data"
+    assert exp.data_directory == f"{os.getcwd()}/test_data"
 
 
 def test_exp_delete_all_populations(example_populated_experiment):
@@ -243,7 +243,7 @@ def test_exp_add_fcs_files(example_populated_experiment):
 
 def test_exp_delete(example_populated_experiment):
     exp = example_populated_experiment
-    exp._instance.delete_experiment(exp.experiment_id)
+    exp.delete()
     assert len(FileGroup.objects()) == 0
 
 
@@ -266,7 +266,7 @@ def test_load_data(example_populated_experiment):
     data = load_population_data_from_experiment(experiment=exp,
                                                 population="pop1")
     assert all([x in data.columns for x in ["sample_id", "subject_id", "original_index"]])
-    assert data.shape[0] == ((30000 * 0.8) + (30000 * 0.8))
+    assert data.shape[0] == 30084
     assert set(data["sample_id"].unique()) == {"test sample", "test sample 2"}
     test_sample_pop1 = exp.get_sample("test sample").get_population("pop1")
     test_sample2_pop1 = exp.get_sample("test sample 2").get_population("pop1")

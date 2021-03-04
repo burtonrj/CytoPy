@@ -99,7 +99,7 @@ def create_ref_sample(experiment: Experiment,
                            **sampling_kwargs)[0]
     features = [x for x in data.columns if x != "sample_id"]
     new_filegroup = FileGroup(primary_id=new_file_name)
-    new_filegroup.data_directory = experiment.get_data_directory()
+    new_filegroup.data_directory = experiment.data_directory
     new_filegroup.init_new_file(data=data[features].values,
                                 channels=features,
                                 markers=features)
