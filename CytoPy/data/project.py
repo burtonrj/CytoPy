@@ -86,7 +86,7 @@ class Project(mongoengine.Document):
     subjects = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
     start_date = mongoengine.DateTimeField(default=datetime.datetime.now)
     owner = mongoengine.StringField(requred=True)
-    experiments = mongoengine.EmbeddedDocumentListField(Experiment)
+    experiments = mongoengine.ListField(mongoengine.ReferenceField(Experiment, reverse_delete_rule=4))
     data_directory = mongoengine.StringField(required=True)
 
     meta = {
@@ -101,7 +101,8 @@ class Project(mongoengine.Document):
         if not os.path.isdir(self.data_directory):
             warn(f"Could not locate data directory at path {self.data_directory}, all further operations "
                  f"will likely resolve in errors as single cell data will not be attainable. Update the "
-                 f"data directory before continuing using the 'update_data_directory' method.")
+                 f"data directory before continuing using the 'update_data_directory' method.",
+                 stacklevel=2)
 
     def update_data_directory(self,
                               data_directory: str,
@@ -132,10 +133,11 @@ class Project(mongoengine.Document):
             for f in e.fcs_files:
                 f.data_directory = data_directory
                 f.save()
+            e.data_directory = data_directory
+            e.save()
         if move:
             for f in os.listdir(self.data_directory):
-                shutil.move(os.path.join(self.data_directory, f),
-                            data_directory)
+                shutil.move(os.path.join(self.data_directory, f), data_directory)
             shutil.rmtree(self.data_directory)
         self.data_directory = data_directory
         self.save()
@@ -159,8 +161,8 @@ class Project(mongoengine.Document):
             If requested experiment does not exist in this project
         """
         try:
-            return self.experiments.get(experiment_id=experiment_id)
-        except mongoengine.DoesNotExist:
+            return [e for e in self.experiments if e.experiment_id == experiment_id][0]
+        except IndexError:
             raise MissingExperimentError(f"Invalid experiment; {experiment_id} does not exist")
 
     def add_experiment(self,
@@ -191,8 +193,9 @@ class Project(mongoengine.Document):
         """
         if experiment_id in [x.experiment_id for x in self.experiments]:
             raise DuplicateExperimentError(f"Experiment with id {experiment_id} already exists!")
-        exp = Experiment(experiment_id=experiment_id)
+        exp = Experiment(experiment_id=experiment_id, data_directory=self.data_directory)
         exp.generate_panel(panel_definition=panel_definition)
+        exp.save()
         self.experiments.append(exp)
         self.save()
         return exp
@@ -287,9 +290,7 @@ class Project(mongoengine.Document):
         if experiment_id not in self.list_experiments():
             raise MissingExperimentError(f"No such experiment {experiment_id}")
         exp = self.get_experiment(experiment_id)
-        for f in exp.fcs_files:
-            f.delete()
-        self.experiments = [e for e in self.experiments if e.experiment_id != experiment_id]
+        exp.delete()
 
     def delete(self,
                delete_h5_data: bool = True,
@@ -311,8 +312,10 @@ class Project(mongoengine.Document):
         --------
         None
         """
-        if delete_h5_data:
-            shutil.rmtree(self.data_directory)
         for p in self.subjects:
             p.delete()
+        for e in self.experiments:
+            e.delete()
         super().delete(*args, **kwargs)
+        if delete_h5_data:
+            shutil.rmtree(self.data_directory)

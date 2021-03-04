@@ -158,7 +158,7 @@ def test_add_population(example_populated_experiment):
     # Check indexes
     pop_idx = {p.population_name: p.index for p in fg.populations}
     for name, expected_n in zip(["root", "pop1", "pop2", "pop3"],
-                                [30000, 24000, 12000, 6000]):
+                                [30000, 15042, 7565, 3804]):
         assert len(pop_idx.get(name)) == expected_n
     # Check trees
     assert all([x in fg.tree.keys() for x in ["root", "pop1", "pop2", "pop3"]])

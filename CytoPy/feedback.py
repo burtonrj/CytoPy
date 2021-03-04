@@ -91,12 +91,3 @@ def vprint(verbose: bool):
     """
     return print if verbose else lambda *a, **k: None
 
-
-def _warning(message: str, *args, **kwargs):
-    """
-    Monkeypatch to surpress excessive text in warnings.
-    """
-    print(message)
-
-
-warnings.showwarning = _warning
