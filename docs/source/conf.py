@@ -2,12 +2,12 @@ import sys
 import os
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, root_dir)
-sys.path.append(f'{root_dir}/CytoPy')
-sys.path.append(f'{root_dir}/CytoPy/data')
-sys.path.append(f'{root_dir}/CytoPy/flow')
-sys.path.append(f'{root_dir}/CytoPy/flow/plotting')
-sys.path.append(f'{root_dir}/CytoPy/flow/clustering')
-sys.path.append(f'{root_dir}/CytoPy/flow/cell_classifier')
+sys.path.append(f'{root_dir}/cytopy')
+sys.path.append(f'{root_dir}/cytopy/data')
+sys.path.append(f'{root_dir}/cytopy/flow')
+sys.path.append(f'{root_dir}/cytopy/flow/plotting')
+sys.path.append(f'{root_dir}/cytopy/flow/clustering')
+sys.path.append(f'{root_dir}/cytopy/flow/cell_classifier')
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -28,7 +28,7 @@ sys.path.append(f'{root_dir}/CytoPy/flow/cell_classifier')
 
 # -- Project information -----------------------------------------------------
 
-project = 'CytoPy'
+project = 'cytopy'
 copyright = '2021, Ross Burton'
 author = 'Ross Burton'
 
