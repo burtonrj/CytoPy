@@ -751,3 +751,16 @@ def test_polygon_fit_predict(gate):
     assert {p.population_name for p in pops} == {"Pop1", "Pop2"}
     assert sum([1900 < len(p.index) < 2100 for p in pops]) == 1
     assert sum([900 < len(p.index) < 1100 for p in pops]) == 1
+
+
+def create_boolean_example_data():
+    data, labels = make_blobs(n_samples=5000,
+                              n_features=2,
+                              cluster_std=1,
+                              centers=[(1., 1.), (3.0, 5.0), (4.0, 1.0)],
+                              random_state=42)
+    data = pd.DataFrame(data, columns=["X", "Y"])
+    a = data[(data.X < 4) & (data.Y < 4)]
+    b = data[(data.X > 2) & (data.Y < 4)]
+    c = data[(data.X > -2) & (data.Y > 2)]
+    return a, b, c

@@ -514,7 +514,9 @@ class FileGroup(mongoengine.Document):
         feedback(f"{population}: {round(training_prop_of_root, 3)}% of root in primary data")
         feedback(f"Predicted in ctrl: {round(ctrl_prop_of_root, 3)}% of root in control data")
         ctrl = ctrl.iloc[np.where(ctrl_labels == 1)[0]]
-        return transformer.inverse_scale(data=ctrl, features=list(ctrl.columns))
+        if transformer:
+            return transformer.inverse_scale(data=ctrl, features=list(ctrl.columns))
+        return ctrl
 
     def load_population_df(self,
                            population: str,
@@ -564,6 +566,7 @@ class FileGroup(mongoengine.Document):
                 data = apply_transform(data=data,
                                        method=transform,
                                        features=features_to_transform,
+                                       return_transformer=False,
                                        **transform_kwargs)
         if label_downstream_affiliations:
             return self._label_downstream_affiliations(parent=population,

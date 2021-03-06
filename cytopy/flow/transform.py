@@ -648,11 +648,12 @@ def apply_transform_map(data: pd.DataFrame,
     Pandas.DataFrame
         DataFrame with feature transformed
     """
+    data = data.copy()
     kwargs = kwargs or {}
     for feature, method in feature_method.items():
         transform_kwargs = kwargs.get(feature, {})
         data = apply_transform(data=data,
-                               features=feature,
+                               features=[feature],
                                method=method,
                                return_transformer=False,
                                **transform_kwargs)
