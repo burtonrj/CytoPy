@@ -70,13 +70,13 @@ def _valid_multi_label(model):
 
 
 def _valid_classifier(model):
-    for x in ["fit", "fit_predict", "predict"]:
+    for x in ["fit", "predict"]:
         try:
             getattr(model, x)
         except AttributeError:
             raise AttributeError("Invalid classifier provided to SklearnCellClassifier, must be a "
                                  "valid Scikit-Learn class or follow the conventions of the Scikit-Learn "
-                                 "ecosystem; that is, contains methods 'fit', 'fit_predict' and 'predict'")
+                                 "ecosystem; that is, contains methods 'fit' and 'predict'")
 
 
 class SklearnCellClassifier(CellClassifier):

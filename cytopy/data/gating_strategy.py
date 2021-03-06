@@ -232,8 +232,13 @@ class GatingStrategy(mongoengine.Document):
         plot_gate_kwargs = plot_gate_kwargs or {}
         if isinstance(gate, str):
             gate = self.get_gate(gate=gate)
-        parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=False)
-        gate.fit(data=parent_data, ctrl_data=ctrl_parent_data)
+        if isinstance(gate, BooleanGate):
+            data, plot_data = self._load_gate_dataframes_boolean(gate=gate)
+            ctrl_parent_data = None
+        else:
+            data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=False)
+            plot_data = data
+        gate.fit(data=data, ctrl_data=ctrl_parent_data)
         create_plot_kwargs["transform_x"] = create_plot_kwargs.get("transform_x", None) or gate.transform_x
         create_plot_kwargs["transform_y"] = create_plot_kwargs.get("transform_y", None) or gate.transform_y
         create_plot_kwargs["transform_x_kwargs"] = create_plot_kwargs.get("transform_x_kwargs",
@@ -242,7 +247,7 @@ class GatingStrategy(mongoengine.Document):
                                                                           None) or gate.transform_y_kwargs
         plot = FlowPlot(**create_plot_kwargs)
         return plot.plot_gate_children(gate=gate,
-                                       parent=parent_data,
+                                       parent=plot_data,
                                        **plot_gate_kwargs)
 
     def add_hyperparameter_grid(self,
@@ -459,6 +464,28 @@ class GatingStrategy(mongoengine.Document):
             return parent, ctrls
         return parent, None
 
+    def _load_gate_dataframes_boolean(self,
+                                      gate: BooleanGate):
+        """
+        Load Population dataframes for BooleanGate
+
+        Parameters
+        ----------
+        gate: BooleanGate
+
+        Returns
+        -------
+        List
+            List of DataFrames
+        """
+        parent_data = self.filegroup.load_population_df(population=gate.parent,
+                                                        transform=None,
+                                                        label_downstream_affiliations=False)
+        return [self.filegroup.load_population_df(population=pop,
+                                                  transform=None,
+                                                  label_downstream_affiliations=False)
+                for pop in gate.populations], parent_data
+
     def apply_gate(self,
                    gate: str or Gate or ThresholdGate or BooleanGate or PolygonGate or EllipseGate,
                    plot: bool = True,
@@ -521,22 +548,27 @@ class GatingStrategy(mongoengine.Document):
 
         create_plot_kwargs = create_plot_kwargs or {}
         plot_gate_kwargs = plot_gate_kwargs or {}
-        parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm, verbose=verbose)
+        if isinstance(gate, BooleanGate):
+            ctrl_parent_data = None
+            data, parent_data = self._load_gate_dataframes_boolean(gate=gate)
+        else:
+            data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm, verbose=verbose)
+            parent_data = data
         original_method_kwargs = gate.method_kwargs.copy()
 
         if overwrite_method_kwargs is not None:
             gate.method_kwargs = overwrite_method_kwargs
         if gate.ctrl_x is not None:
             assert isinstance(gate, ThresholdGate), "Control gate only supported for ThresholdGate"
-            populations = gate.fit_predict(data=parent_data, ctrl_data=ctrl_parent_data)
-        elif gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search:
+            populations = gate.fit_predict(data=data, ctrl_data=ctrl_parent_data)
+        elif gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search and not isinstance(gate, BooleanGate):
             populations = hyperparameter_gate(gate=gate,
                                               grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
                                               cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
-                                              parent=parent_data,
+                                              parent=data,
                                               verbose=verbose)
         else:
-            populations = gate.fit_predict(data=parent_data)
+            populations = gate.fit_predict(data=data)
         for p in populations:
             self.filegroup.add_population(population=p)
         if verbose:
@@ -955,9 +987,17 @@ class GatingStrategy(mongoengine.Document):
             if isinstance(pop.geom, ThresholdGeom):
                 if x_threshold is None:
                     raise ValueError("For threshold geometry, please provide x_threshold")
+                x_threshold = apply_transform(pd.DataFrame({"x": [x_threshold]}),
+                                              features=["x"],
+                                              method=transforms.get(gate.x),
+                                              **transform_kwargs.get(gate.x)).x.values[0]
                 if pop.geom.y_threshold is not None:
                     if y_threshold is None:
                         raise ValueError("For 2D threshold geometry, please provide y_threshold")
+                    y_threshold = apply_transform(pd.DataFrame({"x": [y_threshold]}),
+                                                  features=["x"],
+                                                  method=transforms.get(gate.y),
+                                                  **transform_kwargs.get(gate.y)).x.values[0]
                 update_threshold(population=pop,
                                  parent_data=parent,
                                  x_threshold=x_threshold,

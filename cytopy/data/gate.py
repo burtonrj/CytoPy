@@ -224,7 +224,7 @@ class Gate(mongoengine.Document):
         method = values.get("method", None)
         assert method is not None, "No method given"
         err = f"Module {method} not supported. See docs for supported methods."
-        assert method in ["manual", "density", "quantile", "time"] + list(globals().keys()), err
+        assert method in ["manual", "density", "quantile", "time", "AND", "OR", "NOT"] + list(globals().keys()), err
         super().__init__(*args, **values)
         self.model = None
         self.x_transformer = None
@@ -232,6 +232,7 @@ class Gate(mongoengine.Document):
         if self.ctrl_classifier:
             params = self.ctrl_classifier_params or {}
             build_sklearn_model(klass=self.ctrl_classifier, **params)
+        self.validate()
 
     def transform(self,
                   data: pd.DataFrame) -> pd.DataFrame:
@@ -1539,24 +1540,21 @@ class BooleanGate(PolygonGate):
     * OR - generates a new population that is a merger of all unique events from all populations in a given
     set of populations
     * NOT - generates a new population that contains all events in some target population that are not
-    present in some set of other populations (requires that user specifies 'target' in method kwargs)
+    present in some set of other populations (taken as the first member of 'populations')
 
     BooleanGate inherits from the PolygonGate and generates a Population with Polygon geometry. This
     allows the user to view the resulting 'gate' as a polygon structure. This means
     """
+    populations = mongoengine.ListField(required=True)
+
     def __init__(self,
                  method: str,
-                 method_kwargs: dict,
+                 populations: list,
                  *args,
                  **kwargs):
         if method not in ["AND", "OR", "NOT"]:
             raise ValueError("method must be one of: 'OR', 'AND' or 'NOT'")
-        if method == "NOT":
-            assert "target" in method_kwargs.keys(), "target required for NOT boolean gate; remember NOT is " \
-                                                     "equivalent to subtraction, so requires a target population " \
-                                                     "to subtract from."
-        assert "populations" in method_kwargs.keys(), "Method kwargs missing 'populations'"
-        super().__init__(*args, method=method, method_kwargs=method_kwargs, **kwargs)
+        super().__init__(*args, method=method, populations=populations, **kwargs)
 
     def _or(self, data: List[pd.DataFrame]) -> pd.DataFrame:
         """
@@ -1595,16 +1593,13 @@ class BooleanGate(PolygonGate):
         return pd.concat(data).drop_duplicates().loc[idx].copy()
 
     def _not(self,
-             target: pd.DataFrame,
              data: List[pd.DataFrame]) -> pd.DataFrame:
         """
         NOT operation, generates index of events that contains all events in some target population that are not
-        present in some set of other populations (requires that user specifies 'target' in method kwargs)
+        present in some set of other populations
 
         Parameters
         ----------
-        target: Pandas.DataFrame
-            DataFrame to subtract from
         data: list
             List of Pandas DataFrames
 
@@ -1613,13 +1608,13 @@ class BooleanGate(PolygonGate):
         Pandas.DataFrame
             New population dataframe
         """
-        subtraction_index = np.unique(np.concatenate([df.index.values for df in data], axis=0), axis=0)
+        target = data[0]
+        subtraction_index = np.unique(np.concatenate([df.index.values for df in data[1:]], axis=0), axis=0)
         idx = np.setdiff1d(target.index.values, subtraction_index)
         return pd.concat(data).drop_duplicates().loc[idx].copy()
 
     def _fit(self,
-             data: List[pd.DataFrame],
-             target: pd.DataFrame or None = None) -> (ShapelyPoly, pd.DataFrame):
+             data: List[pd.DataFrame]) -> (ShapelyPoly, pd.DataFrame):
         """
         Perform boolean operation on given DataFrames of population data
 
@@ -1640,9 +1635,7 @@ class BooleanGate(PolygonGate):
             If target not provided and method is NOT
         """
         if self.method == "NOT":
-            assert target is not None, "target required for NOT boolean gate; remember NOT is equivalent to " \
-                                       "subtraction, so requires a target population to subtract from."
-            data = self._not(target=target, data=data)
+            data = self._not(data=data)
         elif self.method == "OR":
             data = self._or(data=data)
         else:
@@ -1652,7 +1645,7 @@ class BooleanGate(PolygonGate):
 
     def fit(self,
             data: List[pd.DataFrame],
-            target: pd.DataFrame or None = None):
+            ctrl_data=None):
         """
         Perform boolean operation on given DataFrames of population data. Will generate
         a population with dummy name 'A'. Call 'label_children' to assign a simple name.
@@ -1661,20 +1654,20 @@ class BooleanGate(PolygonGate):
         ----------
         data: list
             List of Pandas DataFrames, one for each population
-        target: Pandas.DataFrame
 
         Returns
         -------
         None
         """
-        poly, _ = self._fit(data=data, target=target)
+        data = [self.transform(x) for x in data]
+        poly, _ = self._fit(data=data)
         self.add_child(ChildPolygon(name="A",
                                     geom=PolygonGeom(x_values=poly.exterior.xy[0].tolist(),
                                                      y_values=poly.exterior.xy[1].tolist())))
 
     def fit_predict(self,
                     data: List[pd.DataFrame],
-                    target: pd.DataFrame or None = None):
+                    ctrl_data=None):
         """
         Perform boolean operation on given DataFrames of population data
 
@@ -1695,7 +1688,8 @@ class BooleanGate(PolygonGate):
         AssertionError
             If target is not provided and method is NOT
         """
-        poly, pop_data = self._fit(data=data, target=target)
+        data = list(map(self.transform, data))
+        poly, pop_data = self._fit(data=data)
         pop = self._generate_populations(data=pop_data, polygons=[poly])[0]
         pop.population_name = self.children[0].name
         return [pop]

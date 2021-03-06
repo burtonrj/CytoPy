@@ -69,7 +69,7 @@ command::
 
 3. Inside our environment, we want to call the following in this order::
 
-    pip install numpy
+    pip install numpy==1.19
     pip install cytopy
 
 .. warning::
