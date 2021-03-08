@@ -53,9 +53,7 @@ for information about venv) to manage your Python environments.
 
 **Step 2: setup an environment**
 
-1. If you're on a Windows machine, then open Anaconda Prompt, either from the start menu
-or from the Anaconda Navigator. On Linux or Max, open a new terminal.
-2. Create an environment with the following command::
+If you're on a Windows machine, then open Anaconda Prompt, either from the start menu or from the Anaconda Navigator. On Linux or Max, open a new terminal. Now create an environment with the following command::
 
     conda create --name CytoPy python=3.8
 
@@ -67,7 +65,7 @@ command::
 
 **Step 3: install CytoPy**
 
-3. Inside our environment, we want to call the following in this order::
+Inside our environment, we want to call the following in this order::
 
     pip install numpy==1.19
     pip install cytopy
@@ -78,11 +76,13 @@ command::
     C extensions. It is recommended to use pip and not conda to install Numpy
     and CytoPy.
 
-4. Next we recommend you install Jupyter and IPython to interact with CytoPy. You
+**Step 4: install Jupyter (optional)**
+
+Next we recommend you install Jupyter and IPython to interact with CytoPy. You
 can also use CytoPy in the Python console or using Spyder. To install Jupyter and
 IPython you can run::
 
-    conda install jupyter ipython
+    pip install jupyter ipython
 
 To make your CytoPy environment available to Jupyter, you want to run the following::
 
