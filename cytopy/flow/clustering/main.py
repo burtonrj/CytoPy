@@ -222,11 +222,11 @@ def _assign_metalabels(data: pd.DataFrame,
     return pd.merge(data, metadata[["sample_id", "cluster_label", "meta_label"]], on=["sample_id", "cluster_label"])
 
 
-def _summarise_clusters(data: pd.DataFrame,
-                        features: list,
-                        scale: str or None = None,
-                        scale_kwargs: dict or None = None,
-                        summary_method: str = "median"):
+def summarise_clusters(data: pd.DataFrame,
+                       features: list,
+                       scale: str or None = None,
+                       scale_kwargs: dict or None = None,
+                       summary_method: str = "median"):
     """
     Average cluster parameters along columns average to generated a centroid for
     meta-clustering
@@ -319,7 +319,7 @@ def sklearn_metaclustering(data: pd.DataFrame,
     model = globals()[method](**kwargs)
     vprint_(f"------ {method} meta-clustering ------")
     vprint_("...summarising clusters")
-    metadata = _summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
+    metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
     vprint_("...clustering the clusters")
     metadata["meta_label"] = model.fit_predict(metadata[features].values)
     if print_performance_metrics:
@@ -370,7 +370,7 @@ def phenograph_metaclustering(data: pd.DataFrame,
     """
     vprint_ = vprint(verbose)
     vprint_("----- Phenograph meta-clustering ------")
-    metadata = _summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
+    metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
     vprint_("...summarising clusters")
     vprint_("...clustering the clusters")
     communities, graph, q = phenograph.cluster(metadata[features].values, **kwargs)
@@ -449,7 +449,7 @@ def consensus_metacluster(data: pd.DataFrame,
         one sample
     """
     vprint_ = vprint(verbose)
-    metadata = _summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
+    metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
     assert (metadata.shape[0] * resample_proportion) > largest_cluster_n, \
         f"Maximum number of meta clusters (largest_cluster_n) is currently set to {largest_cluster_n} but there are " \
         f"only {metadata.shape[0] * resample_proportion} clusters to cluster in each sample. Either decrease " \
@@ -769,7 +769,7 @@ class Clustering:
         self
         """
         self.data["meta_label"] = None
-        return  self
+        return self
 
     def meta_cluster(self,
                      func: callable,

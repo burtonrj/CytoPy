@@ -33,13 +33,13 @@ changes or you introduce a new data resource, CytoPy can accommodate this data
 without redesigning your existing database or disrupting your workflow.
 
 We encourage the end user to adopt MongoDB, either running on your local
-machine as a service or hosted online with `Mongo Atlas<https://www.mongodb.com/cloud/atlas>`_.
-If however, this is not a suitable option, we provide `CytoPy-SQL <https://github.com/burtonrj/CytoPySQL>`_
-as a possible alternative; this uses SQLAlchemy as it's object-relationship mapper and
-is suitable to use with SQLite. Although, this package is under active development
-and will not offer the same flexibility as CytoPy.
+machine as a service or hosted online with `Mongo Atlas <https://www.mongodb.com/cloud/atlas>`_.
+Under active development is `CytoPy-SQL <https://github.com/burtonrj/CytoPySQL>`_
+which in the future will serve as a lighter alternative to CytoPy; this uses SQLAlchemy
+as it's object-relationship mapper and is suitable to use with SQLite. Although,
+this package will not offer the same flexibility as CytoPy.
 
-Our accompanying `manuscript <https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2>`_
+Our accompanying `manuscript <https://www.biorxiv.org/content/10.1101/2020.04.08.031898v3>`_
 details the application of CytoPy to a novel immunophenotyping project focused on
 patients receiving peritoneal dialysis who were admitted on day 1 of acute peritonitis before
 commencing antibiotic treatment. You can find the accompanying Jupyter Notebooks
@@ -63,8 +63,8 @@ and `@burtondatasci <https://twitter.com/burtondatasci>`_
     Installation <1_install>
     Introduction to the framework and managing data <2_data>
     Tutorials <3_tuts>
-    API Reference <8_reference>
-    License <9_license>
+    API Reference <4_reference>
+    License <5_license>
 
 Indices and tables
 ==================
