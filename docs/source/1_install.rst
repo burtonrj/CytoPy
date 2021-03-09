@@ -2,12 +2,9 @@
 Getting started
 ****************
 
-.. note:: CytoPy assumes you are familiar with Python version 3,
-have some experience with object-orientated programming, Numpy and Pandas.
-Preferably you also have some experience with Scikit-Learn and general
-data science principles.
+.. note:: CytoPy assumes you are familiar with Python version 3, have some experience with object-orientated programming, Numpy and Pandas. Preferably you also have some experience with Scikit-Learn and general data science principles.
 
-If the above note is daunting, please don't threat! There are lots of resources
+If the above note is daunting, please don't fret! There are lots of resources
 linked below and I believe with 6/8 weeks hard work anyone can grasp enough to
 start using CytoPy. So if you're brand new to Python, please start at one of the
 following resources:
@@ -24,9 +21,7 @@ If you're familiar with Docker and would like to avoid installing CytoPy and
 MongoDB on your local system, you can obtains a docker image for CytoPy
 `here <>`_.
 
-.. note:: CytoPy is cross-platform compatible but has been tested on Windows 10,
-Ubuntu 20.04, and Ubuntu 18.04. If you experience issues on other platforms please
-raise an issue on GitHub.
+.. note:: CytoPy is cross-platform compatible but has been tested on Windows 10, Ubuntu 20.04, and Ubuntu 18.04. If you experience issues on other platforms please raise an issue on GitHub.
 
 Installing MongoDB
 ###################

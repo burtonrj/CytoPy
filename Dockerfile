@@ -4,10 +4,11 @@ FROM mongo:latest
 RUN apt-get update && apt-get -y update
 RUN apt-get install -y build-essential python3.8 python3-pip python3-dev
 RUN pip3 -q install pip --upgrade
+RUN apt-get update
 
 # Install CytoPy & Jupyter Notebook
-RUN pip3 install numpy==1.19 && \
-    pip3 install cytopy
+RUN pip3 install numpy==1.19
+RUN pip3 install cytopy
 
 # Add Tini. Tini operates as a process subreaper for jupyter. This prevents kernel crashes.
 ENV TINI_VERSION v0.6.0

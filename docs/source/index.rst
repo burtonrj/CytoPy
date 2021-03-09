@@ -34,20 +34,17 @@ without redesigning your existing database or disrupting your workflow.
 
 We encourage the end user to adopt MongoDB, either running on your local
 machine as a service or hosted online with `Mongo Atlas <https://www.mongodb.com/cloud/atlas>`_.
-Under active development is `CytoPy-SQL <https://github.com/burtonrj/CytoPySQL>`_
-which in the future will serve as a lighter alternative to CytoPy; this uses SQLAlchemy
-as it's object-relationship mapper and is suitable to use with SQLite. Although,
-this package will not offer the same flexibility as CytoPy.
+Under active development is CytoPy-SQL which in the future will serve as a lighter alternative to CytoPy; this uses SQLAlchemy as it's object-relationship mapper and is suitable to use with SQLite. Although, this package will not offer the same flexibility as CytoPy.
 
 Our accompanying `manuscript <https://www.biorxiv.org/content/10.1101/2020.04.08.031898v3>`_
 details the application of CytoPy to a novel immunophenotyping project focused on
 patients receiving peritoneal dialysis who were admitted on day 1 of acute peritonitis before
 commencing antibiotic treatment. You can find the accompanying Jupyter Notebooks
-for this study `here <https://github.com/burtonrj/CytoPy_Manuscript>`_.
+for this study `here <https://github.com/burtonrj/CytoPyManuscript>`_.
 
 CytoPy was authored by `Ross Burton <https://www.linkedin.com/in/burtonbiomedical/>`_
 and the `Eberl Lab <https://www.cardiff.ac.uk/people/view/78691-eberl-matthias>`_
-at `Cardiff University Infection and Immunity Research Institute <https://www.cardiff.ac.uk/medicine/research/divisions/infection-and-immunity>`_.
+at `Cardiff University’s Systems Immunity Research Institute <https://www.cardiff.ac.uk/systems-immunity>`_.
 CytoPy is maintained on GitHub (https://github.com/burtonrj/CytoPy) and all the latest developments
 can be found here. We are eager to expand and improve it's capabilities and are
 open to contributions and collaborations. If you would like to contribute to CytoPy
