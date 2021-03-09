@@ -1,7 +1,12 @@
+.git
+.gitignore
+assets
+README.md
+.idea
+.pytest_cache
 env
 build
 dist
-dockerimage
 *.tar.gz
 *.whl
 *.csv
@@ -18,5 +23,4 @@ BatchEffectRemoval_Local
 *.bin
 *.tree
 *.weights
-<<<<<<< HEAD
 *.ipynb
