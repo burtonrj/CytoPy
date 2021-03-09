@@ -3,45 +3,40 @@
   <h1 align="center">CytoPy: a cytometry analysis framework for Python</h1>
 </p>
 
+<<<<<<< HEAD
 <b>CytoPy is under peer-review and active development. A stable release is scheduled for March 2021 but in the meantime some functionality may change</b>
 
 In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community.
 This expansion is looking to soon replace traditional methods such as manual gating with sophisticated automated algorithms.
+=======
+# Overview
+>>>>>>> dev_db_refactor
 
-Although exciting, this can be daunting to those from a traditional immunology background and those 
-that are new to programming. Additionally, current tools have a loose structure in the steps taken in analysis, 
-resulting in large custom scripts, poor reproducibility, and insufficient data management.
+In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community. This expansion is looking to soon replace traditional methods such as manual gating with sophisticated automated algorithms.
 
-CytoPy was created to address these issues. It was created with the general philosophy that given some 
-cytometry data and a clinical/experimental endpoint, we wish to find what properties separate groups (e.g. what cell populations
-are important for identifying a disease? What phenotypes are changing in response to a stimulus? etc). 
-The pipeline itself is centered around a MongoDB database, is built in  the Python programming language, 
-and designed with a 'low code' API, greatly 
-simplifying cytometry analysis. We can break it down into the following steps that can be completed with minimal 
-code required:
+Although exciting, most of the tools and frameworks on offer are implemented in the R programming language and offer little structure and data management for those that are new to cytometry bioinformatics. This is especially difficult for those with limited experience with R and Bioconductor. We offer an alternative solution implemented in Python, a beginner friendly language that prides itself on readable syntax.
 
-1. Data uploading
-2. Pre-processing
-3. Quantifying inter-sample variation and choosing training data
-4. Supervised cell classification 
-5. High-dimensional clustering
-6. Feature extraction, selection, and description
+The CytoPy framework offers an object orientated design built upon <a href=http://mongoengine.org/>mongoengine</a> for flexible database designs that can incorporate any project, no matter how complex. CytoPy's toolkit populates this database with common data structures to represent cell populations identified in your cytometry data, whilst being algorithm agnostic and encouraging the use and comparison of multiple techniques.
 
-You will notice that we perform both supervised cell classification and high-dimensional clustering.
-Supervised classification being training samples, gated according to some 'gating strategy', being used
-to train a classifier. Alternatively high-dimensional clustering (by PhenoGraph or FlowSOM) involves clustering 
-cells in a completely unbiased fashion. CytoPy provides access to both methodologies as we observe 
-that both have benefits and failings.
+Features we offer are:
 
-CytoPy is algorithm agnostic and provides a general interface for accessing the tools provided by Scikit-Learn whilst following the terminology and signatures common to this library. If you would like to expand CytoPy and add additional methods for autonomous gating, supervised classificaiton or high dimensional clustering, please contact me at burtonrj@cardiff.ac.uk, raise an issue or make a pull request.
+* Dynamic central document-based data repository
+* Autonomous gating with hyperparameter search and local normalisation to help with tricky batch effects
+* Global batch effect correction with the <a href=https://github.com/slowkow/harmonypy>Harmony algoritm</a>
+* Supervised classification supporting any classifier in the Scikit-Learn ecosystem
+* High dimensional clustering, including but not limited to FlowSOM and Phenograph
+* Feature extracting and selection techniques to summarise and interrogate your identified populations of interest
+* A range of utilities from sampling methods, common transformations (logicle, arcsine, hyperlog etc), and dimension reduction (including PHATE, UMAP, tSNE, PCA and KernelPCA)
 
-For more details we refer you to our pre-print <a href='https://www.biorxiv.org/content/10.1101/2020.04.08.031898v2'>manuscript</a> and software documentation. Our documentation contains 
-a detailed tutorials for each of the above steps (https://cytopy.readthedocs.io/)
+To find out more and for installation instructions, please read our documentation at https://cytopy.readthedocs.io/en/latest/
 
-## Installation
+CytoPy was authored by <a href=https://www.linkedin.com/in/burtonbiomedical/>Ross Burton</a>
+and the <a href=https://www.cardiff.ac.uk/people/view/78691-eberl-matthias>Eberl Lab</a>
+at <a href=https://www.cardiff.ac.uk/medicine/research/divisions/infection-and-immunity>Cardiff University Infection and Immunity Research Institute</a>
 
-### Python and MongoDB
+# Release notes
 
+<<<<<<< HEAD
 CytoPy was built in Python 3.7 and uses MongoDB for data management. 
 
 For installing MongoDB the reader should refer to https://docs.mongodb.com/manual/installation/
@@ -69,5 +64,16 @@ To install CytoPy and it's requirements, first download the source code, activat
 
 CytoPy is licensed under the MIT license from the Open Source Initiative. CytoPy was authored by <a href='https://www.linkedin.com/in/burtonbiomedical/'>Ross Burton</a> and the <a href='https://www.cardiff.ac.uk/people/view/78691-eberl-matthias'>Eberl Lab</a>  at <a href='https://www.cardiff.ac.uk/systems-immunity'>Cardiff University's Systems Immunity Research Institute</a>. This project is a working progress and we are eager to expand and improve its capabilities. If you would like to contribute to CytoPy please make a pull request or email us at burtonrj@cardiff.ac.uk. For news and latest developments, follow us on Twitter <a href='https://twitter.com/EberlLab'>@EberlLab</a> and <a href='https://twitter.com/burtondatasci'>@burtondatasci</a>
 
+=======
+* 2.0.0 (stable) - This new build represents a refactored framework that is not compatible with previous builds. Expanded methods and a restructured design.
+* 1.0.1 (premature) - This release corrects some major errors encountered in the flow.clustering module that was preventing clusters from being saved to the database and retrieved correctly.
+* 1.0.0 (premature) - This is the first major release of CytoPy following the early release of v0.0.1 and updated in v0.0.5 and v0.1.0. This first major release includes fundamental changes to data management and therefore is not backward compatible with previous versions.
 
+# Contributors and future directions
+>>>>>>> dev_db_refactor
 
+We are looking for open source contributors to help with the following projects:
+
+* Graphical user interface deployed with Electron JS to expose CytoPy to scientists without training in Python
+* Expansion of test coverage for version 2.0.0
+* CytoPySQL: a lightweight clone of CytoPy that swaps out mongoengine for PeeWee ORM, granting the use of SQLite for those that cannot host a MongoDB service on their local machine or on Mongo Atlas
