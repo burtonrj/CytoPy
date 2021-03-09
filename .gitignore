@@ -18,5 +18,4 @@ BatchEffectRemoval_Local
 *.bin
 *.tree
 *.weights
-<<<<<<< HEAD
 *.ipynb
