@@ -50,7 +50,7 @@ PhenoGraph = "^1.5.6"
 pingouin = "^0.3.8"
 setuptools = "^49.6.0"
 uncertainties="^3.1"
-FlowUtils = { git = "https://github.com/whitews/FlowUtils.git"}
+flowutils = "0.9.1"
 
 [tool.poetry.dev-dependencies]
 
