@@ -15,17 +15,10 @@ that require integration with other data sources.
 CytoPy was created to address these issues. CytoPy is designed with the following
 principles:
 
-* Common tasks are structured into modules but wherever possible, these modules are algorithm-agnostic,
-with the user encouraged to try different methods.
-* Different methods of categorising/classifying cells (e.g. autonomous gates,
-high-dimensional clustering, or supervised classification) all generate the same
-fundamental data: Population's, which encapsulate events of similar phenotype
-* The results of our analysis are stored side-by-side with meta data and other
-data sources in a central data repository, exposing meta data at any point in
-our analysis.
-* Common tasks such as gating, clustering, supervised classification, plotting,
-and summarising your data should be achieved with as few lines of code as possible. Therefore
-CytoPy attempts to provide a 'low-code' API for cytometry bioinformatics.
+* Common tasks are structured into modules but wherever possible, these modules are algorithm-agnostic, with the user encouraged to try different methods.
+* Different methods of categorising/classifying cells (e.g. autonomous gates, high-dimensional clustering, or supervised classification) all generate the same fundamental data: Population's, which encapsulate events of similar phenotype
+* The results of our analysis are stored side-by-side with meta data and other data sources in a central data repository, exposing meta data at any point in our analysis.
+* Common tasks such as gating, clustering, supervised classification, plotting, and summarising your data should be achieved with as few lines of code as possible. Therefore CytoPy attempts to provide a 'low-code' API for cytometry bioinformatics.
 
 The framework uses MongoDB as it's central data repository, chosen for it's
 schema-less design and ability to scale. This means that if your study design
