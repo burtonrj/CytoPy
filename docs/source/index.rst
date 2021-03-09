@@ -34,7 +34,7 @@ without redesigning your existing database or disrupting your workflow.
 
 We encourage the end user to adopt MongoDB, either running on your local
 machine as a service or hosted online with `Mongo Atlas <https://www.mongodb.com/cloud/atlas>`_.
-Under active development is CytoPy-SQL which in the future will serve as a lighter alternative to CytoPy; this uses SQLAlchemy as it's object-relationship mapper and is suitable to use with SQLite. Although, this package will not offer the same flexibility as CytoPy.
+Under active development is CytoPy-SQL which in the future will serve as a lighter alternative to CytoPy; this will PeeWee as it's object-relationship mapper and is suitable to use with SQLite. Although, this package will not offer the same flexibility as CytoPy.
 
 Our accompanying `manuscript <https://www.biorxiv.org/content/10.1101/2020.04.08.031898v3>`_
 details the application of CytoPy to a novel immunophenotyping project focused on

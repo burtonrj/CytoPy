@@ -6,7 +6,6 @@ README.md
 .pytest_cache
 env
 build
-dist
 *.tar.gz
 *.whl
 *.csv

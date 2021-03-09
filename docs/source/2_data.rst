@@ -357,3 +357,5 @@ accompany our manuscript:
 
 * Setting up `FlowCAP <https://github.com/burtonrj/CytoPyManuscript/blob/main/01%20Validation/setup/Sup.%20Add%20FlowCAP.ipynb>`_
 * Setting up the `Peritonitis project <https://github.com/burtonrj/CytoPyManuscript/blob/main/02%20Application/setup/Setup%20project.ipynb>`_
+
+The original Peritonitis dataset can be obtained from this link: https://drive.google.com/file/d/1y6qL_7l2unDoUkNqlr9Xqubq5_sP1E14/view?usp=sharing
