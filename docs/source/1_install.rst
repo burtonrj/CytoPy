@@ -14,15 +14,16 @@ following resources:
 * https://www.youtube.com/watch?v=rfscVS0vtbw (Basics)
 * https://jakevdp.github.io/PythonDataScienceHandbook/ (Data science)
 
+.. note:: CytoPy is cross-platform compatible but has been tested on Windows 10, Ubuntu 20.04, and Ubuntu 18.04. If you experience issues on other platforms please raise an issue on GitHub.
+
 Docker
 #######
 
 If you're familiar with Docker and would like to avoid installing CytoPy and
 MongoDB on your local system, you can obtains a docker image for CytoPy
-`here <>`_.
+`here <https://hub.docker.com/r/burtonrj/cytopy>`_.
 
-.. note:: CytoPy is cross-platform compatible but has been tested on Windows 10, Ubuntu 20.04, and Ubuntu 18.04. If you experience issues on other platforms please raise an issue on GitHub.
-
+.. note:: This docker image comes with Jupyter pre-installed which will launch on port 8888; ensure the port is free before running the image.
 Installing MongoDB
 ###################
 
