@@ -24,9 +24,10 @@ RUN curl -s https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
 WORKDIR /usr/local/
 COPY dist/ dist/
 RUN pip3 install wheel
-RUN pip3 install numpy==1.19
 RUN pip3 install jupyter
-RUN pip3 install /usr/local/dist/CytoPy-2.0-py3-none-any.whl
+RUN pip3 install numpy==1.19
+RUN pip3 install cytopy
+#RUN pip3 install /usr/local/dist/CytoPy-2.0-py3-none-any.whl
 
 ### Add Tini. Tini operates as a process subreaper for jupyter. This prevents kernel crashes.
 ENV TINI_VERSION v0.6.0
@@ -34,8 +35,7 @@ ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /usr/
 RUN chmod +x /usr/bin/tini
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-### When container runs launch Jupyter Notebooks
-CMD ["jupyter", "notebook", "--port=8888", "--no-browser", "--ip=0.0.0.0", "--allow-root"]
+
 
 
 

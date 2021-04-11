@@ -259,7 +259,7 @@ class FileGroup(mongoengine.Document):
             assert source in f.keys(), f"Invalid source, expected one of: {f.keys()}"
             channels = [x.decode("utf-8") for x in f[f"mappings/{source}/channels"][:]]
             markers = [x.decode("utf-8") for x in f[f"mappings/{source}/markers"][:]]
-            data = set_column_names(df=pd.DataFrame(f[source][:]),
+            data = set_column_names(df=pd.DataFrame(f[source][:], dtype=np.float32),
                                     channels=channels,
                                     markers=markers,
                                     preference=self.columns_default)
