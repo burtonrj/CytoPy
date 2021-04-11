@@ -3,8 +3,6 @@
   <h1 align="center">CytoPy: a cytometry analysis framework for Python</h1>
 </p>
 
-In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community. This expansion is looking to soon replace traditional methods such as manual gating with sophisticated automated algorithms.
-
 # Overview
 
 In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community. This expansion is looking to soon replace traditional methods such as manual gating with sophisticated automated algorithms.
