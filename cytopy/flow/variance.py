@@ -191,7 +191,8 @@ def calculate_ref_sample(data: pd.DataFrame,
     # Calculate covar for each
     data = data.dropna(axis=1, how="any")
     features = features or list(data.columns)
-    covar = {k: np.cov(v[features], rowvar=False) for k, v in data.groupby(by="sample_id")}
+    covar = {k: np.cov(v[features].astype(np.float32), rowvar=False)
+             for k, v in data.groupby(by="sample_id")}
     feedback('Search for sample with smallest average euclidean distance to all other samples...')
     # Make comparisons
     sample_ids = list(covar.keys())

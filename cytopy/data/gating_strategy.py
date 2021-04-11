@@ -96,7 +96,7 @@ class GatingStrategy(mongoengine.Document):
 
     Attributes
     -----------
-    template_name: str, required
+    name: str, required
         unique identifier for template
     gates: EmbeddedDocumentList
         list of Gate documents
