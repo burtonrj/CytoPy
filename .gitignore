@@ -1,6 +1,5 @@
 env
 build
-dist
 dockerimage
 *.tar.gz
 *.whl
