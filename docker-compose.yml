@@ -1,0 +1,14 @@
+version: '3'
+services:
+  CytoPy:
+    image: burtonrj/cytopy:latest
+    ports:
+      - "8888:8888"
+    volumes:
+    - /DockerData/notebooks:/notebooks
+    - /DockerData/hdf:/hdf
+    working_dir: "/"
+    links:
+      - mongodb
+  mongodb:
+    image: mongo:4.4-bionic
