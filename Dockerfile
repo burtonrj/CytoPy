@@ -1,12 +1,10 @@
-FROM mongo:bionic
+FROM ubuntu:focal
 
 ### Update and install Python
 # Upgrade installed packages
 RUN apt-get update && apt-get upgrade -y && apt-get clean
 
 # Python package management and basic dependencies
-RUN apt-get install -y build-essential libssl-dev libffi-dev \
-    libxml2-dev libxslt1-dev zlib1g-dev
 RUN apt-get install -y curl python3.8 python3.8-dev python3.8-distutils
 
 # Register the version in alternatives
