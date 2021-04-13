@@ -11,6 +11,8 @@
 [![License]( https://img.shields.io/pypi/l/cytopy)](https://opensource.org/licenses/MIT)
 [![LastCommit](https://img.shields.io/github/last-commit/burtonrj/CytoPy)](https://github.com/burtonrj/CytoPy)
 
+**Warning: Docker image currently failing - fix in progress - 13/04/20**
+
 # Overview
 
 In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community. This expansion is looking to soon replace traditional methods such as manual gating with sophisticated automated algorithms.
