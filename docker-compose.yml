@@ -5,9 +5,9 @@ services:
     ports:
       - "8888:8888"
     volumes:
-    - /DockerData/notebooks:/notebooks
-    - /DockerData/hdf:/hdf
-    working_dir: "/"
+    - /DockerData/notebooks:/home/notebooks
+    - /DockerData/hdf:/home/hdf
+    working_dir: "/home"
     links:
       - mongodb
   mongodb:
