@@ -3,6 +3,14 @@
   <h1 align="center">CytoPy: a cytometry analysis framework for Python</h1>
 </p>
 
+[![PyPi](https://img.shields.io/pypi/v/cytopy)](https://pypi.org/project/cytopy/)
+[![Readthedocs](https://img.shields.io/readthedocs/cytopy)](https://cytopy.readthedocs.io/en/latest/)
+[![Python](https://img.shields.io/pypi/pyversions/cytopy)](https://pypi.org/project/cytopy/)
+[![Wheel](https://img.shields.io/pypi/wheel/cytopy)](https://pypi.org/project/cytopy/)
+[![Downloads](https://img.shields.io/pypi/dm/cytopy)](https://pypi.org/project/cytopy/)
+[![License]( https://img.shields.io/pypi/l/cytopy)](https://opensource.org/licenses/MIT)
+[![LastCommit](https://img.shields.io/github/last-commit/burtonrj/CytoPy)](https://github.com/burtonrj/CytoPy)
+
 # Overview
 
 In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community. This expansion is looking to soon replace traditional methods such as manual gating with sophisticated automated algorithms.
