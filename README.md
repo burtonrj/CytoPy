@@ -3,25 +3,25 @@
   <h1 align="center">CytoPy: a cytometry analysis framework for Python</h1>
 </p>
 
-.. image:: https://img.shields.io/pypi/v/cytopy
+..image:: https://img.shields.io/pypi/v/cytopy
     :target: https://pypi.org/project/cytopy/
     :alt: PyPi
 
-.. image:: https://img.shields.io/pypi/pyversions/cytopy
+..image:: https://img.shields.io/pypi/pyversions/cytopy
 
-.. image:: https://img.shields.io/pypi/wheel/cytopy
+..image:: https://img.shields.io/pypi/wheel/cytopy
     :target: https://pypi.org/project/cytopy/
     :alt: PyPi Wheel
 
-.. image:: https://img.shields.io/pypi/dm/cytopy
+..image:: https://img.shields.io/pypi/dm/cytopy
     :target: https://pypi.org/project/cytopy/
     :alt: PyPi downloads
 
-.. image:: https://img.shields.io/pypi/l/cytopy
+..image:: https://img.shields.io/pypi/l/cytopy
     :target: https://opensource.org/licenses/MIT
     :alt: License
 
-.. image:: https://img.shields.io/github/last-commit/burtonrj/CytoPy
+..image:: https://img.shields.io/github/last-commit/burtonrj/CytoPy
 
 
 
