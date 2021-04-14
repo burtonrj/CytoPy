@@ -7,8 +7,11 @@ services:
     volumes:
     - /DockerData/notebooks:/home/notebooks
     - /DockerData/hdf:/home/hdf
-    working_dir: "/home"
+    working_dir: "/home/"
     links:
       - mongodb
+    entrypoint: sh -c 'jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=/home/notebooks --allow-root'
   mongodb:
     image: mongo:4.4-bionic
+    volumes:
+    - /DockerData/db:/data/db

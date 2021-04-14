@@ -11,8 +11,6 @@
 [![License]( https://img.shields.io/pypi/l/cytopy)](https://opensource.org/licenses/MIT)
 [![LastCommit](https://img.shields.io/github/last-commit/burtonrj/CytoPy)](https://github.com/burtonrj/CytoPy)
 
-**Warning: Docker image currently failing - fix in progress - 13/04/20**
-
 # Overview
 
 In recent years there has been an explosion in Cytometry data analysis tools in the open source scientific community. This expansion is looking to soon replace traditional methods such as manual gating with sophisticated automated algorithms.
@@ -36,6 +34,24 @@ To find out more and for installation instructions, please read our documentatio
 CytoPy was authored by <a href=https://www.linkedin.com/in/burtonbiomedical/>Ross Burton</a>
 and the <a href=https://www.cardiff.ac.uk/people/view/78691-eberl-matthias>Eberl Lab</a>
 at <a href=https://www.cardiff.ac.uk/medicine/research/divisions/infection-and-immunity>Cardiff University Infection and Immunity Research Institute</a>
+
+# Ouickstart with Docker
+CytoPy has many complex dependencies, therefore we recommend that you use docker. A more thorough tutorial is currently being developed, 
+but for those familiar with docker you can run CytoPy with the following commands:
+    
+```
+# Clone this repository (*optional)
+git clone https://github.com/burtonrj/CytoPy.git
+# Run docker compose
+docker-compose up
+```
+
+This will launch the CytoPy docker container and a MongoDB container with mounted volumes:
+* Notebooks are stored locally at `/DockerData/notebooks`; edit this path in docker-compose.yml to modify where notebooks are stored on your machine
+* HDF5 files are stored locally at `/DockerData/hdf`; edit path as above to modify
+* MongoDB database files stored locally at `/DockerData/db`; edit path to modify where MongoDB files are stored
+
+\* Note, cloning the entire repo is optional, you can download the docker-compose.yml file and run this alone
 
 # Release notes
 
