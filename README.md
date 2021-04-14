@@ -35,7 +35,7 @@ CytoPy was authored by <a href=https://www.linkedin.com/in/burtonbiomedical/>Ros
 and the <a href=https://www.cardiff.ac.uk/people/view/78691-eberl-matthias>Eberl Lab</a>
 at <a href=https://www.cardiff.ac.uk/medicine/research/divisions/infection-and-immunity>Cardiff University Infection and Immunity Research Institute</a>
 
-# Ouickstart with Docker
+# Quickstart with Docker
 CytoPy has many complex dependencies, therefore we recommend that you use docker. A more thorough tutorial is currently being developed, 
 but for those familiar with docker you can run CytoPy with the following commands:
     
