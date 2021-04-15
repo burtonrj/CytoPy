@@ -42,7 +42,8 @@ but for those familiar with docker you can run CytoPy with the following command
 ```
 # Clone this repository (*optional)
 git clone https://github.com/burtonrj/CytoPy.git
-# Run docker compose
+# Navigate to where docker-compose.yml file is located and run docker compose
+cd CytoPy
 docker-compose up
 ```
 
