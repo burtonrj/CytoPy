@@ -87,7 +87,7 @@ def _fetch_population_statistics(files: list,
             for f in files}
 
 
-def _fetch_subject(x):
+def _fetch_subject(x) -> str or None:
     if x.subject is not None:
         return x.subject.subject_id
     return None
@@ -149,7 +149,7 @@ class FeatureSpace:
         self._fcs_files = [x for x in experiment.fcs_files
                            if x.primary_id in sample_ids] or experiment.fcs_files
         self.subject_ids = {x.primary_id: _fetch_subject(x) for x in self._fcs_files}
-        self.subject_ids = {k: v.subject_id for k, v in self.subject_ids.items() if v is not None}
+        self.subject_ids = {k: v for k, v in self.subject_ids.items() if v is not None}
         populations = [x.list_populations() for x in self._fcs_files]
         self.populations = set([x for sl in populations for x in sl])
         self.population_statistics = _fetch_population_statistics(files=self._fcs_files, populations=self.populations)
