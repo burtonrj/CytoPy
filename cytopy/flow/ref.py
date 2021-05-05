@@ -98,11 +98,11 @@ def create_ref_sample(experiment: Experiment,
                            transform=None,
                            **sampling_kwargs)[0]
     features = [x for x in data.columns if x != "sample_id"]
-    new_filegroup = FileGroup(primary_id=new_file_name)
-    new_filegroup.data_directory = experiment.data_directory
-    new_filegroup.init_new_file(data=data[features].values,
-                                channels=features,
-                                markers=features)
+    new_filegroup = FileGroup(primary_id=new_file_name,
+                              data=data[features],
+                              channels=features,
+                              markers=features,
+                              data_directory=experiment.data_directory)
     new_filegroup.notes = 'sampled data'
     new_filegroup.save()
     experiment.fcs_files.append(new_filegroup)
