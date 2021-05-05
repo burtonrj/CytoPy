@@ -976,33 +976,32 @@ class GatingStrategy(mongoengine.Document):
         gate = self.get_gate(gate=gate_name)
         err = "Cannot edit a gate that has not been applied; gate children not present in population tree."
         assert all([x in self.filegroup.tree.keys() for x in [c.name for c in gate.children]]), err
-        transforms = [gate.transform_y, gate.transform_y]
-        transform_kwargs = [gate.transform_x_kwargs, gate.transform_y_kwargs]
-        transforms = {k: v for k, v in zip([gate.x, gate.y], transforms) if k is not None}
-        transform_kwargs = {k: v for k, v in zip([gate.x, gate.y], transform_kwargs) if k is not None}
+        transforms, transform_kwargs = gate.transform_info()
         parent = self.filegroup.load_population_df(population=gate.parent,
                                                    transform=transforms,
                                                    transform_kwargs=transform_kwargs)
+
         for child in gate.children:
             pop = self.filegroup.get_population(population_name=child.name)
             if isinstance(pop.geom, ThresholdGeom):
                 if x_threshold is None:
                     raise ValueError("For threshold geometry, please provide x_threshold")
-                x_threshold = apply_transform(pd.DataFrame({"x": [x_threshold]}),
-                                              features=["x"],
-                                              method=transforms.get(gate.x),
-                                              **transform_kwargs.get(gate.x)).x.values[0]
+                xt = apply_transform(pd.DataFrame({"x": [x_threshold]}),
+                                     features=["x"],
+                                     method=transforms.get(gate.x),
+                                     **transform_kwargs.get(gate.x)).x.values[0]
+                yt = None
                 if pop.geom.y_threshold is not None:
                     if y_threshold is None:
                         raise ValueError("For 2D threshold geometry, please provide y_threshold")
-                    y_threshold = apply_transform(pd.DataFrame({"x": [y_threshold]}),
-                                                  features=["x"],
-                                                  method=transforms.get(gate.y),
-                                                  **transform_kwargs.get(gate.y)).x.values[0]
+                    yt = apply_transform(pd.DataFrame({"x": [y_threshold]}),
+                                         features=["x"],
+                                         method=transforms.get(gate.y),
+                                         **transform_kwargs.get(gate.y)).x.values[0]
                 self.filegroup.update_population(update_threshold(population=pop,
                                                                   parent_data=parent,
-                                                                  x_threshold=x_threshold,
-                                                                  y_threshold=y_threshold))
+                                                                  x_threshold=xt,
+                                                                  y_threshold=yt))
             elif isinstance(pop.geom, PolygonGeom):
                 if pop.population_name not in coords.keys():
                     raise MissingPopulationError(f"{pop.population_name} missing from coords")
@@ -1010,10 +1009,18 @@ class GatingStrategy(mongoengine.Document):
                     raise ValueError("coords values should be array of shape (2, n) where "
                                      "n is the desired number of coordinates")
                 x_values, y_values = coords.get(pop.population_name)
+                xc = apply_transform(pd.DataFrame({"x": [x_values]}),
+                                     features=["x"],
+                                     method=transforms.get(gate.x),
+                                     **transform_kwargs.get(gate.x)).x.values[0]
+                yc = apply_transform(pd.DataFrame({"y": [x_values]}),
+                                     features=["y"],
+                                     method=transforms.get(gate.y),
+                                     **transform_kwargs.get(gate.y)).y.values[0]
                 self.filegroup.update_population(update_polygon(population=pop,
                                                                 parent_data=parent,
-                                                                x_values=x_values,
-                                                                y_values=y_values))
+                                                                x_values=xc,
+                                                                y_values=yc))
             self._edit_downstream_effects(population_name=child.name)
 
     def _edit_downstream_effects(self,
