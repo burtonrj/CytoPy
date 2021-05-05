@@ -29,6 +29,7 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import typing
 
 from cytopy.flow.transform import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
@@ -263,6 +264,23 @@ class Gate(mongoengine.Document):
                                                        return_transformer=True,
                                                        **kwargs)
         return data
+
+    def transform_info(self) -> (dict, dict):
+        """
+        Returns two dictionaries describing the transforms and transform settings applied to each variable
+        this gate acts upon
+
+        Returns
+        -------
+        dict, dict
+            Transform dict ({x-variable: transform, y-variable: transform}),
+            Transform kwargs dict ({x-variable: transform kwargs, y-variable: transform kwargs})
+        """
+        transforms = [self.transform_y, self.transform_y]
+        transform_kwargs = [self.transform_x_kwargs, self.transform_y_kwargs]
+        transforms = {k: v for k, v in zip([self.x, self.y], transforms) if k is not None}
+        transform_kwargs = {k: v for k, v in zip([self.x, self.y], transform_kwargs) if k is not None}
+        return transforms, transform_kwargs
 
     def _downsample(self,
                     data: pd.DataFrame) -> pd.DataFrame or None:
