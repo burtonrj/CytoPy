@@ -250,7 +250,7 @@ class FlowPlot:
         if self.transform_y == "log":
             ylim = transform.safe_range(data, "y")
         else:
-            ylim = [data[y].min(), data[x].max()]
+            ylim = [data[y].min(), data[y].max()]
         xlim = pd.DataFrame({"Min": [xlim[0]], "Max": [xlim[1]]})
         ylim = pd.DataFrame({"Min": [ylim[0]], "Max": [ylim[1]]})
         return xlim, ylim

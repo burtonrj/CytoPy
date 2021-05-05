@@ -46,6 +46,7 @@ import pandas as pd
 import numpy as np
 import mongoengine
 import logging
+import typing
 import math
 import os
 
@@ -210,8 +211,8 @@ class GatingStrategy(mongoengine.Document):
 
     def preview_gate(self,
                      gate: str or ThresholdGate or PolygonGate or EllipseGate,
-                     create_plot_kwargs: dict or None = None,
-                     plot_gate_kwargs: dict or None = None):
+                     create_plot_kwargs: typing.Union[dict, None] = None,
+                     plot_gate_kwargs: typing.Union[dict, None] = None):
         """
         Preview the results of some given Gate
 
@@ -253,7 +254,7 @@ class GatingStrategy(mongoengine.Document):
     def add_hyperparameter_grid(self,
                                 gate_name: str,
                                 params: dict,
-                                cost: str or None = None):
+                                cost: typing.Union[str, None] = None):
         """
         Add a hyperparameter grid to search when applying the given gate to new data.
         This hyperparameter grid should correspond to valid hyperparameters for the
@@ -317,7 +318,7 @@ class GatingStrategy(mongoengine.Document):
 
     def add_normalisation(self,
                           gate_name: str,
-                          reference: FileGroup or None = None,
+                          reference: typing.Union[FileGroup, None] = None,
                           **kwargs):
         """
         Add landmark registration for normalisation to a Gate. In short, if normalisation is added
@@ -487,15 +488,15 @@ class GatingStrategy(mongoengine.Document):
                 for pop in gate.populations], parent_data
 
     def apply_gate(self,
-                   gate: str or Gate or ThresholdGate or BooleanGate or PolygonGate or EllipseGate,
+                   gate: typing.Union[str, Gate, ThresholdGate, BooleanGate, PolygonGate, EllipseGate],
                    plot: bool = True,
                    verbose: bool = True,
                    add_to_strategy: bool = True,
-                   create_plot_kwargs: dict or None = None,
-                   plot_gate_kwargs: dict or None = None,
+                   create_plot_kwargs: typing.Union[dict, None] = None,
+                   plot_gate_kwargs: typing.Union[dict, None] = None,
                    hyperparam_search: bool = True,
                    fda_norm: bool = False,
-                   overwrite_method_kwargs: dict or None = None):
+                   overwrite_method_kwargs: typing.Union[dict, None] = None):
         """
         Apply a gate to the associated FileGroup. The gate must be previously defined;
         children associated and labeled. Either a Gate object can be provided or the name
@@ -561,7 +562,8 @@ class GatingStrategy(mongoengine.Document):
         if gate.ctrl_x is not None:
             assert isinstance(gate, ThresholdGate), "Control gate only supported for ThresholdGate"
             populations = gate.fit_predict(data=data, ctrl_data=ctrl_parent_data)
-        elif gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search and not isinstance(gate, BooleanGate):
+        elif gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search and not isinstance(gate,
+                                                                                                          BooleanGate):
             populations = hyperparameter_gate(gate=gate,
                                               grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
                                               cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
@@ -658,8 +660,8 @@ class GatingStrategy(mongoengine.Document):
                             logging_path: str,
                             fda_norm: bool = False,
                             hyperparam_search: bool = False,
-                            plots_path: str or None = None,
-                            sample_ids: list or None = None,
+                            plots_path: typing.Union[str, None] = None,
+                            sample_ids: typing.Union[list, None] = None,
                             verbose: bool = True):
         """
         Apply all the gates associated to this GatingStrategy to each FileGroup of
@@ -759,7 +761,7 @@ class GatingStrategy(mongoengine.Document):
         self.gates = [g for g in self.gates if g.gate_name != gate_name]
 
     def delete_populations(self,
-                           populations: str or list):
+                           populations: typing.Union[str, list]):
         """
         Delete given populations. Populations downstream from delete population(s) will
         also be removed.
@@ -778,7 +780,7 @@ class GatingStrategy(mongoengine.Document):
 
     def plot_gate(self,
                   gate: str,
-                  create_plot_kwargs: dict or None = None,
+                  create_plot_kwargs: typing.Union[dict, None] = None,
                   **kwargs):
         """
         Plot a gate. Must provide the name of a Gate currently associated to this GatingStrategy.
@@ -821,8 +823,8 @@ class GatingStrategy(mongoengine.Document):
                       parent: str,
                       overlay: list,
                       x: str,
-                      y: str or None = None,
-                      create_plot_kwargs: dict or None = None,
+                      y: typing.Union[str, None] = None,
+                      create_plot_kwargs: typing.Union[dict, None] = None,
                       **backgate_kwargs):
         """
         Given some population as the backdrop (parent) and a list of one or more
@@ -877,10 +879,10 @@ class GatingStrategy(mongoengine.Document):
     def plot_population(self,
                         population: str,
                         x: str,
-                        y: str or None = None,
-                        transform_x: str or None = "logicle",
-                        transform_y: str or None = "logicle",
-                        create_plot_kwargs: dict or None = None,
+                        y: typing.Union[str, None] = None,
+                        transform_x: typing.Union[str, None] = "logicle",
+                        transform_y: typing.Union[str, None] = "logicle",
+                        create_plot_kwargs: typing.Union[dict, None] = None,
                         **plot_kwargs):
         """
         Plot an existing population in the associate FileGroup.
@@ -972,8 +974,7 @@ class GatingStrategy(mongoengine.Document):
             Updated threshold or coords are invalid
         """
         gate = self.get_gate(gate=gate_name)
-        err = "Cannot edit a gate that has not been applied; gate children not present in population " \
-              "tree."
+        err = "Cannot edit a gate that has not been applied; gate children not present in population tree."
         assert all([x in self.filegroup.tree.keys() for x in [c.name for c in gate.children]]), err
         transforms = [gate.transform_y, gate.transform_y]
         transform_kwargs = [gate.transform_x_kwargs, gate.transform_y_kwargs]
@@ -998,10 +999,10 @@ class GatingStrategy(mongoengine.Document):
                                                   features=["x"],
                                                   method=transforms.get(gate.y),
                                                   **transform_kwargs.get(gate.y)).x.values[0]
-                update_threshold(population=pop,
-                                 parent_data=parent,
-                                 x_threshold=x_threshold,
-                                 y_threshold=y_threshold)
+                self.filegroup.update_population(update_threshold(population=pop,
+                                                                  parent_data=parent,
+                                                                  x_threshold=x_threshold,
+                                                                  y_threshold=y_threshold))
             elif isinstance(pop.geom, PolygonGeom):
                 if pop.population_name not in coords.keys():
                     raise MissingPopulationError(f"{pop.population_name} missing from coords")
@@ -1009,10 +1010,10 @@ class GatingStrategy(mongoengine.Document):
                     raise ValueError("coords values should be array of shape (2, n) where "
                                      "n is the desired number of coordinates")
                 x_values, y_values = coords.get(pop.population_name)
-                update_polygon(population=pop,
-                               parent_data=parent,
-                               x_values=x_values,
-                               y_values=y_values)
+                self.filegroup.update_population(update_polygon(population=pop,
+                                                                parent_data=parent,
+                                                                x_values=x_values,
+                                                                y_values=y_values))
             self._edit_downstream_effects(population_name=child.name)
 
     def _edit_downstream_effects(self,
@@ -1039,15 +1040,15 @@ class GatingStrategy(mongoengine.Document):
             parent = self.filegroup.load_population_df(population=pop.parent,
                                                        transform=transforms)
             if isinstance(pop.geom, ThresholdGeom):
-                update_threshold(population=pop,
-                                 parent_data=parent,
-                                 x_threshold=pop.geom.x_threshold,
-                                 y_threshold=pop.geom.y_threshold)
+                self.filegroup.update_population(update_threshold(population=pop,
+                                                                  parent_data=parent,
+                                                                  x_threshold=pop.geom.x_threshold,
+                                                                  y_threshold=pop.geom.y_threshold))
             elif isinstance(pop.geom, PolygonGeom):
-                update_polygon(population=pop,
-                               parent_data=parent,
-                               x_values=pop.geom.x_values,
-                               y_values=pop.geom.y_values)
+                self.filegroup.update_population(update_polygon(population=pop,
+                                                                parent_data=parent,
+                                                                x_values=pop.geom.x_values,
+                                                                y_values=pop.geom.y_values))
 
     def save(self,
              save_strategy: bool = True,

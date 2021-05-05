@@ -1,6 +1,5 @@
 from tqdm import tqdm_notebook, tqdm
 from IPython import get_ipython
-import warnings
 import logging
 
 

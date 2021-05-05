@@ -405,6 +405,25 @@ class FileGroup(mongoengine.Document):
         self.tree[population.population_name] = anytree.Node(name=population.population_name,
                                                              parent=self.tree.get(population.parent))
 
+    def update_population(self,
+                          pop: Population):
+        """
+        Replace an existing population. Population to replace identified using 'population_name' field.
+        Note: this method does not allow you to edit the
+
+        Parameters
+        ----------
+        pop: Population
+            New population object
+
+        Returns
+        -------
+        None
+        """
+        assert pop.population_name in self.list_populations(), 'Invalid population, does not exist'
+        self.populations = [p for p in self.populations if p.population_name != pop.population_name]
+        self.populations.append(pop)
+
     def load_ctrl_population_df(self,
                                 ctrl: str,
                                 population: str,
