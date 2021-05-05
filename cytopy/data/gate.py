@@ -553,8 +553,7 @@ class ThresholdGate(Gate):
         self.children = updated_children
 
     def label_children(self,
-                       labels: dict,
-                       drop: bool = True) -> None:
+                       labels: dict) -> None:
         """
         Rename children using a dictionary of labels where the key correspond to the existing child name
         and the value is the new desired population name. If the same population name is given to multiple
@@ -565,15 +564,11 @@ class ThresholdGate(Gate):
         ----------
         labels: dict
             Mapping for new children name
-        drop: bool (default=True)
-            If True, children absent from labels will be dropped
 
         Returns
         -------
         None
         """
-        if drop:
-            self.children = [c for c in self.children if c.name in labels.keys()]
         for c in self.children:
             c.name = labels.get(c.name)
         self._duplicate_children()
@@ -2003,7 +1998,7 @@ def update_threshold(population: Population,
 
     Returns
     -------
-    None
+    Population
 
     Raises
     ------
@@ -2028,6 +2023,7 @@ def update_threshold(population: Population,
         population.index = new_data.index.values
         population.geom.x_threshold = x_threshold
         population.geom.y_threshold = y_threshold
+    return population
 
 
 def update_polygon(population: Population,
@@ -2048,7 +2044,7 @@ def update_polygon(population: Population,
 
     Returns
     -------
-    None
+    Population
     """
     poly = create_polygon(x=x_values, y=y_values)
     new_data = inside_polygon(df=parent_data,
@@ -2058,3 +2054,4 @@ def update_polygon(population: Population,
     population.geom.x_values = x_values
     population.geom.y_values = y_values
     population.index = new_data.index.values
+    return population

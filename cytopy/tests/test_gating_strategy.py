@@ -13,6 +13,12 @@ def create_gatingstrategy_and_load(example_populated_experiment):
     return gs
 
 
+def reload_gatingstrategy(example_populated_experiment):
+    gs = GatingStrategy.objects(name="test").get()
+    gs.load_data(experiment=example_populated_experiment, sample_id="test sample")
+    return gs
+
+
 def create_poly_gate():
     y = [0.2, 0.2, 0.35, 0.35, 0.2]
     x = [600, 1000, 1000, 600, 600]
@@ -47,9 +53,9 @@ def create_ellipse_gate():
                           transform_x=None,
                           transform_y="logicle",
                           method="GaussianMixture",
-                          method_kwargs={"n_components": 2,
+                          method_kwargs={"n_components": 1,
                                          "random_state": 42,
-                                         "conf": 0.95})
+                                         "conf": 0.999})
     return ellipse
 
 
@@ -57,7 +63,10 @@ def apply_some_gates(gs: GatingStrategy):
     # Apply threshold gate
     gate = create_threshold_gate()
     gs.preview_gate(gate=gate)
-    gate.label_children(labels={"++": "pop1"})
+    gate.label_children(labels={"++": "pop1",
+                                "--": "other",
+                                "+-": "other",
+                                "-+": "other"})
     gs.apply_gate(gate)
     # Apply ellipse gate
     gate = create_ellipse_gate()
@@ -279,6 +288,40 @@ def test_population_stats(example_populated_experiment):
     assert stats.get("n") == 30000
     assert stats.get("prop_of_parent") is None
     assert stats.get("prop_of_root") is None
+
+
+def test_edit_threshold_gate(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
+    gs = apply_some_gates(gs)
+    gs.save()
+    gs = reload_gatingstrategy(example_populated_experiment)
+    before_pop1 = gs.filegroup.get_population("pop1").n
+    before_pop2 = gs.filegroup.get_population("pop2").n
+    before_pop3 = gs.filegroup.get_population("pop3").n
+    before_pop4 = gs.filegroup.get_population("pop4").n
+    gs.edit_gate("test threshold", x_threshold=0, y_threshold=0)
+    assert gs.filegroup.get_population("pop1").n == gs.filegroup.data(source="primary").shape[0]
+    assert gs.filegroup.get_population("pop2").n > before_pop2
+    assert gs.filegroup.get_population("pop3").n > before_pop3
+    assert gs.filegroup.get_population("pop4").n > before_pop4
+
+
+def test_edit_polygon_gate(example_populated_experiment):
+    gs = create_gatingstrategy_and_load(example_populated_experiment)
+    gs = apply_some_gates(gs)
+    gs.save()
+    gs = reload_gatingstrategy(example_populated_experiment)
+    before_pop1 = gs.filegroup.get_population("pop1").n
+    before_pop2 = gs.filegroup.get_population("pop2").n
+    before_pop3 = gs.filegroup.get_population("pop3").n
+    before_pop4 = gs.filegroup.get_population("pop4").n
+    gs.edit_gate("test ellipse", coords={"pop2": [[0, 1200, 1200, 0, 0],
+                                                  [-100, -100, 10000, 10000, -100]]})
+    assert gs.filegroup.get_population("pop1").n == before_pop1
+    assert gs.filegroup.get_population("pop2").n > before_pop2
+    assert gs.filegroup.get_population("pop2").n == before_pop1
+    assert gs.filegroup.get_population("pop3").n > before_pop3
+    assert gs.filegroup.get_population("pop4").n > before_pop4
 
 
 def test_save(example_populated_experiment):
