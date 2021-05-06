@@ -276,7 +276,7 @@ class Gate(mongoengine.Document):
             Transform dict ({x-variable: transform, y-variable: transform}),
             Transform kwargs dict ({x-variable: transform kwargs, y-variable: transform kwargs})
         """
-        transforms = [self.transform_y, self.transform_y]
+        transforms = [self.transform_x, self.transform_y]
         transform_kwargs = [self.transform_x_kwargs, self.transform_y_kwargs]
         transforms = {k: v for k, v in zip([self.x, self.y], transforms) if k is not None}
         transform_kwargs = {k: v for k, v in zip([self.x, self.y], transform_kwargs) if k is not None}
