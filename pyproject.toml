@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "CytoPy"
-version = "2.0"
+version = "2.0.1"
 description = "Data centric algorithm agnostic cytometry analysis framework"
 authors = ["Ross Burton <burtonrj@cardiff.ac.uk>"]
 license = "MIT"
