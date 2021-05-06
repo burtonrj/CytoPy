@@ -1013,7 +1013,7 @@ class GatingStrategy(mongoengine.Document):
                                      features=["x"],
                                      method=transforms.get(gate.x),
                                      **transform_kwargs.get(gate.x)).x.values[0]
-                yc = apply_transform(pd.DataFrame({"y": [x_values]}),
+                yc = apply_transform(pd.DataFrame({"y": [y_values]}),
                                      features=["y"],
                                      method=transforms.get(gate.y),
                                      **transform_kwargs.get(gate.y)).y.values[0]
