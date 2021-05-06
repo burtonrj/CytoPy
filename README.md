@@ -10,6 +10,8 @@
 [![Downloads](https://img.shields.io/pypi/dm/cytopy)](https://pypi.org/project/cytopy/)
 [![License]( https://img.shields.io/pypi/l/cytopy)](https://opensource.org/licenses/MIT)
 [![LastCommit](https://img.shields.io/github/last-commit/burtonrj/CytoPy)](https://github.com/burtonrj/CytoPy)
+[![DockerPulls](https://img.shields.io/docker/pulls/burtonrj/cytopy)](https://hub.docker.com/repository/docker/burtonrj/cytopy)
+[![DockerImageSize](https://img.shields.io/docker/image-size/burtonrj/cytopy)](https://hub.docker.com/repository/docker/burtonrj/cytopy)
 
 # Overview
 
