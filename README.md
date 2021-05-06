@@ -56,6 +56,7 @@ This will launch the CytoPy docker container and a MongoDB container with mounte
 
 # Release notes
 
+* 2.0.1 (stable) - Issues #22 #23 & #24 addressed with additional test coverage
 * 2.0.0 (stable) - This new build represents a refactored framework that is not compatible with previous builds. Expanded methods and a restructured design.
 * 1.0.1 (premature) - This release corrects some major errors encountered in the flow.clustering module that was preventing clusters from being saved to the database and retrieved correctly.
 * 1.0.0 (premature) - This is the first major release of CytoPy following the early release of v0.0.1 and updated in v0.0.5 and v0.1.0. This first major release includes fundamental changes to data management and therefore is not backward compatible with previous versions.
