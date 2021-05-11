@@ -33,7 +33,7 @@ import typing
 
 from cytopy.flow.transform import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
-    create_convex_hull, create_polygon, ellipse_to_polygon, probablistic_ellipse
+    create_convex_hull, create_polygon, ellipse_to_polygon, probabilistic_ellipse
 from .population import Population, merge_multiple_gate_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn, uniform_downsampling
 from ..flow.dim_reduction import dimensionality_reduction
@@ -1462,7 +1462,8 @@ class EllipseGate(PolygonGate):
         assert method_kwargs.get("covariance_type", "full"), "EllipseGate only supports covariance_type of 'full'"
         valid = ["manual", "GaussianMixture", "BayesianGaussianMixture"]
         assert method in valid, f"Elliptical gating method should be one of {valid}"
-        self.conf = method_kwargs.get("conf", 0.95)
+        self.conf = method_kwargs.pop("conf", 0.95)
+        self.yeo_johnson = method_kwargs.pop("yeo_johnson", False)
         super().__init__(*args, **values)
 
     def _manual(self) -> ShapelyPoly:
@@ -1535,7 +1536,7 @@ class EllipseGate(PolygonGate):
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         self.model.fit_predict(data[[self.x, self.y]])
-        ellipses = [probablistic_ellipse(covar, conf=self.conf)
+        ellipses = [probabilistic_ellipse(covar, conf=self.conf)
                     for covar in self.model.covariances_]
         polygons = [ellipse_to_polygon(centroid, *ellipse)
                     for centroid, ellipse in zip(self.model.means_, ellipses)]

@@ -1,5 +1,5 @@
 from cytopy.data.geometry import PopulationGeometry, ThresholdGeom, PolygonGeom, create_polygon, \
-    polygon_overlap, create_convex_hull, probablistic_ellipse, inside_ellipse
+    polygon_overlap, create_convex_hull, probabilistic_ellipse, inside_ellipse
 from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs
 from sklearn.mixture import GaussianMixture
@@ -93,7 +93,7 @@ def test_probablistic_ellipse(conf):
     model = GaussianMixture(random_state=42, n_components=1)
     model.fit(test_data)
     center = model.means_[0]
-    width, height, angle = probablistic_ellipse(model.covariances_[0], conf)
+    width, height, angle = probabilistic_ellipse(model.covariances_[0], conf)
     mask = inside_ellipse(test_data, center=center, width=width, height=height, angle=angle)
     assert test_data[mask].shape[0] / test_data.shape[0] == pytest.approx(conf, 0.1)
 

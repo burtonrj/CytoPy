@@ -38,6 +38,7 @@ shap = "0.38.1"
 sphinx = {version = "^3", optional = true}
 snowballstemmer = "^2.0.0"
 statsmodels = "^0.12"
+smm = "^0.1"
 autodocsumm = "^0.2.1"
 tables = "^3.6.1"
 tensorflow = "^2.4"
