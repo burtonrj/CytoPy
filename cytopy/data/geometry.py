@@ -291,8 +291,8 @@ def inside_ellipse(data: np.array,
     return in_ellipse
 
 
-def probablistic_ellipse(covariances: np.array,
-                         conf: float):
+def probabilistic_ellipse(covariances: np.array,
+                          conf: float):
     """
     Given the covariance matrix of a mixture component, calculate a elliptical shape that
     represents a probabilistic confidence interval.
