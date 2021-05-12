@@ -363,7 +363,7 @@ class LogTransformer(Transformer):
         -------
         Pandas.DataFrame
         """
-        if data.shape[0] == 1 and data[features].iloc[0] == 0:
+        if data.shape[0] == 1 and np.all(data[features].iloc[0] == 0):
             return data
         data = remove_negative_values(data, features)
         data[features] = self.inverse(data[features].values)
