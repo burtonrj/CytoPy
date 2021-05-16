@@ -38,9 +38,11 @@ from .population import Population, merge_multiple_gate_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn, uniform_downsampling
 from ..flow.dim_reduction import dimensionality_reduction
 from ..flow.build_models import build_sklearn_model
+from sklearn.preprocessing import PowerTransformer
 from sklearn.cluster import *
 from sklearn.mixture import *
 from hdbscan import HDBSCAN
+from smm import SMM
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
 from string import ascii_uppercase
@@ -223,10 +225,12 @@ class Gate(mongoengine.Document):
 
     def __init__(self, *args, **values):
         method = values.get("method", None)
+        kwargs = values.pop("method_kwargs", {})
+        yeo_johnson = kwargs.pop("yeo_johnson", False)
         assert method is not None, "No method given"
         err = f"Module {method} not supported. See docs for supported methods."
         assert method in ["manual", "density", "quantile", "time", "AND", "OR", "NOT"] + list(globals().keys()), err
-        super().__init__(*args, **values)
+        super().__init__(*args, **values, method_kwargs=kwargs)
         self.model = None
         self.x_transformer = None
         self.y_transformer = None
@@ -234,6 +238,15 @@ class Gate(mongoengine.Document):
             params = self.ctrl_classifier_params or {}
             build_sklearn_model(klass=self.ctrl_classifier, **params)
         self.validate()
+        self._yeo_johnson = None
+        if yeo_johnson:
+            self._yeo_johnson = PowerTransformer(method="yeo-johnson")
+
+    def yeo_johnson_transform(self, data: pd.DataFrame):
+        if self._yeo_johnson is not None:
+            features = [i for i in [self.x, self.y] if i is not None]
+            data[features] = self._yeo_johnson.fit_transform(data[features])
+        return data
 
     def transform(self,
                   data: pd.DataFrame) -> pd.DataFrame:
@@ -706,6 +719,7 @@ class ThresholdGate(Gate):
         dims = [i for i in [self.x, self.y] if i is not None]
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
+
         if self.method == "quantile":
             thresholds = self._quantile_gate(data=data)
         else:
@@ -882,6 +896,16 @@ class ThresholdGate(Gate):
                     thresholds.append(fmo_threshold)
         return thresholds
 
+    def yeo_johnson_inverse(self, thresholds: list) -> (float, float) or (float, None):
+        if len(thresholds) == 2:
+            if self._yeo_johnson is None:
+                return thresholds[0], thresholds[1]
+            thresholds = self._yeo_johnson.inverse_transform([thresholds])[0]
+            return thresholds[0], thresholds[1]
+        if self._yeo_johnson is None:
+            return thresholds[0], None
+        return self._yeo_johnson.inverse_transform([thresholds])[0][0], None
+
     def fit(self,
             data: pd.DataFrame,
             ctrl_data: pd.DataFrame or None = None) -> None:
@@ -908,6 +932,8 @@ class ThresholdGate(Gate):
         data = data.copy()
         data = self.transform(data=data)
         data = self._dim_reduction(data=data)
+        if self._yeo_johnson is not None:
+            data = self.yeo_johnson_transform(data)
         assert len(self.children) == 0, "Children already defined for this gate. Call 'fit_predict' to " \
                                         "fit to new data and match populations to children, or call " \
                                         "'predict' to apply static thresholds to new data. If you want to " \
@@ -916,16 +942,17 @@ class ThresholdGate(Gate):
             thresholds = self._ctrl_fit(primary_data=data, ctrl_data=ctrl_data)
         else:
             thresholds = self._fit(data=data)
-        y_threshold = None
-        if len(thresholds) > 1:
-            y_threshold = thresholds[1]
+
+        x_threshold, y_threshold = self.yeo_johnson_inverse(thresholds)
         data = apply_threshold(data=data,
-                               x=self.x, x_threshold=thresholds[0],
-                               y=self.y, y_threshold=y_threshold)
+                               x=self.x,
+                               x_threshold=x_threshold,
+                               y=self.y,
+                               y_threshold=y_threshold)
         for definition, df in data.items():
             self.add_child(ChildThreshold(name=definition,
                                           definition=definition,
-                                          geom=ThresholdGeom(x_threshold=thresholds[0],
+                                          geom=ThresholdGeom(x_threshold=x_threshold,
                                                              y_threshold=y_threshold)))
         return None
 
@@ -1273,6 +1300,11 @@ class PolygonGate(Gate):
                                        method=self.transform_y, **kwargs).y.values
         return create_polygon(x_values, y_values)
 
+    def yeo_johnson_inverse(self, coords: np.ndarray) -> np.ndarray:
+        if self._yeo_johnson is None:
+            return np.array(coords)
+        return self._yeo_johnson.inverse_transform(coords)
+
     def _fit(self,
              data: pd.DataFrame) -> List[ShapelyPoly]:
         """
@@ -1290,16 +1322,16 @@ class PolygonGate(Gate):
         """
         if self.method == "manual":
             return [self._manual()]
-        kwargs = {k: v for k, v in self.method_kwargs.items() if k != "conf"}
-        self.model = globals()[self.method](**kwargs)
+        self.model = globals()[self.method](**self.method_kwargs)
         self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
+        data = self.yeo_johnson_transform(data)
         labels = self.model.fit_predict(data[[self.x, self.y]])
         hulls = [create_convex_hull(x_values=data.iloc[np.where(labels == i)][self.x].values,
                                     y_values=data.iloc[np.where(labels == i)][self.y].values)
                  for i in np.unique(labels)]
-        hulls = [x for x in hulls if len(x[0]) > 0]
+        hulls = [self.yeo_johnson_inverse(x) for x in hulls if len(x[0]) > 0]
         return [create_polygon(*x) for x in hulls]
 
     def fit(self,
@@ -1459,11 +1491,10 @@ class EllipseGate(PolygonGate):
     def __init__(self, *args, **values):
         method = values.get("method", None)
         method_kwargs = values.get("method_kwargs", {})
-        assert method_kwargs.get("covariance_type", "full"), "EllipseGate only supports covariance_type of 'full'"
+        assert method_kwargs.get("covariance_type", "full") == "full", "EllipseGate only supports covariance_type of 'full'"
         valid = ["manual", "GaussianMixture", "BayesianGaussianMixture"]
         assert method in valid, f"Elliptical gating method should be one of {valid}"
         self.conf = method_kwargs.pop("conf", 0.95)
-        self.yeo_johnson = method_kwargs.pop("yeo_johnson", False)
         super().__init__(*args, **values)
 
     def _manual(self) -> ShapelyPoly:
@@ -1530,13 +1561,13 @@ class EllipseGate(PolygonGate):
         """
         params = {k: v for k, v in self.method_kwargs.items() if k != "conf"}
         self.model = globals()[self.method](**params)
-        if not self.method_kwargs.get("probabilistic_ellipse", True):
+        if not self.method_kwargs.get("probabilistic_ellipse", False):
             return super()._fit(data=data)
         self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         self.model.fit_predict(data[[self.x, self.y]])
-        ellipses = [probabilistic_ellipse(covar, conf=self.conf)
+        ellipses = [probabilistic_ellipse(self.yeo_johnson_inverse(covar), conf=self.conf)
                     for covar in self.model.covariances_]
         polygons = [ellipse_to_polygon(centroid, *ellipse)
                     for centroid, ellipse in zip(self.model.means_, ellipses)]
