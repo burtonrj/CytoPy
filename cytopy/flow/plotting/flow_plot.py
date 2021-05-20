@@ -468,13 +468,16 @@ class FlowPlot:
         if isinstance(gate, ThresholdGate):
             return self._plot_threshold(definitions={c.definition: c.name for c in gate.children},
                                         geoms=[c.geom for c in gate.children],
-                                        lw=lw)
+                                        lw=lw,
+                                        legend_kwargs=legend_kwargs
+                                       )
         # Otherwise, we assume polygon shape
         return self._plot_polygon(geoms=[c.geom for c in gate.children],
                                   labels=[c.name for c in gate.children],
                                   colours=gate_colours,
                                   lw=lw,
-                                  legend_kwargs=legend_kwargs)
+                                  legend_kwargs=legend_kwargs
+                                 )
 
     def plot_population_geoms(self,
                               parent: pd.DataFrame,
