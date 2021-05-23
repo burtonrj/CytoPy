@@ -35,9 +35,9 @@ from warnings import warn
 from functools import partial
 from matplotlib.patches import Ellipse
 from scipy import linalg, stats
-from scipy.spatial.qhull import ConvexHull, QhullError
 from shapely.geometry import Polygon, Point
 import mongoengine
+import alphashape
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -47,6 +47,10 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+
+
+class GeometryError(Exception):
+    pass
 
 
 class PopulationGeometry(mongoengine.EmbeddedDocument):
@@ -233,7 +237,7 @@ def create_polygon(x: list,
 
     Returns
     -------
-    Polygon
+    shapely.geometry.Polygon
     """
     return Polygon([(x, y) for x, y in zip(x, y)])
 
@@ -317,30 +321,43 @@ def probabilistic_ellipse(covariances: np.array,
     return eigen_val[0], eigen_val[1], (180. + angle)
 
 
-def create_convex_hull(x_values: np.array,
-                       y_values: np.array):
+def create_envelope(x_values: np.array,
+                    y_values: np.array,
+                    alpha: float or None = 0.0) -> Polygon:
     """
-    Given the x and y coordinates of a cloud of data points, generate a convex hull,
-    returning the x and y coordinates of its vertices.
+    Given the x and y coordinates of a cloud of data points generate an envelope (alpha shape)
+    that encapsulates these data points.
 
     Parameters
     ----------
     x_values: numpy.ndarray
     y_values: numpy.ndarray
+    alpha: float or None (default = 0.0)
+        By default alpha is 0, generating a convex hull (can be thought of as if wrapping an elastic band
+        around the data points). Increase alpha to create a concave envelope. Warning, as alpha increases,
+        more data points will fall outside the range of the envelope.
+
 
     Returns
     -------
-    numpy.ndarray, numpy.ndarray
+    shapely.geometry.Polygon
+
+    Raises
+    ------
+    GeometryError
+        Failed to generate alpha shape; likely due to insufficient data or alpha being too large.
     """
+    if alpha > 5.0:
+        warn("Alpha is very large and will likely exclude many if not all data points.")
+    if alpha is None:
+        warn("Alpha is None. Attempting to calculate optimal alpha; this may take some time.")
     xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
     try:
-        hull = ConvexHull(xy, incremental=True)
-        x = [float(i) for i in xy[hull.vertices, 0]]
-        y = [float(i) for i in xy[hull.vertices, 1]]
-    except QhullError:
-        warn("ConvexHull generated QhullError; cannot generate geometry")
-        x, y = [], []
-    return x, y
+        poly = alphashape.alphashape(points=xy, alpha=alpha)
+        assert isinstance(poly, Polygon)
+        return poly
+    except AssertionError:
+        raise GeometryError("Failed to generate alpha shape. Check for insufficient data or whether alpha is too large")
 
 
 def ellipse_to_polygon(centroid: (float, float),
@@ -361,7 +378,7 @@ def ellipse_to_polygon(centroid: (float, float),
 
     Returns
     -------
-    Polygon
+    shapely.geometry.Polygon
     """
     ellipse = ellipse or Ellipse(centroid, width, height, angle)
     vertices = ellipse.get_verts()

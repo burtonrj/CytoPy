@@ -1,5 +1,5 @@
 from cytopy.data.geometry import PopulationGeometry, ThresholdGeom, PolygonGeom, create_polygon, \
-    polygon_overlap, create_convex_hull, probabilistic_ellipse, inside_ellipse
+    polygon_overlap, create_envelope, probabilistic_ellipse, inside_ellipse
 from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs
 from sklearn.mixture import GaussianMixture
@@ -70,7 +70,7 @@ def test_create_convex_hull():
                            center_box=(0, 5),
                            random_state=42)[0]
     x, y = test_data[:, 0], test_data[:, 1]
-    hull = create_convex_hull(x, y)
+    hull = create_envelope(x, y)
     assert isinstance(hull[0], list)
     assert isinstance(hull[1], list)
     for idx, t in enumerate([x, y]):
