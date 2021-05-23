@@ -29,8 +29,6 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-import typing
-
 from cytopy.flow.transform import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
     create_convex_hull, create_polygon, ellipse_to_polygon, probabilistic_ellipse
@@ -193,7 +191,7 @@ class Gate(mongoengine.Document):
         Name of the underlying algorithm to use. Should have a value of: "manual", "density",
         "quantile" or correspond to the name of an existing class in Scikit-Learn or HDBSCAN.
         If you have a method that follows the Scikit-Learn template but isn't currently present
-        in cytopy and you would like it to be, please contribute to the respository on GitHub
+        in cytopy and you would like it to be, please contribute to the repository on GitHub
         or contact burtonrj@cardiff.ac.uk
     method_kwargs: dict
         Keyword arguments for initiation of the above method.
@@ -226,10 +224,9 @@ class Gate(mongoengine.Document):
     def __init__(self, *args, **values):
         method = values.get("method", None)
         kwargs = values.pop("method_kwargs", {})
-        yeo_johnson = kwargs.pop("yeo_johnson", False)
         assert method is not None, "No method given"
         err = f"Module {method} not supported. See docs for supported methods."
-        assert method in ["manual", "density", "quantile", "time", "AND", "OR", "NOT"] + list(globals().keys()), err
+        assert method in ["manual", "density", "quantile"] + list(globals().keys()), err
         super().__init__(*args, **values, method_kwargs=kwargs)
         self.model = None
         self.x_transformer = None
@@ -239,13 +236,50 @@ class Gate(mongoengine.Document):
             build_sklearn_model(klass=self.ctrl_classifier, **params)
         self.validate()
         self._yeo_johnson = None
-        if yeo_johnson:
+        if self.method_kwargs.get("yeo_johnson", False):
             self._yeo_johnson = PowerTransformer(method="yeo-johnson")
 
-    def yeo_johnson_transform(self, data: pd.DataFrame):
+    def yeo_johnson_transform(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Apply Yeo-Johnson transformation prior to fitting gating algorithm - method that
+        enforces "normality" whilst handling negative values
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+
+        Returns
+        -------
+        Pandas.DataFrame
+            Transformed dataframe with features (defined by self.x/self.y) transformed.
+        """
         if self._yeo_johnson is not None:
             features = [i for i in [self.x, self.y] if i is not None]
-            data[features] = self._yeo_johnson.fit_transform(data[features])
+            if len(features) == 1:
+                data[features] = self._yeo_johnson.fit_transform(data[features].values.reshape(-1, 1))
+            else:
+                data[features] = self._yeo_johnson.fit_transform(data[features])
+        return data
+
+    def yeo_johnson_inverse(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Inverse any applied Yeo-Johnson transformation to data to original space
+
+        Parameters
+        ----------
+        data: pd.DataFrame
+
+        Returns
+        -------
+        Numpy.Array
+            Inversely transformed data
+        """
+        if self._yeo_johnson is not None:
+            features = [i for i in [self.x, self.y] if i is not None]
+            if len(features) == 1:
+                data[features] = self._yeo_johnson.inverse_transform(data[features].reshape(-1, 1))
+            else:
+                data[features] = self._yeo_johnson.inverse_transform(data[features])
         return data
 
     def transform(self,
@@ -476,6 +510,9 @@ class ThresholdGate(Gate):
           window is kept.
         * inflection_point_kwargs - dictionary; see cytopy.data.gate.find_inflection_point
         * smoothed_peak_finding_kwargs - dictionary; see cytopy.data.gate.smoothed_peak_finding
+        * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be applied
+        prior to fitting, forcing data to resemble a 'normal' distribution. Transform is inversed prior to
+        saving of results.
 
     ThresholdGate supports control gating, whereby thresholds are fitted to control data
     and then applied to primary data.
@@ -897,6 +934,18 @@ class ThresholdGate(Gate):
         return thresholds
 
     def yeo_johnson_inverse(self, thresholds: list) -> (float, float) or (float, None):
+        """
+        Inverse any applied Yeo-Johnson transformation of resulting thresholds
+
+        Parameters
+        ----------
+        thresholds: list
+
+        Returns
+        -------
+        (float, float) or (float, None)
+            Threshold(s) inverse to original space
+        """
         if len(thresholds) == 2:
             if self._yeo_johnson is None:
                 return thresholds[0], thresholds[1]
@@ -1094,6 +1143,14 @@ class PolygonGate(Gate):
     Contributions to extend to other libraries are welcome. The name of the class to use
     should be provided in "method" along with keyword arguments for initiating this class
     in "method_kwargs".
+
+    Additional parameters that can be provided in method_kwargs which are universal for all
+    methods are:
+    * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be applied
+    prior to fitting, forcing data to resemble a 'normal' distribution. Transform is inversed prior to
+    saving of results.
+    * envelope - string value (default="concave"); how to generate the "gate" object enclosing the
+    data points defined by a clustering algorithm. Can be either "convex" or "concave".
 
     Alternatively the "method" can be "manual" for a static gate to be applied; user should
     provide x_values and y_values (if two-dimensional) to "method_kwargs" as two arrays,
@@ -1300,11 +1357,6 @@ class PolygonGate(Gate):
                                        method=self.transform_y, **kwargs).y.values
         return create_polygon(x_values, y_values)
 
-    def yeo_johnson_inverse(self, coords: np.ndarray) -> np.ndarray:
-        if self._yeo_johnson is None:
-            return np.array(coords)
-        return self._yeo_johnson.inverse_transform(coords)
-
     def _fit(self,
              data: pd.DataFrame) -> List[ShapelyPoly]:
         """
@@ -1322,16 +1374,22 @@ class PolygonGate(Gate):
         """
         if self.method == "manual":
             return [self._manual()]
-        self.model = globals()[self.method](**self.method_kwargs)
+        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope", "conf"]}
+        self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         data = self.yeo_johnson_transform(data)
-        labels = self.model.fit_predict(data[[self.x, self.y]])
+        if self.method == "SMM":
+            self.model.fit(data[[self.x, self.y]])
+            labels = self.model.predict(data[[self.x, self.y]])
+        else:
+            labels = self.model.fit_predict(data[[self.x, self.y]])
+        data = self.yeo_johnson_inverse(data=data)
         hulls = [create_convex_hull(x_values=data.iloc[np.where(labels == i)][self.x].values,
                                     y_values=data.iloc[np.where(labels == i)][self.y].values)
                  for i in np.unique(labels)]
-        hulls = [self.yeo_johnson_inverse(x) for x in hulls if len(x[0]) > 0]
+        hulls = [x for x in hulls if len(x[0]) > 0]
         return [create_polygon(*x) for x in hulls]
 
     def fit(self,
@@ -1445,6 +1503,21 @@ class EllipseGate(PolygonGate):
     from the Scikit-Learn mixture module. Keyword arguments for the initiation of a class
     from this module can be given in "method_kwargs".
 
+    Additional parameters that can be provided in method_kwargs which are universal for all
+    methods are:
+    * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be applied
+    prior to fitting, forcing data to resemble a 'normal' distribution. Transform is inversed prior to
+    saving of results.
+    * probabilistic_ellipse - boolean value (default=False); if False, "gate" geometry is identical to
+    PolygonGate and the output of the mixture model is interpreted like clustering. If True, then the
+    "gate" geometry is an ellipse defined by the covariant matrix of the mixture model. If yeo_johnson
+    is True, then probabilistic_ellipse is always set to False.
+    * envelope - string value (default="concave"), ignored if probabilistic_ellipse = True; how to generate
+    the "gate" geometry enclosing the data points defined by a clustering algorithm. Can be either "convex"
+    or "concave".
+    * conf - float (default=0.95), ignored if probabilistic_ellipse = False; controls the size of the resulting
+    ellipse that captures the data points of a component. A larger value will result in a wider gate.
+
     DOES NOT SUPPORT CONTROL GATING.
 
     Attributes
@@ -1492,9 +1565,9 @@ class EllipseGate(PolygonGate):
         method = values.get("method", None)
         method_kwargs = values.get("method_kwargs", {})
         assert method_kwargs.get("covariance_type", "full") == "full", "EllipseGate only supports covariance_type of 'full'"
-        valid = ["manual", "GaussianMixture", "BayesianGaussianMixture"]
+        valid = ["manual", "GaussianMixture", "BayesianGaussianMixture", "SMM"]
         assert method in valid, f"Elliptical gating method should be one of {valid}"
-        self.conf = method_kwargs.pop("conf", 0.95)
+        self.conf = method_kwargs.get("conf", 0.95)
         super().__init__(*args, **values)
 
     def _manual(self) -> ShapelyPoly:
@@ -1559,185 +1632,19 @@ class EllipseGate(PolygonGate):
         list
             List of Shapely polygon's
         """
-        params = {k: v for k, v in self.method_kwargs.items() if k != "conf"}
+        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope", "conf"]}
         self.model = globals()[self.method](**params)
-        if not self.method_kwargs.get("probabilistic_ellipse", False):
+        if self._yeo_johnson is not None or not self.method_kwargs.get("probabilistic_ellipse", False):
             return super()._fit(data=data)
         self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
-        self.model.fit_predict(data[[self.x, self.y]])
-        ellipses = [probabilistic_ellipse(self.yeo_johnson_inverse(covar), conf=self.conf)
+        self.model.fit(data[[self.x, self.y]])
+        ellipses = [probabilistic_ellipse(covar, conf=self.conf)
                     for covar in self.model.covariances_]
         polygons = [ellipse_to_polygon(centroid, *ellipse)
                     for centroid, ellipse in zip(self.model.means_, ellipses)]
         return polygons
-
-
-class BooleanGate(PolygonGate):
-    """
-    The BooleanGate is a special class of Gate that allows for merging, subtraction, and intersection methods.
-    A BooleanGate should be defined with one of the following string values as its 'method' and a set of
-    population names as 'populations' in method_kwargs:
-
-    * AND - generates a new population containing only events present in every population of a given
-    set of populations
-    * OR - generates a new population that is a merger of all unique events from all populations in a given
-    set of populations
-    * NOT - generates a new population that contains all events in some target population that are not
-    present in some set of other populations (taken as the first member of 'populations')
-
-    BooleanGate inherits from the PolygonGate and generates a Population with Polygon geometry. This
-    allows the user to view the resulting 'gate' as a polygon structure. This means
-    """
-    populations = mongoengine.ListField(required=True)
-
-    def __init__(self,
-                 method: str,
-                 populations: list,
-                 *args,
-                 **kwargs):
-        if method not in ["AND", "OR", "NOT"]:
-            raise ValueError("method must be one of: 'OR', 'AND' or 'NOT'")
-        super().__init__(*args, method=method, populations=populations, **kwargs)
-
-    def _or(self, data: List[pd.DataFrame]) -> pd.DataFrame:
-        """
-        OR operation, generates index of events that is a merger of all unique events from all populations in a given
-        set of populations.
-
-        Parameters
-        ----------
-        data: list
-            List of Pandas DataFrames
-
-        Returns
-        -------
-        Pandas.DataFrame
-            New population dataframe
-        """
-        idx = np.unique(np.concatenate([df.index.values for df in data], axis=0), axis=0)
-        return pd.concat(data).drop_duplicates().loc[idx].copy()
-
-    def _and(self, data: List[pd.DataFrame]) -> pd.DataFrame:
-        """
-        AND operation, generates index of events that are present in every population of a given
-        set of populations
-
-        Parameters
-        ----------
-        data: list
-            List of Pandas DataFrames
-
-        Returns
-        -------
-        Pandas.DataFrame
-            New population dataframe
-        """
-        idx = reduce(np.intersect1d, [df.index.values for df in data])
-        return pd.concat(data).drop_duplicates().loc[idx].copy()
-
-    def _not(self,
-             data: List[pd.DataFrame]) -> pd.DataFrame:
-        """
-        NOT operation, generates index of events that contains all events in some target population that are not
-        present in some set of other populations
-
-        Parameters
-        ----------
-        data: list
-            List of Pandas DataFrames
-
-        Returns
-        -------
-        Pandas.DataFrame
-            New population dataframe
-        """
-        target = data[0]
-        subtraction_index = np.unique(np.concatenate([df.index.values for df in data[1:]], axis=0), axis=0)
-        idx = np.setdiff1d(target.index.values, subtraction_index)
-        return pd.concat(data).drop_duplicates().loc[idx].copy()
-
-    def _fit(self,
-             data: List[pd.DataFrame]) -> (ShapelyPoly, pd.DataFrame):
-        """
-        Perform boolean operation on given DataFrames of population data
-
-        Parameters
-        ----------
-        data: list
-            List of population dataframes
-        target: Pandas.DataFrame
-            Required for NOT method
-
-        Returns
-        -------
-        Polygon, Pandas.DataFrame
-
-        Raises
-        ------
-        AssertionError
-            If target not provided and method is NOT
-        """
-        if self.method == "NOT":
-            data = self._not(data=data)
-        elif self.method == "OR":
-            data = self._or(data=data)
-        else:
-            data = self._and(data=data)
-        poly = create_polygon(*create_convex_hull(x_values=data[self.x].values, y_values=data[self.y].values))
-        return poly, data
-
-    def fit(self,
-            data: List[pd.DataFrame],
-            ctrl_data=None):
-        """
-        Perform boolean operation on given DataFrames of population data. Will generate
-        a population with dummy name 'A'. Call 'label_children' to assign a simple name.
-
-        Parameters
-        ----------
-        data: list
-            List of Pandas DataFrames, one for each population
-
-        Returns
-        -------
-        None
-        """
-        data = [self.transform(x) for x in data]
-        poly, _ = self._fit(data=data)
-        self.add_child(ChildPolygon(name="A",
-                                    geom=PolygonGeom(x_values=poly.exterior.xy[0].tolist(),
-                                                     y_values=poly.exterior.xy[1].tolist())))
-
-    def fit_predict(self,
-                    data: List[pd.DataFrame],
-                    ctrl_data=None):
-        """
-        Perform boolean operation on given DataFrames of population data
-
-        Parameters
-        ----------
-        data: list
-            List of Pandas DataFrames
-        target: Pandas.DataFrame
-            Required for NOT method and used to subtract from
-
-        Returns
-        -------
-        List
-            [New population object]
-
-        Raises
-        ------
-        AssertionError
-            If target is not provided and method is NOT
-        """
-        data = list(map(self.transform, data))
-        poly, pop_data = self._fit(data=data)
-        pop = self._generate_populations(data=pop_data, polygons=[poly])[0]
-        pop.population_name = self.children[0].name
-        return [pop]
 
 
 def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
