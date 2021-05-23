@@ -33,7 +33,7 @@ from ..flow.tree import construct_tree
 from ..flow.transform import apply_transform, apply_transform_map
 from ..flow.sampling import uniform_downsampling
 from ..flow.build_models import build_sklearn_model
-from .geometry import create_convex_hull
+from .geometry import create_envelope
 from .population import Population, merge_gate_populations, merge_non_geom_populations, PolygonGeom
 from .subject import Subject
 from .errors import *
@@ -879,8 +879,9 @@ class FileGroup(mongoengine.Document):
         parent_data = self.load_population_df(population=left.parent,
                                               transform={x: transform_x,
                                                          y: transform_y})
-        x_values, y_values = create_convex_hull(x_values=parent_data.loc[new_idx][x].values,
-                                                y_values=parent_data.loc[new_idx][y].values)
+        envelope = create_envelope(x_values=parent_data.loc[new_idx][x].values,
+                                   y_values=parent_data.loc[new_idx][y].values)
+        x_values, y_values = envelope.exterior.xy[0], envelope.exterior.xy[1]
         new_geom = PolygonGeom(x=x,
                                y=y,
                                transform_x=transform_x,

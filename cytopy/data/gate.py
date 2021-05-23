@@ -31,7 +31,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from cytopy.flow.transform import apply_transform
 from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
-    create_convex_hull, create_polygon, ellipse_to_polygon, probabilistic_ellipse
+    create_envelope, create_polygon, ellipse_to_polygon, probabilistic_ellipse, GeometryError
 from .population import Population, merge_multiple_gate_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn, uniform_downsampling
 from ..flow.dim_reduction import dimensionality_reduction
@@ -46,7 +46,7 @@ from shapely.ops import cascaded_union
 from string import ascii_uppercase
 from collections import Counter
 from typing import List, Dict
-from functools import reduce
+from warnings import warn
 from KDEpy import FFTKDE
 from detecta import detect_peaks
 from scipy.signal import savgol_filter
@@ -1149,8 +1149,10 @@ class PolygonGate(Gate):
     * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be applied
     prior to fitting, forcing data to resemble a 'normal' distribution. Transform is inversed prior to
     saving of results.
-    * envelope - string value (default="concave"); how to generate the "gate" object enclosing the
-    data points defined by a clustering algorithm. Can be either "convex" or "concave".
+    * envelope_alpha - float value or None (default=0.0); alpha value for generating envelope that encapsulates identified
+    clusters, generating the Polygon we refer to as a 'gate'. By default this value is 0, generating a convex hull.
+    Should not be set too high (recommended not to be above 3.0). If set to None, will try to choose the
+    optimal alpha, although this is not recommended as it is computationally expensive.
 
     Alternatively the "method" can be "manual" for a static gate to be applied; user should
     provide x_values and y_values (if two-dimensional) to "method_kwargs" as two arrays,
@@ -1371,10 +1373,15 @@ class PolygonGate(Gate):
         -------
         List
             List of Shapely polygon's
+
+        Raises
+        ------
+        GeometryError
+            Polygon geometry cannot be generated for any of the clusters identified
         """
         if self.method == "manual":
             return [self._manual()]
-        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope", "conf"]}
+        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
@@ -1386,11 +1393,17 @@ class PolygonGate(Gate):
         else:
             labels = self.model.fit_predict(data[[self.x, self.y]])
         data = self.yeo_johnson_inverse(data=data)
-        hulls = [create_convex_hull(x_values=data.iloc[np.where(labels == i)][self.x].values,
-                                    y_values=data.iloc[np.where(labels == i)][self.y].values)
-                 for i in np.unique(labels)]
-        hulls = [x for x in hulls if len(x[0]) > 0]
-        return [create_polygon(*x) for x in hulls]
+        polygons = list()
+        for i in np.unique(labels):
+            try:
+                polygons.append(create_envelope(x_values=data.iloc[np.where(labels == i)][self.x].values,
+                                                y_values=data.iloc[np.where(labels == i)][self.y].values,
+                                                alpha=self.method_kwargs.get("envelope_alpha", 0.0)))
+            except GeometryError as e:
+                warn(f"GeometryError: {e}")
+        if len(polygons) == 0:
+            raise GeometryError("Failed to generate Polygon geometries")
+        return polygons
 
     def fit(self,
             data: pd.DataFrame,
@@ -1512,9 +1525,10 @@ class EllipseGate(PolygonGate):
     PolygonGate and the output of the mixture model is interpreted like clustering. If True, then the
     "gate" geometry is an ellipse defined by the covariant matrix of the mixture model. If yeo_johnson
     is True, then probabilistic_ellipse is always set to False.
-    * envelope - string value (default="concave"), ignored if probabilistic_ellipse = True; how to generate
-    the "gate" geometry enclosing the data points defined by a clustering algorithm. Can be either "convex"
-    or "concave".
+    * envelope_alpha - float value or None (default=0.0); alpha value for generating envelope that encapsulates identified
+    clusters, generating the Polygon we refer to as a 'gate'. By default this value is 0, generating a convex hull.
+    Should not be set too high (recommended not to be above 3.0). If set to None, will try to choose the
+    optimal alpha, although this is not recommended as it is computationally expensive.
     * conf - float (default=0.95), ignored if probabilistic_ellipse = False; controls the size of the resulting
     ellipse that captures the data points of a component. A larger value will result in a wider gate.
 
@@ -1632,10 +1646,10 @@ class EllipseGate(PolygonGate):
         list
             List of Shapely polygon's
         """
-        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope", "conf"]}
-        self.model = globals()[self.method](**params)
         if self._yeo_johnson is not None or not self.method_kwargs.get("probabilistic_ellipse", False):
             return super()._fit(data=data)
+        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
+        self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
