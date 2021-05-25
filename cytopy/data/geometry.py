@@ -84,6 +84,8 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
 class ThresholdGeom(PopulationGeometry):
     """
     Threshold shape. Inherits from PopulationGeometry.
+    NOTE: Thresholds should be stored as transformed values and converted to linear space
+    using the 'transform_to_linear' method.
 
     Attributes
     -----------
@@ -120,6 +122,8 @@ class ThresholdGeom(PopulationGeometry):
 class PolygonGeom(PopulationGeometry):
     """
     Polygon shape. Inherits from PopulationGeometry.
+    NOTE: X and Y values should be stored as transformed values and converted to linear space
+    using the 'transform_to_linear' method.
 
     Attributes
     -----------

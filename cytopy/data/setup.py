@@ -24,6 +24,9 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import os.path
+from pathlib import Path
+from loguru import logger
 import mongoengine
 
 __author__ = "Ross Burton"
@@ -34,6 +37,11 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+
+
+def setup_logs():
+    home = str(Path.home())
+    logger.add(os.path.join(home, "cytopy.log"), rotation="10 MB", format="{time} {level} {message}", level="INFO")
 
 
 def global_init(database_name: str,

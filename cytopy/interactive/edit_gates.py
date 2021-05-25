@@ -1,1 +1,0 @@
-# A boker server that uses the PolyEditTool to edit Patches on a Hextile plot
