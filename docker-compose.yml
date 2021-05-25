@@ -1,9 +1,10 @@
 version: '3'
 services:
   CytoPy:
-    image: burtonrj/cytopy:latest
+    image: burtonrj/cytopy:dev
     ports:
       - "8888:8888"
+      - "5006:5006"
     volumes:
     - /DockerData/notebooks:/home/notebooks
     - /DockerData/hdf:/home/hdf

@@ -5,10 +5,12 @@ from ..data.experiment import FileGroup
 from mongoengine.connection import connect, disconnect
 import pandas as pd
 import numpy as np
+import inspect
 import pytest
 import shutil
 import sys
 import os
+ASSET_PATH = inspect.getmodule(assets).__path__[0]
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -20,11 +22,11 @@ def setup():
     -------
     None
     """
-    sys.path.append("/home/ross/CytoPy")
-    os.mkdir(f"{os.getcwd()}/test_data")
+
+    os.mkdir(f"{ASSET_PATH}/test_data")
     connect("test", host="mongomock://localhost", alias="core")
     yield
-    shutil.rmtree(f"{os.getcwd()}/test_data", ignore_errors=True)
+    shutil.rmtree(f"{ASSET_PATH}/test_data", ignore_errors=True)
     disconnect(alias="core")
 
 
@@ -39,15 +41,15 @@ def example_populated_experiment():
     """
     test_project = Project(project_id="test", data_directory=f"{os.getcwd()}/test_data")
     exp = test_project.add_experiment(experiment_id="test experiment",
-                                      panel_definition=f"{assets.__path__._path[0]}/test_panel.xlsx")
+                                      panel_definition=f"{ASSET_PATH}/test_panel.xlsx")
     exp.add_fcs_files(sample_id="test sample",
-                      primary=f"{assets.__path__._path[0]}/test.FCS",
-                      controls={"test_ctrl": f"{assets.__path__._path[0]}/test.FCS"},
+                      primary=f"{ASSET_PATH}/test.fcs",
+                      controls={"test_ctrl": f"{ASSET_PATH}/test.fcs"},
                       compensate=False)
     yield exp
     test_project.reload()
     test_project.delete()
-    os.mkdir(f"{os.getcwd()}/test_data")
+    os.mkdir(f"{ASSET_PATH}/test_data")
 
 
 def reload_filegroup(project_id: str,

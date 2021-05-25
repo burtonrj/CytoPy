@@ -50,6 +50,7 @@ from warnings import warn
 from KDEpy import FFTKDE
 from detecta import detect_peaks
 from scipy.signal import savgol_filter
+from functools import reduce
 import pandas as pd
 import numpy as np
 import mongoengine
@@ -281,6 +282,12 @@ class Gate(mongoengine.Document):
             else:
                 data[features] = self._yeo_johnson.inverse_transform(data[features])
         return data
+
+    def transform_info(self):
+        transforms = {axis: transform for axis, transform in
+                      zip([self.x, self.y], [self.transform_x, self.transform_y])
+                      if axis is not None and transform is not None}
+        return transforms
 
     def transform(self,
                   data: pd.DataFrame) -> pd.DataFrame:
@@ -1648,7 +1655,8 @@ class EllipseGate(PolygonGate):
         """
         if self._yeo_johnson is not None or not self.method_kwargs.get("probabilistic_ellipse", False):
             return super()._fit(data=data)
-        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
+        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf",
+                                                                           "probabilistic_ellipse"]}
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
@@ -1659,6 +1667,156 @@ class EllipseGate(PolygonGate):
         polygons = [ellipse_to_polygon(centroid, *ellipse)
                     for centroid, ellipse in zip(self.model.means_, ellipses)]
         return polygons
+
+
+class BooleanGate(PolygonGate):
+    """
+    The BooleanGate is a special class of Gate that allows for merging, subtraction, and intersection methods.
+    A BooleanGate should be defined with one of the following string values as its 'method' and a set of
+    population names as 'populations' in method_kwargs:
+    * AND - generates a new population containing only events present in every population of a given
+    set of populations
+    * OR - generates a new population that is a merger of all unique events from all populations in a given
+    set of populations
+    * NOT - generates a new population that contains all events in some target population that are not
+    present in some set of other populations (taken as the first member of 'populations')
+    BooleanGate inherits from the PolygonGate and generates a Population with Polygon geometry. This
+    allows the user to view the resulting 'gate' as a polygon structure. This means
+    """
+    populations = mongoengine.ListField(required=True)
+
+    def __init__(self,
+                 method: str,
+                 populations: list,
+                 *args,
+                 **kwargs):
+        if method not in ["AND", "OR", "NOT"]:
+            raise ValueError("method must be one of: 'OR', 'AND' or 'NOT'")
+        super().__init__(*args, method=method, populations=populations, **kwargs)
+
+    def _or(self, data: List[pd.DataFrame]) -> pd.DataFrame:
+        """
+        OR operation, generates index of events that is a merger of all unique events from all populations in a given
+        set of populations.
+        Parameters
+        ----------
+        data: list
+            List of Pandas DataFrames
+        Returns
+        -------
+        Pandas.DataFrame
+            New population dataframe
+        """
+        idx = np.unique(np.concatenate([df.index.values for df in data], axis=0), axis=0)
+        return pd.concat(data).drop_duplicates().loc[idx].copy()
+
+    def _and(self, data: List[pd.DataFrame]) -> pd.DataFrame:
+        """
+        AND operation, generates index of events that are present in every population of a given
+        set of populations
+        Parameters
+        ----------
+        data: list
+            List of Pandas DataFrames
+        Returns
+        -------
+        Pandas.DataFrame
+            New population dataframe
+        """
+        idx = reduce(np.intersect1d, [df.index.values for df in data])
+        return pd.concat(data).drop_duplicates().loc[idx].copy()
+
+    def _not(self,
+             data: List[pd.DataFrame]) -> pd.DataFrame:
+        """
+        NOT operation, generates index of events that contains all events in some target population that are not
+        present in some set of other populations
+        Parameters
+        ----------
+        data: list
+            List of Pandas DataFrames
+        Returns
+        -------
+        Pandas.DataFrame
+            New population dataframe
+        """
+        target = data[0]
+        subtraction_index = np.unique(np.concatenate([df.index.values for df in data[1:]], axis=0), axis=0)
+        idx = np.setdiff1d(target.index.values, subtraction_index)
+        return pd.concat(data).drop_duplicates().loc[idx].copy()
+
+    def _fit(self,
+             data: List[pd.DataFrame]) -> (ShapelyPoly, pd.DataFrame):
+        """
+        Perform boolean operation on given DataFrames of population data
+        Parameters
+        ----------
+        data: list
+            List of population dataframes
+        target: Pandas.DataFrame
+            Required for NOT method
+        Returns
+        -------
+        Polygon, Pandas.DataFrame
+        Raises
+        ------
+        AssertionError
+            If target not provided and method is NOT
+        """
+        if self.method == "NOT":
+            data = self._not(data=data)
+        elif self.method == "OR":
+            data = self._or(data=data)
+        else:
+            data = self._and(data=data)
+        poly = create_envelope(x_values=data[self.x].values, y_values=data[self.y].values)
+        return poly, data
+
+    def fit(self,
+            data: List[pd.DataFrame],
+            ctrl_data=None):
+        """
+        Perform boolean operation on given DataFrames of population data. Will generate
+        a population with dummy name 'A'. Call 'label_children' to assign a simple name.
+        Parameters
+        ----------
+        data: list
+            List of Pandas DataFrames, one for each population
+        Returns
+        -------
+        None
+        """
+        data = [self.transform(x) for x in data]
+        poly, _ = self._fit(data=data)
+        self.add_child(ChildPolygon(name="A",
+                                    geom=PolygonGeom(x_values=poly.exterior.xy[0].tolist(),
+                                                     y_values=poly.exterior.xy[1].tolist())))
+
+    def fit_predict(self,
+                    data: List[pd.DataFrame],
+                    ctrl_data=None):
+        """
+        Perform boolean operation on given DataFrames of population data
+        Parameters
+        ----------
+        data: list
+            List of Pandas DataFrames
+        target: Pandas.DataFrame
+            Required for NOT method and used to subtract from
+        Returns
+        -------
+        List
+            [New population object]
+        Raises
+        ------
+        AssertionError
+            If target is not provided and method is NOT
+        """
+        data = list(map(self.transform, data))
+        poly, pop_data = self._fit(data=data)
+        pop = self._generate_populations(data=pop_data, polygons=[poly])[0]
+        pop.population_name = self.children[0].name
+        return [pop]
 
 
 def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:

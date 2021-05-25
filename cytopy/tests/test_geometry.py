@@ -63,24 +63,23 @@ def test_polygon_overlap(poly1, poly2, expected):
     assert polygon_overlap(poly1, poly2, threshold=0.6) == 0.
 
 
-def test_create_convex_hull():
+def test_create_envelope():
     test_data = make_blobs(n_samples=1000,
                            n_features=2,
                            centers=1,
                            center_box=(0, 5),
                            random_state=42)[0]
     x, y = test_data[:, 0], test_data[:, 1]
-    hull = create_envelope(x, y)
-    assert isinstance(hull[0], list)
-    assert isinstance(hull[1], list)
+    envelope = create_envelope(x, y)
+    assert isinstance(envelope, Polygon)
     for idx, t in enumerate([x, y]):
         lower = np.quantile(t, 0.05)
         upper = np.quantile(t, 0.95)
         t_ = [i for i in t if lower < i < upper]
         for i in range(100):
             s = np.random.choice(t_, 1)[0]
-            assert s >= np.min(hull[idx])
-            assert s <= np.max(hull[idx])
+            assert s >= np.min(envelope.exterior.xy[idx])
+            assert s <= np.max(envelope.exterior.xy[idx])
 
 
 @pytest.mark.parametrize("conf", [0.95, 0.8, 0.5])

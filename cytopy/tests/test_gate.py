@@ -676,8 +676,7 @@ def test_polygon_match_to_children():
                               random_state=42)
     data_dict = [{"data": data[np.where(labels == i)],
                   "signature": pd.DataFrame(data[np.where(labels == i)], columns=["X", "Y"]).mean().to_dict(),
-                  "poly": create_polygon(
-                      *create_envelope(data[np.where(labels == i)][:, 0], data[np.where(labels == i)][:, 1]))}
+                  "poly": create_envelope(data[np.where(labels == i)][:, 0], data[np.where(labels == i)][:, 1])}
                  for i in range(5)]
     g = create_polygon_gate(klass=gate.PolygonGate, method="MiniBatchKMeans")
     for i in [0, 1]:
@@ -752,10 +751,10 @@ def test_polygon_fit(gate):
     data = pd.DataFrame(data, columns=["X", "Y"])
     gate.fit(data=data)
     assert len(gate.children) == 2
-    centroids = [create_polygon(*create_envelope(data.loc[np.where(labels == i)]["X"].values,
-                                                 data.loc[np.where(labels == i)]["Y"].values)).centroid.xy for i in
+    centroids = [create_envelope(data.loc[np.where(labels == i)]["X"].values,
+                                 data.loc[np.where(labels == i)]["Y"].values).centroid.xy for i in
                  np.unique(labels)]
-    child_centroids = [create_polygon(*create_envelope(c.geom.x_values, c.geom.y_values)).centroid.xy
+    child_centroids = [create_envelope(c.geom.x_values, c.geom.y_values).centroid.xy
                        for c in gate.children]
     for c in child_centroids:
         distances = [abs(euclidean(c, centroid)) for centroid in centroids]

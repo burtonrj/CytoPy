@@ -20,12 +20,12 @@ def reload_gatingstrategy(example_populated_experiment):
 
 
 def create_poly_gate():
-    y = [0.2, 0.2, 0.35, 0.35, 0.2]
-    x = [600, 1000, 1000, 600, 600]
+    y = [1000, 1000, 50000, 50000, 1000]
+    x = [10000, 200000, 200000, 10000, 10000]
     poly = PolygonGate(gate_name="test poly",
                        parent="root",
-                       x="FS Lin",
-                       y="IgG1-FITC",
+                       x="FSC-A",
+                       y="CD3",
                        transform_x=None,
                        transform_y="logicle",
                        method="manual",
@@ -37,8 +37,8 @@ def create_poly_gate():
 def create_threshold_gate():
     threshold = ThresholdGate(gate_name="test threshold",
                               parent="root",
-                              x="FS Lin",
-                              y="IgG1-FITC",
+                              x="FSC-A",
+                              y="CD3",
                               transform_x=None,
                               transform_y="logicle",
                               method="density")
@@ -48,14 +48,15 @@ def create_threshold_gate():
 def create_ellipse_gate():
     ellipse = EllipseGate(gate_name="test ellipse",
                           parent="root",
-                          x="FS Lin",
-                          y="IgG1-FITC",
+                          x="FSC-A",
+                          y="CD3",
                           transform_x=None,
                           transform_y="logicle",
                           method="GaussianMixture",
-                          method_kwargs={"n_components": 1,
+                          method_kwargs={"n_components": 3,
                                          "random_state": 42,
-                                         "conf": 0.999})
+                                         "conf": 0.999,
+                                         "probabilistic_ellipse": True})
     return ellipse
 
 
@@ -63,15 +64,16 @@ def apply_some_gates(gs: GatingStrategy):
     # Apply threshold gate
     gate = create_threshold_gate()
     gs.preview_gate(gate=gate)
-    gate.label_children(labels={"++": "pop1",
+    gate.label_children(labels={"+-": "other",
                                 "--": "other",
-                                "+-": "other",
-                                "-+": "other"})
+                                "++": "other",
+                                "-+": "pop1"})
     gs.apply_gate(gate)
     # Apply ellipse gate
     gate = create_ellipse_gate()
     gate.parent = "pop1"
-    gate.y = "CD45-ECD"
+    gate.y = "CD4"
+    gate.x = "CD8"
     gs.preview_gate(gate=gate)
     gate.label_children({"A": "pop2"})
     gs.apply_gate(gate)
@@ -79,7 +81,7 @@ def apply_some_gates(gs: GatingStrategy):
     gate = create_threshold_gate()
     gate.gate_name = "test threshold 2"
     gate.parent = "pop2"
-    gate.x, gate.y = "IgG1-PC5", None
+    gate.x, gate.y = "CD57", None
     gate.transform_x, gate.transform_y = "logicle", None
     gs.preview_gate(gate=gate)
     gate.label_children({"+": "pop3", "-": "pop4"})
@@ -98,7 +100,7 @@ def test_load_data(example_populated_experiment):
 @pytest.mark.parametrize("gate,child_n",
                          [(create_threshold_gate, 4),
                           (create_poly_gate, 1),
-                          (create_ellipse_gate, 2)])
+                          (create_ellipse_gate, 3)])
 def test_preview_gate(example_populated_experiment, gate, child_n):
     gs = create_gatingstrategy_and_load(example_populated_experiment)
     gate = gate()
@@ -124,8 +126,8 @@ def test_apply_gate(example_populated_experiment, gate, populations):
                                     "+-": "Bottom populations"})
     elif isinstance(gate, EllipseGate):
         pops = sorted([(c.name, c.geom.x_values) for c in gate.children], key=lambda x: x[1])
-        gate.label_children({pops[0][0]: "Little pop",
-                             pops[1][0]: "Big pop"})
+        gate.label_children({pops[0][0]: "Big pop",
+                             pops[1][0]: "Little pop"})
     else:
         gate.label_children({"A": "Big pop"})
     gs.apply_gate(gate=gate,
@@ -136,7 +138,7 @@ def test_apply_gate(example_populated_experiment, gate, populations):
     root = gs.filegroup.get_population("root")
     assert all([len(p.index) < len(root.index) for p in not_root])
     biggest_pop = [p for p in not_root
-                   if p.population_name == "Top right" or p.population_name == "Big pop"][0]
+                   if p.population_name == "Top left" or p.population_name == "Big pop"][0]
     assert all([len(p.index) <= len(biggest_pop.index) for p in not_root])
 
 
@@ -181,7 +183,7 @@ def test_add_hyperparameter_grid_ellipse(example_populated_experiment):
 
 def assert_expected_gated_pops(gs: GatingStrategy):
     # Test expected populations present
-    expected_pops = {"root", "pop1", "pop2", "pop3", "pop4"}
+    expected_pops = {"root", "pop1", "pop2", "pop3", "pop4", "other"}
     assert set(gs.list_populations()) == expected_pops
     assert all([x in gs.filegroup.tree.keys() for x in expected_pops])
     # Test population tree
@@ -262,8 +264,8 @@ def test_plot_backgate(example_populated_experiment):
     plt.close("all")
     gs.plot_backgate(parent="root",
                      overlay=["pop3", "pop4"],
-                     x="FS Lin",
-                     y="IgG1-FITC",
+                     x="FSC-A",
+                     y="CD3",
                      create_plot_kwargs={"transform_x": None,
                                          "transform_y": "logicle"})
     plt.show()
