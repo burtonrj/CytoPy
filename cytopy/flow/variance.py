@@ -1096,3 +1096,35 @@ def create_experiment(project,
     panel_definition = {"markers": markers, "channels": channels, "mappings": mappings}
     return project.add_experiment(experiment_id=experiment_name,
                                   panel_definition=panel_definition)
+
+
+class HarmonyMatch:
+    """
+    Unlike the Harmony class, HarmonyMatch performs alignment of a single FileGroup to some reference
+    FileGroup. The intention is to be used as a "denoising" method for training data to supervised
+    classification, similar to the approach taken by Li et al [1].
+
+    The HarmonyMatch class returns a batch aligned DataFrame of a population in a new transformed space,
+    however the index of cells remains the same and can be used to assign population labels.
+
+    Alignment is performed using the Harmony algorithm, first described by Korsunsky et al [2] and
+    implemented in Python by Kamil Slowikowski [3].
+
+    [1] Li H, Shaham U, Stanton KP, Yao Y, Montgomery RR, Kluger Y. Gating mass cytometry data by
+    deep learning. Bioinformatics. 2017 Nov 1;33(21):3423-3430. doi: 10.1093/bioinformatics/btx448.
+    PMID: 29036374; PMCID: PMC5860171.
+    [2] Korsunsky, I., Millard, N., Fan, J. et al. Fast, sensitive and accurate integration of single-cell data
+    with Harmony. Nat Methods 16, 1289–1296 (2019). https://doi.org/10.1038/s41592-019-0619-0
+    [3] https://github.com/slowkow/harmonypy
+    """
+    def __init__(self):
+        pass
+
+    def run(self):
+        pass
+
+    def batch_lisi_distribution(self):
+        pass
+
+    def plot_umap_overlay(self):
+        pass

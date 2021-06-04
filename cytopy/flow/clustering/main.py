@@ -7,9 +7,15 @@ in your data (all your fluorochromes/isotypes). In cytopy, the clustering is
 performed on a Population of a FileGroup. The resulting clusters are saved
 as new Populations.
 
-We can compare the clustering results of many FileGroup's by 'clustering the clusters', to do
-this we summarise their clusters and perform meta-clustering. In this module
-you will find the Clustering class, which is the apparatus to apply a
+In CytoPy, we refer to three different types of clustering:
+* Per-sample clustering, where each FileGroup (sample) is clustered individually
+* Global clustering, where FileGroup's (sample's) are combined into the same space and clustering is
+performed for all events - this is computationally expensive and requires that batch effects have been
+minimised or corrected prior to clustering
+* Meta-clustering, where the clustering results of individual FileGroup's are clustered to
+match clusters between FileGroup's; essentially 'clustering the clusters'
+
+In this module you will find the Clustering class, which is the apparatus to apply a
 clustering method in cytopy and save the results to the database. We also
 provide implementations of PhenoGraph, FlowSOM and provide access to any
 of the clustering methods available through the Scikit-Learn API.
@@ -1056,6 +1062,30 @@ class Clustering:
                 pop.index = cluster.original_index.values
                 fg.add_population(population=pop)
             fg.save()
+
+
+class LatentClustering:
+    """
+    The LatentClustering class is inspired from ACCENSE [1] and can be used for global clustering
+
+    """
+    def __init__(self):
+        pass
+
+    def load(self):
+        pass
+
+    def dimension_reduction(self):
+        pass
+
+    def cluster(self):
+        pass
+
+    def plot(self):
+        pass
+
+    def heatmap(self):
+        pass
 
 
 def geo_mean(x):
