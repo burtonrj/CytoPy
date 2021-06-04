@@ -24,10 +24,11 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-import os.path
-from pathlib import Path
+from typing import Union
 from loguru import logger
+from pathlib import Path
 import mongoengine
+import os
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -39,16 +40,34 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def setup_logs():
-    home = str(Path.home())
-    logger.add(os.path.join(home, "cytopy.log"), rotation="10 MB", format="{time} {level} {message}", level="INFO")
+def setup_logs(path: Union[str, None] = None) -> None:
+    """
+    Setup logging
+
+    Parameters
+    ----------
+    path: str, optional
+        Where to store logs (defaults to home path)
+
+    Returns
+    -------
+    None
+    """
+    path = path or str(Path.home())
+    logger.add(os.path.join(path, "cytopy.log"),
+               rotation="10 MB",
+               format="{time} {level} {message}",
+               level="INFO")
 
 
 def global_init(database_name: str,
+                logging_path: Union[str, None] = None,
                 **kwargs) -> None:
     """
-    Global initializer for mongogengine ORM. See mongoengine.register_connection for additional keyword arguments and
-    mongoengine documentation for extensive details about registering connections. In brief, database connections are
+    Global initializer for mongogengine ORM and logging. Logging is managed using the loguru package.
+
+    See mongoengine.register_connection for additional keyword arguments and mongoengine
+    documentation for extensive details about registering connections. In brief, database connections are
     registered globally and refered to using an alias. By default cytopy uses the alias 'core'.
 
     The database is assumed to be hosted locally, but if a remote server is used the user should provide the host
@@ -58,6 +77,8 @@ def global_init(database_name: str,
     -----------
     database_name: str
         name of database to establish connection with
+    logging_path: Union[str, None]
+        defaults to home path
     kwargs:
         Additional keyword arguments passed to 'register_connection' function of mongoengine.
         See https://docs.mongoengine.org/guide/connecting.html
@@ -66,4 +87,5 @@ def global_init(database_name: str,
     --------
     None
     """
+    setup_logs(logging_path)
     mongoengine.register_connection(alias="core", name=database_name, **kwargs)
