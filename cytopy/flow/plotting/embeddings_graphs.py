@@ -25,7 +25,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ..dim_reduction import dimensionality_reduction
+from ..dim_reduction import DimensionReduction
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from scipy.spatial.distance import pdist, squareform
 from itertools import cycle
@@ -364,13 +364,10 @@ def _generate_cluster_centroids(data: pd.DataFrame,
     data = data.dropna(axis=1, how="any")
     centroids = _cluster_centroids(data=data, features=features, sample_label=sample_label, cluster_label=cluster_label)
     if dim_reduction_method is not None:
-        centroids = dimensionality_reduction(data=centroids,
-                                             features=features,
-                                             method=dim_reduction_method,
-                                             n_components=n_components,
-                                             return_reducer=False,
-                                             return_embeddings_only=False,
-                                             **dim_reduction_kwargs)
+        reducer = DimensionReduction(method=dim_reduction_method,
+                                     n_components=n_components,
+                                     **dim_reduction_kwargs)
+        centroids = reducer.fit_transform(data=centroids, features=features)
     centroids = centroids.merge(_cluster_size(_sample_n(data=data,
                                                         sample_label=sample_label),
                                               _cluster_n(data=data,
