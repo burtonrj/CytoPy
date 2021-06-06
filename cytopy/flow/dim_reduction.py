@@ -30,10 +30,12 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from sklearn.manifold import TSNE
+from sklearn.manifold import TSNE, Isomap, MDS
 from sklearn.decomposition import PCA, KernelPCA
+from typing import List, Union, Type
+from warnings import warn
+from loguru import logger
 from umap import UMAP
-import numpy as np
 import pandas as pd
 import phate
 
@@ -47,69 +49,142 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def dimensionality_reduction(data: pd.DataFrame,
-                             features: list,
-                             method: str,
-                             n_components: int,
-                             return_embeddings_only: bool = False,
-                             return_reducer: bool = False,
-                             **kwargs) -> pd.DataFrame or np.array:
+class DimensionReduction:
     """
-    Perform dimensionality reduction using either UMAP, PCA, tSNE, or PHATE. PCA and tSNE are implemented using
-    the Scikit-Learn machine learning library.
-    Documentation for UMAP can be found here: https://umap-learn.readthedocs.io/en/latest/
-    Documentation for PHATE can be found here: https://phate.readthedocs.io/en/stable/
+    Dimension reduction methods with in-built support for:
+
+    * UMAP
+    * t-SNE
+    * PCA
+    * Kernel PCA
+    * Multidimensional scaling (MDS)
+    * Isomap
+    * PHATE
+
+    You can provide your own custom method by providing a class to the 'method' parameter, so long as that
+    class has a 'fit_transform' function defined, with optionally 'fit' and 'transform' also defined. These methods
+    should accept a Pandas DataFrame and a list of columns (features). The 'transform' and 'fit_transform' functions
+    must return a Pandas DataFrame with embeddings as new columns.
 
     Parameters
     -----------
-    data: Pandas.DataFrame
-        Events to perform dim reduction on
-    features: list
-        column names for feature space
-    method: str
-        method to use; either UMAP, PCA, tSNE, or PHATE
-    n_components: int
-        number of components to generate
-    return_embeddings_only: bool, (default=True)
-        if True, the embeddings are returned as a numpy array, otherwise original dataframe
-        is returned modified with new columns, one for each embedding (column name of format {Method}_{i}
-        where i = 0 to n_components)
-    return_reducer: bool, (default=False)
-        If True, returns instance of dimensionality reduction object
+    method: str or custom type
+        Method to use for dimension reduction (see DimensionReduction.base_methods)
+    n_components: int (Default=2)
+        Number of embeddings to retain
+    random_state: int (default=42)
     kwargs:
-        keyword arguments to pass to chosen dim reduction method
+        Additional keyword arguments passed to base method
 
-    Returns
-    --------
-    (Pandas.DataFrame or numpy.ndarray) or (Pandas.DataFrame or numpy.ndarray, Reducer)
-        Embeddings as numpy array or original DataFrame with new columns for embeddings
-
-    Raises
-    ------
-    ValueError
-        Invalid method requested
+    Attributes
+    ----------
+    method: Object
+        Reducer object with type of requested method
+    embeddings: None or Numpy.Array
+        Embeddings generated from fit_transform method
     """
-    data = data.copy()
-    if method == 'UMAP':
-        reducer = UMAP(random_state=42, n_components=n_components, **kwargs)
-    elif method == 'PCA':
-        reducer = PCA(random_state=42, n_components=n_components, **kwargs)
-    elif method == 'tSNE':
-        reducer = TSNE(random_state=42, n_components=n_components, **kwargs)
-    elif method == 'PHATE':
-        reducer = phate.PHATE(random_state=42, n_jobs=-2, n_components=n_components, verbose=False, **kwargs)
-    elif method == 'KernelPCA':
-        reducer = KernelPCA(random_state=42, n_components=n_components, **kwargs)
-    else:
-        raise ValueError("Error: invalid method given for plot clusters, "
-                         "must be one of: 'UMAP', 'tSNE', 'PCA', 'PHATE', 'KernelPCA'")
-    embeddings = reducer.fit_transform(data[features])
-    if return_embeddings_only:
-        if return_reducer:
-            return embeddings, reducer
-        return embeddings
-    for i, e in enumerate(embeddings.T):
-        data[f'{method}{i+1}'] = e
-    if return_reducer:
-        return data, reducer
-    return data
+    base_methods = {"UMAP": UMAP,
+                    "PCA": PCA,
+                    "tSNE": TSNE,
+                    "PHATE": phate.PHATE,
+                    "KernelPCA": KernelPCA,
+                    "MDS": MDS,
+                    "Isomap": Isomap}
+
+    def __init__(self,
+                 method: Union[str, Type],
+                 n_components: int = 2,
+                 random_state: int = 42,
+                 **kwargs):
+        params = dict(n_components=n_components,
+                      random_state=random_state)
+        params = {**params, **kwargs}
+        try:
+            if isinstance(method, str):
+                self.method = self.base_methods[method](**params)
+        except KeyError:
+            raise KeyError(f"Invalid method, must be one of: {self.base_methods.keys()} or a valid class with "
+                           f"method: fit_transform")
+        except AttributeError as e:
+            logger.error(f"Attribute error when initiating dim reduction method {method}")
+            logger.exception(e)
+            raise AttributeError(f"Attribute error when initiating dim reduction method {method}", e)
+        self.embeddings = None
+        self._method_name = type(self.method).__name__
+
+    def fit(self,
+            data: pd.DataFrame,
+            features: List[str]) -> Union[None, pd.DataFrame]:
+        """
+        Fit the underlying method. Will call 'fit_transform' if fit is not supported.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: List[str]
+            List of features (columns) to use
+
+        Returns
+        -------
+        None or Pandas.DataFrame
+            If fit is not supported, will returns a Pandas DataFrame.
+        """
+        if not hasattr(self.method, "fit"):
+            warn(f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead.")
+            logger.warning(f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead.")
+            return self.fit_transform(data=data, features=features)
+        self.method.fit(data[features])
+
+    def fit_transform(self,
+                      data: pd.DataFrame,
+                      features: List[str]) -> pd.DataFrame:
+        """
+        Fit the underlying method and generate transformed embeddings. Transformed embeddings are
+        stored as new columns in the Pandas DataFrame. DataFrame is copied and not mutated.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: List[str]
+            List of features (columns) to use
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        data = data.copy()
+        self.embeddings = self.method.fit_transform(data[features])
+        for i, e in enumerate(self.embeddings.T):
+            data[f'{self._method_name}{i + 1}'] = e
+        return data
+
+    def transform(self,
+                  data: pd.DataFrame,
+                  features: List[str]) -> pd.DataFrame:
+        """
+        Generate embeddings for the given DataFrame using the current fitted method. Transformed embeddings are
+        stored as new columns in the Pandas DataFrame. DataFrame is copied and not mutated.
+
+        Will call 'fit_transform' if fit is not supported.
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: List[str]
+            List of features (columns) to use
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        if not hasattr(self.method, "transform"):
+            warn(f"Method {self._method_name} has no method 'transform', calling 'fit_transform' instead.")
+            logger.warning(f"Method {self._method_name} has no method 'transform', calling 'fit_transform' instead.")
+            return self.fit_transform(data=data, features=features)
+
+        data = data.copy()
+        embeddings = self.method.transform(data[features])
+        for i, e in enumerate(embeddings.T):
+            data[f'{self._method_name}{i + 1}'] = e
+        return data
+

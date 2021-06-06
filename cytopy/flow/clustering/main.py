@@ -55,7 +55,7 @@ from ...data.experiment import Experiment, load_population_data_from_experiment
 from ...data.population import Population
 from ...data.subject import Subject
 from ...feedback import vprint, progress_bar
-from ..dim_reduction import dimensionality_reduction
+from ..dim_reduction import DimensionReduction
 from ..plotting import single_cell_plot, cluster_bubble_plot
 from ..transform import Scaler
 from .consensus import ConsensusCluster
@@ -934,13 +934,10 @@ class Clustering:
         """
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         df = self.data[self.data.sample_id == sample_id].copy()
-        df = dimensionality_reduction(data=df,
-                                      features=self.features,
-                                      n_components=2,
-                                      return_reducer=False,
-                                      return_embeddings_only=False,
-                                      method=method,
-                                      **dim_reduction_kwargs)
+        reducer = DimensionReduction(method=method,
+                                     n_components=2,
+                                     **dim_reduction_kwargs)
+        df = reducer.fit_transform(data=df, features=self.features)
         return single_cell_plot(data=df,
                                 x=f"{method}1",
                                 y=f"{method}2",

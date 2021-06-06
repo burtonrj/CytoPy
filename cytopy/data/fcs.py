@@ -39,6 +39,7 @@ from .subject import Subject
 from .errors import *
 from sklearn.model_selection import StratifiedKFold, permutation_test_score
 from imblearn.over_sampling import RandomOverSampler
+from loguru import logger
 from warnings import warn
 from typing import List, Generator
 import pandas as pd
@@ -268,6 +269,7 @@ class FileGroup(mongoengine.Document):
                                         sample_size=sample_size)
         return data
 
+    @logger.catch
     def init_new_file(self,
                       data: np.array,
                       channels: List[str],
@@ -305,6 +307,7 @@ class FileGroup(mongoengine.Document):
         self.tree = {"root": anytree.Node(name="root", parent=None)}
         self.save()
 
+    @logger.catch
     def add_ctrl_file(self,
                       ctrl_id: str,
                       data: np.array,
@@ -374,6 +377,7 @@ class FileGroup(mongoengine.Document):
                     continue
                 p.index = primary_index
 
+    @logger.catch
     def add_population(self,
                        population: Population):
         """
@@ -405,6 +409,7 @@ class FileGroup(mongoengine.Document):
         self.tree[population.population_name] = anytree.Node(name=population.population_name,
                                                              parent=self.tree.get(population.parent))
 
+    @logger.catch
     def update_population(self,
                           pop: Population):
         """
@@ -592,6 +597,7 @@ class FileGroup(mongoengine.Document):
                                                        data=data)
         return data
 
+    @logger.catch
     def _label_downstream_affiliations(self,
                                        parent: str,
                                        data: pd.DataFrame) -> pd.DataFrame:
@@ -621,6 +627,7 @@ class FileGroup(mongoengine.Document):
         data["population_label"].fillna(parent, inplace=True)
         return data
 
+    @logger.catch
     def _hdf5_exists(self):
         """
         Tests if associated HDF5 file exists.
@@ -631,6 +638,7 @@ class FileGroup(mongoengine.Document):
         """
         return os.path.isfile(self.h5path)
 
+    @logger.catch
     def list_populations(self) -> list:
         """
         List population names
@@ -641,6 +649,7 @@ class FileGroup(mongoengine.Document):
         """
         return [p.population_name for p in self.populations]
 
+    @logger.catch
     def print_population_tree(self,
                               image: bool = False,
                               path: str or None = None):
@@ -667,6 +676,7 @@ class FileGroup(mongoengine.Document):
         for pre, fill, node in anytree.RenderTree(root):
             print('%s%s' % (pre, node.name))
 
+    @logger.catch
     def delete_populations(self, populations: list or str) -> None:
         """
         Delete given populations. Populations downstream from delete population(s) will
@@ -707,6 +717,7 @@ class FileGroup(mongoengine.Document):
                 self.tree[name].parent = None
             self.tree = {name: node for name, node in self.tree.items() if name not in populations}
 
+    @logger.catch
     def get_population(self,
                        population_name: str) -> Population:
         """
@@ -731,6 +742,7 @@ class FileGroup(mongoengine.Document):
             raise MissingPopulationError(f'Population {population_name} does not exist')
         return [p for p in self.populations if p.population_name == population_name][0]
 
+    @logger.catch
     def get_population_by_parent(self,
                                  parent: str) -> Generator:
         """
@@ -750,6 +762,7 @@ class FileGroup(mongoengine.Document):
             if p.parent == parent and p.population_name != "root":
                 yield p
 
+    @logger.catch
     def list_downstream_populations(self,
                                     population: str) -> list or None:
         """For a given population find all dependencies
@@ -776,6 +789,7 @@ class FileGroup(mongoengine.Document):
         dependencies = [x.name for x in anytree.findall(root, filter_=lambda n: node in n.path)]
         return [p for p in dependencies if p != population]
 
+    @logger.catch
     def merge_gate_populations(self,
                                left: Population or str,
                                right: Population or str,
@@ -804,6 +818,7 @@ class FileGroup(mongoengine.Document):
             right = self.get_population(right)
         self.add_population(merge_gate_populations(left=left, right=right, new_population_name=new_population_name))
 
+    @logger.catch
     def merge_non_geom_populations(self,
                                    populations: list,
                                    new_population_name: str):
@@ -837,6 +852,7 @@ class FileGroup(mongoengine.Document):
                 raise ValueError("populations should be a list of strings or list of Population objects")
         self.add_population(merge_non_geom_populations(populations=pops, new_population_name=new_population_name))
 
+    @logger.catch
     def subtract_populations(self,
                              left: Population,
                              right: Population,
@@ -896,6 +912,7 @@ class FileGroup(mongoengine.Document):
                                     warnings=left.warnings + right.warnings + ["SUBTRACTED POPULATION"])
         self.add_population(population=new_population)
 
+    @logger.catch
     def _write_populations(self):
         """
         Write population data to disk.
@@ -915,6 +932,7 @@ class FileGroup(mongoengine.Document):
                 p.prop_of_total = p.n / root_n
                 overwrite_or_create(file=f, data=p.index, key=f"/index/{p.population_name}/primary")
 
+    @logger.catch
     def population_stats(self,
                          population: str,
                          warn_missing: bool = False):
@@ -947,6 +965,7 @@ class FileGroup(mongoengine.Document):
                     "frac_of_parent": 0,
                     "frac_of_root": 0}
 
+    @logger.catch
     def quantile_clean(self,
                        upper: float = 0.999,
                        lower: float = 0.001):
@@ -972,6 +991,7 @@ class FileGroup(mongoengine.Document):
                                n=df.shape[0])
         self.add_population(clean_pop)
 
+    @logger.catch
     def save(self, *args, **kwargs):
         """
         Save FileGroup and associated populations
@@ -986,6 +1006,7 @@ class FileGroup(mongoengine.Document):
             self._write_populations()
         super().save(*args, **kwargs)
 
+    @logger.catch
     def delete(self,
                delete_hdf5_file: bool = True,
                *args,

@@ -34,7 +34,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from ..data.experiment import Experiment, FileGroup
 from ..feedback import progress_bar, vprint, setup_standard_logger
 from ..flow import transform as transform_module
-from .dim_reduction import dimensionality_reduction
+from .dim_reduction import DimensionReduction
 from .sampling import density_dependent_downsampling, faithful_downsampling, uniform_downsampling
 from .transform import apply_transform, Transformer
 from sklearn.model_selection import GridSearchCV
@@ -45,14 +45,15 @@ from scipy.cluster import hierarchy
 from scipy.spatial import distance
 from collections import defaultdict
 from KDEpy import FFTKDE
+from loguru import logger
 from warnings import warn
+from typing import List, Dict, Callable, Union, Tuple
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import seaborn as sns
 import pandas as pd
 import numpy as np
 import harmonypy
-import logging
 import math
 
 np.random.seed(42)
@@ -69,15 +70,16 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
+@logger.catch
 def load_and_sample(experiment: Experiment,
                     population: str,
-                    sample_size: int or float,
-                    sample_ids: list or None = None,
-                    sampling_method: str or None = "uniform",
-                    transform: str or None = "logicle",
-                    features: list or None = None,
-                    transform_kwargs: dict or None = None,
-                    **kwargs) -> pd.DataFrame and Transformer:
+                    sample_size: Union[int, float],
+                    sample_ids: Union[List[str], None] = None,
+                    sampling_method: Union[str, None] = "uniform",
+                    transform: Union[str, None] = "logicle",
+                    features: Union[List[str], None] = None,
+                    transform_kwargs: Union[Dict[str, str], None] = None,
+                    **kwargs) -> (pd.DataFrame, Transformer):
     """
     Load sample data from experiment and return a Pandas DataFrame. Individual samples
     identified by "sample_id" column
@@ -102,9 +104,10 @@ def load_and_sample(experiment: Experiment,
 
     Raises
     ------
-    AssertionError
+    ValueError
         No feature provided yet transform requested
     """
+    logger.info(f"Sampling {experiment.experiment_id} for Population {population}")
     transform_kwargs = transform_kwargs or {}
     sample_ids = sample_ids or experiment.list_samples()
     files = [experiment.get_sample(s) for s in sample_ids]
@@ -119,17 +122,19 @@ def load_and_sample(experiment: Experiment,
         data.append(df)
     data = pd.concat(data)
     if transform is not None:
-        assert features is not None, "Must provide features for transform"
+        if features is None:
+            raise ValueError("Must provide features for transform")
         data, transformer = apply_transform(data=data, features=features, method=transform,
                                             return_transformer=True, **transform_kwargs)
         return data, transformer
     return data, None
 
 
+@logger.catch
 def bw_optimisation(data: pd.DataFrame,
-                    features: list,
+                    features: List[str],
                     kernel: str = "gaussian",
-                    bandwidth: tuple = (0.01, 0.1, 10),
+                    bandwidth: Tuple[float] = (0.01, 0.1, 10),
                     cv: int = 10,
                     verbose: int = 0) -> float:
     """
@@ -162,8 +167,9 @@ def bw_optimisation(data: pd.DataFrame,
     return grid.best_params_.get("bandwidth")
 
 
+@logger.catch
 def calculate_ref_sample(data: pd.DataFrame,
-                         features: list or None = None,
+                         features: Union[List[str], None] = None,
                          verbose: bool = True) -> str:
     """
 
@@ -211,8 +217,8 @@ def calculate_ref_sample(data: pd.DataFrame,
 
 def _sample_filegroup(filegroup: FileGroup,
                       population: str,
-                      sample_size: int or float = 5000,
-                      sampling_method: str or None = None,
+                      sample_size: Union[int, float] = 5000,
+                      sampling_method: Union[str, None] = None,
                       **kwargs) -> pd.DataFrame:
     """
     Given a FileGroup and the name of the desired population, load the
@@ -243,15 +249,16 @@ def _sample_filegroup(filegroup: FileGroup,
     return data
 
 
+@logger.catch
 def marker_variance(data: pd.DataFrame,
                     reference: str,
-                    comparison_samples: list or None = None,
-                    markers: list or None = None,
+                    comparison_samples: Union[List[str], None] = None,
+                    markers: Union[List[str], None] = None,
                     figsize: tuple = (10, 10),
-                    xlim: tuple or None = None,
+                    xlim: Union[Tuple[float], None] = None,
                     verbose: bool = True,
                     kernel: str = "gaussian",
-                    kde_bw: str or float = "silverman",
+                    kde_bw: Union[str, float] = "silverman",
                     **kwargs):
     """
     Compare the kernel density estimates for each marker in the associated experiment for the given
@@ -283,10 +290,12 @@ def marker_variance(data: pd.DataFrame,
 
     Raises
     ------
-    AssertionError
+    ValueError
         Reference absent from data
     """
-    assert reference in data.sample_id.unique(), "Reference absent from given data"
+    if reference not in data.sample_id.unique():
+        raise ValueError("Reference absent from given data")
+
     comparison_samples = comparison_samples or [x for x in data.sample_id.unique() if x != reference]
     fig = plt.figure(figsize=figsize)
     markers = markers or data.get(reference).columns.tolist()
@@ -324,13 +333,13 @@ def marker_variance(data: pd.DataFrame,
 
 def dim_reduction_grid(data: pd.DataFrame,
                        reference: str,
-                       features: list,
-                       comparison_samples: list or None = None,
-                       figsize: tuple = (10, 10),
+                       features: List[str],
+                       comparison_samples: Union[List[str], None] = None,
+                       figsize: Tuple[int] = (10, 10),
                        method: str = 'PCA',
                        kde: bool = False,
                        verbose: bool = True,
-                       dim_reduction_kwargs: dict or None = None):
+                       dim_reduction_kwargs: Union[Dict, None] = None):
     """
     Generate a grid of embeddings using a valid dimensionality reduction technique, in each plot a reference sample
     is shown in blue and a comparison sample in red. The reference sample is conserved across all plots.
@@ -377,18 +386,17 @@ def dim_reduction_grid(data: pd.DataFrame,
     reference_df = data[data.sample_id == reference].copy()
     if not all([f in reference_df.columns for f in features]):
         raise ValueError(f'Invalid features; valid are: {reference_df.columns}')
-    reference_df, reducer = dimensionality_reduction(reference_df.reset_index(),
-                                                     features=features,
-                                                     method=method,
-                                                     n_components=2,
-                                                     return_reducer=True,
-                                                     **dim_reduction_kwargs)
+    reducer = DimensionReduction(method=method,
+                                 n_components=2,
+                                 **dim_reduction_kwargs)
+    reference_df = reducer.fit_transform(data=reference_df.reset_index(),
+                                         features=features)
     i = 0
     fig.suptitle(f'{method}, Reference: {reference}', y=1.05)
     for sample_id in progress_bar(comparison_samples, verbose=verbose):
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
-        embeddings = reducer.transform(data[data.sample_id == sample_id].reset_index()[features])
+        embeddings = reducer.transform(data[data.sample_id == sample_id].reset_index(), features=features)
         x = f'{method}1'
         y = f'{method}2'
         ax.scatter(reference_df[x], reference_df[y], c='blue', s=4, alpha=0.2)
@@ -404,355 +412,6 @@ def dim_reduction_grid(data: pd.DataFrame,
         ax.set(aspect='auto')
     fig.tight_layout()
     return fig
-
-
-class SimilarityMatrix:
-    """
-    Class for assessing the degree of variation observed in a single experiment. This can be
-    useful for determining the influence of batch effects in your cytometry experiment.
-
-    Parameters
-    -----------
-    data: Pandas.DataFrame
-        DataFrame as generated from load_and_sample
-    reference: str
-        Reference sample; this will be the dataframe used to establish the embedded space
-        upon which data is projected to reduce dimensionality
-    verbose: bool (default=True)
-        Whether to provide feedback
-    kde_kernel: str (default="gaussian")
-        Kernel to use for KDE, for options see KDEpy.FFTKDE
-    kde_bw: str or float (default="ISJ"
-        Bandwidth/bandwidth estimation method to use for KDE. See KDEpy for options.
-        Defaults too improved Sheather Jones (ISJ) algorithm, which does not assume normality
-        and is robust to multimodal distributions. If you need to speed up results, change this to
-        'silvermans' which is less accurate but less computationally intensive.
-    kde_norm: int (default=2)
-        p-norm for high-dimensional KDE calculation
-    """
-
-    def __init__(self,
-                 data: pd.DataFrame,
-                 reference: str,
-                 verbose: bool = True,
-                 kde_kernel: str = "gaussian",
-                 kde_bw: str or float = "cv",
-                 kde_norm: int = 2):
-        assert reference in data.sample_id.unique(), "Invalid reference, not present in given data"
-        self.verbose = verbose
-        self.print = vprint(verbose)
-        self.kde_cache = dict()
-        self.kde_kernel = kde_kernel
-        self.kde_norm = kde_norm
-        self._kde_bw = "cv"
-        self.reference = reference
-        self.data = data.dropna(axis=1)
-        self.kde_bw = kde_bw
-
-    @property
-    def kde_bw(self):
-        return self._kde_bw
-
-    @kde_bw.setter
-    def kde_bw(self, x: str or float):
-        if isinstance(x, str):
-            assert x == "cv", f"kde_bw should be a float or have value 'cv'"
-        else:
-            assert isinstance(x, float), "kde_bw should be a float or 'cv'"
-        self._kde_bw = x
-
-    def clean_cache(self):
-        """
-        Clears the KDE cached results
-
-        Returns
-        -------
-        None
-        """
-        self.kde_cache = {}
-
-    def _estimate_pdf(self,
-                      sample_id: str,
-                      features: list,
-                      df: pd.DataFrame,
-                      **kwargs) -> None:
-        """
-        Given a sample ID and its events dataframe, estimate the PDF by KDE with the option
-        to perform dimensionality reduction first. Resulting PDF is saved to kde_cache.
-
-        Parameters
-        ----------
-        sample_id: str
-        df: Pandas.DataFrame
-        features: list
-
-        Returns
-        -------
-        None
-        """
-        bw = self.kde_bw
-        if bw == "cv":
-            bw = bw_optimisation(data=df, features=features, **kwargs)
-        df = df[features].copy().select_dtypes(include=['number'])
-        kde = FFTKDE(kernel=self.kde_kernel, bw=bw, norm=self.kde_norm)
-        self.kde_cache[sample_id] = np.exp(kde.fit(df.values).evaluate()[1])
-
-    def _calc_divergence(self,
-                         target_id: str,
-                         distance_metric: str or callable = 'jsd') -> list:
-        """
-        Given the name of a sample contained within self.data, loop over kde_cache
-        and calculate the statistical distance between this sample and all other
-        samples contained within self.data
-
-        Parameters
-        ----------
-        target_id: str
-            Should be a valid sample ID for the associated experiment
-        distance_metric: callable or str (default='jsd')
-            Either a callable function to calculate the statistical distance or a string value; options are:
-                * jsd: Jensson-shannon distance
-                * kl:Kullback-Leibler divergence (entropy)
-
-        Returns
-        -------
-        list
-            List of statistical distances, with results given as a list of nested tuples of type: (sample ID, distance).
-
-        Raises
-        ------
-        AssertionError
-            Invalid distance metric
-        """
-        # Assign distance metric func
-        metrics = {"kl": kl,
-                   "jsd": jsd}
-        if isinstance(distance_metric, str):
-            assert distance_metric in ['jsd', 'kl'], \
-                'Invalid divergence metric must be one of either jsd, kl, or a callable function]'
-            distance_metric = metrics.get(distance_metric)
-        return [(name, distance_metric(self.kde_cache.get(target_id), q))
-                for name, q in self.kde_cache.items()]
-
-    def _generate_reducer(self,
-                          features: list,
-                          n_components: int,
-                          dim_reduction_method: str,
-                          **kwargs):
-        """
-        Generate the dimension reduction object for producing lower dimension embeddings
-        using the reference sample as the source for generating the low dimension space.
-
-        Parameters
-        ----------
-        features: list
-        n_components: int
-        dim_reduction_method: str
-        kwargs
-            Additional keyword arguments passed to
-            cytopy.flow.dim_reduction.dimensionality_reduction
-
-        Returns
-        -------
-        object
-            Reducer
-        """
-        reference = self.data[self.data.sample_id == self.reference].copy()
-        ref_embeddings, reducer = dimensionality_reduction(data=reference,
-                                                           method=dim_reduction_method,
-                                                           features=features,
-                                                           return_reducer=True,
-                                                           return_embeddings_only=True,
-                                                           n_components=n_components,
-                                                           **kwargs)
-        return reducer
-
-    def _dim_reduction(self,
-                       reducer: object,
-                       n_components: int,
-                       features: list) -> dict:
-        """
-        Loop over each sample in self.data and generate low dimension embeddings
-
-        Parameters
-        ----------
-        reducer: object
-        n_components: int
-        features: list
-
-        Returns
-        -------
-        dict
-            Dictionary of embeddings
-        """
-        embeddings = list()
-        for sample_id, df in progress_bar(self.data.groupby(by="sample_id"), verbose=self.verbose):
-            embeddings.append(reducer.transform(df[features].values))
-        col_names = [f"embedding{i + 1}" for i in range(n_components)]
-        embeddings = {k: pd.DataFrame(em, columns=col_names)
-                      for k, em in zip(self.data.sample_id.unique(), embeddings)}
-        return embeddings
-
-    def _pairwise_stat_dist(self,
-                            distance_metric: str) -> pd.DataFrame:
-        """
-        Looping over every sample in self.data, calculate the pairwise statistical
-        distance from each sample PDF p, in relation to every other sample PDF q.
-        Returns a symmetrical matrix of pairwise distances.
-
-        Parameters
-        ----------
-        distance_metric: str
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        distance_df = pd.DataFrame()
-        for s in progress_bar(self.data.sample_id.unique(), verbose=self.verbose):
-            distances = self._calc_divergence(target_id=s, distance_metric=distance_metric)
-            name_distances = defaultdict(list)
-            for n, d in distances:
-                name_distances[n].append(d)
-            name_distances = pd.DataFrame(name_distances)
-            name_distances["sample_id"] = s
-            distance_df = pd.concat([distance_df, name_distances])
-        return distance_df
-
-    def matrix(self,
-               distance_metric: str or callable = 'jsd',
-               features: None or list = None,
-               dim_reduction_method: str = "PCA",
-               dim_reduction_kwargs: dict or None = None,
-               bw_optimisaiton_kwargs: dict or None = None) -> pd.DataFrame:
-        """
-        Generate a Pandas DataFrame containing a symmetrical matrix of
-        pairwise statistical distances for every sample in self.data
-
-        Parameters
-        ----------
-        distance_metric: callable or str (default='jsd')
-            Either a callable function to calculate the statistical distance or a string value; options are:
-                * jsd: Jensson-shannon distance
-                * kl:Kullback-Leibler divergence (entropy)
-        features: list (optional)
-            List of markers to use in analysis. If not given, will use all available markers.
-        dim_reduction_method: str (default="PCA")
-            Dimension reduction method, see cytopy.flow.dim_reduction. Set to None to not reduce first
-        dim_reduction_kwargs: dict
-            Keyword arguments for dimension reduction method, see cytopy.flow.dim_reduction
-        bw_optimisaiton_kwargs: dict
-            Additional keyword arguments passed to cytopy.flow.variance.bw_optimisation call
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        # Set defaults
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
-        bw_optimisaiton_kwargs = bw_optimisaiton_kwargs or {}
-        if distance_metric == "kl":
-            warn("Kullback-Leiber Divergence chosen as statistical distance metric, KL divergence "
-                 "is an asymmetrical function and as such it is not advised to use this metric for the "
-                 "similarity matrix'")
-
-        features = features or self.data.columns.tolist()
-        # Create the reducer
-        n_components = dim_reduction_kwargs.get("n_components", 2)
-        reducer = self._generate_reducer(features=features,
-                                         n_components=n_components,
-                                         dim_reduction_method=dim_reduction_method,
-                                         **dim_reduction_kwargs)
-        # Perform dim reduction
-        self.print("...performing dimensionality reduction")
-        embeddings = self._dim_reduction(reducer=reducer,
-                                         features=features,
-                                         n_components=n_components)
-        # Estimate PDFs
-        self.print("...estimate PDFs of embeddings")
-        features = [f"embedding{i + 1}" for i in range(n_components)]
-        for sample_id, df in progress_bar(embeddings.items()):
-            self._estimate_pdf(sample_id=sample_id,
-                               df=df,
-                               features=features,
-                               **bw_optimisaiton_kwargs)
-
-        # Generate distance matrix
-        self.print("...calculating pairwise statistical distances")
-        return self._pairwise_stat_dist(distance_metric=distance_metric)
-
-    def __call__(self,
-                 distance_df: pd.DataFrame or None = None,
-                 figsize: tuple = (12, 12),
-                 distance_metric: str or callable = 'jsd',
-                 clustering_method: str = 'average',
-                 features: None or list = None,
-                 dim_reduction_method: str = "PCA",
-                 dim_reduction_kwargs: dict or None = None,
-                 cluster_plot_kwargs: dict or None = None,
-                 bw_optimisaiton_kwargs: dict or None = None):
-        """
-        Generate a heatmap of pairwise statistical distances with the axis clustered using
-        agglomerative clustering.
-
-        Parameters
-        ----------
-        figsize: tuple (default=(12,12))
-            Figure size
-        distance_metric: callable or str (default='jsd')
-            Either a callable function to calculate the statistical distance or a string value; options are:
-                * jsd: Jensson-shannon distance
-                * kl:Kullback-Leibler divergence (entropy)
-        clustering_method: str
-            Method passed to call to scipy.cluster.heirachy
-        features: list (optional)
-            List of markers to use in analysis. If not given, will use all available markers.
-        dim_reduction_method: str (default="PCA")
-            Dimension reduction method, see cytopy.flow.dim_reduction. Set to None to not reduce first
-        dim_reduction_kwargs: dict
-            Keyword arguments for dimension reduction method, see cytopy.flow.dim_reduction
-        cluster_plot_kwargs: dict
-            Additional keyword arguments passed to Seaborn.clustermap call
-        bw_optimisaiton_kwargs: dict
-            Additional keyword arguments passed to cytopy.flow.variance.bw_optimisation call
-
-        Returns
-        -------
-        Array, Array, ClusterGrid
-            Linkage array, ordered array of sample IDs and seaborn ClusterGrid object
-        """
-        # Set defaults
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
-        cluster_plot_kwargs = cluster_plot_kwargs or {}
-        bw_optimisaiton_kwargs = bw_optimisaiton_kwargs or {}
-        if distance_df is None:
-            distance_df = self.matrix(distance_metric=distance_metric,
-                                      features=features,
-                                      dim_reduction_method=dim_reduction_method,
-                                      dim_reduction_kwargs=dim_reduction_kwargs,
-                                      bw_optimisaiton_kwargs=bw_optimisaiton_kwargs)
-        # Perform hierarchical clustering
-        r = distance_df.drop('sample_id', axis=1).values
-        c = distance_df.drop('sample_id', axis=1).T.values
-        row_linkage = hierarchy.linkage(distance.pdist(r), method=clustering_method)
-        col_linkage = hierarchy.linkage(distance.pdist(c), method=clustering_method)
-
-        if distance_metric == 'jsd':
-            center = 0.5
-        else:
-            center = 0
-        g = sns.clustermap(distance_df.set_index('sample_id'),
-                           row_linkage=row_linkage,
-                           col_linkage=col_linkage,
-                           method=clustering_method,
-                           center=center,
-                           cmap="vlag",
-                           figsize=figsize,
-                           **cluster_plot_kwargs)
-        ax = g.ax_heatmap
-        ax.set_xlabel('')
-        ax.set_ylabel('')
-        return row_linkage, distance_df.sample_id.values, g
 
 
 def generate_groups(linkage_matrix: np.array,
@@ -1101,7 +760,7 @@ def create_experiment(project,
 class HarmonyMatch:
     """
     Unlike the Harmony class, HarmonyMatch performs alignment of a single FileGroup to some reference
-    FileGroup. The intention is to be used as a "denoising" method for training data to supervised
+    FileGroup. The intention is to be used as a "denoising" method for training data for supervised
     classification, similar to the approach taken by Li et al [1].
 
     The HarmonyMatch class returns a batch aligned DataFrame of a population in a new transformed space,
@@ -1117,7 +776,13 @@ class HarmonyMatch:
     with Harmony. Nat Methods 16, 1289–1296 (2019). https://doi.org/10.1038/s41592-019-0619-0
     [3] https://github.com/slowkow/harmonypy
     """
-    def __init__(self):
+
+    def __init__(self,
+                 experiment: Experiment,
+                 reference: str,
+                 target: str,
+                 population: str,
+                 features: list):
         pass
 
     def run(self):

@@ -34,7 +34,7 @@ from .geometry import ThresholdGeom, PolygonGeom, inside_polygon, \
     create_envelope, create_polygon, ellipse_to_polygon, probabilistic_ellipse, GeometryError
 from .population import Population, merge_multiple_gate_populations
 from ..flow.sampling import faithful_downsampling, density_dependent_downsampling, upsample_knn, uniform_downsampling
-from ..flow.dim_reduction import dimensionality_reduction
+from ..flow.dim_reduction import DimensionReduction
 from ..flow.build_models import build_sklearn_model
 from sklearn.preprocessing import PowerTransformer
 from sklearn.cluster import *
@@ -434,13 +434,10 @@ class Gate(mongoengine.Document):
         if method is None:
             return data
         kwargs = {k: v for k, v in self.dim_reduction.items() if k != "method"}
-        data = dimensionality_reduction(data=data,
-                                        features=kwargs.get("features", data.columns.tolist()),
-                                        method=method,
-                                        n_components=2,
-                                        return_embeddings_only=False,
-                                        return_reducer=False,
-                                        **kwargs)
+        reducer = DimensionReduction(method=method,
+                                     n_components=2,
+                                     **kwargs)
+        data = reducer.fit_transform(data=data, features=kwargs.get("features", data.columns.tolist()))
         self.x = f"{method}1"
         self.y = f"{method}2"
         return data
