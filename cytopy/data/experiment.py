@@ -49,6 +49,7 @@ import xlrd
 import os
 import re
 import gc
+import io
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -942,7 +943,7 @@ class Experiment(mongoengine.Document):
         if self.sample_exists(sample_id):
             raise DuplicateSampleError(f'A file group with id {sample_id} already exists')
         feedback("Creating new FileGroup...")
-        if isinstance(primary, str):
+        if isinstance(primary, str) or isinstance(primary, io.IOBase):
             fcs_file = FCSFile(filepath=primary, comp_matrix=comp_matrix)
         else:
             fcs_file = primary
@@ -964,7 +965,7 @@ class Experiment(mongoengine.Document):
                             data_directory=self.data_directory)
         for ctrl_id, path in controls.items():
             feedback(f"Adding control file {ctrl_id}...")
-            if isinstance(path, str):
+            if isinstance(path, str) or isinstance(primary, io.IOBase):
                 fcs_file = FCSFile(filepath=path, comp_matrix=comp_matrix)
             else:
                 fcs_file = path
