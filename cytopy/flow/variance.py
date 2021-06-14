@@ -30,24 +30,21 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import pandas
 
 from ..data.experiment import Experiment, FileGroup
-from ..feedback import progress_bar, vprint, setup_standard_logger
+from ..feedback import progress_bar, vprint
 from ..flow import transform as transform_module
 from .dim_reduction import DimensionReduction
 from .sampling import density_dependent_downsampling, faithful_downsampling, uniform_downsampling
 from .transform import apply_transform, Transformer
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
-from scipy.spatial.distance import jensenshannon as jsd
-from scipy.stats import entropy as kl
 from scipy.cluster import hierarchy
-from scipy.spatial import distance
-from collections import defaultdict
 from KDEpy import FFTKDE
 from loguru import logger
 from warnings import warn
-from typing import List, Dict, Callable, Union, Tuple
+from typing import List, Dict, Union, Tuple
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import seaborn as sns
@@ -331,6 +328,7 @@ def marker_variance(data: pd.DataFrame,
     return fig
 
 
+@logger.catch
 def dim_reduction_grid(data: pd.DataFrame,
                        reference: str,
                        features: List[str],
@@ -414,8 +412,8 @@ def dim_reduction_grid(data: pd.DataFrame,
     return fig
 
 
-def generate_groups(linkage_matrix: np.array,
-                    sample_ids: list or np.array,
+def generate_groups(linkage_matrix: np.ndarray,
+                    sample_ids: Union[List[str], np.ndarray],
                     n_groups: int):
     """
     Given the output of SimilarityMatrix (that is the linkage matrix and ordered list of sample
@@ -475,11 +473,6 @@ class Harmony:
         Additional keyword arguments passed to Scaler
     sample_kwargs: dict, optional
         Additional keyword arguments to pass to sampling method
-    logging_level: int, optional (default=logging.INFO)
-        If given, establishes a logger, logging information to this minimum level
-    log: str, optional
-        Path to file to log events; if not given and logging_level is not None, then
-        logs are printed to stdout
 
     Attributes
     ----------
@@ -494,23 +487,21 @@ class Harmony:
         Meta DataFrame; by default it has one column that identifies 'batches' and is always 'sample_id'
     scaler: Scaler
         Scaler object; used to inverse the scale when saving data back to the database after correction
-    logger: Logger
     """
 
     def __init__(self,
                  experiment: Experiment,
                  population: str,
-                 features: list,
-                 sample_size: int or float,
-                 sample_ids: list or None = None,
-                 sampling_method: str or None = "uniform",
+                 features: List[str],
+                 sample_size: Union[int, float],
+                 sample_ids: Union[List[str], None] = None,
+                 sampling_method: Union[List[str], None] = "uniform",
                  transform: str = "logicle",
-                 transform_kwargs: dict or None = None,
-                 scale: str or None = "standard",
-                 scale_kwargs: dict or None = None,
-                 sample_kwargs: dict or None = None,
-                 logging_level: int or None = logging.INFO,
-                 log: str or None = None):
+                 transform_kwargs: Union[Dict[str, str], None] = None,
+                 scale: Union[str, None] = "standard",
+                 scale_kwargs: Union[Dict, None] = None,
+                 sample_kwargs: Union[Dict, None] = None):
+        logger.info("Preparing Harmony for application to an Experiment")
         sample_kwargs = sample_kwargs or {}
         self.data, self.transformer = load_and_sample(experiment=experiment,
                                                       population=population,
@@ -531,20 +522,8 @@ class Harmony:
             scale = transform_module.Scaler(method=scale, **scale_kwargs)
             self.data = scale(data=self.data, features=self.features)
             self.scaler = scale
-        self._logging_level = logging_level
-        self.logger = None
-        if logging_level:
-            self.logger = setup_standard_logger("harmony", default_level=logging_level, log=log)
 
-    @property
-    def logging_level(self):
-        return self._logging_level
-
-    @logging_level.setter
-    def logging_level(self, value):
-        self.logger.setLevel(value)
-        self._logging_level = value
-
+    @logger.catch
     def run(self, **kwargs):
         """
         Run the harmony algorithm (see https://github.com/slowkow/harmonypy for details). Resulting object
@@ -559,6 +538,7 @@ class Harmony:
         -------
         Harmony
         """
+        logger.info("Running harmony")
         data = self.data[self.features].astype(float)
         self.harmony = harmonypy.run_harmony(data_mat=data.values,
                                              meta_data=self.meta,
@@ -566,7 +546,8 @@ class Harmony:
                                              **kwargs)
         return
 
-    def plot_kde(self, var: str or list):
+    @logger.catch
+    def plot_kde(self, var: Union[str, List[str]]):
         """
         Utility function; generates a KDE plot for a single variable in 'data' attribute.
         Uses gaussian kernel and Silverman's method for bandwidth estimation.
@@ -591,6 +572,7 @@ class Harmony:
         ax.set_xlabel(var)
         return fig, ax
 
+    @logger.catch
     def add_meta_var(self,
                      mask: pd.DataFrame,
                      meta_var_name: str):
@@ -614,11 +596,12 @@ class Harmony:
         self.data.drop(meta_var_name, axis=1, inplace=True)
         return self
 
+    @logger.catch
     def batch_lisi(self,
                    meta_var: str = "sample_id",
                    sample: float = 1.):
         """
-        Computer LISI using the given meta_var as label
+        Compute LISI using the given meta_var as label
 
         Parameters
         ----------
@@ -633,18 +616,21 @@ class Harmony:
 
         Raises
         ------
-        AssertionError
+        ValueError
             meta_var is not present in 'meta' attribute
         """
-        assert meta_var in self.meta.columns
+        if meta_var not in self.meta.columns:
+            logger.error(f"{meta_var} missing from meta attribute")
+            raise ValueError(f"{meta_var} missing from meta attribute")
         idx = np.random.randint(self.data.shape[0], size=int(self.data.shape[0] * sample))
         return harmonypy.lisi.compute_lisi(self.batch_corrected()[self.features].values[idx],
                                            metadata=self.meta.iloc[idx],
                                            label_colnames=[meta_var])
 
+    @logger.catch
     def batch_lisi_distribution(self,
                                 meta_var: str = "sample_id",
-                                sample: float or None = 0.1,
+                                sample: Union[float, None] = 0.1,
                                 **kwargs):
         """
         Plot the distribution of LISI using the given meta_var as label
@@ -673,6 +659,7 @@ class Harmony:
         kwargs["ax"] = kwargs.get("ax", plt.subplots(figsize=(5, 5))[1])
         return sns.histplot(data=data, x="LISI", hue="Data", **kwargs)
 
+    @logger.catch
     def batch_corrected(self):
         """
         Generates a Pandas DataFrame of batch corrected values. If L2 normalisation was performed prior to
@@ -692,10 +679,11 @@ class Harmony:
         corrected["sample_id"] = self.meta.sample_id.values
         return corrected
 
+    @logger.catch
     def save(self,
              experiment: Experiment,
              prefix: str = "Corrected_",
-             subject_mappings: dict or None = None):
+             subject_mappings: Union[Dict[str, str], None] = None):
         """
         Saved the batch corrected data to an Experiment with each biological specimen (batch) saved
         to an individual FileGroup.
@@ -712,6 +700,11 @@ class Harmony:
         Returns
         -------
         None
+
+        Raises
+        ------
+        AssertionError
+            Save called before running the Harmony algorithm
         """
         assert self.harmony is not None, "Call 'run' first"
         subject_mappings = subject_mappings or {}
@@ -729,8 +722,9 @@ class Harmony:
                                       subject_id=subject_mappings.get(sample_id, None))
 
 
+@logger.catch
 def create_experiment(project,
-                      features: list,
+                      features: List[str],
                       experiment_name: str) -> Experiment:
     """
     Utility function for creating an experiment with FileGroups that contain
@@ -775,21 +769,220 @@ class HarmonyMatch:
     [2] Korsunsky, I., Millard, N., Fan, J. et al. Fast, sensitive and accurate integration of single-cell data
     with Harmony. Nat Methods 16, 1289–1296 (2019). https://doi.org/10.1038/s41592-019-0619-0
     [3] https://github.com/slowkow/harmonypy
-    """
 
+    Parameters
+    ----------
+    experiment: Experiment
+        Experiment to load data from for batch effect correction
+    population: str
+        Starting population to load data from e.g. 'root' for originald ata
+    features: list
+        List of features to include in batch correction; only these features will appear
+        in saved data, all other columns will be removed
+    transform: str (default='logicle')
+        How to transform data prior to batch correction. For valid methods see cytopy.flow.transform
+    transform_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer
+    scale: str, optional (default='standard')
+        How to scale data prior to batch correction. For valid methods see cytopy.flow.transform.Scaler
+    scale_kwargs: dict, optional
+        Additional keyword arguments passed to Scaler
+
+    Attributes
+    ----------
+    reference: Pandas.DataFrame
+        This is the reference data that targets will be aligned with
+    transform: Transformer
+        Transformer object. Data generated is inversely transformed before returned to caller.
+    transform_kwargs: dict, optional
+        Keyword arguments controlling transformation
+    features: list
+        List of features
+    meta: Pandas.DataFrame
+        Meta DataFrame; by default it has one column that identifies 'batches' and is always 'sample_id'
+    scaler: Scaler
+        Scaler object; used to inverse the scale when saving data back to the database after correction.
+        Data generated is inversely transformed before returned to caller.
+    harmony: harmonypy.Harmony
+        Fitted Harmony object
+    """
     def __init__(self,
                  experiment: Experiment,
                  reference: str,
-                 target: str,
                  population: str,
-                 features: list):
-        pass
+                 features: List[str],
+                 scale: str = "standard",
+                 transform: Union[str, None] = "logicle",
+                 transform_kwargs: Union[Dict, None] = None,
+                 scale_kwargs: Union[Dict, None] = None):
+        logger.info(f"Preparing Harmony to align data to a reference {reference} from {experiment.experiment_id}")
+        self.scaler = None
+        self.transformer = None
+        self.harmony = None
+        self.features = features
+        self.transform = transform
+        self.population = population
+        self.reference = (experiment.get_sample(sample_id=reference)
+                          .load_population_df(population=population,
+                                              transform=None)
+                          .dropna(axis=1, how="any"))
 
-    def run(self):
-        pass
+        self.reference[["sample_id"]] = reference
+        self.meta = self.reference[["sample_id"]].copy()
+        if transform is not None:
+            self.reference, self.transformer = apply_transform(data=self.reference, features=features, method=transform,
+                                                               return_transformer=True, **transform_kwargs)
 
-    def batch_lisi_distribution(self):
-        pass
+        if scale is not None:
+            scale_kwargs = scale_kwargs or {}
+            self.scaler = transform_module.Scaler(method=scale, **scale_kwargs)
+            self.reference = self.scaler(data=self.reference, features=self.features)
 
-    def plot_umap_overlay(self):
-        pass
+    def _load_target(self,
+                     experiment: Experiment,
+                     target: str) -> pd.DataFrame:
+        """
+        Load target data from Experiment to align with reference
+
+        Parameters
+        ----------
+        experiment: Experiment
+        target: str
+            Sample ID
+
+        Returns
+        -------
+        Pandas.DataFrame
+
+        Raises
+        ------
+        KeyError
+            Requested target is missing features used in reference
+        """
+        logger.info(f"Loading {self.population} population from {target}")
+        target_data = (experiment.get_sample(sample_id=target)
+                       .load_population_df(population=self.population,
+                                           transform=None)
+                       .dropna(axis=1, how="any"))
+
+        if not all([x in target_data.columns for x in self.features]):
+            raise KeyError(f"One or more required features missing from target data, expected columns: {self.features}")
+        if self.transformer is not None:
+            target_data = self.transformer.scale(data=target_data, features=self.features)
+        if self.scaler is not None:
+            target_data = self.scaler(data=target_data, features=self.features)
+        target_data["sample_id"] = target
+        return target_data
+
+    def run(self,
+            experiment: Experiment,
+            target: str,
+            plot: bool = True,
+            **kwargs) -> pd.DataFrame or Tuple[pd.DataFrame, plt.Figure]:
+        """
+        Align the given target to the reference using Harmony.
+
+        Parameters
+        ----------
+        experiment: Experiment
+        target: str
+            Sample ID to align with reference
+        plot: bool (default=True)
+            Generate a figure of 3 plots showing the LISI and alignment of reference and target
+            before and after running Harmony
+        kwargs:
+            Additional keyword arguments passed to harmonypy.Harmony
+
+        Returns
+        -------
+        Pandas.DataFrame or (Pandas.DataFrame, Matplotlib.Figure)
+        """
+        logger.info(f"Aligning {target} from {experiment.experiment_id} with {self.meta.sample_id.values[0]}")
+        target_data = self._load_target(experiment=experiment, target=target)
+        data = pd.concat([self.reference, target_data])[self.features].astype(float)
+        self.harmony = harmonypy.run_harmony(data_mat=data.values,
+                                             meta_data=self.meta,
+                                             vars_use="sample_id",
+                                             **kwargs)
+        if plot:
+            return self._batch_corrected(inverse=True), self._plot(data)
+        return self._batch_corrected(inverse=True)
+
+    def _batch_lisi_distribution(self, data: pd.DataFrame, ax: plt.Axes):
+        """
+        Create a histogram of LISI distribution before and after Harmony
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Merged data of reference and target
+        ax: Matplotlib.Axes
+            Axes object to plot on
+
+        Returns
+        -------
+        None
+        """
+        idx = np.random.randint(data.shape[0], size=int(data.shape[0] * 0.1))
+        before = harmonypy.lisi.compute_lisi(data[self.features].values[idx],
+                                             metadata=self.meta.iloc[idx],
+                                             label_colnames=["sample_id"])
+        after = harmonypy.lisi.compute_lisi(self._batch_corrected()[self.features].values[idx],
+                                            metadata=self.meta.iloc[idx],
+                                            label_colnames=["sample_id"])
+        plot_data = pd.DataFrame({"Before": before.reshape(-1),
+                                  "After": after.reshape(-1)}).melt(var_name="Data", value_name="LISI")
+        sns.histplot(data=plot_data, x="LISI", hue="Data", ax=ax)
+
+    @logger.catch
+    def _plot(self, data: pd.DataFrame) -> plt.Figure:
+        """
+        Generate a figure of 3 plots showing the LISI and alignment of reference and target
+        before and after running Harmony
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+            Merged data of reference and target
+
+        Returns
+        -------
+        Matplotlib.Figure
+        """
+        fig, axes = plt.subplots(1, 3, figsize=(10, 5))
+        self._batch_lisi_distribution(data=data, ax=axes[0])
+        axes[0].set_title("Distribution of LISI before and after running Harmony")
+        reducer = DimensionReduction(method="UMAP",
+                                     n_components=2)
+        before = reducer.fit_transform(data=data.reset_index(), features=self.features)
+        sns.scatterplot(data=before, x="UMAP1", y="UMAP2", hue="sample_id", s=3, ax=axes[1])
+        axes[1].set_title("Before")
+        after = reducer.transform(self._batch_corrected(), features=self.features)
+        sns.scatterplot(data=after, x="UMAP1", y="UMAP2", hue="sample_id", s=3, ax=axes[2])
+        axes[2].set_title("After")
+        return fig
+
+    @logger.catch
+    def _batch_corrected(self,
+                         inverse: bool = False):
+        """
+        Generates a Pandas DataFrame of batch corrected values. If L2 normalisation was performed prior to
+        this, it is reversed. Additional column 'batch_id' identifies rows.
+
+        Parameters
+        ----------
+        inverse: bool (default=False)
+            Inverse any applied transform and scaling prior to returning batch corrected data.
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        corrected = pd.DataFrame(self.harmony.Z_corr.T, columns=self.features)
+        corrected["sample_id"] = self.meta.sample_id.values
+        if inverse:
+            if self.scaler is not None:
+                corrected = self.scaler.inverse(data=corrected, features=self.features)
+            if self.transformer is not None:
+                corrected = self.transformer.inverse_scale(data=corrected, features=self.features)
+        return corrected
