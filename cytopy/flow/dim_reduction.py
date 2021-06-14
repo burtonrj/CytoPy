@@ -94,10 +94,8 @@ class DimensionReduction:
     def __init__(self,
                  method: Union[str, Type],
                  n_components: int = 2,
-                 random_state: int = 42,
                  **kwargs):
-        params = dict(n_components=n_components,
-                      random_state=random_state)
+        params = dict(n_components=n_components)
         params = {**params, **kwargs}
         try:
             if isinstance(method, str):
@@ -105,10 +103,10 @@ class DimensionReduction:
         except KeyError:
             raise KeyError(f"Invalid method, must be one of: {self.base_methods.keys()} or a valid class with "
                            f"method: fit_transform")
-        except AttributeError as e:
-            logger.error(f"Attribute error when initiating dim reduction method {method}")
+        except TypeError as e:
+            logger.error(f"Type error when initiating dim reduction method {method}; invalid argument")
             logger.exception(e)
-            raise AttributeError(f"Attribute error when initiating dim reduction method {method}", e)
+            raise TypeError(f"Type error when initiating dim reduction method {method}; invalid argument", e)
         self.embeddings = None
         self._method_name = type(self.method).__name__
 
