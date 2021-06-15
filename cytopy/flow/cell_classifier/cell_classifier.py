@@ -24,20 +24,22 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-
+from __future__ import annotations
 from ...feedback import progress_bar
 from ...data.experiment import Experiment, FileGroup
 from ...data.population import Population
 from ...flow.transform import apply_transform, Scaler
+from ...flow.variance import HarmonyMatch
 from ...flow import sampling
 from . import utils
 from sklearn.model_selection import train_test_split, KFold, BaseCrossValidator
 from imblearn.over_sampling import RandomOverSampler
+from typing import Union, Tuple, List, Dict, Callable
+import matplotlib.pyplot as plt
 from inspect import signature
+from loguru import logger
 import pandas as pd
 import numpy as np
-import logging
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -84,10 +86,6 @@ class CellClassifier:
     multi_label: bool (default=False)
         If True, single cells can belong to more than one population. The tree structure of training data is
         NOT conserved - all resulting populations will have the same parent population.
-    logging_level: int (default=logging.INFO)
-        Level to log events at
-    log: str, optional
-        Path to log output to; if not given, will log to stdout
     population_prefix: str (default="CellClassifier_")
         Prefix applied to populations generated
 
@@ -103,16 +101,14 @@ class CellClassifier:
         Training feature space
     y: numpy.ndarray
         Target labels
-    logger: logging.Logger
     features: list
     target_populations: list
     """
+
     def __init__(self,
                  features: list,
                  target_populations: list,
                  multi_label: bool = False,
-                 logging_level: int = logging.INFO,
-                 log: str or None = None,
                  population_prefix: str = "CellClassifier_"):
         self.model = None
         self.features = features
@@ -123,15 +119,7 @@ class CellClassifier:
         self.class_weights = None
         self.transformer = None
         self.scaler = None
-        self._logging_level = logging_level
-        self.logger = logging.getLogger("CellClassifier")
-        self.logger.setLevel(logging_level)
-        if log is not None:
-            handler = logging.FileHandler(filename=log)
-        else:
-            handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-        self.logger.addHandler(handler)
+        self.data_calibrator = None
 
     @check_model_init
     def set_params(self, **kwargs):
@@ -152,22 +140,25 @@ class CellClassifier:
         if callable(_set_params):
             self.model.set_params(**kwargs)
         else:
-            self.logger.warning("Model does not support 'set_params'.")
+            logger.warning("Model does not support 'set_params'.")
         return self
 
-    @property
-    def logging_level(self):
-        return self._logging_level
-
-    @logging_level.setter
-    def logging_level(self, value: int):
-        self.logger.setLevel(value)
-        self._logging_level = value
+    def setup_data_calibrator(self,
+                              experiment: Experiment,
+                              reference: str,
+                              population: str,
+                              features: List[str],
+                              **kwargs):
+        self.data_calibrator = HarmonyMatch(experiment=experiment,
+                                            reference=reference,
+                                            population=population,
+                                            features=features,
+                                            **kwargs)
 
     def load_training_data(self,
                            experiment: Experiment,
                            reference: str,
-                           root_population: str):
+                           root_population: str) -> CellClassifier:
         """
         Load a FileGroup with existing Populations to serve as training data
 
@@ -553,7 +544,10 @@ class CellClassifier:
                 sample_id: str,
                 root_population: str,
                 threshold: float = 0.5,
-                return_predictions: bool = True):
+                return_predictions: bool = True,
+                data_calibrator: Union[HarmonyMatch, None] = None,
+                plot_data_calibration: bool = False) -> Tuple[FileGroup, Dict, Union[None, plt.Figure]] or \
+                                                        Tuple[FileGroup, None, Union[None, plt.Figure]]:
         """
         Calls predict on the root population of some unclassified FileGroup, generating
         new populations that will be immediate children of the chosen root population.
@@ -572,15 +566,23 @@ class CellClassifier:
             than or eaual to this threshold.
         return_predictions: bool (default=True)
             Return predicted labels and scores
+        data_calibrator: HarmonyMatch, optional
+            HarmonyMatch object used to align the data to some reference (like the training data)
+            prior to making predictions (see cytopy.flow.variance.HarmonyMatch)
+        plot_data_calibration: bool (default=False)
+            Returns a figure of alignment between reference and data for prediction
+
         Returns
         -------
-        FileGroup, dict or None
+        (FileGroup, Dict, Union[None, Matplotlib.Figure) or (FileGroup, None, Union[None, Matplotlib.Figure])
             Modified FileGroup with new populations, predictions as dictionary with keys 'y_pred' (predicted
             labels) and 'y_score' (probabilities)
         """
         target = experiment.get_sample(sample_id)
         x = target.load_population_df(population=root_population,
                                       transform=None)[self.features]
+        x, fig = data_calibrator.run(data=x, plot=plot_data_calibration)
+        x.drop("sample_id", axis=1, inplace=True)
         if self.transformer is not None:
             x = self.transformer.scale(data=x, features=self.features)
         if self.scaler is not None:
@@ -603,8 +605,8 @@ class CellClassifier:
                                              parent=root_population,
                                              warnings=["supervised_classification"]))
         if return_predictions:
-            return target, {"y_pred": y_pred, "y_score": y_score}
-        return target, None
+            return target, {"y_pred": y_pred, "y_score": y_score}, fig
+        return target, None, fig
 
     def load_validation(self,
                         experiment: Experiment,
