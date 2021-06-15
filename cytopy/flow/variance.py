@@ -875,18 +875,15 @@ class HarmonyMatch:
         return target_data
 
     def run(self,
-            experiment: Experiment,
-            target: str,
+            data: Union[pd.DataFrame, np.ndarray],
             plot: bool = True,
-            **kwargs) -> pd.DataFrame or Tuple[pd.DataFrame, plt.Figure]:
+            **kwargs) -> Union[pd.DataFrame, None] or Tuple[pd.DataFrame, plt.Figure]:
         """
         Align the given target to the reference using Harmony.
 
         Parameters
         ----------
-        experiment: Experiment
-        target: str
-            Sample ID to align with reference
+        data: Union[pd.DataFrame, np.ndarray]
         plot: bool (default=True)
             Generate a figure of 3 plots showing the LISI and alignment of reference and target
             before and after running Harmony
@@ -895,18 +892,19 @@ class HarmonyMatch:
 
         Returns
         -------
-        Pandas.DataFrame or (Pandas.DataFrame, Matplotlib.Figure)
+        Union[Pandas.DataFrame, None] or Tuple[Pandas.DataFrame, Matplotlib.Figure]
         """
-        logger.info(f"Aligning {target} from {experiment.experiment_id} with {self.meta.sample_id.values[0]}")
-        target_data = self._load_target(experiment=experiment, target=target)
-        data = pd.concat([self.reference, target_data])[self.features].astype(float)
+        logger.info(f"Aligning data with {self.meta.sample_id.values[0]}")
+        if isinstance(data, np.ndarray):
+            data = pd.DataFrame(data, columns=self.features)
+        data = pd.concat([self.reference, data])[self.features].astype(float)
         self.harmony = harmonypy.run_harmony(data_mat=data.values,
                                              meta_data=self.meta,
                                              vars_use="sample_id",
                                              **kwargs)
         if plot:
             return self._batch_corrected(inverse=True), self._plot(data)
-        return self._batch_corrected(inverse=True)
+        return self._batch_corrected(inverse=True), None
 
     def _batch_lisi_distribution(self, data: pd.DataFrame, ax: plt.Axes):
         """
