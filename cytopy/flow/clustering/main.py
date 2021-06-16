@@ -90,7 +90,7 @@ def clustering_performance(data: pd.DataFrame,
         logger.info(x)
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def sklearn_clustering(data: pd.DataFrame,
                        features: list,
                        verbose: bool,
@@ -162,7 +162,7 @@ def sklearn_clustering(data: pd.DataFrame,
     return data, None, None
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def phenograph_clustering(data: pd.DataFrame,
                           features: list,
                           verbose: bool,
@@ -227,7 +227,7 @@ def phenograph_clustering(data: pd.DataFrame,
     return data, graphs, q
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def _assign_metalabels(data: pd.DataFrame,
                        metadata: pd.DataFrame):
     """
@@ -249,7 +249,7 @@ def _assign_metalabels(data: pd.DataFrame,
     return pd.merge(data, metadata[["sample_id", "cluster_label", "meta_label"]], on=["sample_id", "cluster_label"])
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def summarise_clusters(data: pd.DataFrame,
                        features: list,
                        scale: str or None = None,
@@ -294,7 +294,7 @@ def summarise_clusters(data: pd.DataFrame,
     return data
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def sklearn_metaclustering(data: pd.DataFrame,
                            features: list,
                            method: str,
@@ -361,7 +361,7 @@ def sklearn_metaclustering(data: pd.DataFrame,
     return data, None, None
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def phenograph_metaclustering(data: pd.DataFrame,
                               features: list,
                               verbose: bool = True,
@@ -417,7 +417,7 @@ def phenograph_metaclustering(data: pd.DataFrame,
     return data, graph, q
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def consensus_metacluster(data: pd.DataFrame,
                           features: list,
                           cluster_class: object,
@@ -556,7 +556,7 @@ def _flowsom_clustering(data: pd.DataFrame,
     return cluster
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def flowsom_clustering(data: pd.DataFrame,
                        features: list,
                        verbose: bool,
@@ -742,7 +742,7 @@ class Clustering:
         self.data["cluster_label"] = None
         self.print("Ready to cluster!")
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def _check_null(self,
                     features: Union[List[str], None] = None) -> list:
         """
@@ -915,7 +915,7 @@ class Clustering:
         """
         self.data["meta_label"].replace(mappings, inplace=True)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def load_meta_variable(self,
                            variable: str,
                            verbose: bool = True,
@@ -956,7 +956,7 @@ class Clustering:
                 warn(f'{_id} is missing meta-variable {variable}')
                 self.data.loc[self.data.subject_id == _id, variable] = None
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def dimension_reduction(self,
                             method: Union[str, Type],
                             n_components: int = 2,
@@ -984,7 +984,7 @@ class Clustering:
                                      **kwargs)
         self.data = reducer.fit_transform(data=self.data, features=self.features)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def single_cell_plot(self,
                          sample_size: Union[int, None] = 100000,
                          sampling_method: str = "uniform",
@@ -1047,7 +1047,7 @@ class Clustering:
                                 discrete=discrete,
                                 **kwargs)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def plot_sample_clusters(self,
                              sample_id: str,
                              method: Union[str, Type] = "UMAP",
@@ -1091,7 +1091,7 @@ class Clustering:
                                 discrete=discrete,
                                 **kwargs)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def plot_meta_clusters(self,
                            colour_label: str = "meta_label",
                            discrete: bool = True,
@@ -1131,7 +1131,7 @@ class Clustering:
                                    dim_reduction_kwargs=dim_reduction_kwargs,
                                    **kwargs)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def clustered_heatmap(self,
                           features: list,
                           sample_id: str or None = None,
@@ -1180,7 +1180,7 @@ class Clustering:
         kwargs["cmap"] = kwargs.get("cmap", "viridis")
         return sns.clustermap(data[features], **kwargs)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def save(self, verbose: bool = True, population_var: str = "meta_label"):
         """
         Clusters are saved as new Populations in each FileGroup in the attached Experiment

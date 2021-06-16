@@ -212,7 +212,7 @@ class NormalisedName(mongoengine.EmbeddedDocument):
     permutations = mongoengine.StringField()
     case_sensitive = mongoengine.BooleanField(default=False)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def query(self, x: str) -> Union[str, None]:
         """
         Given a term 'x', determine if 'x' is synonymous to this standard. If so, return the standardised name.
@@ -368,7 +368,7 @@ def standardise_names(channel_marker: Dict,
     return {"channel": channel, "marker": marker}
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def duplicate_mappings(mappings: List[dict]) -> None:
     """
     Check for duplicates in a list of dictionaries describing channel/marker mappings.
@@ -455,7 +455,7 @@ class Panel(mongoengine.EmbeddedDocument):
         'collection': 'fcs_panels'
     }
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def create_from_excel(self, path: str) -> None:
         """
         Populate panel attributes from an excel template
@@ -492,7 +492,7 @@ class Panel(mongoengine.EmbeddedDocument):
         self.mappings = [ChannelMap(channel=c, marker=m)
                          for c, m in zip(mappings['channel'], mappings['marker'])]
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def create_from_dict(self, x: dict):
         """
         Populate panel attributes from a python dictionary
@@ -538,7 +538,7 @@ class Panel(mongoengine.EmbeddedDocument):
                          for k in x['channels']]
         self.mappings = [ChannelMap(channel=c, marker=m) for c, m in x['mappings']]
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def list_channels(self) -> list:
         """
         List of channels associated to panel
@@ -549,7 +549,7 @@ class Panel(mongoengine.EmbeddedDocument):
         """
         return [cm.channel for cm in self.mappings]
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def list_markers(self) -> list:
         """
         List of channels associated to panel
@@ -625,7 +625,7 @@ class Experiment(mongoengine.Document):
     }
 
     @staticmethod
-    @logger.catch
+    @logger.catch(reraise=True)
     def _check_panel(panel_definition: str or None):
         """
         Check that parameters provided for defining a panel are valid.
@@ -650,7 +650,7 @@ class Experiment(mongoengine.Document):
         if not os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"]:
             raise ValueError("Panel definition is not a valid Excel document")
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def generate_panel(self,
                        panel_definition: Union[str, dict]) -> None:
         """
@@ -682,7 +682,7 @@ class Experiment(mongoengine.Document):
             raise ValueError("panel_definition should be type string or dict")
         self.panel = new_panel
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def delete_all_populations(self,
                                sample_id: str) -> None:
         """
@@ -746,7 +746,7 @@ class Experiment(mongoengine.Document):
             raise MissingSampleError(f"Invalid sample: {sample_id} not associated with this experiment")
         return [f for f in self.fcs_files if f.primary_id == sample_id][0]
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def filter_samples_by_subject(self,
                                   query: str or mongoengine.queryset.visitor.Q) -> List:
         """
@@ -772,7 +772,7 @@ class Experiment(mongoengine.Document):
                 matches.append(f.primary_id)
         return matches
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def list_samples(self,
                      valid_only: bool = True) -> list:
         """
@@ -792,7 +792,7 @@ class Experiment(mongoengine.Document):
             return [f.primary_id for f in self.fcs_files if f.valid]
         return [f.primary_id for f in self.fcs_files]
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def remove_sample(self, sample_id: str):
         """
         Remove sample (FileGroup) from experiment.
@@ -811,7 +811,7 @@ class Experiment(mongoengine.Document):
         filegrp.delete()
         self.save()
 
-    @logger.catch
+    @logger.catch(reraise=True)
     @panel_defined
     def add_dataframes(self,
                        sample_id: str,
@@ -934,7 +934,7 @@ class Experiment(mongoengine.Document):
         del filegrp
         gc.collect()
 
-    @logger.catch
+    @logger.catch(reraise=True)
     @panel_defined
     def add_fcs_files(self,
                       sample_id: str,
@@ -1057,7 +1057,7 @@ class Experiment(mongoengine.Document):
         del filegrp
         gc.collect()
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def _standardise_mappings(self,
                               mappings: List[Dict],
                               missing_error: str) -> List[Dict]:
@@ -1091,7 +1091,7 @@ class Experiment(mongoengine.Document):
         duplicate_mappings(mappings)
         return mappings
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def control_counts(self, ax: plt.Axes or None = None) -> plt.Axes:
         """
         Generates a barplot of total counts of each control in Experiment FileGroup's
@@ -1111,7 +1111,7 @@ class Experiment(mongoengine.Document):
         ax.bar(ctrl_counts.keys(), ctrl_counts.values())
         return ax
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def population_statistics(self,
                               populations: Union[List, None] = None) -> pd.DataFrame:
         """
@@ -1138,7 +1138,7 @@ class Experiment(mongoengine.Document):
                 data.append(df)
         return pd.concat(data).reset_index(drop=True)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def merge_populations(self,
                           mergers: Dict):
         """
@@ -1166,7 +1166,7 @@ class Experiment(mongoengine.Document):
                     logger.warning(f"Failed to merge populations for {f.primary_id}: {str(e)}")
                     warn(f"Failed to merge populations for {f.primary_id}: {str(e)}")
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def delete(self, signal_kwargs=None, **write_concern):
         """
         Delete Experiment; will delete all associated FileGroups.

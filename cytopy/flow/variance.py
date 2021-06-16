@@ -67,7 +67,7 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def load_and_sample(experiment: Experiment,
                     population: str,
                     sample_size: Union[int, float],
@@ -127,7 +127,7 @@ def load_and_sample(experiment: Experiment,
     return data, None
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def bw_optimisation(data: pd.DataFrame,
                     features: List[str],
                     kernel: str = "gaussian",
@@ -164,7 +164,7 @@ def bw_optimisation(data: pd.DataFrame,
     return grid.best_params_.get("bandwidth")
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def calculate_ref_sample(data: pd.DataFrame,
                          features: Union[List[str], None] = None,
                          verbose: bool = True) -> str:
@@ -246,7 +246,7 @@ def _sample_filegroup(filegroup: FileGroup,
     return data
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def marker_variance(data: pd.DataFrame,
                     reference: str,
                     comparison_samples: Union[List[str], None] = None,
@@ -328,7 +328,7 @@ def marker_variance(data: pd.DataFrame,
     return fig
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def dim_reduction_grid(data: pd.DataFrame,
                        reference: str,
                        features: List[str],
@@ -523,7 +523,7 @@ class Harmony:
             self.data = scale(data=self.data, features=self.features)
             self.scaler = scale
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def run(self, **kwargs):
         """
         Run the harmony algorithm (see https://github.com/slowkow/harmonypy for details). Resulting object
@@ -546,7 +546,7 @@ class Harmony:
                                              **kwargs)
         return
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def plot_kde(self, var: Union[str, List[str]]):
         """
         Utility function; generates a KDE plot for a single variable in 'data' attribute.
@@ -572,7 +572,7 @@ class Harmony:
         ax.set_xlabel(var)
         return fig, ax
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def add_meta_var(self,
                      mask: pd.DataFrame,
                      meta_var_name: str):
@@ -596,7 +596,7 @@ class Harmony:
         self.data.drop(meta_var_name, axis=1, inplace=True)
         return self
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def batch_lisi(self,
                    meta_var: str = "sample_id",
                    sample: float = 1.):
@@ -627,7 +627,7 @@ class Harmony:
                                            metadata=self.meta.iloc[idx],
                                            label_colnames=[meta_var])
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def batch_lisi_distribution(self,
                                 meta_var: str = "sample_id",
                                 sample: Union[float, None] = 0.1,
@@ -659,7 +659,7 @@ class Harmony:
         kwargs["ax"] = kwargs.get("ax", plt.subplots(figsize=(5, 5))[1])
         return sns.histplot(data=data, x="LISI", hue="Data", **kwargs)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def batch_corrected(self):
         """
         Generates a Pandas DataFrame of batch corrected values. If L2 normalisation was performed prior to
@@ -679,7 +679,7 @@ class Harmony:
         corrected["sample_id"] = self.meta.sample_id.values
         return corrected
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def save(self,
              experiment: Experiment,
              prefix: str = "Corrected_",
@@ -722,7 +722,7 @@ class Harmony:
                                       subject_id=subject_mappings.get(sample_id, None))
 
 
-@logger.catch
+@logger.catch(reraise=True)
 def create_experiment(project,
                       features: List[str],
                       experiment_name: str) -> Experiment:
@@ -932,7 +932,7 @@ class HarmonyMatch:
                                   "After": after.reshape(-1)}).melt(var_name="Data", value_name="LISI")
         sns.histplot(data=plot_data, x="LISI", hue="Data", ax=ax)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def _plot(self, data: pd.DataFrame) -> plt.Figure:
         """
         Generate a figure of 3 plots showing the LISI and alignment of reference and target
@@ -960,7 +960,7 @@ class HarmonyMatch:
         axes[2].set_title("After")
         return fig
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def _batch_corrected(self,
                          inverse: bool = False):
         """
