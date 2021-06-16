@@ -73,12 +73,21 @@ def data_loaded(func: callable) -> callable:
     -------
     callable
         Wrapper function
+
+    Raises
+    ------
+    ValueError
+        HDF5 file does not exist
     """
 
     def wrapper(*args, **kwargs):
-        assert args[0].h5path is not None, "Data directory and therefore HDF5 path has not been defined."
-        assert os.path.isfile(args[0].h5path), f"Could not locate FileGroup HDF5 record {args[0].h5path}."
-        return func(*args, **kwargs)
+        try:
+            assert args[0].h5path is not None, "Data directory and therefore HDF5 path has not been defined."
+            assert os.path.isfile(args[0].h5path), f"Could not locate FileGroup HDF5 record {args[0].h5path}."
+            return func(*args, **kwargs)
+        except AssertionError as e:
+            logger.exception(str(e))
+            raise ValueError(str(e))
 
     return wrapper
 
@@ -126,6 +135,7 @@ def h5_read_population_primary_index(population_name: str,
     return h5file[f"/index/{population_name}/primary"][:]
 
 
+@logger.catch(reraise=True)
 def set_column_names(df: pd.DataFrame,
                      channels: list,
                      markers: list,
@@ -212,11 +222,13 @@ class FileGroup(mongoengine.Document):
         self._columns_default = "markers"
         self.cell_meta_labels = {}
         if self.id:
+            logger.info(f"Loading existing FileGroup {self.primary_id}; {self.id}")
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
             self.tree = construct_tree(populations=self.populations)
             self._load_cell_meta_labels()
             self._load_population_indexes()
         else:
+            logger.info(f"Creating new FileGroup {self.primary_id}")
             if any([x is None for x in [data, channels, markers]]):
                 raise ValueError("New instance of FileGroup requires that data, channels, and markers "
                                  "be provided to the constructor")
@@ -233,6 +245,7 @@ class FileGroup(mongoengine.Document):
         assert value in ["markers", "channels"], "columns_default must be either 'markers' or 'channels'"
         self._columns_default = value
 
+    @logger.catch(reraise=True)
     @data_loaded
     def data(self,
              source: str,
@@ -269,7 +282,7 @@ class FileGroup(mongoengine.Document):
                                         sample_size=sample_size)
         return data
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def init_new_file(self,
                       data: np.array,
                       channels: List[str],
@@ -306,8 +319,9 @@ class FileGroup(mongoengine.Document):
                                        source="root")]
         self.tree = {"root": anytree.Node(name="root", parent=None)}
         self.save()
+        logger.info(f"Generated new HDF5 file for {self.primary_id}")
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def add_ctrl_file(self,
                       ctrl_id: str,
                       data: np.array,
@@ -344,7 +358,9 @@ class FileGroup(mongoengine.Document):
             f.create_dataset(f"mappings/{ctrl_id}/markers", data=np.array(markers, dtype='S'))
         self.controls.append(ctrl_id)
         self.save()
+        logger.info(f"Generated new control dataset in HDF5 file for {self.primary_id}")
 
+    @logger.catch(reraise=True)
     @data_loaded
     def _load_cell_meta_labels(self):
         """
@@ -354,12 +370,14 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
+        logger.info(f"Loading cell meta labels for {self.primary_id}; {self.id}")
         with h5py.File(self.h5path, "r") as f:
             if "cell_meta_labels" in f.keys():
                 for meta in f["cell_meta_labels"].keys():
                     self.cell_meta_labels[meta] = np.array(f[f"cell_meta_labels/{meta}"][:],
                                                            dtype="U")
 
+    @logger.catch(reraise=True)
     @data_loaded
     def _load_population_indexes(self):
         """
@@ -369,6 +387,7 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
+        logger.info(f"Loading population indexes for {self.primary_id}; {self.id}")
         with h5py.File(self.h5path, "r") as f:
             for p in self.populations:
                 primary_index = h5_read_population_primary_index(population_name=p.population_name,
@@ -377,7 +396,7 @@ class FileGroup(mongoengine.Document):
                     continue
                 p.index = primary_index
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def add_population(self,
                        population: Population):
         """
@@ -399,6 +418,7 @@ class FileGroup(mongoengine.Document):
         AssertionError
             Population is missing index
         """
+        logger.info(f"Adding new population {population} to {self.primary_id}; {self.id}")
         if population.population_name in self.tree.keys():
             err = f"Population with name '{population.population_name}' already exists"
             raise DuplicatePopulationError(err)
@@ -409,7 +429,7 @@ class FileGroup(mongoengine.Document):
         self.tree[population.population_name] = anytree.Node(name=population.population_name,
                                                              parent=self.tree.get(population.parent))
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def update_population(self,
                           pop: Population):
         """
@@ -425,10 +445,12 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
+        logger.info(f"Updating population {pop.population_name}")
         assert pop.population_name in self.list_populations(), 'Invalid population, does not exist'
         self.populations = [p for p in self.populations if p.population_name != pop.population_name]
         self.populations.append(pop)
 
+    @logger.catch(reraise=True)
     def load_ctrl_population_df(self,
                                 ctrl: str,
                                 population: str,
@@ -498,6 +520,8 @@ class FileGroup(mongoengine.Document):
         MissingControlError
             If the chosen control does not exist
         """
+        logger.info(
+            f"Predicting {population} in control data in {self.primary_id} {ctrl} using {classifier} classifier")
         transform_kwargs = transform_kwargs or {}
         if ctrl not in self.controls:
             raise MissingControlError(f"No such control {ctrl} associated to this FileGroup")
@@ -506,8 +530,10 @@ class FileGroup(mongoengine.Document):
         feedback = vprint(verbose=verbose)
         classifier = build_sklearn_model(klass=classifier, **params)
         assert population in self.list_populations(), f"Desired population {population} not found"
+
         feedback(f"====== Estimating {population} for {ctrl} control ======")
         feedback("Loading data...")
+        logger.info("Loading primary and control data")
         training, ctrl, transformer = _load_data_for_ctrl_estimate(filegroup=self,
                                                                    target_population=population,
                                                                    ctrl=ctrl,
@@ -517,8 +543,10 @@ class FileGroup(mongoengine.Document):
         features = [x for x in training.columns if x != "label"]
         features = [x for x in features if x in ctrl.columns]
         x, y = training[features], training["label"].values
+
         if evaluate_classifier:
             feedback("Evaluating classifier with permutation testing...")
+            logger.info("Evaluating classifier with permutation testing...")
             skf = StratifiedKFold(n_splits=kfolds, random_state=42, shuffle=True)
             score, permutation_scores, pvalue = permutation_test_score(classifier, x, y,
                                                                        cv=skf,
@@ -526,10 +554,15 @@ class FileGroup(mongoengine.Document):
                                                                        scoring=scoring,
                                                                        n_jobs=-1,
                                                                        random_state=42)
+            logger.info(f"...Performance (without permutations): {round(score, 4)}")
             feedback(f"...Performance (without permutations): {round(score, 4)}")
+            logger.info(f"...Performance (average across permutations; standard dev): "
+                        f"{round(np.mean(permutation_scores), 4)}; {round(np.std(permutation_scores), 4)}")
             feedback(f"...Performance (average across permutations; standard dev): "
                      f"{round(np.mean(permutation_scores), 4)}; {round(np.std(permutation_scores), 4)}")
             feedback(f"...p-value (comparison of original score to permuations): {round(pvalue, 4)}")
+            logger.info(f"...p-value (comparison of original score to permuations): {round(pvalue, 4)}")
+
         feedback("Predicting population for control data...")
         classifier.fit(x, y)
         ctrl_labels = classifier.predict(ctrl[features])
@@ -542,6 +575,7 @@ class FileGroup(mongoengine.Document):
             return transformer.inverse_scale(data=ctrl, features=list(ctrl.columns))
         return ctrl
 
+    @logger.catch(reraise=True)
     def load_population_df(self,
                            population: str,
                            transform: str or dict or None = "logicle",
@@ -578,6 +612,7 @@ class FileGroup(mongoengine.Document):
         AssertionError
             Invalid population, does not exist
         """
+        logger.info(f"Loading {population} from {self.primary_id}; {self.id}")
         assert population in self.tree.keys(), f"Invalid population, {population} does not exist"
         idx = self.get_population(population_name=population).index
         data = self.data(source="primary").loc[idx]
@@ -597,7 +632,7 @@ class FileGroup(mongoengine.Document):
                                                        data=data)
         return data
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def _label_downstream_affiliations(self,
                                        parent: str,
                                        data: pd.DataFrame) -> pd.DataFrame:
@@ -618,7 +653,6 @@ class FileGroup(mongoengine.Document):
         -------
         Pandas.DataFrame
         """
-
         data["population_label"] = None
         dependencies = self.list_downstream_populations(parent)
         for pop in dependencies:
@@ -627,7 +661,7 @@ class FileGroup(mongoengine.Document):
         data["population_label"].fillna(parent, inplace=True)
         return data
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def _hdf5_exists(self):
         """
         Tests if associated HDF5 file exists.
@@ -638,7 +672,7 @@ class FileGroup(mongoengine.Document):
         """
         return os.path.isfile(self.h5path)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def list_populations(self) -> list:
         """
         List population names
@@ -649,7 +683,7 @@ class FileGroup(mongoengine.Document):
         """
         return [p.population_name for p in self.populations]
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def print_population_tree(self,
                               image: bool = False,
                               path: str or None = None):
@@ -676,7 +710,7 @@ class FileGroup(mongoengine.Document):
         for pre, fill, node in anytree.RenderTree(root):
             print('%s%s' % (pre, node.name))
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def delete_populations(self, populations: list or str) -> None:
         """
         Delete given populations. Populations downstream from delete population(s) will
@@ -698,11 +732,13 @@ class FileGroup(mongoengine.Document):
             If invalid value given for populations
         """
         if populations == "all":
+            logger.info(f"Deleting all populations in {self.primary_id}; {self.id}")
             for p in self.populations:
                 self.tree[p.population_name].parent = None
             self.populations = [p for p in self.populations if p.population_name == "root"]
             self.tree = {name: node for name, node in self.tree.items() if name == "root"}
         else:
+            logger.info(f"Deleting population(s) {populations} in {self.primary_id}; {self.id}")
             assert isinstance(populations, list), "Provide a list of population names for removal"
             assert "root" not in populations, "Cannot delete root population"
             downstream_effects = [self.list_downstream_populations(p) for p in populations]
@@ -717,7 +753,7 @@ class FileGroup(mongoengine.Document):
                 self.tree[name].parent = None
             self.tree = {name: node for name, node in self.tree.items() if name not in populations}
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def get_population(self,
                        population_name: str) -> Population:
         """
@@ -742,7 +778,7 @@ class FileGroup(mongoengine.Document):
             raise MissingPopulationError(f'Population {population_name} does not exist')
         return [p for p in self.populations if p.population_name == population_name][0]
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def get_population_by_parent(self,
                                  parent: str) -> Generator:
         """
@@ -762,7 +798,7 @@ class FileGroup(mongoengine.Document):
             if p.parent == parent and p.population_name != "root":
                 yield p
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def list_downstream_populations(self,
                                     population: str) -> list or None:
         """For a given population find all dependencies
@@ -789,7 +825,7 @@ class FileGroup(mongoengine.Document):
         dependencies = [x.name for x in anytree.findall(root, filter_=lambda n: node in n.path)]
         return [p for p in dependencies if p != population]
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def merge_gate_populations(self,
                                left: Population or str,
                                right: Population or str,
@@ -812,13 +848,14 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
+        logger.info(f"Merging {left} and {right} populations for {self.primary_id}; {self.id}")
         if isinstance(left, str):
             left = self.get_population(left)
         if isinstance(right, str):
             right = self.get_population(right)
         self.add_population(merge_gate_populations(left=left, right=right, new_population_name=new_population_name))
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def merge_non_geom_populations(self,
                                    populations: list,
                                    new_population_name: str):
@@ -842,6 +879,7 @@ class FileGroup(mongoengine.Document):
         ValueError
             If populations is invalid
         """
+        logger.info(f"Merging {populations} populations for {self.primary_id}; {self.id}")
         pops = list()
         for p in populations:
             if isinstance(p, str):
@@ -852,7 +890,7 @@ class FileGroup(mongoengine.Document):
                 raise ValueError("populations should be a list of strings or list of Population objects")
         self.add_population(merge_non_geom_populations(populations=pops, new_population_name=new_population_name))
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def subtract_populations(self,
                              left: Population,
                              right: Population,
@@ -882,6 +920,7 @@ class FileGroup(mongoengine.Document):
             If left and right population do not share the same parent or the right population
             is not downstream of the left population
         """
+        logger.info(f"Subtracting {right} population from {left} for {self.primary_id}; {self.id}")
         same_parent = left.parent == right.parent
         downstream = right.population_name in list(self.list_downstream_populations(left.population_name))
         if left.source not in ["root", "gate"] or right.source not in ["root", "gate"]:
@@ -912,7 +951,7 @@ class FileGroup(mongoengine.Document):
                                     warnings=left.warnings + right.warnings + ["SUBTRACTED POPULATION"])
         self.add_population(population=new_population)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def _write_populations(self):
         """
         Write population data to disk.
@@ -921,6 +960,7 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
+        logger.info(f"Writing populations in {self.primary_id}; {self.id} to disk")
         root_n = self.get_population("root").n
         with h5py.File(self.h5path, "r+") as f:
             for meta, labels in self.cell_meta_labels.items():
@@ -932,7 +972,7 @@ class FileGroup(mongoengine.Document):
                 p.prop_of_total = p.n / root_n
                 overwrite_or_create(file=f, data=p.index, key=f"/index/{p.population_name}/primary")
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def population_stats(self,
                          population: str,
                          warn_missing: bool = False):
@@ -965,7 +1005,7 @@ class FileGroup(mongoengine.Document):
                     "frac_of_parent": 0,
                     "frac_of_root": 0}
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def quantile_clean(self,
                        upper: float = 0.999,
                        lower: float = 0.001):
@@ -991,7 +1031,7 @@ class FileGroup(mongoengine.Document):
                                n=df.shape[0])
         self.add_population(clean_pop)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def save(self, *args, **kwargs):
         """
         Save FileGroup and associated populations
@@ -1000,13 +1040,14 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
+        logger.info(f"Writing {self.primary_id}; {self.id} to disk")
         # Calculate meta and save indexes to disk
         if self.populations:
             # Populate h5path for populations
             self._write_populations()
         super().save(*args, **kwargs)
 
-    @logger.catch
+    @logger.catch(reraise=True)
     def delete(self,
                delete_hdf5_file: bool = True,
                *args,
@@ -1022,6 +1063,7 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
+        logger.info(f"Deleting {self.primary_id}; {self.id}")
         super().delete(*args, **kwargs)
         if delete_hdf5_file:
             if os.path.isfile(self.h5path):
