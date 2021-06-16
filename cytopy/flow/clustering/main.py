@@ -61,7 +61,9 @@ from ..transform import Scaler
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from sklearn.cluster import *
+from typing import List, Dict, Union, Tuple, Type
 from sklearn.metrics import calinski_harabasz_score, silhouette_score, davies_bouldin_score
+from loguru import logger
 from warnings import warn
 import seaborn as sns
 import pandas as pd
@@ -80,12 +82,15 @@ __status__ = "Production"
 
 def clustering_performance(data: pd.DataFrame,
                            labels: list):
-    print("Clustering performance...")
-    print(f"Silhouette coefficient: {silhouette_score(data.values, labels, metric='euclidean')}")
-    print(f"Calinski-Harabasz index: {calinski_harabasz_score(data.values, labels)}")
-    print(f"Davies-Bouldin index: {davies_bouldin_score(data.values, labels)}")
+    for x in ["Clustering performance...",
+              f"Silhouette coefficient: {silhouette_score(data.values, labels, metric='euclidean')}",
+              f"Calinski-Harabasz index: {calinski_harabasz_score(data.values, labels)}",
+              f"Davies-Bouldin index: {davies_bouldin_score(data.values, labels)}"]:
+        print(x)
+        logger.info(x)
 
 
+@logger.catch
 def sklearn_clustering(data: pd.DataFrame,
                        features: list,
                        verbose: bool,
@@ -128,25 +133,36 @@ def sklearn_clustering(data: pd.DataFrame,
 
     Raises
     ------
-    AssertionError
+    ValueError
         Invalid Scikit-Learn or equivalent class provided in method
     """
-    assert method in globals().keys(), \
-        "Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN"
+    _print = vprint(verbose=verbose)
+    if method not in globals().keys():
+        logger.error("Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN")
+        raise ValueError("Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN")
     model = globals()[method](**kwargs)
     if global_clustering:
+        logger.info(f"Performing global clustering with the Scikit-Learn clustering algo {method} "
+                    f"using features {features}")
         data["cluster_label"] = model.fit_predict(data[features])
         if print_performance_metrics:
             clustering_performance(data[features], data["cluster_label"].values)
         return data, None, None
+    logger.info(f"Performing clustering with the Scikit-Learn clustering algo {method} using features {features}")
     for _id, df in progress_bar(data.groupby("sample_id"), verbose=verbose):
+        _print(f"----- Clustering {_id} -----")
+        logger.info(f"clustering {_id}")
         df["cluster_label"] = model.fit_predict(df[features])
         data.loc[df.index, ["cluster_label"]] = df["cluster_label"].values
         if print_performance_metrics:
             clustering_performance(df[features], df["cluster_label"].values)
+        _print("-----------------------------")
+        logger.info(f"clustering complete")
+        _print("\n")
     return data, None, None
 
 
+@logger.catch
 def phenograph_clustering(data: pd.DataFrame,
                           features: list,
                           verbose: bool,
@@ -187,15 +203,18 @@ def phenograph_clustering(data: pd.DataFrame,
     _print = vprint(verbose=verbose)
     data["cluster_label"] = None
     if global_clustering:
+        logger.info(f"Performing clustering with the PhenoGraph using features {features}")
         communities, graph, q = phenograph.cluster(data[features], **kwargs)
         data["cluster_label"] = communities
         if print_performance_metrics:
             clustering_performance(data[features], data["cluster_label"].values)
+        logger.info("PhenoGraph clustering complete")
         return data, graph, q
     graphs = dict()
     q = dict()
     for _id, df in data.groupby("sample_id"):
         _print(f"----- Clustering {_id} -----")
+        logger.info(f"clustering {_id}")
         communities, graph, q_ = phenograph.cluster(df[features], **kwargs)
         graphs[_id], q[_id] = graph, q_
         df["cluster_label"] = communities
@@ -204,9 +223,11 @@ def phenograph_clustering(data: pd.DataFrame,
             clustering_performance(df[features], df["cluster_label"].values)
         _print("-----------------------------")
         _print("\n")
+        logger.info("PhenoGraph clustering complete")
     return data, graphs, q
 
 
+@logger.catch
 def _assign_metalabels(data: pd.DataFrame,
                        metadata: pd.DataFrame):
     """
@@ -228,6 +249,7 @@ def _assign_metalabels(data: pd.DataFrame,
     return pd.merge(data, metadata[["sample_id", "cluster_label", "meta_label"]], on=["sample_id", "cluster_label"])
 
 
+@logger.catch
 def summarise_clusters(data: pd.DataFrame,
                        features: list,
                        scale: str or None = None,
@@ -272,6 +294,7 @@ def summarise_clusters(data: pd.DataFrame,
     return data
 
 
+@logger.catch
 def sklearn_metaclustering(data: pd.DataFrame,
                            features: list,
                            method: str,
@@ -316,13 +339,14 @@ def sklearn_metaclustering(data: pd.DataFrame,
 
     Raises
     ------
-    AssertionError
+    ValueError
         Invalid Scikit-Learn or equivalent class provided in method
     """
     vprint_ = vprint(verbose)
-    assert method in globals().keys(), \
-        "Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN"
+    if method not in globals().keys():
+        raise ValueError("Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN")
     model = globals()[method](**kwargs)
+    logger.info(f"Meta clustering with {method}")
     vprint_(f"------ {method} meta-clustering ------")
     vprint_("...summarising clusters")
     metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
@@ -333,9 +357,11 @@ def sklearn_metaclustering(data: pd.DataFrame,
     vprint_("...assigning meta-labels")
     data = _assign_metalabels(data, metadata)
     vprint_("------ Complete ------")
+    logger.info("Meta-clustering complete")
     return data, None, None
 
 
+@logger.catch
 def phenograph_metaclustering(data: pd.DataFrame,
                               features: list,
                               verbose: bool = True,
@@ -376,6 +402,7 @@ def phenograph_metaclustering(data: pd.DataFrame,
     """
     vprint_ = vprint(verbose)
     vprint_("----- Phenograph meta-clustering ------")
+    logger.info(f"Meta clustering with PhenoGraph")
     metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
     vprint_("...summarising clusters")
     vprint_("...clustering the clusters")
@@ -386,9 +413,11 @@ def phenograph_metaclustering(data: pd.DataFrame,
     vprint_("...assigning meta-labels")
     data = _assign_metalabels(data, metadata)
     vprint_("------ Complete ------")
+    logger.info("PhenoGraph clustering complete")
     return data, graph, q
 
 
+@logger.catch
 def consensus_metacluster(data: pd.DataFrame,
                           features: list,
                           cluster_class: object,
@@ -450,16 +479,18 @@ def consensus_metacluster(data: pd.DataFrame,
 
     Raises
     ------
-    AssertionError
+    ValueError
         If maximum number of meta clusters exceeds the maximum number of clusters identified in any
         one sample
     """
     vprint_ = vprint(verbose)
     metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
-    assert (metadata.shape[0] * resample_proportion) > largest_cluster_n, \
-        f"Maximum number of meta clusters (largest_cluster_n) is currently set to {largest_cluster_n} but there are " \
-        f"only {metadata.shape[0] * resample_proportion} clusters to cluster in each sample. Either decrease " \
-        f"largest_cluster_n or increase resample_proportion."
+    if (metadata.shape[0] * resample_proportion) < largest_cluster_n:
+        raise ValueError(f"Maximum number of meta clusters (largest_cluster_n) is currently set to "
+                         f"{largest_cluster_n} but there are only {metadata.shape[0] * resample_proportion} "
+                         f"clusters to cluster in each sample. Either decrease largest_cluster_n or increase "
+                         f"resample_proportion.")
+    logger.info("Performing consensus meta-clustering")
     vprint_("----- Consensus meta-clustering ------")
     consensus_clust = ConsensusCluster(cluster=cluster_class,
                                        smallest_cluster_n=smallest_cluster_n,
@@ -472,6 +503,7 @@ def consensus_metacluster(data: pd.DataFrame,
     if print_performance_metrics:
         clustering_performance(metadata[features], metadata["meta_label"].values)
     data = _assign_metalabels(data, metadata)
+    logger.info("consensus clustering complete")
     return data, None, None
 
 
@@ -524,6 +556,7 @@ def _flowsom_clustering(data: pd.DataFrame,
     return cluster
 
 
+@logger.catch
 def flowsom_clustering(data: pd.DataFrame,
                        features: list,
                        verbose: bool,
@@ -574,6 +607,7 @@ def flowsom_clustering(data: pd.DataFrame,
         Modified dataframe with clustering IDs assigned to the column 'cluster_label'
     """
     if global_clustering:
+        logger.info(f"Performing global clustering with FlowSOM on features {features}")
         cluster = _flowsom_clustering(data=data,
                                       features=features,
                                       verbose=verbose,
@@ -586,8 +620,10 @@ def flowsom_clustering(data: pd.DataFrame,
             clustering_performance(data[features], data["cluster_label"].values)
         return data, None, None
     vprint_ = vprint(verbose)
+    logger.info(f"Performing clustering with FlowSOM on features {features}")
     for _id, df in data.groupby("sample_id"):
         vprint_(f"----- Clustering {_id} -----")
+        logger.info(f"clustering {_id}")
         cluster = _flowsom_clustering(data=df,
                                       features=features,
                                       verbose=verbose,
@@ -600,6 +636,7 @@ def flowsom_clustering(data: pd.DataFrame,
             clustering_performance(df[features], df["cluster_label"].values)
         data.loc[df.index, ["cluster_label"]] = df.cluster_label
         vprint_("\n")
+        logger.info("FlowSOM clustering complete")
     return data, None, None
 
 
@@ -684,6 +721,7 @@ class Clustering:
                  transform_kwargs: dict or None = None,
                  verbose: bool = True,
                  population_prefix: str = "cluster"):
+        logger.info(f"Creating new Clustering object with connection to {experiment.experiment_id}")
         self.experiment = experiment
         self.verbose = verbose
         self.print = vprint(verbose)
@@ -694,6 +732,7 @@ class Clustering:
         self.metrics = None
         self.population_prefix = population_prefix
         self.print("Loading single cell data...")
+        logger.info(f"Obtaining data for clustering for population {root_population}")
         self.data = load_population_data_from_experiment(experiment=experiment,
                                                          sample_ids=sample_ids,
                                                          transform=transform,
@@ -703,29 +742,37 @@ class Clustering:
         self.data["cluster_label"] = None
         self.print("Ready to cluster!")
 
-    def _check_null(self) -> list:
+    @logger.catch
+    def _check_null(self,
+                    features: Union[List[str], None] = None) -> list:
         """
         Internal method. Check for null values in the underlying dataframe.
         Returns a list of column names for columns with no missing values.
+
+        Parameters
+        ----------
+        features: Union[List[str], None] (default=None)
 
         Returns
         -------
         List
             List of valid columns
         """
-        null_cols = (self.data[self.features]
+        features = features or self.features
+        null_cols = (self.data[features]
                      .isnull()
                      .sum()
-                     [self.data[self.features].isnull().sum() > 0]
+                     [self.data[features].isnull().sum() > 0]
                      .index
                      .values)
         if null_cols.size != 0:
             warn(f'The following columns contain null values and will be excluded from '
                  f'clustering analysis: {null_cols}')
-        return [x for x in self.features if x not in null_cols]
+        return [x for x in features if x not in null_cols]
 
     def cluster(self,
                 func: callable,
+                overwrite_features: Union[List[str], None] = None,
                 **kwargs):
         """
         Perform clustering with a suitable clustering function from cytopy.flow.clustering.main:
@@ -740,6 +787,10 @@ class Clustering:
         Parameters
         ----------
         func: callable
+        overwrite_features: List[str], optional
+            Uses this list of features instead of those in the 'features' attribute. This can be
+            useful if the 'dimension_reduction' function has been used and you wish to perform global
+            clustering on the latent variables.
         kwargs:
             Additional keyword arguments passed to the given clustering function
 
@@ -747,7 +798,7 @@ class Clustering:
         -------
         self
         """
-        features = self._check_null()
+        features = self._check_null(overwrite_features)
         self.data, self.graph, self.metrics = func(data=self.data,
                                                    features=features,
                                                    verbose=self.verbose,
@@ -864,6 +915,7 @@ class Clustering:
         """
         self.data["meta_label"].replace(mappings, inplace=True)
 
+    @logger.catch
     def load_meta_variable(self,
                            variable: str,
                            verbose: bool = True,
@@ -900,12 +952,105 @@ class Clustering:
                 else:
                     self.data.loc[self.data.subject_id == _id, variable] = p[variable]
             except KeyError:
+                logger.warning(f'{_id} is missing meta-variable {variable}')
                 warn(f'{_id} is missing meta-variable {variable}')
                 self.data.loc[self.data.subject_id == _id, variable] = None
 
+    @logger.catch
+    def dimension_reduction(self,
+                            method: Union[str, Type],
+                            n_components: int = 2,
+                            **kwargs):
+        """
+        Perform dimension reduction on associated data. This will generate new latent features
+        that can be used for clustering. Latent variables will be stored as indexed columns in
+        data attribute named according to the method e.g. UMAP1, UMAP2 etc
+
+        Parameters
+        ----------
+        method: str
+            Valid dimension reduction method (see cytopy.flow.dimension_reduction)
+        n_components: int (default=2)
+            Number of components to generate
+        kwargs:
+            Additional keyword arguments passed to DimensionReduction
+
+        Returns
+        -------
+        None
+        """
+        reducer = DimensionReduction(method=method,
+                                     n_components=n_components,
+                                     **kwargs)
+        self.data = reducer.fit_transform(data=self.data, features=self.features)
+
+    @logger.catch
+    def single_cell_plot(self,
+                         sample_size: Union[int, None] = 100000,
+                         sampling_method: str = "uniform",
+                         method: Union[str, Type] = "UMAP",
+                         dim_reduction_kwargs: dict or None = None,
+                         label: str = "cluster_label",
+                         discrete: bool = True,
+                         **kwargs):
+        """
+        Plot the entire single cell dataframe (the data attribute). WARNING: this can be computationally
+        expensive so if you have limited resource, try specifying a sample size first.
+
+        Parameters
+        ----------
+        sample_size: int, optional (default=100000)
+        sampling_method: str (default="uniform")
+            Can either be uniform or absolute:
+            * uniform: take a uniform sample of the same size from each sample
+            * absolute: sample uniformly from the whole dataframe without accounting for individual
+            biological sample size
+        method: Union[str, Type]
+            Dimensionality reduction technique; available in-built methods are: UMAP, PCA, PHATE, KernelPCA or tSNE.
+            (see cytopy.flow.dimension_reduction)
+        dim_reduction_kwargs: dict, optional
+            Additional keyword arguments passed to dimension reduction (see cytopy.flow.dim_reduction)
+        label: str, (default='cluster_label')
+            How to colour single cells
+        discrete: bool (default=True)
+            If True, label is treated as a discrete variable. If False, continuous colourmap will be applied.
+        kwargs:
+            Additional keyword arguments passed to cytopy.flow.plotting.single_cell_plot
+
+        Returns
+        -------
+        Matplotlib.Axes
+        """
+        plot_data = self.data
+        if sample_size is not None:
+            if sampling_method == "uniform":
+                plot_data = list()
+                n = int(sample_size / self.data.sample_id.nunique())
+                for _, sample_data in self.data.groupby("sample_id"):
+                    if n >= sample_data.shape[0]:
+                        plot_data.append(sample_data)
+                    else:
+                        plot_data.append(sample_data.sample(n))
+                plot_data = pd.concat(plot_data)
+            else:
+                if sample_size < self.data.shape[0]:
+                    plot_data = self.data.sample(sample_size)
+
+        reducer = DimensionReduction(method=method,
+                                     n_components=2,
+                                     **dim_reduction_kwargs)
+        df = reducer.fit_transform(data=plot_data, features=self.features)
+        return single_cell_plot(data=df,
+                                x=f"{method}1",
+                                y=f"{method}2",
+                                label=label,
+                                discrete=discrete,
+                                **kwargs)
+
+    @logger.catch
     def plot_sample_clusters(self,
                              sample_id: str,
-                             method: str = "UMAP",
+                             method: Union[str, Type] = "UMAP",
                              dim_reduction_kwargs: dict or None = None,
                              label: str = "cluster_label",
                              discrete: bool = True,
@@ -917,8 +1062,9 @@ class Clustering:
         Parameters
         ----------
         sample_id: str
-        method: str
-            Dimensionality reduction technique; available methods are: UMAP, PCA, PHATE, KernelPCA or tSNE
+        method: Union[str, Type]
+            Dimensionality reduction technique; available in-built methods are: UMAP, PCA, PHATE, KernelPCA or tSNE.
+            (see cytopy.flow.dimension_reduction)
         dim_reduction_kwargs: dict, optional
             Additional keyword arguments passed to dimension reduction (see cytopy.flow.dim_reduction)
         label: str, (default='cluster_label')
@@ -945,6 +1091,7 @@ class Clustering:
                                 discrete=discrete,
                                 **kwargs)
 
+    @logger.catch
     def plot_meta_clusters(self,
                            colour_label: str = "meta_label",
                            discrete: bool = True,
@@ -984,14 +1131,22 @@ class Clustering:
                                    dim_reduction_kwargs=dim_reduction_kwargs,
                                    **kwargs)
 
+    @logger.catch
     def clustered_heatmap(self,
                           features: list,
                           sample_id: str or None = None,
+                          meta_label: bool = True,
                           **kwargs):
         """
-        Generate a clustered heatmap (using Seaborn Clustermap function). If sample_id is provided,
-        rows are individual clusters from a single sample, otherwise rows are meta clusters. Columns
-        shown the median intensity of each feature.
+        Generate a clustered heatmap (using Seaborn Clustermap function). This function is capable of producing
+        different types of heatmaps depending on the input and the clustered dataframe (data attribute):
+
+        * sample_id is None and meta_label is True, will plot the median intensity of each feature for
+        each meta cluster
+        * sample_id is None and meta_label is False, will plot the median intensity of each feature
+        for each cluster label
+        * if sample_id is not None, then will plot the median intensity for each feature for each cluster
+        for the specified sample
 
         Default parameters passed to clustermap (overwrite using kwargs):
         * col_cluster = True
@@ -1003,6 +1158,7 @@ class Clustering:
         ----------
         features: list
         sample_id: str, optional
+        meta_label: bool (default=True)
         kwargs:
             Additional keyword arguments passed to Seaborn.clustermap
 
@@ -1010,8 +1166,10 @@ class Clustering:
         -------
         Seaborn.ClusterGrid
         """
-        if sample_id is None:
+        if sample_id is None and meta_label:
             data = self.data.groupby(["meta_label"])[self.features].median()
+        elif sample_id is None and not meta_label:
+            data = self.data.groupby(["cluster_label"])[self.features].median()
         else:
             data = self.data[self.data.sample_id == sample_id].groupby(["cluster_label"]).median()
         data[features] = data[features].apply(pd.to_numeric)
@@ -1022,6 +1180,7 @@ class Clustering:
         kwargs["cmap"] = kwargs.get("cmap", "viridis")
         return sns.clustermap(data[features], **kwargs)
 
+    @logger.catch
     def save(self, verbose: bool = True, population_var: str = "meta_label"):
         """
         Clusters are saved as new Populations in each FileGroup in the attached Experiment
@@ -1039,11 +1198,12 @@ class Clustering:
 
         Raises
         ------
-        AssertionError
+        ValueError
             If population_var is 'meta_label' and meta clustering has not been previously performed
         """
         if population_var == "meta_label":
-            assert not self.data.meta_label.isnull().all(), "Meta clustering has not been performed"
+            if self.data.meta_label.isnull().all():
+                raise ValueError("Meta clustering has not been performed")
         for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
             fg = self.experiment.get_sample(sample_id)
             sample_data = self.data[self.data.sample_id == sample_id].copy()
@@ -1061,33 +1221,9 @@ class Clustering:
             fg.save()
 
 
-class LatentClustering:
-    """
-    The LatentClustering class is inspired from ACCENSE [1] and can be used for global clustering
-
-    """
-    def __init__(self):
-        pass
-
-    def load(self):
-        pass
-
-    def dimension_reduction(self):
-        pass
-
-    def cluster(self):
-        pass
-
-    def plot(self):
-        pass
-
-    def heatmap(self):
-        pass
-
-
 def geo_mean(x):
     a = np.array(x)
-    return a.prod()**(1.0/len(a))
+    return a.prod() ** (1.0 / len(a))
 
 
 def _assert_unique_label(x):

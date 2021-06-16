@@ -29,7 +29,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ..feedback import progress_bar, setup_standard_logger
+from ..feedback import progress_bar
 from ..data.experiment import Experiment
 from .plotting.embeddings_graphs import discrete_scatterplot, cont_scatterplot
 from .cell_classifier import utils as classifier_utils
@@ -143,9 +143,6 @@ class FeatureSpace:
                  logging_level: int or None = None,
                  log: str or None = None):
         sample_ids = sample_ids or experiment.list_samples()
-        self.logger = setup_standard_logger(name="FeatureSpace",
-                                            default_level=logging_level,
-                                            log=log)
         self._fcs_files = [x for x in experiment.fcs_files
                            if x.primary_id in sample_ids] or experiment.fcs_files
         self.subject_ids = {x.primary_id: _fetch_subject(x) for x in self._fcs_files}
