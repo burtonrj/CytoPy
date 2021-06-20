@@ -351,10 +351,6 @@ def create_envelope(x_values: np.array,
     GeometryError
         Failed to generate alpha shape; likely due to insufficient data or alpha being too large.
     """
-    if alpha > 5.0:
-        warn("Alpha is very large and will likely exclude many if not all data points.")
-    if alpha is None:
-        warn("Alpha is None. Attempting to calculate optimal alpha; this may take some time.")
     xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
     try:
         poly = alphashape.alphashape(points=xy, alpha=alpha)

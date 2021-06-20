@@ -27,12 +27,12 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ...feedback import progress_bar, vprint
+from ...feedback import progress_bar
 from .consensus import ConsensusCluster
 from sklearn.preprocessing import MinMaxScaler
-from warnings import warn
 from minisom import MiniSom
 import pandas as pd
+import logging
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -42,6 +42,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+logger = logging.getLogger("FlowSOM")
 
 
 class FlowSOM:
@@ -80,7 +81,6 @@ class FlowSOM:
         assert neighborhood_function in ['gaussian', 'mexican_hat', 'bubble', 'triangle'], \
             'Invalid neighborhood function, must be one of "gaussian", "mexican_hat", "bubble", or "triangle"'
         self.verbose = verbose
-        self.print = vprint(verbose)
         self.nf = neighborhood_function
         self.xn = None
         self.yn = None
@@ -131,23 +131,23 @@ class FlowSOM:
             som.random_weights_init(self.data)
         elif weight_init == 'pca':
             if not self.normalisation:
-                warn('It is strongly recommended to normalize the data before initializing '
-                     'the weights if using PCA.')
+                logger.warning('It is strongly recommended to normalize the data before initializing '
+                               'the weights if using PCA.')
             som.pca_weights_init(self.data)
         else:
-            warn('Invalid value provided for "weight_init", valid input is either "random" or "pca". '
-                 'Defaulting to random initialisation of weights')
+            logger.warning('Invalid value provided for "weight_init", valid input is either "random" or "pca". '
+                           'Defaulting to random initialisation of weights')
             som.random_weights_init(self.data)
 
-        self.print("------------- Training SOM -------------")
+        logger.info("------------- Training SOM -------------")
         som.train_batch(self.data, batch_size, verbose=True)  # random training
         self.xn = som_dim[0]
         self.yn = som_dim[1]
         self.map = som
         self.weights = som.get_weights()
         self.flatten_weights = self.weights.reshape(self.xn*self.yn, self.dims)
-        self.print("\nTraining complete!")
-        self.print("----------------------------------------")
+        logger.info("Training complete!")
+        logger.info("----------------------------------------")
 
     def meta_cluster(self,
                      cluster_class: callable,
@@ -208,11 +208,11 @@ class FlowSOM:
         assert self.map is not None, err_msg
         assert self.meta_class is not None, err_msg
         labels = []
-        self.print('---------- Predicting Labels ----------')
+        logger.info('---------- Predicting Labels ----------')
         for i in progress_bar(range(len(self.data)), verbose=self.verbose):
             xx = self.data[i, :]  # fetch the sample data
             winner = self.map.winner(xx)  # make prediction, prediction = the closest entry location in the SOM
             c = self.meta_class[winner]  # from the location info get cluster info
             labels.append(c)
-        self.print('---------------------------------------')
+        logger.info('---------------------------------------')
         return labels

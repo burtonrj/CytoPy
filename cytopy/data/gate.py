@@ -54,6 +54,7 @@ from functools import reduce
 import pandas as pd
 import numpy as np
 import mongoengine
+import logging
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -63,6 +64,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+logger = logging.getLogger("Gate")
 
 
 class Child(mongoengine.EmbeddedDocument):
@@ -223,21 +225,30 @@ class Gate(mongoengine.Document):
     }
 
     def __init__(self, *args, **values):
-        method = values.get("method", None)
-        kwargs = values.pop("method_kwargs", {})
-        assert method is not None, "No method given"
-        err = f"Module {method} not supported. See docs for supported methods."
-        assert method in ["manual", "density", "quantile"] + list(globals().keys()), err
+
+        try:
+            method = values.get("method", None)
+            kwargs = values.pop("method_kwargs", {})
+            assert method is not None, "No method given"
+            err = f"Module {method} not supported. See docs for supported methods."
+            assert method in ["manual", "density", "quantile"] + list(globals().keys()), err
+        except AssertionError as e:
+            logger.exception(e)
+            raise ValueError(f"Could not create Gate: {e}")
+
         super().__init__(*args, **values, method_kwargs=kwargs)
         self.model = None
         self.x_transformer = None
         self.y_transformer = None
+
         if self.ctrl_classifier:
             params = self.ctrl_classifier_params or {}
             build_sklearn_model(klass=self.ctrl_classifier, **params)
+
         self.validate()
         self._yeo_johnson = None
         if self.method_kwargs.get("yeo_johnson", False):
+            logger.debug("Yeo-johnson transform = TRUE")
             self._yeo_johnson = PowerTransformer(method="yeo-johnson")
 
     def yeo_johnson_transform(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -254,6 +265,7 @@ class Gate(mongoengine.Document):
         Pandas.DataFrame
             Transformed dataframe with features (defined by self.x/self.y) transformed.
         """
+        logger.debug("Performing yeo-johnson transform")
         if self._yeo_johnson is not None:
             features = [i for i in [self.x, self.y] if i is not None]
             if len(features) == 1:
@@ -275,6 +287,7 @@ class Gate(mongoengine.Document):
         Numpy.Array
             Inversely transformed data
         """
+        logger.debug("Performing inverse yeo-johnson transform")
         if self._yeo_johnson is not None:
             features = [i for i in [self.x, self.y] if i is not None]
             if len(features) == 1:
@@ -282,12 +295,6 @@ class Gate(mongoengine.Document):
             else:
                 data[features] = self._yeo_johnson.inverse_transform(data[features])
         return data
-
-    def transform_info(self):
-        transforms = {axis: transform for axis, transform in
-                      zip([self.x, self.y], [self.transform_x, self.transform_y])
-                      if axis is not None and transform is not None}
-        return transforms
 
     def transform(self,
                   data: pd.DataFrame) -> pd.DataFrame:
@@ -304,6 +311,7 @@ class Gate(mongoengine.Document):
             Transformed dataframe
         """
         if self.transform_x is not None:
+            logger.debug(f"Transforming x axis {self.x} with {self.transform_x} transform")
             kwargs = self.transform_x_kwargs or {}
             data, self.x_transformer = apply_transform(data=data,
                                                        features=[self.x],
@@ -311,6 +319,7 @@ class Gate(mongoengine.Document):
                                                        return_transformer=True,
                                                        **kwargs)
         if self.transform_y is not None and self.y is not None:
+            logger.debug(f"Transforming x axis {self.y} with {self.transform_y} transform")
             kwargs = self.transform_y_kwargs or {}
             data, self.y_transformer = apply_transform(data=data,
                                                        features=[self.y],
@@ -354,12 +363,18 @@ class Gate(mongoengine.Document):
         ------
         AssertionError
             If sampling kwargs are missing
+
+        ValueError
+            Invalid downsampling method provided
         """
         data = data.copy()
+        logger.debug(f"Downsampling data using {self.sampling.get('method')} method")
+
         if self.sampling.get("method", None) == "uniform":
             n = self.sampling.get("n", None) or self.sampling.get("frac", None)
             assert n is not None, "Must provide 'n' or 'frac' for uniform downsampling"
             return uniform_downsampling(data=data, sample_size=n)
+
         if self.sampling.get("method", None) == "density":
             kwargs = {k: v for k, v in self.sampling.items()
                       if k not in ["method", "features"]}
@@ -367,9 +382,12 @@ class Gate(mongoengine.Document):
             return density_dependent_downsampling(data=data,
                                                   features=features,
                                                   **kwargs)
+
         if self.sampling.get("method", None) == "faithful":
             h = self.sampling.get("h", 0.01)
             return faithful_downsampling(data=data.values, h=h)
+
+        logger.error("Invalid downsample method, should be one of: 'uniform', 'density' or 'faithful'")
         raise ValueError("Invalid downsample method, should be one of: 'uniform', 'density' or 'faithful'")
 
     def _upsample(self,
@@ -393,13 +411,17 @@ class Gate(mongoengine.Document):
         -------
         list
         """
+        logger.debug("Upsampling data")
         sample = sample.copy()
         sample["label"] = None
+
         for i, p in enumerate(populations):
             sample.loc[sample.index.isin(p.index), "label"] = i
+
         sample["label"].fillna(-1, inplace=True)
         labels = sample["label"].values
         sample.drop("label", axis=1, inplace=True)
+
         new_labels = upsample_knn(sample=sample,
                                   original_data=data,
                                   labels=labels,
@@ -407,11 +429,14 @@ class Gate(mongoengine.Document):
                                   verbose=self.sampling.get("verbose", True),
                                   scoring=self.sampling.get("upsample_scoring", "balanced_accuracy"),
                                   **self.sampling.get("knn_kwargs", {}))
+
         for i, p in enumerate(populations):
             new_idx = data.index.values[np.where(new_labels == i)]
             if len(new_idx) == 0:
+                logger.error(f"Up-sampling failed, no events labelled for {p.population_name}; index of len 0")
                 raise ValueError(f"Up-sampling failed, no events labelled for {p.population_name}")
             p.index = new_idx
+
         return populations
 
     def _dim_reduction(self,
@@ -430,6 +455,8 @@ class Gate(mongoengine.Document):
         -------
         Pandas.DataFrame
         """
+        logger.debug("Performing dimension reduction")
+
         method = self.dim_reduction.get("method", None)
         if method is None:
             return data
@@ -458,12 +485,16 @@ class Gate(mongoengine.Document):
 
         Raises
         -------
-        AssertionError
+        ValueError
             If required columns missing from provided data
         """
-        assert self.x in data.columns, f"{self.x} missing from given dataframe"
-        if self.y:
-            assert self.y in data.columns, f"{self.y} missing from given dataframe"
+        try:
+            assert self.x in data.columns, f"{self.x} missing from given dataframe"
+            if self.y:
+                assert self.y in data.columns, f"{self.y} missing from given dataframe"
+        except AssertionError as e:
+            logger.exception(e)
+            raise ValueError(e)
 
     def reset_gate(self) -> None:
         """
@@ -589,15 +620,20 @@ class ThresholdGate(Gate):
 
         Raises
         ------
-        AssertionError
+        ValueError
             If invalid definition
         """
-        if self.y is not None:
-            definition = child.definition.split(",")
-            assert all(i in ["++", "+-", "-+", "--"]
-                       for i in definition), "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
-        else:
-            assert child.definition in ["+", "-"], "Invalid child definition, should be either '+' or '-'"
+        try:
+            if self.y is not None:
+                definition = child.definition.split(",")
+                assert all(i in ["++", "+-", "-+", "--"]
+                           for i in definition), "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
+            else:
+                assert child.definition in ["+", "-"], "Invalid child definition, should be either '+' or '-'"
+        except AssertionError as e:
+            logger.exception(e)
+            raise ValueError(e)
+
         child.geom.x = self.x
         child.geom.y = self.y
         child.geom.transform_x, child.geom.transform_y = self.transform_x, self.transform_y
@@ -1582,7 +1618,8 @@ class EllipseGate(PolygonGate):
     def __init__(self, *args, **values):
         method = values.get("method", None)
         method_kwargs = values.get("method_kwargs", {})
-        assert method_kwargs.get("covariance_type", "full") == "full", "EllipseGate only supports covariance_type of 'full'"
+        assert method_kwargs.get("covariance_type",
+                                 "full") == "full", "EllipseGate only supports covariance_type of 'full'"
         valid = ["manual", "GaussianMixture", "BayesianGaussianMixture", "SMM"]
         assert method in valid, f"Elliptical gating method should be one of {valid}"
         self.conf = method_kwargs.get("conf", 0.95)
@@ -1650,7 +1687,7 @@ class EllipseGate(PolygonGate):
         list
             List of Shapely polygon's
         """
-        if self._yeo_johnson is not None or not self.method_kwargs.get("probabilistic_ellipse", False):
+        if self._yeo_johnson is not None or self.method_kwargs.get("probabilistic_ellipse", False) is False:
             return super()._fit(data=data)
         params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf",
                                                                            "probabilistic_ellipse"]}
