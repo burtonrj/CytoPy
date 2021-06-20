@@ -58,6 +58,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+logger = logging.getLogger("GatingStrategy")
 
 
 def gate_stats(gate: Gate,
@@ -129,7 +130,6 @@ class GatingStrategy(mongoengine.Document):
 
     def __init__(self, *args, **values):
         self.verbose = values.pop("verbose", True)
-        self.print = vprint(verbose=self.verbose)
         super().__init__(*args, **values)
         self.filegroup = None
 
@@ -657,7 +657,6 @@ class GatingStrategy(mongoengine.Document):
 
     def apply_to_experiment(self,
                             experiment: Experiment,
-                            logging_path: str,
                             fda_norm: bool = False,
                             hyperparam_search: bool = False,
                             plots_path: typing.Union[str, None] = None,
@@ -671,8 +670,6 @@ class GatingStrategy(mongoengine.Document):
         ----------
         experiment: Experiment
             Experiment to apply GatingStrategy to
-        logging_path: str
-            Path for gating log
         fda_norm: bool (default=False)
              Perform normalisation if defined for Gate
         hyperparam_search: bool (default=False)
@@ -692,35 +689,35 @@ class GatingStrategy(mongoengine.Document):
         -------
         None
         """
-        logging.basicConfig(filename=logging_path,
-                            filemode="a",
-                            format="%(asctime)s - %(levelname)s - %(message)s",
-                            level=logging.INFO)
-        logging.info(f" -- Gating {experiment.experiment_id} using {self.name} strategy --")
+        logger.info(f" -- Gating {experiment.experiment_id} using {self.name} strategy --")
+
         sample_ids = sample_ids or experiment.list_samples()
         if plots_path is not None:
             assert os.path.isdir(plots_path), "Invalid plots_path, directory does not exist"
         for s in progress_bar(sample_ids, verbose=verbose):
             self.load_data(experiment=experiment, sample_id=s)
             try:
-                self.apply_all(verbose=False, fda_norm=fda_norm, hyperparam_search=hyperparam_search)
+                self.apply_all(verbose=False,
+                               fda_norm=fda_norm,
+                               hyperparam_search=hyperparam_search)
                 self.save(save_strategy=False, save_filegroup=True)
-                logging.info(f"{s} - gated successfully!")
+                logger.info(f"{s} - gated successfully!")
                 if plots_path is not None:
                     fig = self.plot_all_gates()
-                    fig.savefig(f"{plots_path}/{s}.png", facecolor="white", dpi=300)
-                    logging.info(f"{s} - gates plotted to {plots_path}")
+                    fig.savefig(f"{plots_path}/{s}.png", facecolor="white", dpi=100)
+                    fig.close()
+                    logger.info(f"{s} - gates plotted to {plots_path}")
             except DuplicatePopulationError as e:
-                logging.error(f"{s} - {str(e)}")
+                logger.error(f"{s} - {str(e)}")
             except InsufficientEventsError as e:
-                logging.error(f"{s} - {str(e)}")
+                logger.error(f"{s} - {str(e)}")
             except AssertionError as e:
-                logging.error(f"{s} - {str(e)}")
+                logger.error(f"{s} - {str(e)}")
             except ValueError as e:
-                logging.error(f"{s} - {str(e)}")
+                logger.error(f"{s} - {str(e)}")
             except OverflowError as e:
-                logging.error(f"{s} - {str(e)}")
-        logging.info(f" -- {experiment.experiment_id} complete --")
+                logger.error(f"{s} - {str(e)}")
+        logger.info(f" -- {experiment.experiment_id} complete --")
 
     def plot_all_gates(self):
         """
@@ -738,7 +735,8 @@ class GatingStrategy(mongoengine.Document):
         for i in range(n):
             ax = fig.add_subplot(gs[i])
             self.plot_gate(gate=self.gates[i].gate_name,
-                           create_plot_kwargs={"ax": ax})
+                           create_plot_kwargs={"ax": ax,
+                                               "downsample": 0.25})
             ax.set_title(self.gates[i].gate_name)
         fig.tight_layout()
         return fig
@@ -1116,14 +1114,18 @@ class GatingStrategy(mongoengine.Document):
         populations = [[c.name for c in g.children] for g in self.gates]
         populations = list(set([x for sl in populations for x in sl]))
         if delete_gates:
-            self.print("Deleting gates...")
+            logger.info("Deleting gates...")
             for g in self.gates:
                 g.delete()
         if remove_associations:
-            self.print("Deleting associated populations in FileGroups...")
+            logger.info("Deleting associated populations in FileGroups...")
             for f in progress_bar(FileGroup.objects(), verbose=self.verbose):
-                if self.name in f.gating_strategy:
-                    f.gating_strategy = [gs for gs in f.gating_strategy if gs != self.name]
-                    f.delete_populations(populations=populations)
-                    f.save()
-        self.print(f"{self.name} successfully deleted.")
+                try:
+                    if self.name in f.gating_strategy:
+                        f.gating_strategy = [gs for gs in f.gating_strategy if gs != self.name]
+                        f.delete_populations(populations=populations)
+                        f.save()
+                except ValueError as e:
+                    logger.warning(f"Could not delete associations in {f.primary_id}: {e}")
+
+        logger.info(f"{self.name} successfully deleted.")

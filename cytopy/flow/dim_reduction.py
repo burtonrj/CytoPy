@@ -33,10 +33,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from sklearn.manifold import TSNE, Isomap, MDS
 from sklearn.decomposition import PCA, KernelPCA
 from typing import List, Union, Type
-from warnings import warn
-from loguru import logger
 from umap import UMAP
 import pandas as pd
+import logging
 import phate
 
 __author__ = "Ross Burton"
@@ -47,6 +46,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+logger = logging.getLogger("DimensionReduction")
 
 
 class DimensionReduction:
@@ -128,7 +128,6 @@ class DimensionReduction:
             If fit is not supported, will returns a Pandas DataFrame.
         """
         if not hasattr(self.method, "fit"):
-            warn(f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead.")
             logger.warning(f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead.")
             return self.fit_transform(data=data, features=features)
         self.method.fit(data[features])
@@ -176,7 +175,6 @@ class DimensionReduction:
         Pandas.DataFrame
         """
         if not hasattr(self.method, "transform"):
-            warn(f"Method {self._method_name} has no method 'transform', calling 'fit_transform' instead.")
             logger.warning(f"Method {self._method_name} has no method 'transform', calling 'fit_transform' instead.")
             return self.fit_transform(data=data, features=features)
 

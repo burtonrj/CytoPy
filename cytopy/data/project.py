@@ -34,10 +34,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from .experiment import Experiment
 from .subject import Subject
-from warnings import warn
 from .errors import *
 import mongoengine
 import datetime
+import logging
 import shutil
 import os
 
@@ -49,6 +49,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+logger = logging.getLogger("Project")
 
 
 class Project(mongoengine.Document):
@@ -99,10 +100,10 @@ class Project(mongoengine.Document):
                  **values):
         super().__init__(*args, **values)
         if not os.path.isdir(self.data_directory):
-            warn(f"Could not locate data directory at path {self.data_directory}, all further operations "
-                 f"will likely resolve in errors as single cell data will not be attainable. Update the "
-                 f"data directory before continuing using the 'update_data_directory' method.",
-                 stacklevel=2)
+            logger.warning(f"Could not locate data directory at path {self.data_directory}, all further operations "
+                           f"will likely resolve in errors as single cell data will not be attainable. Update the "
+                           f"data directory before continuing using the 'update_data_directory' method.",
+                           stacklevel=2)
 
     def update_data_directory(self,
                               data_directory: str,
@@ -128,6 +129,7 @@ class Project(mongoengine.Document):
             If provided path does not exist
         """
         if not os.path.isdir(data_directory):
+            logger.error(f"Could not find directory at path {data_directory}")
             raise InvalidDataDirectory(f"Could not find directory at path {data_directory}")
         for e in self.experiments:
             for f in e.fcs_files:
@@ -163,6 +165,7 @@ class Project(mongoengine.Document):
         try:
             return [e for e in self.experiments if e.experiment_id == experiment_id][0]
         except IndexError:
+            logger.error(f"Invalid experiment; {experiment_id} does not exist")
             raise MissingExperimentError(f"Invalid experiment; {experiment_id} does not exist")
 
     def add_experiment(self,
@@ -192,6 +195,7 @@ class Project(mongoengine.Document):
             If given experiment ID already exists
         """
         if experiment_id in [x.experiment_id for x in self.experiments]:
+            logger.error(f"Experiment with id {experiment_id} already exists!")
             raise DuplicateExperimentError(f"Experiment with id {experiment_id} already exists!")
         exp = Experiment(experiment_id=experiment_id, data_directory=self.data_directory)
         exp.generate_panel(panel_definition=panel_definition)
@@ -224,6 +228,7 @@ class Project(mongoengine.Document):
             If subject already exists
         """
         if subject_id in [x.subject_id for x in self.subjects]:
+            logger.error(f"Subject with ID {subject_id} already exists")
             raise DuplicateSubjectError(f"Subject with ID {subject_id} already exists")
         new_subject = Subject(subject_id=subject_id, **kwargs)
         new_subject.save()
@@ -272,6 +277,7 @@ class Project(mongoengine.Document):
             If desired subject does not exist
         """
         if subject_id not in self.list_subjects():
+            logger.error(f"Invalid subject ID {subject_id}, does not exist")
             raise MissingSubjectError(f"Invalid subject ID {subject_id}, does not exist")
         return Subject.objects(subject_id=subject_id).get()
 
@@ -288,6 +294,7 @@ class Project(mongoengine.Document):
         None
         """
         if experiment_id not in self.list_experiments():
+            logger.error(f"No such experiment {experiment_id}")
             raise MissingExperimentError(f"No such experiment {experiment_id}")
         exp = self.get_experiment(experiment_id)
         exp.delete()
@@ -312,10 +319,15 @@ class Project(mongoengine.Document):
         --------
         None
         """
+        logger.info(f"Deleting project {self.project_id}")
+        logger.info("Deleting associated subjects...")
         for p in self.subjects:
             p.delete()
+        logger.info("Deleting associated experiments...")
         for e in self.experiments:
             e.delete()
         super().delete(*args, **kwargs)
         if delete_h5_data:
+            logger.info(f"Deleting data directory {self.data_directory}...")
             shutil.rmtree(self.data_directory)
+        logger.info("Project deleted.")

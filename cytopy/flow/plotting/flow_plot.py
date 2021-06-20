@@ -165,7 +165,8 @@ class FlowPlot:
                  bins: int or None = None,
                  cmap: str = "jet",
                  bw: str or float = "silverman",
-                 autoscale: bool = True):
+                 autoscale: bool = True,
+                 downsample: Union[float, None] = None):
         assert transform_x in TRANSFORMS, f"Unsupported transform, must be one of: {TRANSFORMS}"
         assert transform_y in TRANSFORMS, f"Unsupported transform, must be one of: {TRANSFORMS}"
         self.transform_x = transform_x
@@ -174,6 +175,7 @@ class FlowPlot:
         self.transform_y_kwargs = transform_y_kwargs or {}
         self.labels = {'x': xlabel, 'y': ylabel}
         self.autoscale = autoscale
+        self.downsample = downsample
         if xlim or ylim:
             self.autoscale = False
         self.lims = {'x': xlim or [None, None], 'y': ylim or [None, None]}
@@ -217,6 +219,10 @@ class FlowPlot:
         """
         self.transform_y = None
         kwargs = kwargs or {}
+
+        if self.downsample is not None:
+            data = data.sample(frac=self.downsample)
+
         data = kde1d(data=data, x=x, transform_method=self.transform_x, bw=self.bw, **self.transform_x_kwargs)
         self._ax.plot(data["x"].values,
                       data["y"].values,
@@ -320,6 +326,10 @@ class FlowPlot:
             ybins = ytransformer.inverse_scale(ygrid, features=["y"]).y.values
         else:
             ybins = pd.DataFrame({"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)}).y.values
+
+        if self.downsample is not None:
+            data = data.sample(frac=self.downsample)
+
         self._ax.hist2d(data[x].values, data[y].values, bins=[xbins, ybins], norm=LogNorm(), cmap=self.cmap, **kwargs)
 
     def _set_axis_limits(self,
@@ -1394,7 +1404,7 @@ class DiagnosticBackgating:
         except KeyError:
             raise KeyError(f"{name} is not a recognised layer, expected one of: {self.layer_names}")
 
-    def __iter__(self) -> Generator[Tuple[str, Dict]]:
+    def __iter__(self) -> Generator:
         for name, data in self.stack.items():
             yield name, data
 

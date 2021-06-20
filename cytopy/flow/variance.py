@@ -30,8 +30,6 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-import pandas
-
 from ..data.experiment import Experiment, FileGroup
 from ..feedback import progress_bar, vprint
 from ..flow import transform as transform_module
@@ -42,7 +40,6 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
 from scipy.cluster import hierarchy
 from KDEpy import FFTKDE
-from loguru import logger
 from warnings import warn
 from typing import List, Dict, Union, Tuple
 import matplotlib.pyplot as plt
@@ -51,6 +48,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import harmonypy
+import logging
 import math
 
 np.random.seed(42)
@@ -65,9 +63,9 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+logger = logging.getLogger("Variance")
 
 
-@logger.catch(reraise=True)
 def load_and_sample(experiment: Experiment,
                     population: str,
                     sample_size: Union[int, float],
@@ -127,7 +125,6 @@ def load_and_sample(experiment: Experiment,
     return data, None
 
 
-@logger.catch(reraise=True)
 def bw_optimisation(data: pd.DataFrame,
                     features: List[str],
                     kernel: str = "gaussian",
@@ -164,7 +161,6 @@ def bw_optimisation(data: pd.DataFrame,
     return grid.best_params_.get("bandwidth")
 
 
-@logger.catch(reraise=True)
 def calculate_ref_sample(data: pd.DataFrame,
                          features: Union[List[str], None] = None,
                          verbose: bool = True) -> str:
@@ -246,7 +242,6 @@ def _sample_filegroup(filegroup: FileGroup,
     return data
 
 
-@logger.catch(reraise=True)
 def marker_variance(data: pd.DataFrame,
                     reference: str,
                     comparison_samples: Union[List[str], None] = None,
@@ -328,7 +323,6 @@ def marker_variance(data: pd.DataFrame,
     return fig
 
 
-@logger.catch(reraise=True)
 def dim_reduction_grid(data: pd.DataFrame,
                        reference: str,
                        features: List[str],
@@ -523,7 +517,6 @@ class Harmony:
             self.data = scale(data=self.data, features=self.features)
             self.scaler = scale
 
-    @logger.catch(reraise=True)
     def run(self, **kwargs):
         """
         Run the harmony algorithm (see https://github.com/slowkow/harmonypy for details). Resulting object
@@ -546,7 +539,6 @@ class Harmony:
                                              **kwargs)
         return
 
-    @logger.catch(reraise=True)
     def plot_kde(self, var: Union[str, List[str]]):
         """
         Utility function; generates a KDE plot for a single variable in 'data' attribute.
@@ -572,7 +564,6 @@ class Harmony:
         ax.set_xlabel(var)
         return fig, ax
 
-    @logger.catch(reraise=True)
     def add_meta_var(self,
                      mask: pd.DataFrame,
                      meta_var_name: str):
@@ -596,7 +587,6 @@ class Harmony:
         self.data.drop(meta_var_name, axis=1, inplace=True)
         return self
 
-    @logger.catch(reraise=True)
     def batch_lisi(self,
                    meta_var: str = "sample_id",
                    sample: float = 1.):
@@ -627,7 +617,6 @@ class Harmony:
                                            metadata=self.meta.iloc[idx],
                                            label_colnames=[meta_var])
 
-    @logger.catch(reraise=True)
     def batch_lisi_distribution(self,
                                 meta_var: str = "sample_id",
                                 sample: Union[float, None] = 0.1,
@@ -659,7 +648,6 @@ class Harmony:
         kwargs["ax"] = kwargs.get("ax", plt.subplots(figsize=(5, 5))[1])
         return sns.histplot(data=data, x="LISI", hue="Data", **kwargs)
 
-    @logger.catch(reraise=True)
     def batch_corrected(self):
         """
         Generates a Pandas DataFrame of batch corrected values. If L2 normalisation was performed prior to
@@ -679,7 +667,6 @@ class Harmony:
         corrected["sample_id"] = self.meta.sample_id.values
         return corrected
 
-    @logger.catch(reraise=True)
     def save(self,
              experiment: Experiment,
              prefix: str = "Corrected_",
@@ -722,7 +709,6 @@ class Harmony:
                                       subject_id=subject_mappings.get(sample_id, None))
 
 
-@logger.catch(reraise=True)
 def create_experiment(project,
                       features: List[str],
                       experiment_name: str) -> Experiment:
@@ -798,14 +784,11 @@ class HarmonyMatch:
         Keyword arguments controlling transformation
     features: list
         List of features
-    meta: Pandas.DataFrame
-        Meta DataFrame; by default it has one column that identifies 'batches' and is always 'sample_id'
     scaler: Scaler
         Scaler object; used to inverse the scale when saving data back to the database after correction.
         Data generated is inversely transformed before returned to caller.
-    harmony: harmonypy.Harmony
-        Fitted Harmony object
     """
+
     def __init__(self,
                  experiment: Experiment,
                  reference: str,
@@ -818,7 +801,6 @@ class HarmonyMatch:
         logger.info(f"Preparing Harmony to align data to a reference {reference} from {experiment.experiment_id}")
         self.scaler = None
         self.transformer = None
-        self.harmony = None
         self.features = features
         self.transform = transform
         self.population = population
@@ -827,9 +809,9 @@ class HarmonyMatch:
                                               transform=None)
                           .dropna(axis=1, how="any"))
 
-        self.reference[["sample_id"]] = reference
-        self.meta = self.reference[["sample_id"]].copy()
+        self.reference[["sample_id"]] = "reference"
         if transform is not None:
+            transform_kwargs = transform_kwargs or {}
             self.reference, self.transformer = apply_transform(data=self.reference, features=features, method=transform,
                                                                return_transformer=True, **transform_kwargs)
 
@@ -838,45 +820,32 @@ class HarmonyMatch:
             self.scaler = transform_module.Scaler(method=scale, **scale_kwargs)
             self.reference = self.scaler(data=self.reference, features=self.features)
 
-    def _load_target(self,
-                     experiment: Experiment,
-                     target: str) -> pd.DataFrame:
-        """
-        Load target data from Experiment to align with reference
-
-        Parameters
-        ----------
-        experiment: Experiment
-        target: str
-            Sample ID
-
-        Returns
-        -------
-        Pandas.DataFrame
-
-        Raises
-        ------
-        KeyError
-            Requested target is missing features used in reference
-        """
-        logger.info(f"Loading {self.population} population from {target}")
-        target_data = (experiment.get_sample(sample_id=target)
-                       .load_population_df(population=self.population,
-                                           transform=None)
-                       .dropna(axis=1, how="any"))
-
-        if not all([x in target_data.columns for x in self.features]):
-            raise KeyError(f"One or more required features missing from target data, expected columns: {self.features}")
+    def _transform_and_scale(self, data: pd.DataFrame):
         if self.transformer is not None:
-            target_data = self.transformer.scale(data=target_data, features=self.features)
+            data = self.transformer.scale(data=data, features=self.features)
         if self.scaler is not None:
-            target_data = self.scaler(data=target_data, features=self.features)
-        target_data["sample_id"] = target
-        return target_data
+            data = self.scaler(data=data, features=self.features)
+        return data
+
+    def _inverse_transform_scale(self, data: pd.DataFrame):
+        if self.scaler is not None:
+            data = self.scaler.inverse(data=data, features=self.features)
+        if self.transformer is not None:
+            data = self.transformer.inverse_scale(data=data, features=self.features)
+        return data
+
+    def _resample(self,
+                  data: pd.DataFrame):
+        if data.shape[0] > self.reference.shape[0]:
+            n = data.shape[0] - self.reference.shape[0]
+            return pd.concat([self.reference, self.reference.sample(n)]), data
+        elif data.shape[0] < self.reference.shape[0]:
+            return self.reference.sample(data.shape[0]), data
 
     def run(self,
             data: Union[pd.DataFrame, np.ndarray],
             plot: bool = True,
+            chunksize: int = 25000,
             **kwargs) -> Union[pd.DataFrame, None] or Tuple[pd.DataFrame, plt.Figure]:
         """
         Align the given target to the reference using Harmony.
@@ -894,19 +863,70 @@ class HarmonyMatch:
         -------
         Union[Pandas.DataFrame, None] or Tuple[Pandas.DataFrame, Matplotlib.Figure]
         """
-        logger.info(f"Aligning data with {self.meta.sample_id.values[0]}")
+        logger.info(f"Aligning data with {self.reference.sample_id.values[0]}")
+
+        if not all([x in data.columns for x in self.features]):
+            raise KeyError(f"One or more required features missing from target data, expected columns: {self.features}")
+
         if isinstance(data, np.ndarray):
             data = pd.DataFrame(data, columns=self.features)
-        data = pd.concat([self.reference, data])[self.features].astype(float)
-        self.harmony = harmonypy.run_harmony(data_mat=data.values,
-                                             meta_data=self.meta,
-                                             vars_use="sample_id",
-                                             **kwargs)
-        if plot:
-            return self._batch_corrected(inverse=True), self._plot(data)
-        return self._batch_corrected(inverse=True), None
 
-    def _batch_lisi_distribution(self, data: pd.DataFrame, ax: plt.Axes):
+        data = self._transform_and_scale(data=data)
+        ref, data = self._resample(data)
+        data["sample_id"] = "target"
+
+        data = pd.concat([ref, data]).reset_index()
+        meta_var = data[["sample_id"]].copy()
+
+        harmony = harmonypy.run_harmony(data_mat=data[self.features].astype(float).values,
+                                        meta_data=meta_var,
+                                        vars_use="sample_id",
+                                        **kwargs)
+        corrected = pd.DataFrame(harmony.Z_corr.T, columns=self.features)
+        corrected["sample_id"] = meta_var.sample_id.values
+
+        figure = None
+        if plot:
+            figure = self._plot(before=data, after=corrected)
+        corrected = self._inverse_transform_scale(data=corrected)
+        return corrected.drop("sample_id", axis=1), figure
+
+    def _plot(self,
+              before: pd.DataFrame,
+              after: pd.DataFrame) -> plt.Figure:
+        """
+        Generate a figure of 3 plots showing the LISI and alignment of reference and target
+        before and after running Harmony
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        Matplotlib.Figure
+        """
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        self._batch_lisi_distribution(before=before, after=after, ax=axes[0])
+        axes[0].set_title("LISI before and after running Harmony")
+
+        reducer = DimensionReduction(method="UMAP",
+                                     n_components=2)
+        before = reducer.fit_transform(data=before, features=self.features)
+        sns.scatterplot(data=before, x="UMAP1", y="UMAP2", hue="sample_id", s=3, ax=axes[1])
+        axes[1].set_title("Before")
+        axes[1].get_legend().remove()
+
+        after = reducer.transform(after, features=self.features)
+        sns.scatterplot(data=after, x="UMAP1", y="UMAP2", hue="sample_id", s=3, ax=axes[2])
+        axes[2].set_title("After")
+
+        fig.tight_layout()
+        return fig
+
+    def _batch_lisi_distribution(self,
+                                 before: pd.DataFrame,
+                                 after: pd.DataFrame,
+                                 ax: plt.Axes):
         """
         Create a histogram of LISI distribution before and after Harmony
 
@@ -921,66 +941,17 @@ class HarmonyMatch:
         -------
         None
         """
-        idx = np.random.randint(data.shape[0], size=int(data.shape[0] * 0.1))
-        before = harmonypy.lisi.compute_lisi(data[self.features].values[idx],
-                                             metadata=self.meta.iloc[idx],
+        if before.shape[0] > 10000:
+            before = before.sample(n=10000)
+        if after.shape[0] > 10000:
+            after = after.sample(n=10000)
+
+        before = harmonypy.lisi.compute_lisi(before[self.features],
+                                             metadata=before[["sample_id"]],
                                              label_colnames=["sample_id"])
-        after = harmonypy.lisi.compute_lisi(self._batch_corrected()[self.features].values[idx],
-                                            metadata=self.meta.iloc[idx],
+        after = harmonypy.lisi.compute_lisi(after[self.features],
+                                            metadata=after[["sample_id"]],
                                             label_colnames=["sample_id"])
         plot_data = pd.DataFrame({"Before": before.reshape(-1),
                                   "After": after.reshape(-1)}).melt(var_name="Data", value_name="LISI")
-        sns.histplot(data=plot_data, x="LISI", hue="Data", ax=ax)
-
-    @logger.catch(reraise=True)
-    def _plot(self, data: pd.DataFrame) -> plt.Figure:
-        """
-        Generate a figure of 3 plots showing the LISI and alignment of reference and target
-        before and after running Harmony
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-            Merged data of reference and target
-
-        Returns
-        -------
-        Matplotlib.Figure
-        """
-        fig, axes = plt.subplots(1, 3, figsize=(10, 5))
-        self._batch_lisi_distribution(data=data, ax=axes[0])
-        axes[0].set_title("Distribution of LISI before and after running Harmony")
-        reducer = DimensionReduction(method="UMAP",
-                                     n_components=2)
-        before = reducer.fit_transform(data=data.reset_index(), features=self.features)
-        sns.scatterplot(data=before, x="UMAP1", y="UMAP2", hue="sample_id", s=3, ax=axes[1])
-        axes[1].set_title("Before")
-        after = reducer.transform(self._batch_corrected(), features=self.features)
-        sns.scatterplot(data=after, x="UMAP1", y="UMAP2", hue="sample_id", s=3, ax=axes[2])
-        axes[2].set_title("After")
-        return fig
-
-    @logger.catch(reraise=True)
-    def _batch_corrected(self,
-                         inverse: bool = False):
-        """
-        Generates a Pandas DataFrame of batch corrected values. If L2 normalisation was performed prior to
-        this, it is reversed. Additional column 'batch_id' identifies rows.
-
-        Parameters
-        ----------
-        inverse: bool (default=False)
-            Inverse any applied transform and scaling prior to returning batch corrected data.
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        corrected = pd.DataFrame(self.harmony.Z_corr.T, columns=self.features)
-        corrected["sample_id"] = self.meta.sample_id.values
-        if inverse:
-            if self.scaler is not None:
-                corrected = self.scaler.inverse(data=corrected, features=self.features)
-            if self.transformer is not None:
-                corrected = self.transformer.inverse_scale(data=corrected, features=self.features)
-        return corrected
+        sns.histplot(data=plot_data, x="LISI", hue="Data", ax=ax, bins=50)

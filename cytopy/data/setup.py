@@ -24,10 +24,10 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+from logging.handlers import RotatingFileHandler
 from typing import Union
-from loguru import logger
-from pathlib import Path
 import mongoengine
+import logging
 import os
 
 __author__ = "Ross Burton"
@@ -40,7 +40,8 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def setup_logs(path: Union[str, None] = None) -> None:
+def setup_logs(path: Union[str, None] = None,
+               level: int = logging.INFO) -> None:
     """
     Setup logging
 
@@ -48,20 +49,24 @@ def setup_logs(path: Union[str, None] = None) -> None:
     ----------
     path: str, optional
         Where to store logs (defaults to home path)
+    level: int (default=logging.INFO)
 
     Returns
     -------
     None
     """
-    path = path or str(Path.home())
-    logger.add(os.path.join(path, "cytopy.log"),
-               rotation="10 MB",
-               format="{time} {level} {message}",
-               level="INFO")
+    path = path or "cytopy.log"
+    logging.basicConfig(level=level,
+                        format="%(asctime)s - %(levelname)s - %(message)s",
+                        handlers=[
+                            RotatingFileHandler(path, maxBytes=2e+6, backupCount=10),
+                            logging.StreamHandler()
+                        ])
 
 
 def global_init(database_name: str,
                 logging_path: Union[str, None] = None,
+                logging_level: int = logging.INFO,
                 **kwargs) -> None:
     """
     Global initializer for mongogengine ORM and logging. Logging is managed using the loguru package.
@@ -79,6 +84,7 @@ def global_init(database_name: str,
         name of database to establish connection with
     logging_path: Union[str, None]
         defaults to home path
+    logging_level: int (default=logging.INFO)
     kwargs:
         Additional keyword arguments passed to 'register_connection' function of mongoengine.
         See https://docs.mongoengine.org/guide/connecting.html
@@ -87,5 +93,7 @@ def global_init(database_name: str,
     --------
     None
     """
-    setup_logs(logging_path)
+    setup_logs(logging_path, level=logging_level)
     mongoengine.register_connection(alias="core", name=database_name, **kwargs)
+    logging.info(f"Environment setup. Logging to {logging_path or 'cytopy.log'}. "
+                 f"Connected to {database_name} database.")

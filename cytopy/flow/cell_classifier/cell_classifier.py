@@ -33,13 +33,14 @@ from ...flow.variance import HarmonyMatch
 from ...flow import sampling
 from . import utils
 from sklearn.model_selection import train_test_split, KFold, BaseCrossValidator
+from sklearn.neighbors import KNeighborsClassifier
 from imblearn.over_sampling import RandomOverSampler
-from typing import Union, Tuple, List, Dict, Callable
+from typing import Union, Tuple, Dict, Type
 import matplotlib.pyplot as plt
 from inspect import signature
-from loguru import logger
 import pandas as pd
 import numpy as np
+import logging
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -49,6 +50,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+logger = logging.getLogger("CellClassifier")
 
 DEFAULT_METRICS = ["balanced_accuracy_score", "f1_weighted", "roc_auc_score"]
 
@@ -142,18 +144,6 @@ class CellClassifier:
         else:
             logger.warning("Model does not support 'set_params'.")
         return self
-
-    def setup_data_calibrator(self,
-                              experiment: Experiment,
-                              reference: str,
-                              population: str,
-                              features: List[str],
-                              **kwargs):
-        self.data_calibrator = HarmonyMatch(experiment=experiment,
-                                            reference=reference,
-                                            population=population,
-                                            features=features,
-                                            **kwargs)
 
     def load_training_data(self,
                            experiment: Experiment,
@@ -416,17 +406,17 @@ class CellClassifier:
         """
         metrics = metrics or DEFAULT_METRICS
         train_test_split_kwargs = train_test_split_kwargs or {}
-        self.logger.info("Generating training and testing data")
+        logger.info("Generating training and testing data")
         x_train, x_test, y_train, y_test = train_test_split(self.x,
                                                             self.y,
                                                             test_size=test_frac,
                                                             **train_test_split_kwargs)
-        self.logger.info("Training model")
+        logger.info("Training model")
         self._fit(x=x_train, y=y_train, **fit_kwargs)
         results = dict()
         y_hat = dict()
         for key, (X, y) in zip(["train", "test"], [[x_train, y_train], [x_test, y_test]]):
-            self.logger.info(f"Evaluating {key}ing performance....")
+            logger.info(f"Evaluating {key}ing performance....")
             y_pred, y_score = self._predict(X)
             y_hat[key] = {"y_pred": y_pred, "y_score": y_score}
             results[key] = utils.calc_metrics(metrics=metrics,
@@ -582,12 +572,14 @@ class CellClassifier:
         x = target.load_population_df(population=root_population,
                                       transform=None)[self.features]
         x, fig = data_calibrator.run(data=x, plot=plot_data_calibration)
-        x.drop("sample_id", axis=1, inplace=True)
+
         if self.transformer is not None:
             x = self.transformer.scale(data=x, features=self.features)
         if self.scaler is not None:
             x = self.scaler(data=x, features=self.features)
+
         y_pred, y_score = self._predict(x=x, threshold=threshold)
+
         if not self.multi_label:
             self._add_unclassified_population(x=x,
                                               y_pred=y_pred,
