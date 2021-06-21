@@ -12,10 +12,9 @@ RUN apt-get update \
 WORKDIR /usr/local/
 COPY dist/ dist/
 RUN pip3 install wheel
-RUN pip3 install numpy==1.19
 RUN pip3 install jupyter
 RUN pip install jupyterlab
-RUN pip3 install /usr/local/dist/CytoPy-2.0-py3-none-any.whl
+RUN pip3 install /usr/local/dist/CytoPy-2.0.2-py3-none-any.whl
 
 ### Add Tini. Tini operates as a process subreaper for jupyter. This prevents kernel crashes.
 ENV TINI_VERSION v0.6.0
