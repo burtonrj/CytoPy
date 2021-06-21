@@ -705,7 +705,7 @@ class GatingStrategy(mongoengine.Document):
                 if plots_path is not None:
                     fig = self.plot_all_gates()
                     fig.savefig(f"{plots_path}/{s}.png", facecolor="white", dpi=100)
-                    fig.close()
+                    plt.close(fig)
                     logger.info(f"{s} - gates plotted to {plots_path}")
             except DuplicatePopulationError as e:
                 logger.error(f"{s} - {str(e)}")
