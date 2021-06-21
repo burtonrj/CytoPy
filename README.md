@@ -58,6 +58,7 @@ This will launch the CytoPy docker container and a MongoDB container with mounte
 
 # Release notes
 
+* 2.0.2 (stable) - Bumped FlowUtils to v0.9.3 and fixed figure bug in GatingStrategy apply_to_experiment method
 * 2.0.1 (stable) - Issues #22 #23 & #24 addressed with additional test coverage
 * 2.0.0 (stable) - This new build represents a refactored framework that is not compatible with previous builds. Expanded methods and a restructured design.
 * 1.0.1 (premature) - This release corrects some major errors encountered in the flow.clustering module that was preventing clusters from being saved to the database and retrieved correctly.
