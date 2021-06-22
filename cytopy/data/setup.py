@@ -28,7 +28,6 @@ from logging.handlers import RotatingFileHandler
 from typing import Union
 import mongoengine
 import logging
-import os
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
