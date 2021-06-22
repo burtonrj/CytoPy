@@ -37,10 +37,12 @@ from ..flow.sampling import faithful_downsampling, density_dependent_downsamplin
 from ..flow.dim_reduction import DimensionReduction
 from ..flow.build_models import build_sklearn_model
 from sklearn.preprocessing import PowerTransformer
+from sklearn.linear_model import HuberRegressor
 from sklearn.cluster import *
 from sklearn.mixture import *
 from hdbscan import HDBSCAN
 from smm import SMM
+from scipy import stats
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
 from string import ascii_uppercase
@@ -1424,9 +1426,11 @@ class PolygonGate(Gate):
         params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
+
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         data = self.yeo_johnson_transform(data)
+
         if self.method == "SMM":
             self.model.fit(data[[self.x, self.y]])
             labels = self.model.predict(data[[self.x, self.y]])
@@ -1434,6 +1438,7 @@ class PolygonGate(Gate):
             labels = self.model.fit_predict(data[[self.x, self.y]])
         data = self.yeo_johnson_inverse(data=data)
         polygons = list()
+
         for i in np.unique(labels):
             try:
                 polygons.append(create_envelope(x_values=data.iloc[np.where(labels == i)][self.x].values,
@@ -1701,6 +1706,89 @@ class EllipseGate(PolygonGate):
         polygons = [ellipse_to_polygon(centroid, *ellipse)
                     for centroid, ellipse in zip(self.model.means_, ellipses)]
         return polygons
+
+
+class HuberGate(PolygonGate):
+    """
+    The HuberGate is a special form of PolygonGate that is designed for gating singlets
+    and eliminating doublets. It is inspired by the 'singletGate' method in R and fits a
+    robust linear model (Scikit-Learn's HuberRegression) to data with a collinearity between
+    the x and y axis variables; much like the forward-area and forward-height plot used
+    to identify singlets.
+
+    A linear fit is made, whilst accounting for outliers, and the 'gate' is taken as the
+    confidence interval around this fit. The size of the gate is controlled by the 'conf'
+    parameter passed in 'method_kwargs' (the larger the value, the wider the gate, default=0.1).
+
+    DOES NOT SUPPORT CONTROL GATING.
+
+    Attributes
+    -----------
+    gate_name: str (required)
+        Name of the gate
+    parent: str (required)
+        Parent population that this gate is applied to
+    x: str (required)
+        Name of the x-axis variable forming the one/two dimensional space this gate
+        is applied to
+    y: str (optional)
+        Name of the y-axis variable forming the two dimensional space this gate
+        is applied to
+    transform_x: str, optional
+        Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
+    transform_y: str, optional
+        Method used to transform the Y-axis dimension, supported methods are: logicle, hyperlog, asinh or log
+    transform_x_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
+    transform_y_kwargs: dict, optional
+        Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
+    sampling: dict (optional)
+         Options for downsampling data prior to application of gate. Should contain a
+         key/value pair for desired method e.g ({"method": "uniform"). Available methods
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         keyword arguments should be provided in the sampling dictionary.
+    method_kwargs: dict
+        Keyword arguments. 'conf' controls the gate width (as described above) and the remaining
+
+    """
+    def __init__(self, *args, **values):
+        values["method"] = "HuberRegressor"
+        method_kwargs = values.get("method_kwargs", {})
+        self.conf = stats.norm(method_kwargs.pop("conf", 0.1))
+        super().__init__(*args, **values)
+
+    def _predict_interval(self,
+                          data: pd.DataFrame):
+        x = np.array([data[self.x].min(), data[self.x].max()])
+        y = np.array([data[self.y].min(), data[self.y].max()])
+        y_pred = self.model.predict(x.reshape(-1, 1))
+        stdev = np.sqrt(sum((y_pred - y) ** 2) / len(y) - 1)
+        y_lower = (y_pred - self.conf * stdev)
+        y_upper = (y_pred + self.conf * stdev)
+        return y_lower, y_upper
+
+    def _fit_model(self,
+                   data: pd.DataFrame):
+        x = data[self.x].values.reshape(-1, 1)
+        y = data[self.y].values
+        self.model.fit(x, y)
+
+    def _fit(self,
+             data: pd.DataFrame) -> List[ShapelyPoly]:
+        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson",
+                                                                           "envelope_alpha",
+                                                                           "conf"]}
+        self.model = HuberRegressor(**params)
+
+        self._xy_in_dataframe(data=data)
+        if self.sampling.get("method", None) is not None:
+            data = self._downsample(data=data)
+        self._fit_model(data=data)
+        y_lower, y_upper = self._predict_interval(data=data)
+
+        return create_polygon([data[self.x].min(), data[self.x].max(), data[self.x].max(),
+                               data[self.x].min(), data[self.x].min()],
+                              [y_lower[0], y_lower[1], y_upper[1], y_upper[0], y_lower[0]])
 
 
 class BooleanGate(PolygonGate):
