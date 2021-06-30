@@ -765,7 +765,9 @@ class FlowPlot:
         self._ax.text(x, y, text, ha='center', va='center', transform=self._ax.transAxes,
                       backgroundcolor="white", bbox=dict(facecolor='white', edgecolor='black', pad=5.0))
 
-    def _1dthreshold_annotations(self, labels: dict or None = None):
+    def _1dthreshold_annotations(self,
+                                 labels: dict or None = None,
+                                 legend_kwargs: dict or None = None):
         """
         Annotate a 1D threshold plot
 
@@ -788,8 +790,17 @@ class FlowPlot:
             raise KeyError(f"Definitions for 1D threshold gate must be either '-' or '+', not: {labels.keys()}")
         self._threshold_annotation(0.05, 0.95, "A")
         self._threshold_annotation(0.95, 0.95, "B")
-        self._ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self._ax.transAxes)
-        self._ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self._ax.transAxes)
+        #self._ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self._ax.transAxes)
+        #self._ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self._ax.transAxes)
+        
+        patchm = patches.Patch(edgecolor=None, facecolor=None, label=f"A: {legend_labels.get('A')}")
+        patchp = patches.Patch(edgecolor=None, facecolor=None, label=f"B: {legend_labels.get('B')}")
+        legend_kwargs = dict(legend_kwargs) if legend_kwargs is not None else {}
+        list_patches = [patchm, patchp]
+        self._ax.legend(handles=list_patches, handlelength=0, **legend_kwargs)
+        
+        
+        
 
     def _add_threshold(self,
                        x: float,
@@ -823,7 +834,7 @@ class FlowPlot:
             self._2dthreshold_annotations(labels=labels, legend_kwargs=legend_kwargs)
         else:
             # Label regions for one axis
-            self._1dthreshold_annotations(labels=labels)
+            self._1dthreshold_annotations(labels=labels, legend_kwargs=legend_kwargs)
 
     def backgate(self,
                  parent: pd.DataFrame,
