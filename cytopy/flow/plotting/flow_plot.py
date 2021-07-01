@@ -779,7 +779,7 @@ class FlowPlot:
         
         legend_kwargs = dict(legend_kwargs) if legend_kwargs is not None else {}
         legend_kwargs['ncol'] = 2
-        list_patches = [patchmp, patchpp, patchmm, patchpm]
+        list_patches = [patchmp, patchmm, patchpp, patchpm]
         self._ax.legend(handles=list_patches, handlelength=0, **legend_kwargs)
 
     def _threshold_annotation(self, x: float, y: float, text: str):
