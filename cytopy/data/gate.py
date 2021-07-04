@@ -1751,20 +1751,20 @@ class HuberGate(PolygonGate):
         Keyword arguments. 'conf' controls the gate width (as described above) and the remaining
 
     """
+
     def __init__(self, *args, **values):
         values["method"] = "HuberRegressor"
-        method_kwargs = values.get("method_kwargs", {})
-        self.conf = stats.norm(method_kwargs.pop("conf", 0.1))
         super().__init__(*args, **values)
 
     def _predict_interval(self,
                           data: pd.DataFrame):
+        conf = stats.norm.ppf(1 - self.method_kwargs.get("conf", 0.1))
         x = np.array([data[self.x].min(), data[self.x].max()])
         y = np.array([data[self.y].min(), data[self.y].max()])
         y_pred = self.model.predict(x.reshape(-1, 1))
         stdev = np.sqrt(sum((y_pred - y) ** 2) / len(y) - 1)
-        y_lower = (y_pred - self.conf * stdev)
-        y_upper = (y_pred + self.conf * stdev)
+        y_lower = (y_pred - conf * stdev)
+        y_upper = (y_pred + conf * stdev)
         return y_lower, y_upper
 
     def _fit_model(self,
@@ -1786,9 +1786,9 @@ class HuberGate(PolygonGate):
         self._fit_model(data=data)
         y_lower, y_upper = self._predict_interval(data=data)
 
-        return create_polygon([data[self.x].min(), data[self.x].max(), data[self.x].max(),
-                               data[self.x].min(), data[self.x].min()],
-                              [y_lower[0], y_lower[1], y_upper[1], y_upper[0], y_lower[0]])
+        return [create_polygon([data[self.x].min(), data[self.x].max(), data[self.x].max(),
+                                data[self.x].min(), data[self.x].min()],
+                               [y_lower[0], y_lower[1], y_upper[1], y_upper[0], y_lower[0]])]
 
 
 class BooleanGate(PolygonGate):
