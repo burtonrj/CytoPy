@@ -562,7 +562,7 @@ class FlowPlot:
             definitions = {}
             for c in children:
                 label = c.population_name
-                if plot_stats: label += ' %d / %d cells (%0.0f%%)'%(c.n, parent.shape[0], c.n/parent.shape[0]*100)
+                if plot_stats: label += '\n%d / %d cells (%0.0f%%)'%(c.n, parent.shape[0], c.n/parent.shape[0]*100)
                     
                 definitions[c.definition] = label
                 
