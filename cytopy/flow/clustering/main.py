@@ -61,8 +61,9 @@ from ..transform import Scaler
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from sklearn.cluster import *
-from typing import List, Dict, Union, Tuple, Type
+from typing import List, Union, Type, Dict
 from sklearn.metrics import calinski_harabasz_score, silhouette_score, davies_bouldin_score
+from collections import defaultdict
 import seaborn as sns
 import pandas as pd
 import numpy as np
@@ -150,18 +151,17 @@ def sklearn_clustering(data: pd.DataFrame,
 
     logger.info(f"Performing clustering with the Scikit-Learn clustering algo {method} using features {features}")
     for _id, df in progress_bar(data.groupby("sample_id"), verbose=verbose):
-        logger.info(f"clustering {_id}")
+        logger.info(f"========== Clustering {_id} ==========")
         df["cluster_label"] = model.fit_predict(df[features])
         data.loc[df.index, ["cluster_label"]] = df["cluster_label"].values
         if print_performance_metrics:
             clustering_performance(df[features], df["cluster_label"].values)
-        logger.info(f"clustering complete")
+        logger.info(f"========== Clustering complete ==========")
     return data, None, None
 
 
 def phenograph_clustering(data: pd.DataFrame,
                           features: list,
-                          verbose: bool,
                           global_clustering: bool = False,
                           print_performance_metrics: bool = True,
                           **kwargs):
@@ -210,14 +210,14 @@ def phenograph_clustering(data: pd.DataFrame,
     graphs = dict()
     q = dict()
     for _id, df in data.groupby("sample_id"):
-        logger.info(f"clustering {_id}")
+        logger.info(f"========== Clustering {_id} ==========")
         communities, graph, q_ = phenograph.cluster(df[features], **kwargs)
         graphs[_id], q[_id] = graph, q_
         df["cluster_label"] = communities
         data.loc[df.index, ["cluster_label"]] = df.cluster_label
         if print_performance_metrics:
             clustering_performance(df[features], df["cluster_label"].values)
-        logger.info("PhenoGraph clustering complete")
+        logger.info("========== clustering complete ==========")
     return data, graphs, q
 
 
@@ -290,7 +290,6 @@ def sklearn_metaclustering(data: pd.DataFrame,
                            features: list,
                            method: str,
                            summary_method: str = "median",
-                           verbose: bool = True,
                            print_performance_metrics: bool = True,
                            scale_method: str or None = None,
                            scale_kwargs: dict or None = None,
@@ -610,7 +609,7 @@ def flowsom_clustering(data: pd.DataFrame,
     logger.info(f"Performing clustering with FlowSOM on features {features}")
     for _id, df in data.groupby("sample_id"):
 
-        logger.info(f"clustering {_id}")
+        logger.info(f"========== Clustering {_id} ==========")
         cluster = _flowsom_clustering(data=df,
                                       features=features,
                                       verbose=verbose,
@@ -623,7 +622,7 @@ def flowsom_clustering(data: pd.DataFrame,
         if print_performance_metrics:
             clustering_performance(df[features], df["cluster_label"].values)
         data.loc[df.index, ["cluster_label"]] = df.cluster_label
-        logger.info("FlowSOM clustering complete")
+        logger.info("========== Clustering complete ==========")
 
     return data, None, None
 
@@ -1159,7 +1158,58 @@ class Clustering:
         kwargs["cmap"] = kwargs.get("cmap", "viridis")
         return sns.clustermap(data[features], **kwargs)
 
-    def save(self, verbose: bool = True, population_var: str = "meta_label"):
+    def _create_parent_populations(self,
+                                   population_var: str,
+                                   parent_populations: Dict,
+                                   verbose: bool = True):
+        """
+        Form parent populations from existing clusters
+
+        Parameters
+        ----------
+        population_var: str
+            Name of the cluster population variable i.e. cluster_label or meta_label
+        parent_populations: Dict
+            Dictionary of parent associations. Parent populations will be a merger of all child populations.
+            Each child population intended to inherit from a parent that is not 'root' should be given as a
+            key with the value being the parent to associate to.
+        verbose: bool (default=True)
+            Whether to provide feedback in the form of a progress bar
+
+        Returns
+        -------
+        None
+            Parent populations are saved to the FileGroup
+        """
+        logger.info("Creating parent populations from clustering results")
+        parent_child_mappings = defaultdict(list)
+        for child, parent in parent_populations.items():
+            parent_child_mappings[parent].append(child)
+
+        for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
+            fg = self.experiment.get_sample(sample_id)
+            sample_data = self.data[self.data.sample_id == sample_id].copy()
+
+            for parent, children in parent_child_mappings.items():
+                cluster_data = sample_data[sample_data[population_var].isin(children)]
+                if cluster_data.shape[0] == 0:
+                    logger.warning(f"No clusters found for {sample_id} to generate requested parent {parent}")
+                    continue
+                parent_population_name = parent if self.population_prefix is None \
+                    else f"{self.population_prefix}_{parent}"
+                pop = Population(population_name=parent_population_name,
+                                 n=cluster_data.shape[0],
+                                 parent=self.root_population,
+                                 source="cluster",
+                                 signature=cluster_data.mean().to_dict())
+                pop.index = cluster_data.original_index.values
+                fg.add_population(population=pop)
+            fg.save()
+
+    def save(self,
+             verbose: bool = True,
+             population_var: str = "meta_label",
+             parent_populations: Union[Dict, None] = None):
         """
         Clusters are saved as new Populations in each FileGroup in the attached Experiment
         according to the sample_id in data.
@@ -1169,6 +1219,10 @@ class Clustering:
         verbose: bool (default=True)
         population_var: str (default='meta_label')
             Variable in data that should be used to identify individual Populations
+        parent_populations: Dict
+            Dictionary of parent associations. Parent populations will be a merger of all child populations.
+            Each child population intended to inherit from a parent that is not 'root' should be given as a
+            key with the value being the parent to associate to.
 
         Returns
         -------
@@ -1182,16 +1236,25 @@ class Clustering:
         if population_var == "meta_label":
             if self.data.meta_label.isnull().all():
                 raise ValueError("Meta clustering has not been performed")
+
+        if parent_populations is not None:
+            self._create_parent_populations(population_var=population_var,
+                                            parent_populations=parent_populations)
+        parent_populations = parent_populations or {}
+
         for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
             fg = self.experiment.get_sample(sample_id)
             sample_data = self.data[self.data.sample_id == sample_id].copy()
+
             for cluster_label, cluster in sample_data.groupby(population_var):
-                population_name = str(cluster_label)
-                if self.population_prefix is not None:
-                    population_name = f"{self.population_prefix}_{cluster_label}"
+                population_name = str(cluster_label) if self.population_prefix is None \
+                    else f"{self.population_prefix}_{cluster_label}"
+                parent = parent_populations.get(cluster_label, self.root_population)
+                parent = parent if self.population_prefix is None or parent == self.root_population \
+                    else f"{self.population_prefix}_{parent}"
                 pop = Population(population_name=population_name,
                                  n=cluster.shape[0],
-                                 parent=self.root_population,
+                                 parent=parent,
                                  source="cluster",
                                  signature=cluster.mean().to_dict())
                 pop.index = cluster.original_index.values

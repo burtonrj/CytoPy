@@ -742,8 +742,9 @@ class FileGroup(mongoengine.Document):
                     self.tree[name].parent = None
                 self.tree = {name: node for name, node in self.tree.items() if name not in populations}
             except AssertionError as e:
-                logger.exception(e)
-                raise ValueError(str(e))
+                logger.warning(e)
+            except ValueError as e:
+                logger.warning(e)
 
     def get_population(self,
                        population_name: str) -> Population:
