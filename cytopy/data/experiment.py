@@ -660,11 +660,10 @@ class Experiment(mongoengine.Document):
         -------
         None
         """
-        for f in self.fcs_files:
-            f.delete_populations('all')
-#             if sample_id == 'all' or f.primary_id == sample_id:
-#                 f.populations = [p for p in f.populations if p.population_name == "root"]
-#                 f.save()
+        for f in self.fcs_files:            
+            if sample_id == 'all' or f.primary_id == sample_id:
+                f.delete_populations('all')
+                f.save()
 
     def sample_exists(self, sample_id: str) -> bool:
         """
