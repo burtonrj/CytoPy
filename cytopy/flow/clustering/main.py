@@ -881,7 +881,11 @@ class Clustering:
         -------
         None
         """
-        self.data[self.data.sample_id == sample_id]["cluster_label"].replace(mappings, inplace=True)
+        if sample_id is not "all":
+            idx = self.data[self.data.sample_id == sample_id].index
+            self.data.loc[idx, "cluster_label"] = self.data.loc[idx]["cluster_label"].replace(mappings)
+        else:
+            self.data["cluster_label"] = self.data["cluster_label"].replace(mappings)
 
     def rename_meta_clusters(self,
                              mappings: dict):
@@ -1017,6 +1021,7 @@ class Clustering:
                 if sample_size < self.data.shape[0]:
                     plot_data = self.data.sample(sample_size)
 
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
         reducer = DimensionReduction(method=method,
                                      n_components=2,
                                      **dim_reduction_kwargs)

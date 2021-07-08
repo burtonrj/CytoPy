@@ -28,7 +28,6 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ..feedback import vprint
 from ..flow.tree import construct_tree
 from ..flow.transform import apply_transform, apply_transform_map
 from ..flow.sampling import uniform_downsampling
@@ -39,7 +38,6 @@ from .subject import Subject
 from .errors import *
 from sklearn.model_selection import StratifiedKFold, permutation_test_score
 from imblearn.over_sampling import RandomOverSampler
-from warnings import warn
 from typing import List, Generator
 import pandas as pd
 import numpy as np
@@ -767,7 +765,6 @@ class FileGroup(mongoengine.Document):
             If population doesn't exist
         """
         if population_name not in list(self.list_populations()):
-            logger.error(f'Population {population_name} does not exist for {self.primary_id}; {self.id}')
             raise MissingPopulationError(f'Population {population_name} does not exist')
         return [p for p in self.populations if p.population_name == population_name][0]
 

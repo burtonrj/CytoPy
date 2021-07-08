@@ -53,7 +53,9 @@ import pandas as pd
 import numpy as np
 import graphviz
 import pingouin
+import logging
 import shap
+logger = logging.getLogger("feature_selection")
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -120,14 +122,9 @@ class FeatureSpace:
         The experiment to summarise
     sample_ids: list, optional
         List of sample IDs to be included
-    logging_level: int (default=logging.INFO)
-        Level of incident to log
-    log: str, optional
-        Where to log information; default is stdout but can provide filepath for logging
 
     Attributes
     ----------
-    logger: logging.Logger
     sample_ids: dict
     subject_ids: dict
     populations: list
@@ -139,9 +136,7 @@ class FeatureSpace:
 
     def __init__(self,
                  experiment: Experiment,
-                 sample_ids: list or None = None,
-                 logging_level: int or None = None,
-                 log: str or None = None):
+                 sample_ids: list or None = None):
         sample_ids = sample_ids or experiment.list_samples()
         self._fcs_files = [x for x in experiment.fcs_files
                            if x.primary_id in sample_ids] or experiment.fcs_files
@@ -173,7 +168,7 @@ class FeatureSpace:
         """
         for f in self._fcs_files:
             if pop1 not in f.list_populations():
-                self.logger.warning(f"{f.primary_id} missing population {pop1}")
+                logger.warning(f"{f.primary_id} missing population {pop1}")
                 if pop2 is None:
                     for p in [q for q in self.populations if q != pop1]:
                         self.ratios[f.primary_id][f"{pop1}:{p}"] = None
@@ -241,7 +236,7 @@ class FeatureSpace:
         for f in progress_bar(self._fcs_files, verbose=verbose):
             for p in populations:
                 if p not in f.list_populations():
-                    self.logger.warning(f"{f.primary_id} missing population {p}")
+                    logger.debug(f"{f.primary_id} missing population {p}")
                     for s in stats:
                         self.channel_desc[f.primary_id][f"{p}_{channel}_{s}"] = None
                 else:
@@ -277,6 +272,7 @@ class FeatureSpace:
         for f in self._fcs_files:
             subject = f.subject
             if subject is None:
+                self.meta_labels[f.primary_id][meta_label] = None
                 continue
             try:
                 if isinstance(key, str):
@@ -289,8 +285,10 @@ class FeatureSpace:
                     meta_label = meta_label or key[len(key) - 1]
                     self.meta_labels[f.primary_id][meta_label] = node
             except KeyError:
-                self.logger.warning(f"{f.primary_id} missing meta variable {key} in Subject document")
-                self.meta_labels[f.primary_id][key] = None
+                logger.warning(f"{f.primary_id} missing meta variable {key} in Subject document")
+                if meta_label is None:
+                    meta_label = key if isinstance(key, str) else key[0]
+                self.meta_labels[f.primary_id][meta_label] = None
         return self
 
     def construct_dataframe(self):

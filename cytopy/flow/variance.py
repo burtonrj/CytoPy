@@ -517,7 +517,9 @@ class Harmony:
             self.data = scale(data=self.data, features=self.features)
             self.scaler = scale
 
-    def run(self, **kwargs):
+    def run(self,
+            var_use: str = "sample_id",
+            **kwargs):
         """
         Run the harmony algorithm (see https://github.com/slowkow/harmonypy for details). Resulting object
         is stored in 'harmony' attribute
@@ -535,7 +537,7 @@ class Harmony:
         data = self.data[self.features].astype(float)
         self.harmony = harmonypy.run_harmony(data_mat=data.values,
                                              meta_data=self.meta,
-                                             vars_use="sample_id",
+                                             vars_use=var_use,
                                              **kwargs)
         return
 
