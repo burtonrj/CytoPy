@@ -26,7 +26,11 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+from typing import List, Dict, Set
+import pandas as pd
 import mongoengine
+import logging
+import json
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -36,6 +40,8 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+
+logger = logging.getLogger("subject")
 
 
 class Subject(mongoengine.DynamicDocument):
@@ -58,6 +64,36 @@ class Subject(mongoengine.DynamicDocument):
         'db_alias': 'core',
         'collection': 'subjects'
     }
+
+    @property
+    def fields(self) -> List[str]:
+        return list(self.to_dict().keys())
+
+    @fields.setter
+    def fields(self, _):
+        raise ValueError("Fields is read only, access individual fields to edit values.")
+
+    def to_dict(self, *args, **kwargs) -> Dict:
+        return json.loads(self.to_json(*args, **kwargs))
+
+    def field_to_df(self, field: str, **kwargs) -> pd.DataFrame:
+        if len(self.__getitem__(field)) == 0:
+            logger.warning(f"filed '{field}' is empty")
+            return None
+        try:
+            return pd.DataFrame(self.to_dict()[field], **kwargs)
+        except KeyError:
+            logger.error(f"{field} is not a recognised field")
+        except ValueError:
+            return (pd.DataFrame(self.to_dict()[field],
+                                 index=["value"],
+                                 **kwargs).T
+                    .reset_index()
+                    .rename({"index": field}, axis=1))
+
+
+def common_fields(subjects: List[Subject]) -> Set:
+    return set.intersection(*[set(s.fields) for s in subjects])
 
 
 def safe_search(subject_id: str):
