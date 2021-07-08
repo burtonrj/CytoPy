@@ -1289,4 +1289,3 @@ def load_control_population_from_experiment(experiment: Experiment,
     for c in additional_columns:
         data[c] = None
     return data
-
