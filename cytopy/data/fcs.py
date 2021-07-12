@@ -38,7 +38,7 @@ from .subject import Subject
 from .errors import *
 from sklearn.model_selection import StratifiedKFold, permutation_test_score
 from imblearn.over_sampling import RandomOverSampler
-from typing import List, Generator
+from typing import *
 import pandas as pd
 import numpy as np
 import mongoengine
@@ -455,7 +455,6 @@ class FileGroup(mongoengine.Document):
                                 scoring: str = "balanced_accuracy",
                                 transform: str = "logicle",
                                 transform_kwargs: dict or None = None,
-                                verbose: bool = True,
                                 evaluate_classifier: bool = True,
                                 kfolds: int = 5,
                                 n_permutations: int = 25,
@@ -491,8 +490,6 @@ class FileGroup(mongoengine.Document):
             Transformation to be applied to data prior to classification
         transform_kwargs: dict, optional
             Additional keyword arguments applied to Transformer
-        verbose: bool (default=True)
-            Whether to provide feedback
         evaluate_classifier: bool (default=True)
             If True, stratified cross validation with permutating testing is applied prior to
             predicting control population,  feeding back to stdout the performance of the classifier
@@ -563,12 +560,62 @@ class FileGroup(mongoengine.Document):
             return transformer.inverse_scale(data=ctrl, features=list(ctrl.columns))
         return ctrl
 
+    def load_multiple_populations(self,
+                                  populations: Optional[List[str]] = None,
+                                  regex: Optional[str] = None,
+                                  transform: Optional[Union[str, Dict]] = "logicle",
+                                  features_to_transform: Optional[List] = None,
+                                  transform_kwargs: Optional[Dict] = None):
+        """
+        Load a DataFrame of single cell data obtained from multiple populations. Population data
+        is merged and identifiable from the column 'population_label'
+
+        Parameters
+        ----------
+        populations: List[str]
+            Populations of interest (will log a warning and skip population if it doesn't exist)
+        regex: str, optional
+            Provide a regular expression pattern and will return matching populations (ignores populations
+            if provided)
+        transform: str or dict, optional (default="logicle")
+            Transform to be applied; specify a value of None to not perform any transformation
+        features_to_transform: list, optional
+            Features (columns) to be transformed. If not provied, all columns transformed
+        transform_kwargs: dict, optional
+            Additional keyword arguments passed to Transformer
+
+        Returns
+        -------
+        Pandas.DataFrame
+
+        Raises
+        ------
+        ValueError
+            Must provide list of populations or a regex pattern
+        """
+        dataframe = list()
+        if regex is None and populations is None:
+            raise ValueError("Must provide list of populations or a regex pattern")
+
+        if regex:
+            populations = self.list_populations(regex=regex)
+        for p in populations:
+            try:
+                pop_data = self.load_population_df(population=p,
+                                                   transform=transform,
+                                                   transform_kwargs=transform_kwargs,
+                                                   features_to_transform=features_to_transform)
+                pop_data["population_label"] = p
+                dataframe.append(pop_data)
+            except ValueError:
+                logger.warning(f"{self.primary_id} does not contain population {p}")
+        return pd.concat(dataframe)
+
     def load_population_df(self,
                            population: str,
                            transform: str or dict or None = "logicle",
                            features_to_transform: list or None = None,
-                           transform_kwargs: dict or None = None,
-                           label_downstream_affiliations: bool = False) -> pd.DataFrame:
+                           transform_kwargs: dict or None = None) -> pd.DataFrame:
         """
         Load the DataFrame for the events pertaining to a single population.
 
@@ -582,13 +629,6 @@ class FileGroup(mongoengine.Document):
             Features (columns) to be transformed. If not provied, all columns transformed
         transform_kwargs: dict, optional
             Additional keyword arguments passed to Transformer
-        label_downstream_affiliations: bool (default=False)
-            If True, an additional column will be generated named "population_label" containing
-            the end node membership of each event e.g. if you choose CD4+ population and
-            there are subsequent populations belonging to this CD4+ population in a tree
-            like: "CD4+ -> CD4+CD25+ -> CD4+CD25+CD45RA+" then the population label column
-            will contain the name of the lowest possible "leaf" population that an event is
-            assigned too.
 
         Returns
         -------
@@ -617,38 +657,6 @@ class FileGroup(mongoengine.Document):
                                        features=features_to_transform,
                                        return_transformer=False,
                                        **transform_kwargs)
-
-        if label_downstream_affiliations:
-            return self._label_downstream_affiliations(parent=population,
-                                                       data=data)
-        return data
-
-    def _label_downstream_affiliations(self,
-                                       parent: str,
-                                       data: pd.DataFrame) -> pd.DataFrame:
-        """
-        An additional column will be generated named "population_label" containing
-        the end node membership of each event e.g. if you choose CD4+ population and
-        there are subsequent populations belonging to this CD4+ population in a tree
-        like: "CD4+ -> CD4+CD25+ -> CD4+CD25+CD45RA+" then the population label column
-        will contain the name of the lowest possible "leaf" population that an event is
-        assigned too.
-
-        Parameters
-        ----------
-        parent: str
-        data: Pandas.DataFrame
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        data["population_label"] = None
-        dependencies = self.list_downstream_populations(parent)
-        for pop in dependencies:
-            idx = self.get_population(pop).index
-            data.loc[idx, 'population_label'] = pop
-        data["population_label"].fillna(parent, inplace=True)
         return data
 
     def _hdf5_exists(self):
@@ -661,15 +669,25 @@ class FileGroup(mongoengine.Document):
         """
         return os.path.isfile(self.h5path)
 
-    def list_populations(self) -> list:
+    def list_populations(self,
+                         regex: Optional[str] = None) -> list:
         """
         List population names
+
+        Parameters
+        ----------
+        regex: str, optional
+            Provide a regular expression pattern and only matching populations will be returned.
 
         Returns
         -------
         List
         """
-        return [p.population_name for p in self.populations]
+        populations = [p.population_name for p in self.populations]
+        if regex:
+            regex = re.compile(regex)
+            return list(filter(regex.match, populations))
+        return populations
 
     def print_population_tree(self,
                               image: bool = False,
