@@ -37,7 +37,7 @@ from .subject import Subject
 from .read_write import FCSFile
 from .mapping import ChannelMap
 from .errors import *
-from typing import List, Union, Dict, Callable
+from typing import List, Union, Dict, Callable, Optional
 from collections import Counter
 from datetime import datetime
 from warnings import warn
@@ -217,7 +217,7 @@ class NormalisedName(mongoengine.EmbeddedDocument):
     regex_str = mongoengine.StringField()
     permutations = mongoengine.StringField()
     case_sensitive = mongoengine.BooleanField(default=False)
-    
+
     def query(self, x: str) -> Union[str, None]:
         """
         Given a term 'x', determine if 'x' is synonymous to this standard. If so, return the standardised name.
@@ -597,12 +597,14 @@ def panel_defined(func: Callable) -> Callable:
     """
     Wrapper that will raise ValueError if Panel definition does not exist in provided Experiment
     """
+
     def wrapper(*args, **kwargs):
         if args[0].panel is None:
             err = f"No panel defined for experiment {args[0].experiment_id}"
             logger.error(err)
             raise ValueError(err)
         return func(*args, **kwargs)
+
     return wrapper
 
 
@@ -941,7 +943,7 @@ class Experiment(mongoengine.Document):
         self.save()
         del filegrp
         gc.collect()
-    
+
     @panel_defined
     def add_fcs_files(self,
                       sample_id: str,
@@ -998,7 +1000,8 @@ class Experiment(mongoengine.Document):
         AssertionError
             Raised on failure to standardise mappings using panel definition
         """
-        logger.info(f"Creating new FileGroup {sample_id} and adding to experiment {self.experiment_id} using an FCS file")
+        logger.info(
+            f"Creating new FileGroup {sample_id} and adding to experiment {self.experiment_id} using an FCS file")
         processing_datetime = processing_datetime or datetime.now()
         collection_datetime = collection_datetime or datetime.now()
         controls = controls or {}
@@ -1136,11 +1139,6 @@ class Experiment(mongoengine.Document):
                 data.append(df)
         return pd.concat(data).reset_index(drop=True)
 
-    def plot_population_distribution(self,
-                                     population: str):
-        stats = self.population_statistics(populations=[population])
-
-
     def merge_populations(self,
                           mergers: Dict):
         """
@@ -1184,108 +1182,73 @@ class Experiment(mongoengine.Document):
         logger.info("Experiment successfully deleted.")
 
 
-def load_population_data_from_experiment(experiment: Experiment,
-                                         population: str,
-                                         transform: str = "logicle",
-                                         transform_kwargs: Union[Dict, None] = None,
-                                         sample_ids: Union[List, None] = None,
-                                         verbose: bool = True,
-                                         additional_columns: Union[List, None] = None) -> pd.DataFrame:
+def single_cell_dataframe(experiment: Experiment,
+                          populations: Optional[Union[str, List[str]]] = None,
+                          regex: Optional[str] = None,
+                          transform: Union[str, Dict] = "logicle",
+                          transform_kwargs: Optional[Dict] = None,
+                          sample_ids: Optional[List[str]] = None,
+                          verbose: bool = True,
+                          ctrl: Optional[str] = None):
     """
-    Load Population from samples in the given Experiment and generate a
-    standard exploration dataframe that contains the columns 'sample_id',
-    'subject_id', 'meta_label' and initialises additional
-    columns with null values if specified (additional_columns).
-
+    Generate a single cell DataFrame that is a concatenation of population data from many
+    samples from a single Experiment. Population level data is identifiable from the 'population_label'
+    column, sample level data identifiable from the 'sample_id' column, and subject level information
+    from the 'subject_id' column.
 
     Parameters
     ----------
     experiment: Experiment
-    population: str
-    transform: str
+    populations: list or str, optional
+        * Single string value will load the matching population from samples in 'experiment'
+        * List of strings will load the matching populations from samples in 'experiment'
+        * None, to provide a regular expression (regex) for population matching
+    regex: str, optional
+        Match all populations matching the given pattern; if given, populations argument is ignored
+    transform: str or dict (default='logicle')
+        Transformation applied to the single cell data. If a string is provided, method is applied to
+        all features. If a dictionary is provided, keys are interpreted as names of features and values
+        the transform to be applied.
     transform_kwargs: dict, optional
+        Additional keyword arguments passed to transform method
     sample_ids: list, optional
+        List of samples to include. If None (default) then loads all available samples in experiment
     verbose: bool (default=True)
-    additional_columns: list, optional
+    ctrl: str, optional
+        Loads data corresponding to the given control. NOTE: only supports loading of a single population
+        from each sample in 'experiment'
 
     Returns
     -------
     Pandas.DataFrame
     """
     logger.debug(f"Loading data from {experiment.experiment_id}")
-    transform_kwargs = transform_kwargs or {}
-    additional_columns = additional_columns or list()
     sample_ids = sample_ids or list(experiment.list_samples())
-    population_data = list()
+    data = list()
+
+    method = "load_population_df"
+    kwargs = dict(populations=populations, transform=transform, transform_kwargs=transform_kwargs)
+    if isinstance(populations, list):
+        method = "load_multiple_populations"
+        kwargs["regex"] = regex
+
+        if ctrl:
+            raise ValueError("load_multiple_populations does not support control data. Load ctrl populations "
+                             "individually and merge post-hoc.")
+    elif ctrl:
+        method = "load_ctrl_population_df"
+        kwargs["ctrl"] = ctrl
+
     for _id in progress_bar(sample_ids, verbose=verbose):
         fg = experiment.get_sample(sample_id=_id)
         logger.debug(f"Loading FileGroup data from {_id}; {fg.id}")
-        pop_data = fg.load_population_df(population=population,
-                                         transform=transform,
-                                         transform_kwargs=transform_kwargs,
-                                         label_downstream_affiliations=True)
-
+        pop_data = getattr(fg, method)(**kwargs)
         pop_data["sample_id"] = _id
         pop_data["subject_id"] = None
         if fg.subject:
             pop_data["subject_id"] = fg.subject.subject_id
-        population_data.append(pop_data)
+        data.append(pop_data)
     data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
-                      for df in population_data]).reset_index(drop=True)
+                      for df in data]).reset_index(drop=True)
     data.index = list(data.index)
-    for c in additional_columns:
-        data[c] = None
-    return data
-
-
-def load_control_population_from_experiment(experiment: Experiment,
-                                            population: str,
-                                            ctrl: str,
-                                            transform: str = "logicle",
-                                            transform_kwargs: Union[Dict, None] = None,
-                                            sample_ids: Union[List, None] = None,
-                                            verbose: bool = True,
-                                            additional_columns: Union[List, None] = None):
-    """
-    Load Population from a given control from samples in the given Experiment and generate a
-    standard exploration dataframe that contains the columns 'sample_id',
-    'subject_id', and initialises additional columns with null values if specified (additional_columns).
-
-
-    Parameters
-    ----------
-    experiment: Experiment
-    population: str
-    ctrl: str,
-    transform: str
-    transform_kwargs: dict, optional
-    sample_ids: list, optional
-    verbose: bool (default=True)
-    additional_columns: list, optional
-
-    Returns
-    -------
-    Pandas.DataFrame
-    """
-    logger.debug(f"Loading {ctrl} control data from {experiment.experiment_id}")
-    additional_columns = additional_columns or list()
-    sample_ids = sample_ids or list(experiment.list_samples())
-    population_data = list()
-    for _id in progress_bar(sample_ids, verbose=verbose):
-        fg = experiment.get_sample(sample_id=_id)
-        logger.debug(f"Loading {ctrl} control data from FileGroup {_id}; {fg.id}")
-        pop_data = fg.load_ctrl_population_df(population=population,
-                                              transform=transform,
-                                              transform_kwargs=transform_kwargs,
-                                              ctrl=ctrl)
-        pop_data["sample_id"] = _id
-        pop_data["subject_id"] = None
-        if fg.subject:
-            pop_data["subject_id"] = fg.subject.subject_id
-        population_data.append(pop_data)
-    data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
-                      for df in population_data]).reset_index(drop=True)
-    data.index = list(data.index)
-    for c in additional_columns:
-        data[c] = None
     return data

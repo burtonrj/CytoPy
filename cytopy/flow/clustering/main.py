@@ -51,7 +51,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ...data.experiment import Experiment, load_population_data_from_experiment
+from ...data.experiment import Experiment, single_cell_dataframe
 from ...data.population import Population
 from ...data.subject import Subject
 from ...feedback import progress_bar
@@ -719,11 +719,11 @@ class Clustering:
         self.population_prefix = population_prefix
 
         logger.info(f"Obtaining data for clustering for population {root_population}")
-        self.data = load_population_data_from_experiment(experiment=experiment,
-                                                         sample_ids=sample_ids,
-                                                         transform=transform,
-                                                         transform_kwargs=transform_kwargs,
-                                                         population=root_population)
+        self.data = single_cell_dataframe(experiment=experiment,
+                                          sample_ids=sample_ids,
+                                          transform=transform,
+                                          transform_kwargs=transform_kwargs,
+                                          populations=root_population)
         self.data["meta_label"] = None
         self.data["cluster_label"] = None
         logging.info("Ready to cluster!")
