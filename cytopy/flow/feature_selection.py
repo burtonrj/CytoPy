@@ -397,6 +397,7 @@ def box_swarm_plot(plot_df: pd.DataFrame,
                    hue: str or None = None,
                    ax: plt.Axes or None = None,
                    palette: str or None = None,
+                   overlay: bool = True,
                    boxplot_kwargs: dict or None = None,
                    overlay_kwargs: dict or None = None):
     """
@@ -413,6 +414,8 @@ def box_swarm_plot(plot_df: pd.DataFrame,
         Name of the column to use as x-axis variable
     hue: str, optional
         Name of the column to use as factor to colour plot
+    overlay: bool (default=True)
+        Overlay swarm plot on boxplot
     ax: Matplotlib.Axes, optional
         Axis object to plot on. If None, will generate new axis of figure size (10,5)
     palette: str, optional
@@ -438,14 +441,15 @@ def box_swarm_plot(plot_df: pd.DataFrame,
                 boxprops=dict(alpha=.3),
                 palette=palette,
                 **boxplot_kwargs)
-    sns.swarmplot(data=plot_df,
-                  x=x,
-                  y=y,
-                  hue=hue,
-                  ax=ax,
-                  dodge=True,
-                  palette=palette,
-                  **overlay_kwargs)
+    if overlay:
+        sns.stripplot(data=plot_df,
+                      x=x,
+                      y=y,
+                      hue=hue,
+                      ax=ax,
+                      dodge=True,
+                      palette=palette,
+                      **overlay_kwargs)
     return ax
 
 

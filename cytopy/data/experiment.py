@@ -1189,7 +1189,9 @@ def single_cell_dataframe(experiment: Experiment,
                           transform_kwargs: Optional[Dict] = None,
                           sample_ids: Optional[List[str]] = None,
                           verbose: bool = True,
-                          ctrl: Optional[str] = None):
+                          ctrl: Optional[str] = None,
+                          label_parent: bool = False,
+                          frac_of: Optional[List[str]] = None):
     """
     Generate a single cell DataFrame that is a concatenation of population data from many
     samples from a single Experiment. Population level data is identifiable from the 'population_label'
@@ -1217,6 +1219,12 @@ def single_cell_dataframe(experiment: Experiment,
     ctrl: str, optional
         Loads data corresponding to the given control. NOTE: only supports loading of a single population
         from each sample in 'experiment'
+    label_parent: bool (default=False)
+        If True, additional column appended with parent name for each population
+    frac_of: list, optional
+        Provide a list of populations and additional columns will be appended to resulting
+        DataFrame containing the fraction of the requested population compared to each population
+        in this list
 
     Returns
     -------
@@ -1227,16 +1235,23 @@ def single_cell_dataframe(experiment: Experiment,
     data = list()
 
     method = "load_population_df"
-    kwargs = dict(populations=populations, transform=transform, transform_kwargs=transform_kwargs)
-    if isinstance(populations, list):
+    kwargs = dict(population=populations,
+                  transform=transform,
+                  transform_kwargs=transform_kwargs,
+                  label_parent=label_parent,
+                  frac_of=frac_of)
+    if isinstance(populations, list) or regex is not None:
         method = "load_multiple_populations"
         kwargs["regex"] = regex
-
+        kwargs["populations"] = populations
+        kwargs.pop("population")
         if ctrl:
             raise ValueError("load_multiple_populations does not support control data. Load ctrl populations "
                              "individually and merge post-hoc.")
     elif ctrl:
         method = "load_ctrl_population_df"
+        kwargs.pop("label_parent")
+        kwargs.pop("frac_of")
         kwargs["ctrl"] = ctrl
 
     for _id in progress_bar(sample_ids, verbose=verbose):

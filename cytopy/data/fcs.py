@@ -565,7 +565,9 @@ class FileGroup(mongoengine.Document):
                                   regex: Optional[str] = None,
                                   transform: Optional[Union[str, Dict]] = "logicle",
                                   features_to_transform: Optional[List] = None,
-                                  transform_kwargs: Optional[Dict] = None):
+                                  transform_kwargs: Optional[Dict] = None,
+                                  label_parent: bool = False,
+                                  frac_of: Optional[List[str]] = None):
         """
         Load a DataFrame of single cell data obtained from multiple populations. Population data
         is merged and identifiable from the column 'population_label'
@@ -583,6 +585,12 @@ class FileGroup(mongoengine.Document):
             Features (columns) to be transformed. If not provied, all columns transformed
         transform_kwargs: dict, optional
             Additional keyword arguments passed to Transformer
+        label_parent: bool (default=False)
+            If True, additional column appended with parent name for each population
+        frac_of: list, optional
+            Provide a list of populations and additional columns will be appended to resulting
+            DataFrame containing the fraction of the requested population compared to each population
+            in this list
 
         Returns
         -------
@@ -604,7 +612,9 @@ class FileGroup(mongoengine.Document):
                 pop_data = self.load_population_df(population=p,
                                                    transform=transform,
                                                    transform_kwargs=transform_kwargs,
-                                                   features_to_transform=features_to_transform)
+                                                   features_to_transform=features_to_transform,
+                                                   label_parent=label_parent,
+                                                   frac_of=frac_of)
                 pop_data["population_label"] = p
                 dataframe.append(pop_data)
             except ValueError:
@@ -615,7 +625,9 @@ class FileGroup(mongoengine.Document):
                            population: str,
                            transform: str or dict or None = "logicle",
                            features_to_transform: list or None = None,
-                           transform_kwargs: dict or None = None) -> pd.DataFrame:
+                           transform_kwargs: dict or None = None,
+                           label_parent: bool = False,
+                           frac_of: Optional[List[str]] = None) -> pd.DataFrame:
         """
         Load the DataFrame for the events pertaining to a single population.
 
@@ -629,6 +641,12 @@ class FileGroup(mongoengine.Document):
             Features (columns) to be transformed. If not provied, all columns transformed
         transform_kwargs: dict, optional
             Additional keyword arguments passed to Transformer
+        label_parent: bool (default=False)
+            If True, additional column appended with parent name for each population
+        frac_of: list, optional
+            Provide a list of populations and additional columns will be appended to resulting
+            DataFrame containing the fraction of the requested population compared to each population
+            in this list
 
         Returns
         -------
@@ -643,8 +661,8 @@ class FileGroup(mongoengine.Document):
             logger.error(f"Invalid population, {population} does not exist for {self.primary_id}; {self.id}")
             raise ValueError(f"Invalid population, {population} does not exist")
 
-        idx = self.get_population(population_name=population).index
-        data = self.data(source="primary").loc[idx]
+        population = self.get_population(population_name=population)
+        data = self.data(source="primary").loc[population.index]
 
         if transform is not None:
             features_to_transform = features_to_transform or list(data.columns)
@@ -657,6 +675,17 @@ class FileGroup(mongoengine.Document):
                                        features=features_to_transform,
                                        return_transformer=False,
                                        **transform_kwargs)
+        if label_parent:
+            data["parent_label"] = population.parent
+
+        if frac_of is not None:
+            for comparison_pop in frac_of:
+                if comparison_pop not in self.list_populations():
+                    logger.warning(f"{comparison_pop} in 'frac_of' is not a recognised population")
+                    continue
+                comparison_pop = self.get_population(population_name=comparison_pop)
+                data[f"frac of {comparison_pop.population_name}"] = population.n / comparison_pop.n
+
         return data
 
     def _hdf5_exists(self):

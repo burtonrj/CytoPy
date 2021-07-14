@@ -362,7 +362,10 @@ def _generate_cluster_centroids(data: pd.DataFrame,
     dim_reduction_kwargs = dim_reduction_kwargs or {}
     assert n_components in [2, 3], "n_components must be 2 or 3"
     data = data.dropna(axis=1, how="any")
-    centroids = _cluster_centroids(data=data, features=features, sample_label=sample_label, cluster_label=cluster_label)
+    centroids = _cluster_centroids(data=data,
+                                   features=features,
+                                   sample_label=sample_label,
+                                   cluster_label=cluster_label)
     if dim_reduction_method is not None:
         reducer = DimensionReduction(method=dim_reduction_method,
                                      n_components=n_components,
@@ -374,11 +377,12 @@ def _generate_cluster_centroids(data: pd.DataFrame,
                                                          sample_label=sample_label,
                                                          cluster_label=cluster_label)))
     if colour_label is not None:
-        centroids = _label_centroids(data=data,
-                                     centroids=centroids,
-                                     sample_label=sample_label,
-                                     cluster_label=cluster_label,
-                                     target_label=colour_label)
+        if colour_label != cluster_label:
+            centroids = _label_centroids(data=data,
+                                         centroids=centroids,
+                                         sample_label=sample_label,
+                                         cluster_label=cluster_label,
+                                         target_label=colour_label)
     return centroids
 
 
@@ -560,7 +564,7 @@ def plot_min_spanning_tree(data: pd.DataFrame,
     mst = nx.minimum_spanning_tree(graph)
     norm = cm.Normalize(vmin=0, vmax=21, clip=True)
     mapper = plt.cm.ScalarMappable(norm=norm, cmap=plt.get_cmap("tab10"))
-    colours = centroids['meta_label'].apply(lambda x: mcolors.to_hex(mapper.to_rgba(x)))
+    colours = centroids[colour_label].apply(lambda x: mcolors.to_hex(mapper.to_rgba(x)))
 
     fig, ax = plt.subplots(figsize=(10, 10))
     pos = nx.spring_layout(mst, iterations=300, scale=3, dim=2)
