@@ -87,7 +87,7 @@ def test_merge_index():
                               parent="test_parent")
     x.index = np.array([0, 1, 2, 3, 4, 5, 11, 13])
     y.index = np.array([0, 1, 3, 8, 11, 15, 19])
-    idx = population._merge_index(x, y)
+    idx = population.merge_index(x, y)
     assert np.array_equal(idx, np.array([0, 1, 2, 3, 4, 5, 8, 11, 13, 15, 19]))
 
 

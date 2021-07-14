@@ -165,8 +165,8 @@ def _check_transforms_dimensions(left: Population,
     assert left.geom.y == right.geom.y, "Y dimension differs between left and right populations"
 
 
-def _merge_index(left: Population,
-                 right: Population) -> np.ndarray:
+def merge_index(left: Population,
+                right: Population) -> np.ndarray:
     """
     Merge the index of two populations.
 
@@ -238,7 +238,7 @@ def _merge_thresholds(left: Population,
                                 n=len(left.index) + len(right.index),
                                 parent=left.parent,
                                 warnings=left.warnings + right.warnings + ["MERGED POPULATION"],
-                                index=_merge_index(left, right),
+                                index=merge_index(left, right),
                                 geom=new_geom,
                                 source="gate",
                                 definition=",".join([left.definition, right.definition]),
@@ -271,7 +271,7 @@ def _merge_polygons(left: Population,
                            transform_y=left.geom.transform_y,
                            x_values=x,
                            y_values=y)
-    new_idx = _merge_index(left, right)
+    new_idx = merge_index(left, right)
     new_population = Population(population_name=new_population_name,
                                 n=len(new_idx),
                                 parent=left.parent,
