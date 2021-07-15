@@ -53,6 +53,7 @@ from itertools import cycle
 import seaborn as sns
 import pandas as pd
 import numpy as np
+import logging
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -64,7 +65,7 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 TRANSFORMS = ["log", "logicle", "hyperlog", "asinh", None]
-
+logger = logging.getLogger("flow_plot")
 
 def kde1d(data: pd.DataFrame,
           x: str,
@@ -1000,7 +1001,7 @@ class FlowPlot:
         colour: str (default="#db4b6a")
         alpha: float (default=0.75)
         size: float (default=5.)
-        method: str (default="scatter)
+        method: str (default="scatter")
         shade: bool (default=True)
         plot_kwargs: dict
         overlay_kwargs: dict
@@ -1059,6 +1060,26 @@ class FlowPlot:
                         ncol=ncol,
                         fancybox=fancy,
                         shadow=shadow)
+
+
+def backgating(filegroup,
+               populations: Dict,
+               col_wrap: int = 3,
+               figsize: Tuple[int, int] = (10, 10)):
+    try:
+        fig, axes = plt.subplots(math.ceil(len(populations)/col_wrap), col_wrap, figsize=figsize)
+        for i, (population, properties) in enumerate(populations.items()):
+            plot = FlowPlot(ax=axes[i], **properties.get("flow_plot_kwargs", {}))
+            parent = filegroup.load_population_df(population=properties.get("parent", "root"),
+                                                  transform=None)
+            pop_df = filegroup.load_population_df(population=population, transform=None)
+            plot.overlay_plot(data1=parent, data2=pop_df, **properties["overlay_kwargs"])
+        fig.tight_layout()
+        return fig
+    except KeyError as e:
+        logger.error(f"Missing required overlay_kwargs: {e}")
+    except AttributeError as e:
+        logger.error(f"Missing required argument for plotting: {e}")
 
 
 class DiagnosticBackgating:
