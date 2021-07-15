@@ -73,9 +73,11 @@ class HarmonyCalibrator:
             raise ValueError("x and y must have the same columns")
         x["sample_id"] = "ref"
         y["sample_id"] = "target"
-        data = pd.DataFrame(resample(x, y)).reset_index()
+        data = (pd.DataFrame(resample(x, y))
+                .reset_index(drop=False)
+                .rename({"index": "original_index"}, axis=1))
         self.meta = data[["sample_id"]].copy()
-        self.features = [x for x in data.columns if x != "sample_id"]
+        self.features = [x for x in data.columns if x not in ["sample_id", "original_index"]]
         self.data = data[self.features].astype(float).values
         self.harmony = None
         self.corrected = None
@@ -84,8 +86,7 @@ class HarmonyCalibrator:
     @property
     def corrected_target(self):
         return (self.corrected[self.corrected.sample_id == "target"]
-                .drop("sample_id", axis=1)
-                .reset_index(drop=True))
+                .drop("sample_id", axis=1))
 
     def _before_and_after(self):
         before = pd.DataFrame(self.data, columns=self.features)
