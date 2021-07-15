@@ -33,11 +33,10 @@ from ...flow.variance import HarmonyMatch
 from ...flow import sampling
 from . import utils
 from sklearn.model_selection import train_test_split, KFold, BaseCrossValidator
-from sklearn.neighbors import KNeighborsClassifier
 from imblearn.over_sampling import RandomOverSampler
-from typing import Union, Tuple, Dict, Type
 import matplotlib.pyplot as plt
 from inspect import signature
+from typing import *
 import pandas as pd
 import numpy as np
 import logging
@@ -59,7 +58,6 @@ def check_model_init(func):
     def wrapper(*args, **kwargs):
         assert args[0].model is not None, "Call 'build_model' prior to fit or predict"
         return func(*args, **kwargs)
-
     return wrapper
 
 
@@ -67,7 +65,13 @@ def check_data_init(func):
     def wrapper(*args, **kwargs):
         assert args[0].x is not None, "Call 'load_training_data' prior to fit"
         return func(*args, **kwargs)
+    return wrapper
 
+
+def check_target_init(func):
+    def wrapper(*args, **kwargs):
+        assert args[0]._target is not None, "Call 'load_training_data' prior to fit"
+        return func(*args, **kwargs)
     return wrapper
 
 
@@ -108,8 +112,8 @@ class CellClassifier:
     """
 
     def __init__(self,
-                 features: list,
-                 target_populations: list,
+                 features: List[str],
+                 target_populations: List[str],
                  multi_label: bool = False,
                  population_prefix: str = "CellClassifier_"):
         self.model = None
@@ -121,7 +125,8 @@ class CellClassifier:
         self.class_weights = None
         self.transformer = None
         self.scaler = None
-        self.data_calibrator = None
+        self._target = None
+        self._target_data = None
 
     @check_model_init
     def set_params(self, **kwargs):
@@ -146,17 +151,15 @@ class CellClassifier:
         return self
 
     def load_training_data(self,
-                           experiment: Experiment,
-                           reference: str,
+                           reference: FileGroup,
                            root_population: str) -> CellClassifier:
         """
         Load a FileGroup with existing Populations to serve as training data
 
         Parameters
         ----------
-        experiment: Experiment
-        reference: str
-            Name of the FileGroup to use as training data
+        reference: FileGroup
+            FileGroup to use as training data
         root_population: str
             Root population from which all target populations inherit
 
@@ -171,28 +174,52 @@ class CellClassifier:
             an invalid hierarchy; populations must be downstream of the chosen
             root_population
         """
-        ref = experiment.get_sample(reference)
-        utils.assert_population_labels(ref=ref,
+        utils.assert_population_labels(ref=reference,
                                        expected_labels=self.target_populations)
-        utils.check_downstream_populations(ref=ref,
+        utils.check_downstream_populations(ref=reference,
                                            root_population=root_population,
                                            population_labels=self.target_populations)
         if self.multi_label:
-            self.x, self.y = utils.multilabel(ref=ref,
+            self.x, self.y = utils.multilabel(ref=reference,
                                               root_population=root_population,
                                               population_labels=self.target_populations,
                                               features=self.features)
         else:
-            self.x, self.y = utils.singlelabel(ref=ref,
+            self.x, self.y = utils.singlelabel(ref=reference,
                                                root_population=root_population,
                                                population_labels=self.target_populations,
                                                features=self.features)
         return self
 
+    def load_target(self,
+                    target: FileGroup,
+                    root_population: str = "root",
+                    sample_size: Union[int, float] = 10000,
+                    sampling_method: str = "uniform",
+                    sampling_kwargs: Optional[Dict] = None):
+        self._target = target
+        x = self._target.load_population_df(population=root_population,
+                                            transform=None)[self.features]
+        sampling_kwargs = sampling_kwargs or {}
+        self._target_data = sampling.sample_dataframe(data=x,
+                                                      method=sampling_method,
+                                                      sample_size=sample_size,
+                                                      **sampling_kwargs)
+        if self.transformer is not None:
+            self._target_data = self.transformer.scale(data=self._target_data, features=self.features)
+        if self.scaler is not None:
+            self._target_data = self.scaler(data=self._target_data, features=self.features)
+        return self
+
+    @check_target_init
+    def calibrate(self):
+        ref = self.x.copy()
+
+
     @check_data_init
     def downsample(self,
                    method: str,
-                   sample_size: int or float,
+                   sample_size: Union[int, float],
                    **kwargs):
         """
         Downsample training data
@@ -218,15 +245,7 @@ class CellClassifier:
         """
         x = self.x.copy()
         x["y"] = self.y
-        if method == "uniform":
-            x = sampling.uniform_downsampling(data=x, sample_size=sample_size, **kwargs)
-        elif method == "density":
-            x = sampling.density_dependent_downsampling(data=x, sample_size=sample_size, **kwargs)
-        elif method == "faithful":
-            x = sampling.faithful_downsampling(data=x, **kwargs)
-        else:
-            valid = ['uniform', 'density', 'faithful']
-            raise ValueError(f"Invalid method, must be one of {valid}")
+        x = sampling.sample_dataframe(data=x, sample_size=sample_size, method=method, **kwargs)
         self.x, self.y = x[self.features], x["y"].values
         return self
 
@@ -368,9 +387,9 @@ class CellClassifier:
     @check_data_init
     def fit_train_test_split(self,
                              test_frac: float = 0.3,
-                             metrics: list or None = None,
+                             metrics: Optional[List[str]] = None,
                              return_predictions: bool = True,
-                             train_test_split_kwargs: dict or None = None,
+                             train_test_split_kwargs: Optional[Dict] = None,
                              **fit_kwargs):
         """
         Fits model to training data and performs validation on holdout data. Training and testing
@@ -430,9 +449,9 @@ class CellClassifier:
     @check_model_init
     @check_data_init
     def fit_cv(self,
-               cross_validator: BaseCrossValidator or None = None,
-               metrics: list or None = None,
-               split_kwargs: dict or None = None,
+               cross_validator: Optional[BaseCrossValidator] = None,
+               metrics: Optional[List[str]] = None,
+               split_kwargs: Optional[Dict] = None,
                verbose: bool = True,
                **fit_kwargs):
         """
@@ -535,7 +554,7 @@ class CellClassifier:
                 root_population: str,
                 threshold: float = 0.5,
                 return_predictions: bool = True,
-                data_calibrator: Union[HarmonyMatch, None] = None,
+                data_calibrator: Optional[HarmonyMatch] = None,
                 plot_data_calibration: bool = False) -> Tuple[FileGroup, Dict, Union[None, plt.Figure]] or \
                                                         Tuple[FileGroup, None, Union[None, plt.Figure]]:
         """

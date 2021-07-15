@@ -30,13 +30,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from .neighbours import calculate_optimal_neighbours, knn
-from ..feedback import vprint
 from sklearn.neighbors import BallTree, KDTree
 from multiprocessing import Pool, cpu_count
 from functools import partial
-from warnings import warn
+from typing import *
 import pandas as pd
 import numpy as np
+import logging
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -47,9 +47,16 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
+logger = logging.getLogger("sampling")
+
+class SamplingError(Exception):
+    def __init__(self, message: str):
+        logger.error(message)
+        super().__init__(message)
+
 
 def uniform_downsampling(data: pd.DataFrame,
-                         sample_size: int or float,
+                         sample_size: Union[int, float],
                          **kwargs):
     """
     Uniform downsampling. Wraps the Pandas DataFrame sample method
@@ -71,18 +78,18 @@ def uniform_downsampling(data: pd.DataFrame,
 
     Raises
     ------
-    TypeError
+    SamplingError
         Sample size type is invalid; should be either int or float
     """
     if isinstance(sample_size, int):
         if sample_size >= data.shape[0]:
-            warn(f"Number of observations larger than requested sample size {sample_size}, "
-                 f"returning complete data (n={data.shape[0]})")
+            logger.warning(f"Number of observations larger than requested sample size {sample_size}, "
+                           f"returning complete data (n={data.shape[0]})")
             return data
         return data.sample(n=sample_size, **kwargs)
     if isinstance(sample_size, float):
         return data.sample(frac=sample_size, **kwargs)
-    raise TypeError("sample_size should be an int or float value")
+    raise SamplingError("sample_size should be an int or float value")
 
 
 def faithful_downsampling(data: np.array,
@@ -153,11 +160,11 @@ def prob_downsample(local_d: int,
 
 
 def density_dependent_downsampling(data: pd.DataFrame,
-                                   features: list or None = None,
-                                   sample_size: int or float = 0.1,
+                                   features: Optional[List[str]] = None,
+                                   sample_size: Union[int, float] = 0.1,
                                    alpha: int = 5,
                                    distance_metric: str = "manhattan",
-                                   tree_sample: float or int = 0.1,
+                                   tree_sample: Union[int, float] = 0.1,
                                    outlier_dens: int = 1,
                                    target_dens: int = 5,
                                    njobs: int = -1):
@@ -201,7 +208,7 @@ def density_dependent_downsampling(data: pd.DataFrame,
         Down-sampled pandas dataframe
     """
     if isinstance(sample_size, int) and sample_size >= data.shape[0]:
-        warn("Requested sample size >= size of dataframe")
+        logger.warning("Requested sample size >= size of dataframe")
         return data
     df = data.copy()
     features = features or df.columns.tolist()
@@ -214,8 +221,8 @@ def density_dependent_downsampling(data: pd.DataFrame,
                                           target_dens=target_dens,
                                           njobs=njobs)
     if sum(prob) == 0:
-        warn('Error: density dependendent downsampling failed; weights sum to zero. '
-             'Defaulting to uniform sampling')
+        logger.warning('Error: density dependendent downsampling failed; weights sum to zero. '
+                       'Defaulting to uniform sampling')
         return uniform_downsampling(data=data, sample_size=sample_size)
     if isinstance(sample_size, int):
         return df.sample(n=sample_size, weights=prob)
@@ -356,7 +363,6 @@ def upsample_knn(sample: pd.DataFrame,
                  original_data: pd.DataFrame,
                  labels: list,
                  features: list,
-                 verbose: bool = True,
                  scoring: str = "balanced_accuracy",
                  **kwargs):
     """
@@ -377,8 +383,6 @@ def upsample_knn(sample: pd.DataFrame,
         List of labels (should correspond to the label for each row)
     features: list
         List of features (column names)
-    verbose: bool (default=True)
-        If True, will provide feedback to stdout
     scoring: str (default="balanced_accuracy")
         Scoring parameter to use for GridSearchCV. Only relevant is n_neighbors parameter is not provided
     kwargs: dict
@@ -389,17 +393,16 @@ def upsample_knn(sample: pd.DataFrame,
     numpy.ndarray
         Array of labels for original data
     """
-    feedback = vprint(verbose)
-    feedback("Upsampling...")
+    logger.info("Upsampling...")
     n = kwargs.get("n_neighbors", None)
     if n is None:
-        feedback("Calculating optimal n_neighbours by grid search CV...")
+        logger.info("Calculating optimal n_neighbours by grid search CV...")
         n, score = calculate_optimal_neighbours(x=sample[features].values,
                                                 y=labels,
                                                 scoring=scoring,
                                                 **kwargs)
-        feedback(f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}...")
-    feedback("Training...")
+        logger.info(f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}...")
+    logger.info("Training...")
     train_acc, val_acc, model = knn(data=sample,
                                     features=features,
                                     labels=np.array(labels),
@@ -408,12 +411,46 @@ def upsample_knn(sample: pd.DataFrame,
                                     random_state=42,
                                     return_model=True,
                                     **kwargs)
-    feedback(f"...training balanced accuracy score: {train_acc}")
-    feedback(f"...validation balanced accuracy score: {val_acc}")
-    feedback("Predicting labels in original data...")
+    logger.info(f"...training balanced accuracy score: {train_acc}")
+    logger.info(f"...validation balanced accuracy score: {val_acc}")
+    logger.info("Predicting labels in original data...")
     new_labels = model.predict(original_data[features].values)
-    feedback("Complete!")
+    logger.info("Complete!")
     return new_labels
 
 
+def sample_dataframe(data: pd.DataFrame,
+                     sample_size: Union[int, float] = 0.1,
+                     method: str = "uniform",
+                     **kwargs) -> pd.DataFrame:
+    """
+    Convenient wrapper function for common sampling methods.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    sample_size: float or int (default=0.1)
+    method: str
+        One of 'uniform', 'density' or 'faithful'
+    kwargs:
+        Additional keyword arguments passed to chosen method. See cytopy.flow.sampling for details
+
+    Returns
+    -------
+    Pandas.DataFrame
+
+    Raises
+    ------
+    SamplingError
+        Invalid method
+    """
+    if method == "uniform":
+        return uniform_downsampling(data=data, sample_size=sample_size, **kwargs)
+    elif method == "density":
+        return density_dependent_downsampling(data=data, sample_size=sample_size, **kwargs)
+    elif method == "faithful":
+        return faithful_downsampling(data=data, **kwargs)
+    else:
+        valid = ['uniform', 'density', 'faithful']
+        raise SamplingError(f"Invalid method, must be one of {valid}")
 

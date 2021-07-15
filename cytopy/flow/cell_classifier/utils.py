@@ -158,7 +158,7 @@ def assert_population_labels(ref, expected_labels: list):
     AssertionError
         Ref missing expected populations
     """
-    assert len(ref.populations) >= 2, "Reference sample does not contain any gated populations"
+    assert len(ref.populations) > 1, "Reference sample does not contain any gated populations"
     for x in expected_labels:
         assert x in ref.tree.keys(), f"Ref FileGroup missing expected population {x}"
 
