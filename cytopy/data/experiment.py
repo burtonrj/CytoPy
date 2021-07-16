@@ -31,6 +31,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+from ..flow.sampling import sample_dataframe
 from ..feedback import progress_bar
 from .fcs import FileGroup
 from .subject import Subject
@@ -1191,7 +1192,11 @@ def single_cell_dataframe(experiment: Experiment,
                           verbose: bool = True,
                           ctrl: Optional[str] = None,
                           label_parent: bool = False,
-                          frac_of: Optional[List[str]] = None):
+                          frac_of: Optional[List[str]] = None,
+                          sample_size: Optional[int, float] = None,
+                          sampling_level: str = "file",
+                          sampling_method: str = "uniform",
+                          sampling_kwargs: Optional[Dict] = None):
     """
     Generate a single cell DataFrame that is a concatenation of population data from many
     samples from a single Experiment. Population level data is identifiable from the 'population_label'
@@ -1232,6 +1237,7 @@ def single_cell_dataframe(experiment: Experiment,
     """
     logger.debug(f"Loading data from {experiment.experiment_id}")
     sample_ids = sample_ids or list(experiment.list_samples())
+    sampling_kwargs = sampling_kwargs or {}
     data = list()
 
     method = "load_population_df"
@@ -1254,6 +1260,9 @@ def single_cell_dataframe(experiment: Experiment,
         kwargs.pop("frac_of")
         kwargs["ctrl"] = ctrl
 
+    if sample_size is not None and sampling_level == "file":
+        sample_size = int(sample_size / len(sample_ids))
+
     for _id in progress_bar(sample_ids, verbose=verbose):
         fg = experiment.get_sample(sample_id=_id)
         logger.debug(f"Loading FileGroup data from {_id}; {fg.id}")
@@ -1262,8 +1271,20 @@ def single_cell_dataframe(experiment: Experiment,
         pop_data["subject_id"] = None
         if fg.subject:
             pop_data["subject_id"] = fg.subject.subject_id
+        if sample_size is not None and sampling_level == "file":
+            pop_data = sample_dataframe(data=pop_data,
+                                        sample_size=sample_size,
+                                        method=sampling_method,
+                                        **sampling_kwargs)
         data.append(pop_data)
+
     data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
                       for df in data]).reset_index(drop=True)
     data.index = list(data.index)
+
+    if sample_size is not None and sampling_level == "experiment":
+        data = sample_dataframe(data=data,
+                                sample_size=sample_size,
+                                method=sampling_method,
+                                **sampling_kwargs).reset_index(drop=True)
     return data
