@@ -58,10 +58,11 @@ from ...feedback import progress_bar
 from ..dim_reduction import DimensionReduction
 from ..plotting import single_cell_plot, cluster_bubble_plot
 from ..transform import Scaler
+from ..sampling import sample_dataframe_uniform_groups
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from sklearn.cluster import *
-from typing import List, Union, Type, Dict
+from typing import *
 from sklearn.metrics import calinski_harabasz_score, silhouette_score, davies_bouldin_score
 from collections import defaultdict
 import seaborn as sns
@@ -81,6 +82,12 @@ __status__ = "Production"
 logger = logging.getLogger("Clustering")
 
 
+class ClusteringError(Exception):
+    def __init__(self, message: str):
+        logger.error(message)
+        super().__init__(message)
+
+
 def clustering_performance(data: pd.DataFrame,
                            labels: list):
     for x in ["Clustering performance...",
@@ -89,6 +96,35 @@ def clustering_performance(data: pd.DataFrame,
               f"Davies-Bouldin index: {davies_bouldin_score(data.values, labels)}"]:
         print(x)
         logger.info(x)
+
+
+def remove_null_features(data: pd.DataFrame,
+                         features: Optional[List[str]] = None) -> list:
+    """
+    Check for null values in the dataframe.
+    Returns a list of column names for columns with no missing values.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    features: List[str], optional
+
+    Returns
+    -------
+    List
+        List of valid columns
+    """
+    features = features or data.columns.tolist()
+    null_cols = (data[features]
+                 .isnull()
+                 .sum()
+                 [data[features].isnull().sum() > 0]
+                 .index
+                 .values)
+    if null_cols.size != 0:
+        logger.warning(f'The following columns contain null values and will be excluded from '
+                       f'clustering analysis: {null_cols}')
+    return [x for x in features if x not in null_cols]
 
 
 def sklearn_clustering(data: pd.DataFrame,
@@ -136,6 +172,7 @@ def sklearn_clustering(data: pd.DataFrame,
     ValueError
         Invalid Scikit-Learn or equivalent class provided in method
     """
+    data = data.copy()
     if method not in globals().keys():
         logger.error("Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN")
         raise ValueError("Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN")
@@ -196,6 +233,7 @@ def phenograph_clustering(data: pd.DataFrame,
         Modified dataframe with clustering IDs assigned to the column 'cluster_label', sparse graph
         matrix, and modularity score for communities (Q)
     """
+    data = data.copy()
     data["cluster_label"] = None
 
     if global_clustering:
@@ -332,6 +370,7 @@ def sklearn_metaclustering(data: pd.DataFrame,
     ValueError
         Invalid Scikit-Learn or equivalent class provided in method
     """
+    data = data.copy()
     if method not in globals().keys():
         raise ValueError("Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN")
 
@@ -386,6 +425,7 @@ def phenograph_metaclustering(data: pd.DataFrame,
         Updated dataframe with a new column named 'meta_label' with the meta-clustering
         associations
     """
+    data = data.copy()
     logger.info(f"Meta clustering with PhenoGraph")
     metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
 
@@ -466,6 +506,7 @@ def consensus_metacluster(data: pd.DataFrame,
         If maximum number of meta clusters exceeds the maximum number of clusters identified in any
         one sample
     """
+    data = data.copy()
     metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
     if (metadata.shape[0] * resample_proportion) < largest_cluster_n:
         err = f"Maximum number of meta clusters (largest_cluster_n) is currently set to " \
@@ -592,6 +633,7 @@ def flowsom_clustering(data: pd.DataFrame,
     Pandas.DataFrame and None and None
         Modified dataframe with clustering IDs assigned to the column 'cluster_label'
     """
+    data = data.copy()
     if global_clustering:
         logger.info(f"Performing global clustering with FlowSOM on features {features}")
         cluster = _flowsom_clustering(data=data,
@@ -728,36 +770,9 @@ class Clustering:
         self.data["cluster_label"] = None
         logging.info("Ready to cluster!")
 
-    def _check_null(self,
-                    features: Union[List[str], None] = None) -> list:
-        """
-        Internal method. Check for null values in the underlying dataframe.
-        Returns a list of column names for columns with no missing values.
-
-        Parameters
-        ----------
-        features: Union[List[str], None] (default=None)
-
-        Returns
-        -------
-        List
-            List of valid columns
-        """
-        features = features or self.features
-        null_cols = (self.data[features]
-                     .isnull()
-                     .sum()
-                     [self.data[features].isnull().sum() > 0]
-                     .index
-                     .values)
-        if null_cols.size != 0:
-            logger.warning(f'The following columns contain null values and will be excluded from '
-                           f'clustering analysis: {null_cols}')
-        return [x for x in features if x not in null_cols]
-
     def cluster(self,
-                func: callable,
-                overwrite_features: Union[List[str], None] = None,
+                func: Callable,
+                overwrite_features: Optional[List[str]] = None,
                 **kwargs):
         """
         Perform clustering with a suitable clustering function from cytopy.flow.clustering.main:
@@ -783,7 +798,7 @@ class Clustering:
         -------
         self
         """
-        features = self._check_null(overwrite_features)
+        features = remove_null_features(self.data, features=overwrite_features)
         self.data, self.graph, self.metrics = func(data=self.data,
                                                    features=features,
                                                    verbose=self.verbose,
@@ -855,7 +870,7 @@ class Clustering:
         -------
         None
         """
-        features = self._check_null()
+        features = remove_null_features(data=self.data, features=self.features)
         self.data, self.graph, self.metrics = func(data=self.data,
                                                    features=features,
                                                    verbose=self.verbose,
@@ -1009,14 +1024,9 @@ class Clustering:
         plot_data = self.data
         if sample_size is not None:
             if sampling_method == "uniform":
-                plot_data = list()
-                n = int(sample_size / self.data.sample_id.nunique())
-                for _, sample_data in self.data.groupby("sample_id"):
-                    if n >= sample_data.shape[0]:
-                        plot_data.append(sample_data)
-                    else:
-                        plot_data.append(sample_data.sample(n))
-                plot_data = pd.concat(plot_data)
+                plot_data = sample_dataframe_uniform_groups(data=self.data,
+                                                            group_id="sample_id",
+                                                            sample_size=sample_size)
             else:
                 if sample_size < self.data.shape[0]:
                     plot_data = self.data.sample(sample_size)

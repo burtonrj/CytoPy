@@ -49,6 +49,7 @@ __status__ = "Production"
 
 logger = logging.getLogger("sampling")
 
+
 class SamplingError(Exception):
     def __init__(self, message: str):
         logger.error(message)
@@ -454,3 +455,15 @@ def sample_dataframe(data: pd.DataFrame,
         valid = ['uniform', 'density', 'faithful']
         raise SamplingError(f"Invalid method, must be one of {valid}")
 
+
+def sample_dataframe_uniform_groups(data: pd.DataFrame,
+                                    group_id: str,
+                                    sample_size: int):
+    sample_data = list()
+    n = int(sample_size / data[group_id].nunique())
+    for _, df in data.groupby(group_id):
+        if n >= df.shape[0]:
+            sample_data.append(df)
+        else:
+            sample_data.append(df.sample(n))
+    return pd.concat(sample_data)
