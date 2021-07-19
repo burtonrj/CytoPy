@@ -212,7 +212,9 @@ class GatingStrategy(mongoengine.Document):
     def preview_gate(self,
                      gate: str or ThresholdGate or PolygonGate or EllipseGate,
                      create_plot_kwargs: typing.Union[dict, None] = None,
-                     plot_gate_kwargs: typing.Union[dict, None] = None):
+                     plot_gate_kwargs: typing.Union[dict, None] = None,
+                     plot: bool = True
+                     ):
         """
         Preview the results of some given Gate
 
@@ -240,6 +242,9 @@ class GatingStrategy(mongoengine.Document):
             data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=False)
             plot_data = data
         gate.fit(data=data, ctrl_data=ctrl_parent_data)
+        
+        if not plot: return
+        
         create_plot_kwargs["transform_x"] = create_plot_kwargs.get("transform_x", None) or gate.transform_x
         create_plot_kwargs["transform_y"] = create_plot_kwargs.get("transform_y", None) or gate.transform_y
         create_plot_kwargs["transform_x_kwargs"] = create_plot_kwargs.get("transform_x_kwargs",
