@@ -211,8 +211,8 @@ class GatingStrategy(mongoengine.Document):
 
     def preview_gate(self,
                      gate: str or ThresholdGate or PolygonGate or EllipseGate,
-                     create_plot_kwargs: typing.Union[dict, None] = None,
-                     plot_gate_kwargs: typing.Union[dict, None] = None):
+                     create_plot_kwargs: typing.Optional[Dict] = None,
+                     plot_gate_kwargs: typing.Optional[Dict] = None):
         """
         Preview the results of some given Gate
 
@@ -254,7 +254,7 @@ class GatingStrategy(mongoengine.Document):
     def add_hyperparameter_grid(self,
                                 gate_name: str,
                                 params: dict,
-                                cost: typing.Union[str, None] = None):
+                                cost: typing.Optional[str] = None):
         """
         Add a hyperparameter grid to search when applying the given gate to new data.
         This hyperparameter grid should correspond to valid hyperparameters for the
@@ -492,11 +492,11 @@ class GatingStrategy(mongoengine.Document):
                    plot: bool = True,
                    verbose: bool = True,
                    add_to_strategy: bool = True,
-                   create_plot_kwargs: typing.Union[dict, None] = None,
-                   plot_gate_kwargs: typing.Union[dict, None] = None,
+                   create_plot_kwargs: typing.Optional[Dict] = None,
+                   plot_gate_kwargs: typing.Optional[Dict] = None,
                    hyperparam_search: bool = True,
                    fda_norm: bool = False,
-                   overwrite_method_kwargs: typing.Union[dict, None] = None):
+                   overwrite_method_kwargs: typing.Optional[Dict] = None):
         """
         Apply a gate to the associated FileGroup. The gate must be previously defined;
         children associated and labeled. Either a Gate object can be provided or the name
@@ -659,7 +659,7 @@ class GatingStrategy(mongoengine.Document):
                             experiment: Experiment,
                             fda_norm: bool = False,
                             hyperparam_search: bool = False,
-                            plots_path: typing.Union[str, None] = None,
+                            plots_path: typing.Optional[str] = None,
                             sample_ids: typing.Union[list, None] = None,
                             verbose: bool = True):
         """
@@ -778,7 +778,7 @@ class GatingStrategy(mongoengine.Document):
 
     def plot_gate(self,
                   gate: str,
-                  create_plot_kwargs: typing.Union[dict, None] = None,
+                  create_plot_kwargs: typing.Optional[Dict] = None,
                   **kwargs):
         """
         Plot a gate. Must provide the name of a Gate currently associated to this GatingStrategy.
@@ -821,8 +821,8 @@ class GatingStrategy(mongoengine.Document):
                       parent: str,
                       overlay: list,
                       x: str,
-                      y: typing.Union[str, None] = None,
-                      create_plot_kwargs: typing.Union[dict, None] = None,
+                      y: typing.Optional[str] = None,
+                      create_plot_kwargs: typing.Optional[Dict] = None,
                       **backgate_kwargs):
         """
         Given some population as the backdrop (parent) and a list of one or more
@@ -877,10 +877,10 @@ class GatingStrategy(mongoengine.Document):
     def plot_population(self,
                         population: str,
                         x: str,
-                        y: typing.Union[str, None] = None,
-                        transform_x: typing.Union[str, None] = "logicle",
-                        transform_y: typing.Union[str, None] = "logicle",
-                        create_plot_kwargs: typing.Union[dict, None] = None,
+                        y: typing.Optional[str] = None,
+                        transform_x: typing.Optional[str] = "logicle",
+                        transform_y: typing.Optional[str] = "logicle",
+                        create_plot_kwargs: typing.Optional[Dict] = None,
                         **plot_kwargs):
         """
         Plot an existing population in the associate FileGroup.

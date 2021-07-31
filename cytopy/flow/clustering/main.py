@@ -1224,7 +1224,7 @@ class Clustering:
     def save(self,
              verbose: bool = True,
              population_var: str = "meta_label",
-             parent_populations: Union[Dict, None] = None):
+             parent_populations: Optional[Dict] = None):
         """
         Clusters are saved as new Populations in each FileGroup in the attached Experiment
         according to the sample_id in data.

@@ -70,8 +70,8 @@ def load_and_sample(experiment: Experiment,
                     population: str,
                     sample_size: Union[int, float],
                     sample_ids: Union[List[str], None] = None,
-                    sampling_method: Union[str, None] = "uniform",
-                    transform: Union[str, None] = "logicle",
+                    sampling_method: Optional[str] = "uniform",
+                    transform: Optional[str] = "logicle",
                     features: Union[List[str], None] = None,
                     transform_kwargs: Union[Dict[str, str], None] = None,
                     **kwargs) -> (pd.DataFrame, Transformer):
@@ -211,7 +211,7 @@ def calculate_ref_sample(data: pd.DataFrame,
 def _sample_filegroup(filegroup: FileGroup,
                       population: str,
                       sample_size: Union[int, float] = 5000,
-                      sampling_method: Union[str, None] = None,
+                      sampling_method: Optional[str] = None,
                       **kwargs) -> pd.DataFrame:
     """
     Given a FileGroup and the name of the desired population, load the
@@ -331,7 +331,7 @@ def dim_reduction_grid(data: pd.DataFrame,
                        method: str = 'PCA',
                        kde: bool = False,
                        verbose: bool = True,
-                       dim_reduction_kwargs: Union[Dict, None] = None):
+                       dim_reduction_kwargs: Optional[Dict] = None):
     """
     Generate a grid of embeddings using a valid dimensionality reduction technique, in each plot a reference sample
     is shown in blue and a comparison sample in red. The reference sample is conserved across all plots.
@@ -492,9 +492,9 @@ class Harmony:
                  sampling_method: Union[List[str], None] = "uniform",
                  transform: str = "logicle",
                  transform_kwargs: Union[Dict[str, str], None] = None,
-                 scale: Union[str, None] = "standard",
-                 scale_kwargs: Union[Dict, None] = None,
-                 sample_kwargs: Union[Dict, None] = None):
+                 scale: Optional[str] = "standard",
+                 scale_kwargs: Optional[Dict] = None,
+                 sample_kwargs: Optional[Dict] = None):
         logger.info("Preparing Harmony for application to an Experiment")
         sample_kwargs = sample_kwargs or {}
         self.data, self.transformer = load_and_sample(experiment=experiment,
