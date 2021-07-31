@@ -81,6 +81,7 @@ def data_loaded(func: callable) -> callable:
     ValueError
         HDF5 file does not exist
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
@@ -108,6 +109,7 @@ def population_in_file(func: callable):
     -------
     callable
     """
+
     @wraps(func)
     def wrapper(population_name: str,
                 h5file: h5py.File):
@@ -343,10 +345,6 @@ class FileGroup(mongoengine.Document):
             Name of the control e.g ("CD45RA FMO" or "HLA-DR isotype control"
         data: numpy.ndarray
             Single cell events data obtained for this control
-        channels: list
-            List of channel names
-        markers: list
-            List of marker names
 
         Returns
         -------
@@ -529,12 +527,12 @@ class FileGroup(mongoengine.Document):
         assert population in self.list_populations(), f"Desired population {population} not found"
 
         logger.info("Loading primary and control data")
-        training, ctrl, transformer = _load_data_for_ctrl_estimate(filegroup=self,
-                                                                   target_population=population,
-                                                                   ctrl=ctrl,
-                                                                   transform=transform,
-                                                                   sample_size=sample_size,
-                                                                   **transform_kwargs)
+        training, ctrl = _load_data_for_ctrl_estimate(filegroup=self,
+                                                      target_population=population,
+                                                      ctrl=ctrl,
+                                                      transform=transform,
+                                                      sample_size=sample_size,
+                                                      **transform_kwargs)
         features = [x for x in training.columns if x != "label"]
         features = [x for x in features if x in ctrl.columns]
         x, y = training[features], training["label"].values
@@ -561,8 +559,6 @@ class FileGroup(mongoengine.Document):
         logger.info(f"{population}: {round(training_prop_of_root, 3)}% of root in primary data")
         logger.info(f"Predicted in ctrl: {round(ctrl_prop_of_root, 3)}% of root in control data")
         ctrl = ctrl.iloc[np.where(ctrl_labels == 1)[0]]
-        if transformer:
-            return transformer.inverse_scale(data=ctrl, features=list(ctrl.columns))
         return ctrl
 
     def load_multiple_populations(self,
@@ -633,7 +629,7 @@ class FileGroup(mongoengine.Document):
                            transform_kwargs: dict or None = None,
                            label_parent: bool = False,
                            frac_of: Optional[List[str]] = None,
-                           label_downstream_affiliations = None) -> pd.DataFrame:
+                           label_downstream_affiliations=None) -> pd.DataFrame:
         """
         Load the DataFrame for the events pertaining to a single population.
 
@@ -668,19 +664,11 @@ class FileGroup(mongoengine.Document):
             raise ValueError(f"Invalid population, {population} does not exist")
 
         population = self.get_population(population_name=population)
-        data = self.data(source="primary").loc[population.index]
-
-        if transform is not None:
-            features_to_transform = features_to_transform or list(data.columns)
-            transform_kwargs = transform_kwargs or {}
-            if isinstance(transform, dict):
-                data = apply_transform_map(data=data, feature_method=transform, kwargs=transform_kwargs)
-            else:
-                data = apply_transform(data=data,
-                                       method=transform,
-                                       features=features_to_transform,
-                                       return_transformer=False,
-                                       **transform_kwargs)
+        transform_kwargs = transform_kwargs or {}
+        data = self.data(source="primary",
+                         transform=transform,
+                         features_to_transform=features_to_transform,
+                         **transform_kwargs).loc[population.index]
         if label_parent:
             data["parent_label"] = population.parent
 
@@ -1182,11 +1170,15 @@ def _load_data_for_ctrl_estimate(filegroup: FileGroup,
     -------
     Pandas.DataFrame, Pandas.DataFrame, Transformer
     """
-    training = filegroup.data(source="primary")
+    training = filegroup.data(source="primary",
+                              transform=transform,
+                              **transform_kwargs)
     population_idx = filegroup.get_population(target_population).index
     training["label"] = 0
     training.loc[population_idx, "label"] = 1
-    ctrl = filegroup.data(source=ctrl)
+    ctrl = filegroup.data(source=ctrl,
+                          transform=transform,
+                          **transform_kwargs)
     time_columns = training.columns[training.columns.str.contains("time", flags=re.IGNORECASE)].to_list()
     for t in time_columns:
         training.drop(t, axis=1, inplace=True)
@@ -1198,10 +1190,4 @@ def _load_data_for_ctrl_estimate(filegroup: FileGroup,
     training["label"] = y_resampled
     if training.shape[0] > sample_size:
         training = training.sample(n=sample_size)
-    training = apply_transform(data=training, features=features, method=transform, **transform_kwargs)
-    ctrl, transformer = apply_transform(data=ctrl,
-                                        features=[x for x in features if x in ctrl.columns],
-                                        method=transform,
-                                        return_transformer=True,
-                                        **transform_kwargs)
-    return training, ctrl, transformer
+    return training, ctrl
