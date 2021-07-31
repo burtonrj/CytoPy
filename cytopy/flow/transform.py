@@ -44,6 +44,23 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
+LOGICLE_CACHE = dict()
+INVERSE_LOGICLE_CACHE = dict()
+
+
+def lookup_logicle_cache(x: np.ndarray, inverse: bool = False) -> np.ndarray:
+    if inverse:
+        return np.array([INVERSE_LOGICLE_CACHE.get(i, np.nan) for i in x])
+    return np.array([LOGICLE_CACHE.get(i, np.nan) for i in x])
+
+
+def update_cache(original: np.ndarray,
+                 transformed: np.ndarray):
+    global LOGICLE_CACHE
+    global INVERSE_LOGICLE_CACHE
+    LOGICLE_CACHE = LOGICLE_CACHE.update({o: t for o, t in np.c_[original, transformed]})
+    INVERSE_LOGICLE_CACHE = INVERSE_LOGICLE_CACHE.update({t: o for o, t in np.c_[original, transformed]})
+
 
 class TransformError(Exception):
     pass
@@ -187,7 +204,6 @@ class LogicleTransformer(Transformer):
     Logicle transformation, implemented as defined in the GatingML 2.0 specification:
 
     logicle(x, T, W, M, A) = root(B(y, T, W, M, A) − x)
-
     where B is a modified bi-exponential function defined as:
 
     B(y, T, W, M, A) = ae^(by) − ce^(−dy) − f
@@ -219,6 +235,77 @@ class LogicleTransformer(Transformer):
                          m=m,
                          a=a,
                          t=t)
+
+    def scale(self,
+              data: pd.DataFrame,
+              features: list):
+        """
+        Scale features (columns) of given dataframe
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+
+        Raises
+        ------
+        TransformError
+            Chosen transform function is missing the arguments channel_indices or channels. cytopy uses
+            the FlowUtils class for transformations. See FlowUtils documentation for details.
+        """
+        data = data.copy()
+        data[features] = data[features].astype(float)
+        original = data[features].values
+        cached = lookup_logicle_cache(original)
+        missing_idx = np.argwhere(np.isnan(cached))
+        transformed = self.transform(data=original[missing_idx],
+                                     channel_indices=list(range(len(features))),
+                                     **self.kwargs)
+        cached[missing_idx] = transformed
+        if len(missing_idx) > 0:
+            update_cache(original[missing_idx], transformed)
+        data[features] = cached
+        data[features] = data[features].astype(float)
+        return data
+
+    def inverse_scale(self,
+                      data: pd.DataFrame,
+                      features: list):
+        """
+        Apply inverse scale to features (columns) of given dataframe, under the assumption that
+        these features have previously been transformed with this Transformer
+
+        Parameters
+        ----------
+        data: Pandas.DataFrame
+        features: list
+
+        Returns
+        -------
+        Pandas.DataFrame
+
+        Raises
+        ------
+        TransformError
+            Chosen inverse transform function is missing the arguments channel_indices or channels.
+            cytopy uses the FlowUtils class for transformations. See FlowUtils documentation for details.
+        """
+        data = data.copy()
+        data[features] = data[features].astype(float)
+        original = data[features].values
+        cached = lookup_logicle_cache(original, inverse=True)
+        missing_idx = np.argwhere(np.isnan(cached))
+        inverse_transformed = self.inverse(data=original[missing_idx],
+                                           channel_indices=[range(len(features))],
+                                           **self.kwargs)
+        cached[missing_idx] = inverse_transformed
+        data[features] = cached
+        data[features] = data[features].astype(float)
+        return data
 
 
 class HyperlogTransformer(Transformer):

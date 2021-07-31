@@ -837,7 +837,6 @@ class Experiment(mongoengine.Document):
                        controls: Union[Dict, None] = None,
                        comp_matrix: Union[pd.DataFrame, None] = None,
                        subject_id: Union[str, None] = None,
-                       verbose: bool = True,
                        processing_datetime: Union[str, None] = None,
                        collection_datetime: Union[str, None] = None,
                        missing_error: str = "raise"):
@@ -953,7 +952,6 @@ class Experiment(mongoengine.Document):
                       compensate: bool = True,
                       comp_matrix: Union[pd.DataFrame, None] = None,
                       subject_id: Union[str, None] = None,
-                      verbose: bool = True,
                       processing_datetime: Union[str, None] = None,
                       collection_datetime: Union[str, None] = None,
                       missing_error: str = "raise"):
@@ -979,8 +977,6 @@ class Experiment(mongoengine.Document):
             Path to csv file containing spill over matrix for compensation
         subject_id: str, optional
             If a string value is provided, newly generated sample will be associated to this subject
-        verbose: bool (default=True)
-            If True, progress printed to stdout
         processing_datetime: str, optional
             Optional processing datetime string
         collection_datetime: str, optional
@@ -1193,7 +1189,7 @@ def single_cell_dataframe(experiment: Experiment,
                           ctrl: Optional[str] = None,
                           label_parent: bool = False,
                           frac_of: Optional[List[str]] = None,
-                          sample_size: Optional[int, float] = None,
+                          sample_size: Optional[Union[int, float]] = None,
                           sampling_level: str = "file",
                           sampling_method: str = "uniform",
                           sampling_kwargs: Optional[Dict] = None):
