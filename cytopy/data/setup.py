@@ -84,7 +84,7 @@ def global_init(database_name: str,
     -----------
     database_name: str
         name of database to establish connection with
-    logging_path: Union[str, None]
+    logging_path: Optional[str]
         defaults to home path
     logging_level: int (default=logging.INFO)
     kwargs:

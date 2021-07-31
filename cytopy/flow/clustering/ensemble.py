@@ -195,7 +195,7 @@ class EnsembleClustering:
     def save(self,
              cluster_labels: List[int],
              verbose: bool = True,
-             parent_populations: Union[Dict, None] = None):
+             parent_populations: Optional[Dict] = None):
         data = self.data.copy()
         data["cluster_label"] = cluster_labels
         if parent_populations is not None:

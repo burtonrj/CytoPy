@@ -219,7 +219,7 @@ class NormalisedName(mongoengine.EmbeddedDocument):
     permutations = mongoengine.StringField()
     case_sensitive = mongoengine.BooleanField(default=False)
 
-    def query(self, x: str) -> Union[str, None]:
+    def query(self, x: str) -> Optional[str]:
         """
         Given a term 'x', determine if 'x' is synonymous to this standard. If so, return the standardised name.
 
@@ -829,17 +829,108 @@ class Experiment(mongoengine.Document):
         filegrp.delete()
         self.save()
 
+    def _sample_exists(self, sample_id: str):
+        if self.sample_exists(sample_id):
+            logger.error(f'A file group with id {sample_id} already exists')
+            raise DuplicateSampleError(f'A file group with id {sample_id} already exists')
+
+    def _add_data(self,
+                  sample_id: str,
+                  compensated: bool,
+                  primary_data: Union[pd.DataFrame, FCSFile],
+                  mappings: Optional[List[Dict]] = None,
+                  controls: Optional[Dict] = None,
+                  subject_id: Optional[str] = None,
+                  processing_datetime: Optional[str] = None,
+                  collection_datetime: Optional[str] = None,
+                  missing_error: str = "raise",
+                  cache_transforms: Optional[List[str]] = None,
+                  transform_kwargs: Optional[Dict] = None):
+
+        self._sample_exists(sample_id)
+        processing_datetime = processing_datetime or datetime.now()
+        collection_datetime = collection_datetime or datetime.now()
+        controls = controls or {}
+        cache_transforms = cache_transforms or []
+        transform_kwargs = transform_kwargs or {}
+
+        try:
+            mappings = mappings or primary_data.channel_mappings
+            mappings = self._standardise_mappings(mappings,
+                                                  missing_error=missing_error)
+        except ValueError as err:
+            logger.exception(f"Failed to add {sample_id}: {err}")
+            warn(f"Failed to add {sample_id}: {str(err)}")
+            del primary_data
+            del controls
+            gc.collect()
+            return
+
+        logger.info("Adding primary data...")
+
+        if isinstance(primary_data, pd.DataFrame):
+            data = primary_data.values
+        else:
+            data = primary_data.event_data
+
+        filegrp = FileGroup(data=data,
+                            channels=[x.get("channel") for x in mappings],
+                            markers=[x.get("marker") for x in mappings],
+                            primary_id=sample_id,
+                            compensated=compensated,
+                            collection_datetime=collection_datetime,
+                            processing_datetime=processing_datetime,
+                            data_directory=self.data_directory)
+
+        for transform in cache_transforms:
+            logger.info(f"Caching transform {transform}")
+            filegrp.transform_and_cache(source="primary",
+                                        transform=transform,
+                                        **transform_kwargs.get(transform, {}))
+
+        for ctrl_id, ctrl_data in controls.items():
+            logger.info(f"Adding control file {ctrl_id}...")
+            if isinstance(primary_data, pd.DataFrame):
+                data = ctrl_data.values
+            else:
+                data = ctrl_data.event_data
+            filegrp.add_ctrl_file(data=data,
+                                  ctrl_id=ctrl_id,
+                                  channels=[x.get("channel") for x in mappings],
+                                  markers=[x.get("marker") for x in mappings])
+            for transform in cache_transforms:
+                logger.info(f"Caching transform {transform} for {ctrl_id}")
+                filegrp.transform_and_cache(source=ctrl_id,
+                                            transform=transform,
+                                            **transform_kwargs.get(transform, {}))
+
+        if subject_id is not None:
+            try:
+                filegrp.subject = Subject.objects(subject_id=subject_id).get()
+            except mongoengine.errors.DoesNotExist:
+                warn(f'Error: no such patient {subject_id}, continuing without association.')
+                logger.warning(f'Error: no such patient {subject_id}, continuing without association.')
+        filegrp.save()
+
+        logger.info(f'Successfully created {sample_id} and associated to {self.experiment_id}')
+        self.fcs_files.append(filegrp)
+        self.save()
+        del filegrp
+        gc.collect()
+
     @panel_defined
     def add_dataframes(self,
                        sample_id: str,
                        primary_data: pd.DataFrame,
                        mappings: List[Dict],
-                       controls: Union[Dict, None] = None,
-                       comp_matrix: Union[pd.DataFrame, None] = None,
-                       subject_id: Union[str, None] = None,
-                       processing_datetime: Union[str, None] = None,
-                       collection_datetime: Union[str, None] = None,
-                       missing_error: str = "raise"):
+                       controls: Optional[Dict] = None,
+                       comp_matrix: Optional[pd.DataFrame] = None,
+                       subject_id: Optional[str] = None,
+                       processing_datetime: Optional[str] = None,
+                       collection_datetime: Optional[str] = None,
+                       missing_error: str = "raise",
+                       cache_transforms: Optional[List[str]] = None,
+                       transform_kwargs: Optional[Dict] = None):
         """
         Add new single cell cytometry data to the experiment, under a new sample ID, using
         Pandas DataFrame(s) as the input; generates a new FileGroup associated to this experiment.
@@ -864,8 +955,6 @@ class Experiment(mongoengine.Document):
             Spill over matrix for compensation (if not provided, data is assumed to be compensated previously)
         subject_id: str, optional
             If a string value is provided, newly generated sample will be associated to this subject
-        verbose: bool (default=True)
-            If True, progress printed to stdout
         processing_datetime: str, optional
             Optional processing datetime string
         collection_datetime: str, optional
@@ -885,76 +974,38 @@ class Experiment(mongoengine.Document):
         """
         logger.info(f"Creating new FileGroup {sample_id} and adding to experiment {self.experiment_id} "
                     f"using Pandas DataFrame(s)")
-        processing_datetime = processing_datetime or datetime.now()
-        collection_datetime = collection_datetime or datetime.now()
-        controls = controls or {}
-
-        if self.sample_exists(sample_id):
-            logger.error(f'A file group with id {sample_id} already exists')
-            raise DuplicateSampleError(f'A file group with id {sample_id} already exists')
-
         compensated = False
         if comp_matrix is not None:
             logger.info("Applying compensation...")
             primary_data = compenstate(primary_data.values, comp_matrix.values)
-            controls = {ctrl_id: compenstate(ctrl_data, comp_matrix.values) for ctrl_id, ctrl_data in controls.items()}
+            controls = {ctrl_id: compenstate(ctrl_data, comp_matrix.values)
+                        for ctrl_id, ctrl_data in controls.items()}
             compensated = True
-
-        try:
-            logger.info("Checking channel/marker mappings...")
-            mappings = self._standardise_mappings(mappings,
-                                                  missing_error=missing_error)
-        except ValueError as err:
-            logger.exception(f"Failed to add {sample_id}: {err}")
-            warn(f"Failed to add {sample_id}: {str(err)}")
-            del primary_data
-            del controls
-            gc.collect()
-            return
-
-        logger.info("Adding primary data...")
-        filegrp = FileGroup(data=primary_data.values,
-                            channels=[x.get("channel") for x in mappings],
-                            markers=[x.get("marker") for x in mappings],
-                            primary_id=sample_id,
-                            compensated=compensated,
-                            collection_datetime=collection_datetime,
-                            processing_datetime=processing_datetime,
-                            data_directory=self.data_directory)
-
-        for ctrl_id, ctrl_data in controls.items():
-            logger.info(f"Adding control file {ctrl_id}...")
-            filegrp.add_ctrl_file(data=ctrl_data.values,
-                                  ctrl_id=ctrl_id,
-                                  channels=[x.get("channel") for x in mappings],
-                                  markers=[x.get("marker") for x in mappings])
-
-        if subject_id is not None:
-            logger.info(f"Associating to {subject_id} Subject...")
-            try:
-                filegrp.subject = Subject.objects(subject_id=subject_id).get()
-            except mongoengine.errors.DoesNotExist:
-                logger.warning(f'Error: no such patient {subject_id}, continuing without association.')
-                warn(f'Error: no such patient {subject_id}, continuing without association.')
-        filegrp.save()
-
-        logger.info(f'Successfully created {sample_id} and associated to {self.experiment_id}')
-        self.fcs_files.append(filegrp)
-        self.save()
-        del filegrp
-        gc.collect()
+        self._add_data(sample_id=sample_id,
+                       compensated=compensated,
+                       primary_data=primary_data,
+                       mappings=mappings,
+                       controls=controls,
+                       subject_id=subject_id,
+                       processing_datetime=processing_datetime,
+                       collection_datetime=collection_datetime,
+                       missing_error=missing_error,
+                       cache_transforms=cache_transforms,
+                       transform_kwargs=transform_kwargs)
 
     @panel_defined
     def add_fcs_files(self,
                       sample_id: str,
-                      primary: Union[str, FCSFile],
-                      controls: Union[Dict, None] = None,
+                      primary_data: Union[str, FCSFile],
+                      controls: Optional[Dict] = None,
                       compensate: bool = True,
-                      comp_matrix: Union[pd.DataFrame, None] = None,
-                      subject_id: Union[str, None] = None,
-                      processing_datetime: Union[str, None] = None,
-                      collection_datetime: Union[str, None] = None,
-                      missing_error: str = "raise"):
+                      comp_matrix: Optional[pd.DataFrame] = None,
+                      subject_id: Optional[str] = None,
+                      processing_datetime: Optional[str] = None,
+                      collection_datetime: Optional[str] = None,
+                      missing_error: str = "raise",
+                      cache_transforms: Optional[List[str]] = None,
+                      transform_kwargs: Optional[Dict] = None):
         """
         Add new single cell cytometry data to the experiment, under a new sample ID, using
         filepath to fcs file(s) as the input; generates a new FileGroup associated to this experiment.
@@ -999,63 +1050,29 @@ class Experiment(mongoengine.Document):
         """
         logger.info(
             f"Creating new FileGroup {sample_id} and adding to experiment {self.experiment_id} using an FCS file")
-        processing_datetime = processing_datetime or datetime.now()
-        collection_datetime = collection_datetime or datetime.now()
-        controls = controls or {}
 
-        if self.sample_exists(sample_id):
-            logger.error(f'A file group with id {sample_id} already exists')
-            raise DuplicateSampleError(f'A file group with id {sample_id} already exists')
-
-        if isinstance(primary, str):
-            fcs_file = FCSFile(filepath=primary, comp_matrix=comp_matrix)
+        if isinstance(primary_data, str):
+            fcs_file = FCSFile(filepath=primary_data, comp_matrix=comp_matrix)
         else:
-            fcs_file = primary
+            fcs_file = primary_data
 
+        compensated = False
         if compensate:
+            compensated = True
             logger.info("Compensating primary file...")
             fcs_file.compensate()
-        mappings = self._standardise_mappings(fcs_file.channel_mappings,
-                                              missing_error=missing_error)
 
-        logger.info("Adding primary data...")
-        filegrp = FileGroup(data=fcs_file.event_data,
-                            channels=[x.get("channel") for x in mappings],
-                            markers=[x.get("marker") for x in mappings],
-                            primary_id=sample_id,
-                            compensated=compensate,
-                            collection_datetime=collection_datetime,
-                            processing_datetime=processing_datetime,
-                            data_directory=self.data_directory)
-        for ctrl_id, path in controls.items():
-            logger.info(f"Adding control file {ctrl_id}...")
-            if isinstance(path, str):
-                fcs_file = FCSFile(filepath=path, comp_matrix=comp_matrix)
-            else:
-                fcs_file = path
-            if compensate:
-                logger.info("Compensating...")
-                fcs_file.compensate()
-            mappings = self._standardise_mappings(fcs_file.channel_mappings,
-                                                  missing_error=missing_error)
-            filegrp.add_ctrl_file(data=fcs_file.event_data,
-                                  ctrl_id=ctrl_id,
-                                  channels=[x.get("channel") for x in mappings],
-                                  markers=[x.get("marker") for x in mappings])
-
-        if subject_id is not None:
-            try:
-                filegrp.subject = Subject.objects(subject_id=subject_id).get()
-            except mongoengine.errors.DoesNotExist:
-                warn(f'Error: no such patient {subject_id}, continuing without association.')
-                logger.warning(f'Error: no such patient {subject_id}, continuing without association.')
-        filegrp.save()
-
-        logger.info(f'Successfully created {sample_id} and associated to {self.experiment_id}')
-        self.fcs_files.append(filegrp)
-        self.save()
-        del filegrp
-        gc.collect()
+        self._add_data(sample_id=sample_id,
+                       compensated=compensated,
+                       primary_data=primary_data,
+                       mappings=None,
+                       controls=controls,
+                       subject_id=subject_id,
+                       processing_datetime=processing_datetime,
+                       collection_datetime=collection_datetime,
+                       missing_error=missing_error,
+                       cache_transforms=cache_transforms,
+                       transform_kwargs=transform_kwargs)
 
     def _standardise_mappings(self,
                               mappings: List[Dict],

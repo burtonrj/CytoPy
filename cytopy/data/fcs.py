@@ -224,10 +224,10 @@ class FileGroup(mongoengine.Document):
             CONFIG.save()
             return self.columns
 
-    def _transform_and_cache(self,
-                             source: str,
-                             transform: str,
-                             **transform_kwargs) -> pd.DataFrame:
+    def transform_and_cache(self,
+                            source: str,
+                            transform: str,
+                            **transform_kwargs) -> pd.DataFrame:
         primary = self._load_data(key=source)
         transformed = apply_transform(data=primary,
                                       features=self.columns,
@@ -285,12 +285,12 @@ class FileGroup(mongoengine.Document):
                 transform_mapping[method].append(feature)
             for method, transform_features in transform_mapping.items():
                 if f"{source}:{method}" not in self.keys:
-                    self._transform_and_cache(source=source, transform=method)
+                    self.transform_and_cache(source=source, transform=method)
                 features = [f for f in features if f not in transform_features]
                 data.append(self._load_data(key=f"{source}:{method}")[features])
         else:
             if f"{source}:{transform}" not in self.keys:
-                self._transform_and_cache(source=source, transform=transform, **transform_kwargs)
+                self.transform_and_cache(source=source, transform=transform, **transform_kwargs)
             df = self._load_data(key=f"{source}:{transform}")
             if features_to_transform is None:
                 return df
