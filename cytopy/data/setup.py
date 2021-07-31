@@ -25,9 +25,12 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from logging.handlers import RotatingFileHandler
-from typing import Union
+from typing import *
 import mongoengine
 import logging
+import cytopy
+import json
+import os
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -39,7 +42,7 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def setup_logs(path: Union[str, None] = None,
+def setup_logs(path: Optional[str] = None,
                level: int = logging.INFO) -> None:
     """
     Setup logging
@@ -64,7 +67,7 @@ def setup_logs(path: Union[str, None] = None,
 
 
 def global_init(database_name: str,
-                logging_path: Union[str, None] = None,
+                logging_path: Optional[str] = None,
                 logging_level: int = logging.INFO,
                 **kwargs) -> None:
     """
@@ -72,7 +75,7 @@ def global_init(database_name: str,
 
     See mongoengine.register_connection for additional keyword arguments and mongoengine
     documentation for extensive details about registering connections. In brief, database connections are
-    registered globally and refered to using an alias. By default cytopy uses the alias 'core'.
+    registered globally and referred to using an alias. By default cytopy uses the alias 'core'.
 
     The database is assumed to be hosted locally, but if a remote server is used the user should provide the host
     address and port. If authentication is needed then a username and password should also be provided.
@@ -96,3 +99,29 @@ def global_init(database_name: str,
     mongoengine.register_connection(alias="core", name=database_name, **kwargs)
     logging.info(f"Environment setup. Logging to {logging_path or 'cytopy.log'}. "
                  f"Connected to {database_name} database.")
+
+
+class Config:
+    def __init__(self,
+                 path: Optional[str] = None):
+        cytopy_path = os.path.abspath(cytopy.__file__)
+        path = path or os.path.join(cytopy_path, "config.json")
+        with open(path, "r") as f:
+            self.options = json.load(f)
+
+    def __getitem__(self, item: str):
+        try:
+            return self.options[item]
+        except KeyError:
+            raise KeyError(f"Invalid option, valid options are: {self.options.keys()}")
+
+    def __getattr__(self, item: str):
+        self.__getitem__(item=item)
+
+    def __str__(self):
+        return json.dumps(self.options, indent=4)
+
+    def save(self,
+             path: Optional[str] = None):
+        with open(path, "w") as f:
+            json.dump(self.options, f)
