@@ -104,7 +104,7 @@ def global_init(database_name: str,
 class Config:
     def __init__(self,
                  path: Optional[str] = None):
-        cytopy_path = os.path.abspath(cytopy.__file__)
+        cytopy_path = os.path.dirname(cytopy.__file__)
         path = path or os.path.join(cytopy_path, "config.json")
         with open(path, "r") as f:
             self.options = json.load(f)
