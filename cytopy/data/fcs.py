@@ -30,14 +30,16 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from ..flow.tree import construct_tree
 from ..flow.transform import apply_transform, apply_transform_map
-from ..flow.sampling import uniform_downsampling
 from ..flow.build_models import build_sklearn_model
 from .geometry import create_envelope
 from .population import Population, merge_gate_populations, merge_non_geom_populations, PolygonGeom
 from .subject import Subject
+from .setup import Config
 from .errors import *
 from sklearn.model_selection import StratifiedKFold, permutation_test_score
 from imblearn.over_sampling import RandomOverSampler
+from collections import defaultdict
+from functools import wraps
 from typing import *
 import pandas as pd
 import numpy as np
@@ -57,6 +59,7 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 logger = logging.getLogger("FileGroup")
+CONFIG = Config()
 
 
 def data_loaded(func: callable) -> callable:
@@ -78,7 +81,7 @@ def data_loaded(func: callable) -> callable:
     ValueError
         HDF5 file does not exist
     """
-
+    @wraps(func)
     def wrapper(*args, **kwargs):
         try:
             assert args[0].h5path is not None, "Data directory and therefore HDF5 path has not been defined."
@@ -105,7 +108,7 @@ def population_in_file(func: callable):
     -------
     callable
     """
-
+    @wraps(func)
     def wrapper(population_name: str,
                 h5file: h5py.File):
         if population_name not in h5file["index"].keys():
@@ -132,39 +135,6 @@ def h5_read_population_primary_index(population_name: str,
     numpy.ndarray
     """
     return h5file[f"/index/{population_name}/primary"][:]
-
-
-def set_column_names(df: pd.DataFrame,
-                     channels: list,
-                     markers: list,
-                     preference: str = "markers"):
-    """
-    Given a dataframe of fcs events and lists of channels and markers, set the
-    column names according to the given preference.
-
-    Parameters
-    ----------
-    df: pd.DataFrame
-    channels: list
-    markers: list
-    preference: str
-        Valid values are: 'markers' or 'channels'
-
-    Returns
-    -------
-    Pandas.DataFrame
-
-    Raises
-    ------
-    AssertionError
-        Preference must be either 'markers' or 'channels'
-    """
-    mappings = [{"channels": c, "markers": m} for c, m in zip(channels, markers)]
-    assert preference in ["markers", "channels"], "preference should be either 'markers' or 'channels'"
-    other = [x for x in ["markers", "channels"] if x != preference][0]
-    col_names = list(map(lambda x: x[preference] if x[preference] else x[other], mappings))
-    df.columns = col_names
-    return df
 
 
 class FileGroup(mongoengine.Document):
@@ -207,6 +177,8 @@ class FileGroup(mongoengine.Document):
     notes = mongoengine.StringField(required=False)
     subject = mongoengine.ReferenceField(Subject, reverse_delete_rule=mongoengine.NULLIFY)
     data_directory = mongoengine.StringField()
+    channels = mongoengine.ListField(required=True)
+    markers = mongoengine.ListField(required=True)
     meta = {
         'db_alias': 'core',
         'collection': 'fcs_files'
@@ -214,10 +186,7 @@ class FileGroup(mongoengine.Document):
 
     def __init__(self, *args, **kwargs):
         data = kwargs.pop("data", None)
-        channels = kwargs.pop("channels", None)
-        markers = kwargs.pop("markers", None)
         super().__init__(*args, **kwargs)
-        self._columns_default = "markers"
         self.cell_meta_labels = {}
         if self.id:
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
@@ -226,26 +195,62 @@ class FileGroup(mongoengine.Document):
             self._load_population_indexes()
         else:
             logger.info(f"Creating new FileGroup {self.primary_id}")
-            if any([x is None for x in [data, channels, markers]]):
-                raise ValueError("New instance of FileGroup requires that data, channels, and markers "
-                                 "be provided to the constructor")
+            if data is None:
+                raise ValueError("New instance of FileGroup requires that data be provided to the constructor")
             self.save()
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
-            self.init_new_file(data=data, channels=channels, markers=markers)
+            self.init_new_file(data=data)
 
     @property
-    def columns_default(self):
-        return self._columns_default
+    def keys(self):
+        with h5py.File(self.h5path, "r") as f:
+            return f.keys()
 
-    @columns_default.setter
-    def columns_default(self, value: str):
-        assert value in ["markers", "channels"], "columns_default must be either 'markers' or 'channels'"
-        self._columns_default = value
+    @keys.setter
+    def keys(self, _):
+        raise ValueError("Data keys are read-only")
+
+    @property
+    def columns(self) -> List[str]:
+        try:
+            mappings = [{"channels": c, "markers": m} for c, m in zip(self.channels, self.markers)]
+            other = [x for x in ["markers", "channels"] if x != CONFIG.column_default][0]
+            return list(map(lambda x: x[CONFIG.column_default] if x[CONFIG.column_default] else x[other], mappings))
+        except KeyError:
+            logger.error("Preference must be either 'markers' or 'channels'. Defaulting to markers.")
+            CONFIG.column_default = "marker"
+            CONFIG.save()
+            return self.columns
+
+    def _transform_and_cache(self,
+                             source: str,
+                             transform: str,
+                             **transform_kwargs) -> pd.DataFrame:
+        primary = self._load_data(key=source)
+        transformed = apply_transform(data=primary,
+                                      features=self.columns,
+                                      method=transform,
+                                      return_transformer=False,
+                                      **transform_kwargs)
+        with h5py.File(self.h5path, "a") as f:
+            f.create_dataset(f"{source}:{transform}", data=transformed)
 
     @data_loaded
+    def _load_data(self,
+                   key: str = "primary"):
+        try:
+            with h5py.File(self.h5path, "r") as f:
+                return pd.DataFrame(f[key][:], dtype=np.float32, columns=self.columns)
+        except KeyError:
+            logging.error(f"Invalid key given on access to {self.primary_id} ({self.id}) HDF5, expected "
+                          f"one of {f.keys()}")
+            raise
+
     def data(self,
-             source: str,
-             sample_size: int or float or None = None) -> pd.DataFrame:
+             source: str = "primary",
+             transform: Optional[str, Dict[str, str]] = None,
+             features_to_transform: Optional[List[str]] = None,
+             **transform_kwargs) -> pd.DataFrame:
         """
         Load the FileGroup dataframe for the desired source file.
 
@@ -253,8 +258,8 @@ class FileGroup(mongoengine.Document):
         ----------
         source: str
             Name of the file to load from e.g. either "primary" or the name of a control
-        sample_size: int or float (optional)
-            Sample the DataFrame
+        transform: str or dict, optional
+        features_to_transform: list, optional
 
         Returns
         -------
@@ -264,27 +269,38 @@ class FileGroup(mongoengine.Document):
         ------
         ValueError
             Invalid source
+
         """
-        with h5py.File(self.h5path, "r") as f:
-            if source not in f.keys():
-                logging.error(f"Invalid source given on access to {self.primary_id} ({self.id}) HDF5, expected "
-                              f"one of {f.keys()}")
-                raise ValueError(f"Invalid source, expected one of: {f.keys()}")
-            channels = [x.decode("utf-8") for x in f[f"mappings/{source}/channels"][:]]
-            markers = [x.decode("utf-8") for x in f[f"mappings/{source}/markers"][:]]
-            data = set_column_names(df=pd.DataFrame(f[source][:], dtype=np.float32),
-                                    channels=channels,
-                                    markers=markers,
-                                    preference=self.columns_default)
-        if sample_size is not None:
-            return uniform_downsampling(data=data,
-                                        sample_size=sample_size)
-        return data
+        data = list()
+        features = self.columns
+
+        if transform is None:
+            return self._load_data(key=source)
+
+        if isinstance(transform, dict):
+            transform_mapping = defaultdict(list)
+            for feature, method in transform.items():
+                transform_mapping[method].append(feature)
+            for method, transform_features in transform_mapping.items():
+                if f"{source}:{method}" not in self.keys:
+                    self._transform_and_cache(source=source, transform=method)
+                features = [f for f in features if f not in transform_features]
+                data.append(self._load_data(key=f"{source}:{method}")[features])
+        else:
+            if f"{source}:{transform}" not in self.keys:
+                self._transform_and_cache(source=source, transform=transform, **transform_kwargs)
+            df = self._load_data(key=f"{source}:{transform}")
+            if features_to_transform is None:
+                return df
+            else:
+                data.append(df[features_to_transform])
+                features = [f for f in features if f not in features_to_transform]
+        if len(features) > 0:
+            data.append(self._load_data(key=source)[features])
+        return pd.concat(data, axis=1)
 
     def init_new_file(self,
-                      data: np.array,
-                      channels: List[str],
-                      markers: List[str]):
+                      data: np.array):
         """
         Under the assumption that this FileGroup has not been previously defined,
         generate a HDF5 file and initialise the root Population
@@ -292,8 +308,6 @@ class FileGroup(mongoengine.Document):
         Parameters
         ----------
         data: numpy.ndarray
-        channels: list
-        markers: list
 
         Returns
         -------
@@ -305,10 +319,6 @@ class FileGroup(mongoengine.Document):
             os.remove(self.h5path)
         with h5py.File(self.h5path, "w") as f:
             f.create_dataset(name="primary", data=data)
-            f.create_group("mappings")
-            f.create_group("mappings/primary")
-            f.create_dataset("mappings/primary/channels", data=np.array(channels, dtype='S'))
-            f.create_dataset("mappings/primary/markers", data=np.array(markers, dtype='S'))
             f.create_group("index")
             f.create_group("index/root")
             f.create_group("cell_meta_labels")
@@ -323,9 +333,7 @@ class FileGroup(mongoengine.Document):
 
     def add_ctrl_file(self,
                       ctrl_id: str,
-                      data: np.array,
-                      channels: List[str],
-                      markers: List[str]):
+                      data: np.array):
         """
         Add a new control file to this FileGroup.
 
@@ -354,9 +362,6 @@ class FileGroup(mongoengine.Document):
                 logger.error(f"{ctrl_id} already exists for {self.primary_id}; {self.id}")
                 raise ValueError(f"Entry for {ctrl_id} already exists")
             f.create_dataset(name=ctrl_id, data=data)
-            f.create_group(f"mappings/{ctrl_id}")
-            f.create_dataset(f"mappings/{ctrl_id}/channels", data=np.array(channels, dtype='S'))
-            f.create_dataset(f"mappings/{ctrl_id}/markers", data=np.array(markers, dtype='S'))
         self.controls.append(ctrl_id)
         self.save()
         logger.debug(f"Generated new control dataset in HDF5 file for {self.primary_id}")

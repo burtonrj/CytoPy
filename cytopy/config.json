@@ -1,3 +1,4 @@
 {
-  "logicle_cache_precision": 5
+  "matplotlib_transform_precision": 5,
+  "column_default": "markers"
 }
