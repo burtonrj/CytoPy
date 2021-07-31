@@ -31,6 +31,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from multiprocessing import Pool, cpu_count
+from typing import *
 import flowio
 import dateutil.parser as date_parser
 import numpy as np
@@ -262,7 +263,7 @@ class FCSFile:
         csv file containing compensation matrix (optional, not required if a
         spillover matrix is already linked to the file)
     """
-    def __init__(self, filepath, comp_matrix=None):
+    def __init__(self, filepath: str, comp_matrix: Optional[Union[pd.DataFrame, str]] = None):
         fcs = flowio.FlowData(filepath)
         self.filename = fcs.text.get('fil', 'Unknown_filename')
         self.sys = fcs.text.get('sys', 'Unknown_system')
@@ -286,7 +287,10 @@ class FCSFile:
         except KeyError:
             self.processing_date = 'Unknown'
         if comp_matrix is not None:
-            self.spill = pd.read_csv(comp_matrix)
+            if isinstance(comp_matrix, str):
+                self.spill = pd.read_csv(comp_matrix)
+            else:
+                self.spill = comp_matrix
             self.spill_txt = None
         else:
             if 'spill' in fcs.text.keys():

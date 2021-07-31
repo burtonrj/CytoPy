@@ -627,7 +627,8 @@ class FileGroup(mongoengine.Document):
                            features_to_transform: list or None = None,
                            transform_kwargs: dict or None = None,
                            label_parent: bool = False,
-                           frac_of: Optional[List[str]] = None) -> pd.DataFrame:
+                           frac_of: Optional[List[str]] = None,
+                           label_downstream_affiliations = None) -> pd.DataFrame:
         """
         Load the DataFrame for the events pertaining to a single population.
 
