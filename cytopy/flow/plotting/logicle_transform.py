@@ -24,11 +24,13 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+from ...data.setup import Config
 from ..transform import LogicleTransformer
 from matplotlib.ticker import NullFormatter, LogFormatterMathtext
 from matplotlib.ticker import Locator
 from matplotlib import transforms as mtransforms
 from matplotlib import scale as mscale
+from typing import *
 import pandas as pd
 import numpy as np
 
@@ -41,6 +43,43 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
+
+CONFIG = Config()
+CACHE = {}
+
+
+def cache_lookup(cache: Dict, data: pd.DataFrame, inverse: bool = False) -> (np.ndarray, np.ndarray):
+    if inverse:
+        cache = {v: k for k, v in cache.items()}
+    cached = np.array([cache.get(x, np.nan) for x in data["x"].values])
+    missing_idx = np.argwhere(np.isnan(cached))
+    return cached, missing_idx
+
+
+def update_cache(original: np.ndarray,
+                 transformed: np.ndarray):
+    global CACHE
+    CACHE.update({o: t for o, t in np.c_[original, transformed]})
+
+
+def transform_with_cache(data: np.ndarray,
+                         scaler: LogicleTransformer,
+                         inverse: bool = False):
+    original = pd.DataFrame(data, columns=["x"])
+    if CONFIG.matplotlib_transform_precision is not None:
+        data["x"] = data["x"].round(CONFIG.matplotlib_transform_precision)
+    cached, missing_idx = cache_lookup(cache=CACHE, data=original, inverse=inverse)
+    if len(missing_idx) == 0:
+        return cached
+    if inverse:
+        inverse_transformed = scaler.inverse_scale(data=original.iloc[missing_idx], features=["x"])
+        cached[missing_idx] = inverse_transformed
+        return cached
+    else:
+        transformed = scaler.scale(data=original.iloc[missing_idx], features=["x"])
+        cached[missing_idx] = transformed["x"].values
+        update_cache(original["x"].values, transformed["x"].values)
+        return cached
 
 
 class LogicleScale(mscale.ScaleBase):
@@ -70,9 +109,7 @@ class LogicleScale(mscale.ScaleBase):
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame(data, columns=["x"])
-            data = self._scaler.scale(data=data, features=["x"])
-            return data.values
+            return transform_with_cache(data=data, scaler=self._scaler, inverse=False)
 
         def inverted(self):
             return LogicleScale.InvertedLogicalTransform(scaler=self._scaler)
@@ -88,9 +125,7 @@ class LogicleScale(mscale.ScaleBase):
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame(data, columns=["x"])
-            data = self._scaler.inverse_scale(data=data, features=["x"])
-            return data.values
+            return transform_with_cache(data=data, scaler=self._scaler, inverse=True)
 
         def inverted(self):
             return LogicleScale.LogicleTransform(scaler=self._scaler)
