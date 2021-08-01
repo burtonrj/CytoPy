@@ -4,11 +4,11 @@ from ...feedback import progress_bar
 from ..sampling import sample_dataframe_uniform_groups
 from ..dim_reduction import DimensionReduction
 from ..plotting import single_cell_plot
+from ..transform import Scaler
 from .main import remove_null_features, ClusteringError
 from .ensemble_methods import CoMatrix, MixtureModel
 from .mutual_info import MutualInfo
-from .metrics import Metric
-from ..transform import Scaler
+from .metrics import *
 from collections import defaultdict
 from typing import *
 import seaborn as sns
@@ -30,30 +30,43 @@ def valid_labels(func: Callable):
 
 
 class EnsembleClustering:
+
+    default_metrics = {
+        "ball_hall": BallHall,
+        "baker_hubert_gamma_index": BakerHubertGammaIndex,
+        "silhouette_coef": SilhouetteCoef,
+        "davies_bouldin_index": DaviesBouldinIndex,
+        "g_plus_index": GPlusIndex,
+        "calinski_harabasz_score": CalinskiHarabaszScore
+    }
+
     def __init__(self,
                  experiment: Experiment,
                  features: list,
                  sample_ids: list or None = None,
                  root_population: str = "root",
-                 transform: str = "logicle",
+                 transform: Union[str, Dict] = "logicle",
                  transform_kwargs: dict or None = None,
                  verbose: bool = True,
                  population_prefix: str = "ensemble",
                  sample_size: Optional[int, float] = None,
                  sample_method: str = "uniform",
                  sampling_kwargs: Optional[Dict] = None,
-                 random_state: int = 42):
+                 random_state: int = 42,
+                 metrics: Optional[List[Union[str, Metric]]] = None):
         logger.info(f"Creating new EnsembleClustering object with connection to {experiment.experiment_id}")
+        np.random.seed(random_state)
         self.experiment = experiment
         self.verbose = verbose
         self.features = features
         self.transform = transform
         self.root_population = root_population
         self.graph = None
-        self._metrics = None
+        self.metrics = None
+        self._performance = dict()
         self.population_prefix = population_prefix
         self.clustering_permutations = dict()
-        np.random.seed(random_state)
+        self._populate_metrics(metrics=metrics)
 
         logger.info(f"Obtaining data for clustering for population {root_population}")
         self.data = single_cell_dataframe(experiment=experiment,
@@ -67,6 +80,21 @@ class EnsembleClustering:
                                           sampling_kwargs=sampling_kwargs)
         self.data["cluster_label"] = None
         logging.info("Ready to cluster!")
+
+    def _populate_metrics(self, metrics: Optional[List[Union[str, Metric]]]):
+        try:
+            for m in metrics:
+                if isinstance(m, str):
+                    self.metrics.append(self.default_metrics[m])
+                else:
+                    assert isinstance(m, Metric)
+        except KeyError:
+            logger.error(f"Invalid metric, must be one of {self.default_metrics.keys()}")
+            raise
+        except AssertionError:
+            logger.error(f"metrics must be a list of strings corresponding to default metrics "
+                         f"({self.default_metrics.keys()}) and/or Metric objects")
+            raise
 
     def cluster(self,
                 cluster_name: str,
@@ -92,15 +120,16 @@ class EnsembleClustering:
                                                       "params": kwargs or {},
                                                       "scalar": scalar}
         logger.info(f"Calculating performance metrics for {cluster_name}")
-        metrics = [self._cluster_metric(data["cluster_label"].values)]
-        self._metrics[cluster_name] = {x[0]: x[1] for x in metrics}
+        performance = [self._cluster_metric(data["cluster_label"].values, metric)
+                       for metric in self._performance]
+        self._performance[cluster_name] = {x[0]: x[1] for x in performance}
         logger.info("Clustering complete!")
 
     @property
-    def metrics(self):
-        if self._metrics is None:
+    def performance(self):
+        if self._performance is None:
             raise ClusteringError("Add clusters before accessing metrics")
-        return pd.DataFrame(self._metrics)
+        return pd.DataFrame(self._performance)
 
     def _cluster_metric(self, labels: np.ndarray, metric: Metric):
         return metric.name, metric(self.data, self.features, labels)
