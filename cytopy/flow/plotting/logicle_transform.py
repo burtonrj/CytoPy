@@ -52,7 +52,7 @@ def cache_lookup(cache: Dict, data: pd.DataFrame, inverse: bool = False) -> (np.
     if inverse:
         cache = {v: k for k, v in cache.items()}
     cached = np.array([cache.get(x, np.nan) for x in data["x"].values])
-    missing_idx = np.argwhere(np.isnan(cached))
+    missing_idx = np.argwhere(np.isnan(cached)).reshape(-1)
     return cached, missing_idx
 
 
@@ -67,19 +67,19 @@ def transform_with_cache(data: np.ndarray,
                          inverse: bool = False):
     original = pd.DataFrame(data, columns=["x"])
     if CONFIG.matplotlib_transform_precision is not None:
-        data["x"] = data["x"].round(CONFIG.matplotlib_transform_precision)
+        original["x"] = original["x"].round(CONFIG.matplotlib_transform_precision)
     cached, missing_idx = cache_lookup(cache=CACHE, data=original, inverse=inverse)
     if len(missing_idx) == 0:
-        return cached
+        return cached.reshape(-1, 1)
     if inverse:
         inverse_transformed = scaler.inverse_scale(data=original.iloc[missing_idx], features=["x"])
-        cached[missing_idx] = inverse_transformed
-        return cached
+        cached[missing_idx] = inverse_transformed["x"].values
+        return cached.reshape(-1, 1)
     else:
         transformed = scaler.scale(data=original.iloc[missing_idx], features=["x"])
         cached[missing_idx] = transformed["x"].values
-        update_cache(original["x"].values, transformed["x"].values)
-        return cached
+        update_cache(original.iloc[missing_idx]["x"].values, transformed["x"].values)
+        return cached.reshape(-1, 1)
 
 
 class LogicleScale(mscale.ScaleBase):
