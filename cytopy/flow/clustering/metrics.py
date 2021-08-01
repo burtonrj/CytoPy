@@ -1,6 +1,7 @@
-import pandas as pd
+from sklearn import metrics as sklearn_metrics
 from scipy.spatial import distance
 from typing import *
+import pandas as pd
 import numpy as np
 import math
 
@@ -8,126 +9,152 @@ import math
 class Metric:
     def __init__(self,
                  name: str,
-                 desc: str):
+                 desc: str,
+                 **kwargs):
         self.name = name
         self.description = desc
+        self.kwargs = kwargs
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self,
+                 data: pd.DataFrame,
+                 features: List[str],
+                 labels: List[int]):
         return self
 
 
 class BallHall(Metric):
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__(name="Ball Hall Index",
-                         desc="Ball-Hall Index is the mean of the mean dispersion across all clusters")
+                         desc="Ball-Hall Index is the mean of the mean dispersion across all clusters",
+                         **kwargs)
 
-    def __call__(self, *args, **kwargs):
-        return self
+    def __call__(self,
+                 data: pd.DataFrame,
+                 features: List[str],
+                 labels: List[int]):
+        data = data[features].copy()
+        sum_total = 0
 
-def ball_hall(data: pd.DataFrame,
-              features: List[str],
-              labels: List[int]):
-    """
-    Ball-Hall Index is the mean of the mean dispersion across all clusters
-    """
-    data = data[features].copy()
-    sum_total = 0
-
-    n = len(np.unique(labels))
-    # iterate through all the clusters
-    for i in range(n):
-        sum_distance = 0
-        indices = [t for t, x in enumerate(labels) if x == i]
-        cluster_member = data.values[indices, :]
-        # compute the center of the cluster
-        cluster_center = np.mean(cluster_member, 0)
-        # iterate through all the members
-        for member in cluster_member:
-            sum_distance = sum_distance + math.pow(distance.euclidean(member, cluster_center), 2)
-        sum_total = sum_total + sum_distance / len(indices)
-    # compute the validation
-    return sum_total / n
+        n = len(np.unique(labels))
+        # iterate through all the clusters
+        for i in range(n):
+            sum_distance = 0
+            indices = [t for t, x in enumerate(labels) if x == i]
+            cluster_member = data.values[indices, :]
+            # compute the center of the cluster
+            cluster_center = np.mean(cluster_member, 0)
+            # iterate through all the members
+            for member in cluster_member:
+                sum_distance = sum_distance + math.pow(distance.euclidean(member, cluster_center), 2)
+            sum_total = sum_total + sum_distance / len(indices)
+        # compute the validation
+        return sum_total / n
 
 
-def baker_hubert_gamma():
-    """
-    Baker-Hubert Gamma Index: A measure of compactness, based on similarity between points in a cluster, compared to similarity
-    with points in other clusters
-    """
-    self.description = 'Gamma Index: a measure of compactness'
-    splus = 0
-    sminus = 0
-    pairDis = distance.pdist(self.dataMatrix)
-    numPair = len(pairDis)
-    temp = np.zeros((len(self.classLabel), 2))
-    temp[:, 0] = self.classLabel
-    vecB = distance.pdist(temp)
-    # iterate through all the pairwise comparisons
-    for i in range(numPair - 1):
-        for j in range(i + 1, numPair):
-            if vecB[i] > 0 and vecB[j] == 0:
-                # heter points smaller than homo points
-                if pairDis[i] < pairDis[j]:
-                    splus = splus + 1
-                # heter points larger than homo points
-                if pairDis[i] > vecB[j]:
-                    sminus = sminus + 1
-            if vecB[i] == 0 and vecB[j] > 0:
-                # heter points smaller than homo points
-                if pairDis[j] < pairDis[i]:
-                    splus = splus + 1
-                # heter points larger than homo points
-                if pairDis[j] > vecB[i]:
-                    sminus = sminus + 1
-    # compute the fitness
-    self.validation = (splus - sminus) / (splus + sminus)
-    return self.validation
+class BakerHubertGammaIndex(Metric):
+    def __init__(self, **kwargs):
+        super().__init__(name="Baker-Hubert Gamma Index",
+                         desc="A measure of compactness, based on similarity between points in a cluster, "
+                              "compared to similarity with points in other clusters",
+                         **kwargs)
+
+    def __call__(self,
+                 data: pd.DataFrame,
+                 features: List[str],
+                 labels: List[int]):
+        splus = 0
+        sminus = 0
+        data_matrix = data[features].copy()
+        pair_dis = distance.pdist(data_matrix)
+        num_pair = len(pair_dis)
+        temp = np.zeros((len(labels), 2))
+        temp[:, 0] = labels
+        vec_b = distance.pdist(temp)
+        # iterate through all the pairwise comparisons
+        for i in range(num_pair - 1):
+            for j in range(i + 1, num_pair):
+                if vec_b[i] > 0 and vec_b[j] == 0:
+                    if pair_dis[i] < pair_dis[j]:
+                        splus += 1
+                    if pair_dis[i] > vec_b[j]:
+                        sminus += 1
+                if vec_b[i] == 0 and vec_b[j] > 0:
+                    if pair_dis[j] < pair_dis[i]:
+                        splus += 1
+                    if pair_dis[j] > vec_b[i]:
+                        sminus += 1
+        return (splus - sminus) / (splus + sminus)
 
 
-def silhouette_coef():
-    """
-    Silhouette: Compactness and connectedness combination that measures a ratio of within cluster distances to closest neighbors
-    outside of cluster. This uses sklearn.metrics version of the Silhouette.
-    """
-    #scikit
-    pass
+class SilhouetteCoef(Metric):
+    def __init__(self, **kwargs):
+        super().__init__(name="Silhouette Coefficient",
+                         desc="Compactness and connectedness combination that measures a ratio of within cluster "
+                              "distances to closest neighbors outside of cluster. This uses sklearn.metrics "
+                              "version of the Silhouette.",
+                         **kwargs)
+
+    def __call__(self,
+                 data: pd.DataFrame,
+                 features: List[str],
+                 labels: List[int]):
+        return sklearn_metrics.silhouette_score(data[features].values, labels=labels, **self.kwargs)
 
 
-def davies_bouldin_index():
-    """
-    The Davies-Bouldin index, the average of all cluster similarities.
-    """
-    #scikit
-    pass
+class DaviesBouldinIndex(Metric):
+    def __init__(self, **kwargs):
+        super().__init__(name="Davies-Bouldin index",
+                         desc="The average similarity between clusters. Similarity is defined as the "
+                              "ratio of within-cluster distances to between-cluster distances. Clusters further "
+                              "apart and less dispersed will result in a better score.",
+                         **kwargs)
+
+    def __call__(self,
+                 data: pd.DataFrame,
+                 features: List[str],
+                 labels: List[int]):
+        return sklearn_metrics.davies_bouldin_score(data[features].values, labels=labels)
 
 
-def g_plus_index(self):
-    """
-    The G_plus index, the proportion of discordant pairs among all the pairs of distinct point, a measure of connectedness
-    """
-    self.description = "The G_plus index, a measure of connectedness"
-    sminus = 0
-    pairDis = distance.pdist(self.dataMatrix)
-    numPair = len(pairDis)
-    temp = np.zeros((len(self.classLabel), 2))
-    temp[:, 0] = self.classLabel
-    vecB = distance.pdist(temp)
-    # iterate through all the pairwise comparisons
-    for i in range(numPair - 1):
-        for j in range(i + 1, numPair):
-            if vecB[i] > 0 and vecB[j] == 0:
-                # heter points larger than homo points
-                if pairDis[i] > vecB[j]:
-                    sminus = sminus + 1
-            if vecB[i] == 0 and vecB[j] > 0:
-                # heter points larger than homo points
-                if pairDis[j] > vecB[i]:
-                    sminus = sminus + 1
-    # return fitness
-    self.validation = 2 * sminus / (numPair * (numPair - 1))
-    return self.validation
+class GPlusIndex(Metric):
+    def __init__(self, **kwargs):
+        super().__init__(name="G-plus index",
+                         desc="The proportion of discordant pairs among all the pairs of distinct points - "
+                              "a measure of connectedness",
+                         **kwargs)
+
+    def __call__(self,
+                 data: pd.DataFrame,
+                 features: List[str],
+                 labels: List[int]):
+        sminus = 0
+        data_matrix = data[features].copy()
+        pair_dis = distance.pdist(data_matrix)
+        num_pair = len(pair_dis)
+        temp = np.zeros((len(labels), 2))
+        temp[:, 0] = labels
+        vec_b = distance.pdist(temp)
+        # iterate through all the pairwise comparisons
+        for i in range(num_pair - 1):
+            for j in range(i + 1, num_pair):
+                if vec_b[i] > 0 and vec_b[j] == 0:
+                    if pair_dis[i] > vec_b[j]:
+                        sminus += 1
+                if vec_b[i] == 0 and vec_b[j] > 0:
+                    if pair_dis[j] > vec_b[i]:
+                        sminus += 1
+        return (2 * sminus) / (num_pair * (num_pair - 1))
 
 
-def calinski_harabasz_score():
-    # Scikit learn
-    pass
+class CalinskiHarabaszScore(Metric):
+    def __init__(self, **kwargs):
+        super().__init__(name="Calinski and Harabasz score",
+                         desc="The score is defined as ratio between the within-cluster dispersion and the "
+                              "between-cluster dispersion",
+                         **kwargs)
+
+    def __call__(self,
+                 data: pd.DataFrame,
+                 features: List[str],
+                 labels: List[int]):
+        return sklearn_metrics.calinski_harabasz_score(data[features].values, labels=labels)

@@ -1,5 +1,3 @@
-import copy
-
 from ...feedback import progress_bar
 import scipy.cluster.hierarchy as hierarchical_cluster
 from scipy.spatial import distance as ssd
