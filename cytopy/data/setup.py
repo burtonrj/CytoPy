@@ -25,6 +25,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from logging.handlers import RotatingFileHandler
+from types import SimpleNamespace
 from typing import *
 import mongoengine
 import logging
@@ -101,25 +102,28 @@ def global_init(database_name: str,
                  f"Connected to {database_name} database.")
 
 
-class Config:
+class Config(SimpleNamespace):
     def __init__(self,
                  path: Optional[str] = None):
         cytopy_path = os.path.dirname(cytopy.__file__)
         path = path or os.path.join(cytopy_path, "config.json")
         with open(path, "r") as f:
-            self.options = json.load(f)
+            super().__init__(**json.load(f))
 
     def __getitem__(self, item: str):
         try:
-            return self.options[item]
+            return self.__dict__[item]
         except KeyError:
             raise KeyError(f"Invalid option, valid options are: {self.options.keys()}")
 
-    def __getattr__(self, item: str):
-        self.__getitem__(item=item)
+    def get(self, item: str, default=None):
+        try:
+            self.__getitem__(item=item)
+        except KeyError:
+            return default
 
     def __str__(self):
-        return json.dumps(self.options, indent=4)
+        return json.dumps(self.__dict__, indent=4)
 
     def save(self,
              path: Optional[str] = None):
