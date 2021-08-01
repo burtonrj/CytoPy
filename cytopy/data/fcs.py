@@ -29,7 +29,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from ..flow.tree import construct_tree
-from ..flow.transform import apply_transform, apply_transform_map
+from ..flow.transform import apply_transform
 from ..flow.build_models import build_sklearn_model
 from .geometry import create_envelope
 from .population import Population, merge_gate_populations, merge_non_geom_populations, PolygonGeom
@@ -203,14 +203,9 @@ class FileGroup(mongoengine.Document):
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
             self.init_new_file(data=data)
 
-    @property
     def keys(self):
         with h5py.File(self.h5path, "r") as f:
-            return f.keys()
-
-    @keys.setter
-    def keys(self, _):
-        raise ValueError("Data keys are read-only")
+            return list(f.keys())
 
     @property
     def columns(self) -> List[str]:
@@ -250,7 +245,7 @@ class FileGroup(mongoengine.Document):
 
     def data(self,
              source: str = "primary",
-             transform: Optional[str, Dict[str, str]] = None,
+             transform: Optional[Union[str, Dict[str, str]]] = None,
              features_to_transform: Optional[List[str]] = None,
              **transform_kwargs) -> pd.DataFrame:
         """
@@ -284,12 +279,12 @@ class FileGroup(mongoengine.Document):
             for feature, method in transform.items():
                 transform_mapping[method].append(feature)
             for method, transform_features in transform_mapping.items():
-                if f"{source}:{method}" not in self.keys:
+                if f"{source}:{method}" not in self.keys():
                     self.transform_and_cache(source=source, transform=method)
                 features = [f for f in features if f not in transform_features]
                 data.append(self._load_data(key=f"{source}:{method}")[features])
         else:
-            if f"{source}:{transform}" not in self.keys:
+            if f"{source}:{transform}" not in self.keys():
                 self.transform_and_cache(source=source, transform=transform, **transform_kwargs)
             df = self._load_data(key=f"{source}:{transform}")
             if features_to_transform is None:

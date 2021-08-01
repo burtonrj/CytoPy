@@ -895,9 +895,7 @@ class Experiment(mongoengine.Document):
             else:
                 data = ctrl_data.event_data
             filegrp.add_ctrl_file(data=data,
-                                  ctrl_id=ctrl_id,
-                                  channels=[x.get("channel") for x in mappings],
-                                  markers=[x.get("marker") for x in mappings])
+                                  ctrl_id=ctrl_id)
             for transform in cache_transforms:
                 logger.info(f"Caching transform {transform} for {ctrl_id}")
                 filegrp.transform_and_cache(source=ctrl_id,
@@ -1052,21 +1050,31 @@ class Experiment(mongoengine.Document):
             f"Creating new FileGroup {sample_id} and adding to experiment {self.experiment_id} using an FCS file")
 
         if isinstance(primary_data, str):
-            fcs_file = FCSFile(filepath=primary_data, comp_matrix=comp_matrix)
+            primary_data = FCSFile(filepath=primary_data, comp_matrix=comp_matrix)
         else:
-            fcs_file = primary_data
+            primary_data = primary_data
 
         compensated = False
         if compensate:
             compensated = True
             logger.info("Compensating primary file...")
-            fcs_file.compensate()
+            primary_data.compensate()
+
+        control_data = {}
+        for ctrl_id, ctrl in controls.items():
+            if isinstance(ctrl, str):
+                control_data[ctrl_id] = FCSFile(filepath=ctrl, comp_matrix=comp_matrix)
+            else:
+                control_data[ctrl_id] = ctrl
+
+            if compensate:
+                control_data[ctrl_id].compensate()
 
         self._add_data(sample_id=sample_id,
                        compensated=compensated,
                        primary_data=primary_data,
                        mappings=None,
-                       controls=controls,
+                       controls=control_data,
                        subject_id=subject_id,
                        processing_datetime=processing_datetime,
                        collection_datetime=collection_datetime,

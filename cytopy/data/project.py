@@ -100,10 +100,12 @@ class Project(mongoengine.Document):
                  **values):
         super().__init__(*args, **values)
         if not os.path.isdir(self.data_directory):
-            logger.warning(f"Could not locate data directory at path {self.data_directory}, all further operations "
-                           f"will likely resolve in errors as single cell data will not be attainable. Update the "
-                           f"data directory before continuing using the 'update_data_directory' method.",
-                           stacklevel=2)
+            if self.id:
+                logger.warning(f"Could not locate data directory at path {self.data_directory}",
+                               stacklevel=2)
+                raise FileNotFoundError(f"{self.data_directory} does not exist")
+            else:
+                os.mkdir(self.data_directory)
 
     def update_data_directory(self,
                               data_directory: str,
