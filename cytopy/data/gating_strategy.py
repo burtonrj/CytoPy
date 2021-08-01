@@ -41,12 +41,12 @@ from .errors import *
 from datetime import datetime
 from warnings import warn
 from matplotlib import gridspec
+from typing import *
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import mongoengine
 import logging
-import typing
 import math
 import os
 
@@ -211,8 +211,8 @@ class GatingStrategy(mongoengine.Document):
 
     def preview_gate(self,
                      gate: str or ThresholdGate or PolygonGate or EllipseGate,
-                     create_plot_kwargs: typing.Optional[Dict] = None,
-                     plot_gate_kwargs: typing.Optional[Dict] = None):
+                     create_plot_kwargs: Optional[Dict] = None,
+                     plot_gate_kwargs: Optional[Dict] = None):
         """
         Preview the results of some given Gate
 
@@ -254,7 +254,7 @@ class GatingStrategy(mongoengine.Document):
     def add_hyperparameter_grid(self,
                                 gate_name: str,
                                 params: dict,
-                                cost: typing.Optional[str] = None):
+                                cost: Optional[str] = None):
         """
         Add a hyperparameter grid to search when applying the given gate to new data.
         This hyperparameter grid should correspond to valid hyperparameters for the
@@ -318,7 +318,7 @@ class GatingStrategy(mongoengine.Document):
 
     def add_normalisation(self,
                           gate_name: str,
-                          reference: typing.Union[FileGroup, None] = None,
+                          reference: Union[FileGroup, None] = None,
                           **kwargs):
         """
         Add landmark registration for normalisation to a Gate. In short, if normalisation is added
@@ -488,15 +488,15 @@ class GatingStrategy(mongoengine.Document):
                 for pop in gate.populations], parent_data
 
     def apply_gate(self,
-                   gate: typing.Union[str, Gate, ThresholdGate, BooleanGate, PolygonGate, EllipseGate],
+                   gate: Union[str, Gate, ThresholdGate, BooleanGate, PolygonGate, EllipseGate],
                    plot: bool = True,
                    verbose: bool = True,
                    add_to_strategy: bool = True,
-                   create_plot_kwargs: typing.Optional[Dict] = None,
-                   plot_gate_kwargs: typing.Optional[Dict] = None,
+                   create_plot_kwargs: Optional[Dict] = None,
+                   plot_gate_kwargs: Optional[Dict] = None,
                    hyperparam_search: bool = True,
                    fda_norm: bool = False,
-                   overwrite_method_kwargs: typing.Optional[Dict] = None):
+                   overwrite_method_kwargs: Optional[Dict] = None):
         """
         Apply a gate to the associated FileGroup. The gate must be previously defined;
         children associated and labeled. Either a Gate object can be provided or the name
@@ -659,8 +659,8 @@ class GatingStrategy(mongoengine.Document):
                             experiment: Experiment,
                             fda_norm: bool = False,
                             hyperparam_search: bool = False,
-                            plots_path: typing.Optional[str] = None,
-                            sample_ids: typing.Union[list, None] = None,
+                            plots_path: Optional[str] = None,
+                            sample_ids: Union[list, None] = None,
                             verbose: bool = True):
         """
         Apply all the gates associated to this GatingStrategy to each FileGroup of
@@ -759,7 +759,7 @@ class GatingStrategy(mongoengine.Document):
         self.gates = [g for g in self.gates if g.gate_name != gate_name]
 
     def delete_populations(self,
-                           populations: typing.Union[str, list]):
+                           populations: Union[str, list]):
         """
         Delete given populations. Populations downstream from delete population(s) will
         also be removed.
@@ -778,7 +778,7 @@ class GatingStrategy(mongoengine.Document):
 
     def plot_gate(self,
                   gate: str,
-                  create_plot_kwargs: typing.Optional[Dict] = None,
+                  create_plot_kwargs: Optional[Dict] = None,
                   **kwargs):
         """
         Plot a gate. Must provide the name of a Gate currently associated to this GatingStrategy.
@@ -821,8 +821,8 @@ class GatingStrategy(mongoengine.Document):
                       parent: str,
                       overlay: list,
                       x: str,
-                      y: typing.Optional[str] = None,
-                      create_plot_kwargs: typing.Optional[Dict] = None,
+                      y: Optional[str] = None,
+                      create_plot_kwargs: Optional[Dict] = None,
                       **backgate_kwargs):
         """
         Given some population as the backdrop (parent) and a list of one or more
@@ -877,10 +877,10 @@ class GatingStrategy(mongoengine.Document):
     def plot_population(self,
                         population: str,
                         x: str,
-                        y: typing.Optional[str] = None,
-                        transform_x: typing.Optional[str] = "logicle",
-                        transform_y: typing.Optional[str] = "logicle",
-                        create_plot_kwargs: typing.Optional[Dict] = None,
+                        y: Optional[str] = None,
+                        transform_x: Optional[str] = "logicle",
+                        transform_y: Optional[str] = "logicle",
+                        create_plot_kwargs: Optional[Dict] = None,
                         **plot_kwargs):
         """
         Plot an existing population in the associate FileGroup.

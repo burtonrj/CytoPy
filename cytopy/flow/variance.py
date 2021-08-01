@@ -41,7 +41,7 @@ from sklearn.neighbors import KernelDensity
 from scipy.cluster import hierarchy
 from KDEpy import FFTKDE
 from warnings import warn
-from typing import List, Dict, Union, Tuple
+from typing import *
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import seaborn as sns
