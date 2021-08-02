@@ -30,12 +30,11 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from ..data.experiment import Experiment, FileGroup
+from ..data.experiment import Experiment, single_cell_dataframe
 from ..feedback import progress_bar, vprint
 from ..flow import transform as transform_module
 from .dim_reduction import DimensionReduction
-from .sampling import density_dependent_downsampling, faithful_downsampling, uniform_downsampling
-from .transform import apply_transform, Transformer
+from .transform import TRANSFORMERS
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
 from scipy.cluster import hierarchy
@@ -64,65 +63,6 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 logger = logging.getLogger("Variance")
-
-
-def load_and_sample(experiment: Experiment,
-                    population: str,
-                    sample_size: Union[int, float],
-                    sample_ids: Union[List[str], None] = None,
-                    sampling_method: Optional[str] = "uniform",
-                    transform: Optional[str] = "logicle",
-                    features: Union[List[str], None] = None,
-                    transform_kwargs: Union[Dict[str, str], None] = None,
-                    **kwargs) -> (pd.DataFrame, Transformer):
-    """
-    Load sample data from experiment and return a Pandas DataFrame. Individual samples
-    identified by "sample_id" column
-
-    Parameters
-    ----------
-    experiment: Experiment
-    sample_ids: list
-    sample_size: int or float (optional)
-        Total number of events to sample from each file
-    sampling_method: str
-    transform: str (optional)
-    features: list
-    transform_kwargs: dict (optional)
-    population: str
-    kwargs:
-        Additional keyword arguments for sampling method
-
-    Returns
-    -------
-    Pandas.DataFrame and Transformer
-
-    Raises
-    ------
-    ValueError
-        No feature provided yet transform requested
-    """
-    logger.info(f"Sampling {experiment.experiment_id} for Population {population}")
-    transform_kwargs = transform_kwargs or {}
-    sample_ids = sample_ids or experiment.list_samples()
-    files = [experiment.get_sample(s) for s in sample_ids]
-    data = list()
-    for f in progress_bar(files, verbose=True):
-        df = _sample_filegroup(filegroup=f,
-                               sample_size=sample_size,
-                               sampling_method=sampling_method,
-                               population=population,
-                               **kwargs)
-        df["sample_id"] = f.primary_id
-        data.append(df)
-    data = pd.concat(data)
-    if transform is not None:
-        if features is None:
-            raise ValueError("Must provide features for transform")
-        data, transformer = apply_transform(data=data, features=features, method=transform,
-                                            return_transformer=True, **transform_kwargs)
-        return data, transformer
-    return data, None
 
 
 def bw_optimisation(data: pd.DataFrame,
@@ -206,40 +146,6 @@ def calculate_ref_sample(data: pd.DataFrame,
             avg = np.mean(norms, axis=1)
             ref_ind = np.argmin(avg)
     return sample_ids[int(ref_ind)]
-
-
-def _sample_filegroup(filegroup: FileGroup,
-                      population: str,
-                      sample_size: Union[int, float] = 5000,
-                      sampling_method: Optional[str] = None,
-                      **kwargs) -> pd.DataFrame:
-    """
-    Given a FileGroup and the name of the desired population, load the
-    population with transformations applied and downsample if necessary.
-
-    Parameters
-    ----------
-    filegroup: FileGroup
-    population: str
-    sample_size: int or float (optional)
-    sampling_method: str (optional)
-    kwargs:
-        Down-sampling keyword arguments
-
-    Returns
-    -------
-    Pandas.DataFrame
-    """
-    data = filegroup.load_population_df(population=population,
-                                        transform=None)
-    if sampling_method == "uniform":
-        return uniform_downsampling(data=data, sample_size=sample_size)
-    if sampling_method == "density":
-        return density_dependent_downsampling(data=data, sample_size=sample_size, **kwargs)
-    if sampling_method == "faithful":
-        return pd.DataFrame(faithful_downsampling(data=data.values, **kwargs),
-                            columns=data.columns)
-    return data
 
 
 def marker_variance(data: pd.DataFrame,
@@ -465,7 +371,7 @@ class Harmony:
         How to scale data prior to batch correction. For valid methods see cytopy.flow.transform.Scaler
     scale_kwargs: dict, optional
         Additional keyword arguments passed to Scaler
-    sample_kwargs: dict, optional
+    sampling_kwargs: dict, optional
         Additional keyword arguments to pass to sampling method
 
     Attributes
@@ -482,30 +388,17 @@ class Harmony:
     scaler: Scaler
         Scaler object; used to inverse the scale when saving data back to the database after correction
     """
-
     def __init__(self,
-                 experiment: Experiment,
-                 population: str,
+                 data: pd.DataFrame,
                  features: List[str],
-                 sample_size: Union[int, float],
-                 sample_ids: Union[List[str], None] = None,
-                 sampling_method: Union[List[str], None] = "uniform",
-                 transform: str = "logicle",
+                 transform: Optional[str] = "logicle",
                  transform_kwargs: Union[Dict[str, str], None] = None,
                  scale: Optional[str] = "standard",
-                 scale_kwargs: Optional[Dict] = None,
-                 sample_kwargs: Optional[Dict] = None):
+                 scale_kwargs: Optional[Dict] = None):
         logger.info("Preparing Harmony for application to an Experiment")
-        sample_kwargs = sample_kwargs or {}
-        self.data, self.transformer = load_and_sample(experiment=experiment,
-                                                      population=population,
-                                                      sample_size=sample_size,
-                                                      sample_ids=sample_ids,
-                                                      sampling_method=sampling_method,
-                                                      transform=transform,
-                                                      features=features,
-                                                      transform_kwargs=transform_kwargs,
-                                                      **sample_kwargs)
+        transform_kwargs = transform_kwargs or {}
+        self.transformer = None if transform is None else TRANSFORMERS[transform](**transform_kwargs)
+        self.data = data
         self.data = self.data.dropna(axis=1, how="any")
         self.features = [x for x in features if x in self.data.columns]
         self.meta = self.data[["sample_id"]].copy()
@@ -667,6 +560,7 @@ class Harmony:
         assert self.harmony is not None, "Call 'run' first"
         corrected = pd.DataFrame(self.harmony.Z_corr.T, columns=self.features)
         corrected["sample_id"] = self.meta.sample_id.values
+        corrected["original_index"] = self.data["original_index"]
         return corrected
 
     def save(self,

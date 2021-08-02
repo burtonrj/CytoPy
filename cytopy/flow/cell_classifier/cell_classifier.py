@@ -26,11 +26,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from __future__ import annotations
 from ...feedback import progress_bar
-from ...data.experiment import Experiment, FileGroup
+from ...data.experiment import Experiment, FileGroup, single_cell_dataframe
 from ...data.population import Population
-from ...flow.transform import apply_transform, Scaler
+from ...flow.transform import apply_transform, Scaler, TRANSFORMERS, Transformer
+from ...flow.variance import Harmony
 from ...flow import sampling
-from .calibrator import HarmonyCalibrator
 from . import utils
 from sklearn.model_selection import train_test_split, KFold, BaseCrossValidator
 from imblearn.over_sampling import RandomOverSampler
@@ -94,73 +94,36 @@ class ClassifierError(Exception):
         super().__init__(message)
 
 
-class CellClassifier:
-    """
-    Use supervised machine learning to predict the classification of single cell data. This is the base
-    class used by SklearnCellClassifier and KerasCellClassifier. Training data should be provided in the form
-    of a FileGroup with existing Populations. Supports multi-class and multi-label classification; if multi-label
-    classification is chosen, the tree structure of training data is NOT conserved - all resulting populations
-    will have the same parent population.
-
-    Parameters
-    ----------
-    features: list
-        List of channels/markers to use as features in prediction
-    target_populations: list
-        List of populations from training data to predict
-    multi_label: bool (default=False)
-        If True, single cells can belong to more than one population. The tree structure of training data is
-        NOT conserved - all resulting populations will have the same parent population.
-    population_prefix: str (default="CellClassifier_")
-        Prefix applied to populations generated
-
-    Attributes
-    ----------
-    scaler: Scaler
-        Scaler object
-    transformer: Transformer
-        Transformer object
-    class_weights: dict
-        Sample class weights; key is sample index, value is weight. Set by calling compute_class_weights.
-    x: Pandas.DataFrame
-        Training feature space
-    y: numpy.ndarray
-        Target labels
-    features: list
-    target_populations: list
-    """
+class BaseClassifier:
 
     def __init__(self,
-                 features: List[str],
                  target_populations: List[str],
-                 multi_label: bool = False,
-                 population_prefix: str = "CellClassifier_"):
+                 population_prefix: str,
+                 x: Optional[pd.DataFrame],
+                 y: Optional[Union[pd.Series, np.ndarray]],
+                 features: List[str],
+                 transformer: Optional[Transformer] = None,
+                 multi_label: bool = False):
         self.model = None
-        self.features = features
         self.target_populations = target_populations
-        self.multi_label = multi_label
-        self.population_prefix = population_prefix
-        self.x, self.y = None, None
-        self.class_weights = None
-        self.transformer = None
+        self.x = x
+        self.y = y
+        self.features = features
+        self.transformer = transformer
         self.scaler = None
-        self._target = None
-        self._target_data = None
-        self._target_sample = None
-        self._target_root = None
-        self.calibrator = None
+        self.multi_label = multi_label
+        self.class_weights = None
+        self.population_prefix = population_prefix
 
     @check_model_init
     def set_params(self, **kwargs):
         """
         Convenient wrapper function for direct access to set_params method of model.
         If model does not contain 'set_params' method, this function has no effect.
-
         Parameters
         ----------
         kwargs:
             New parameters
-
         Returns
         -------
         self
@@ -172,107 +135,13 @@ class CellClassifier:
             logger.warning("Model does not support 'set_params'.")
         return self
 
-    def load_training_data(self,
-                           reference: FileGroup,
-                           root_population: str) -> CellClassifier:
-        """
-        Load a FileGroup with existing Populations to serve as training data
-
-        Parameters
-        ----------
-        reference: FileGroup
-            FileGroup to use as training data
-        root_population: str
-            Root population from which all target populations inherit
-
-        Returns
-        -------
-        self
-
-        Raises
-        ------
-        AssertionError
-            If FileGroup is invalid for reasons of missing target populations or
-            an invalid hierarchy; populations must be downstream of the chosen
-            root_population
-        """
-        utils.assert_population_labels(ref=reference,
-                                       expected_labels=self.target_populations)
-        utils.check_downstream_populations(ref=reference,
-                                           root_population=root_population,
-                                           population_labels=self.target_populations)
-        if self.multi_label:
-            self.x, self.y = utils.multilabel(ref=reference,
-                                              root_population=root_population,
-                                              population_labels=self.target_populations,
-                                              features=self.features)
-        else:
-            self.x, self.y = utils.singlelabel(ref=reference,
-                                               root_population=root_population,
-                                               population_labels=self.target_populations,
-                                               features=self.features)
-        return self
-
-    @check_data_init
-    def load_target(self,
-                    target: FileGroup,
-                    root_population: str = "root",
-                    sample_size: Optional[Union[int, float]] = 10000,
-                    sampling_method: str = "uniform",
-                    sampling_kwargs: Optional[Dict] = None):
-        self._target = target
-        self._target_root = root_population
-        self._target_data = self._target.load_population_df(population=root_population,
-                                                            transform=None)[self.features]
-        sampling_kwargs = sampling_kwargs or {}
-        if self.transformer is not None:
-            self._target_data = self.transformer.scale(data=self._target_data, features=self.features)
-        if self.scaler is not None:
-            self._target_data = self.scaler(data=self._target_data, features=self.features)
-        if sample_size is not None:
-            self._target_sample = sampling.sample_dataframe(data=self._target_data,
-                                                            method=sampling_method,
-                                                            sample_size=sample_size,
-                                                            **sampling_kwargs)
-        return self
-
-    @check_data_init
-    @check_target_init
-    def calibrate(self, **kwargs):
-        ref = self.x.copy()
-        if self._target_sample is None:
-            logger.warning("It is recommended that you down-sample data for calibration. If the data is large it "
-                           "might take a long time to compute or exceed memory capacity.")
-            target = self._target_data.copy()
-        else:
-            target = self._target_sample.copy()
-        self.calibrator = HarmonyCalibrator(x=ref, y=target)
-        self.calibrator(**kwargs)
-
-        if self._target_sample is None:
-            self._target_data = self.calibrator.corrected_target
-        else:
-            self._target_sample = self.calibrator.corrected_target
-
-    @check_calibrated
-    def plot_calibration(self,
-                         kind: str,
-                         **kwargs):
-        if kind == "overlay_plot":
-            self.calibrator.overlay_plot(**kwargs)
-        elif kind == "lisi_distribution":
-            self.calibrator.lisi_distribution(**kwargs)
-        else:
-            raise ClassifierError("Must be either 'overlay_plot' or 'lisi_distribution'")
-
     @check_data_init
     def downsample(self,
                    method: str,
-                   sample_size: Union[int, float],
+                   sample_size: int or float,
                    **kwargs):
         """
         Downsample training data
-
         Parameters
         ----------
         method: str
@@ -282,11 +151,9 @@ class CellClassifier:
             Desired sample size
         kwargs:
             Additional keyword arguments passed to sampling method
-
         Returns
         -------
         self
-
         Raises
         ------
         ValueError
@@ -294,7 +161,15 @@ class CellClassifier:
         """
         x = self.x.copy()
         x["y"] = self.y
-        x = sampling.sample_dataframe(data=x, sample_size=sample_size, method=method, **kwargs)
+        if method == "uniform":
+            x = sampling.uniform_downsampling(data=x, sample_size=sample_size, **kwargs)
+        elif method == "density":
+            x = sampling.density_dependent_downsampling(data=x, sample_size=sample_size, **kwargs)
+        elif method == "faithful":
+            x = sampling.faithful_downsampling(data=x, **kwargs)
+        else:
+            valid = ['uniform', 'density', 'faithful']
+            raise ValueError(f"Invalid method, must be one of {valid}")
         self.x, self.y = x[self.features], x["y"].values
         return self
 
@@ -304,7 +179,6 @@ class CellClassifier:
                   **kwargs):
         """
         Transform training data. Transformer used will be saved to the attribute 'transformer'
-
         Parameters
         ----------
         method: str
@@ -312,7 +186,6 @@ class CellClassifier:
             See cytopy.flow.transform for more details.
         kwargs:
             Additional keyword arguments passed to Transformer.
-
         Returns
         -------
         self
@@ -329,12 +202,10 @@ class CellClassifier:
         """
         Performs random oversampling using the RandomOverSampler class of Imbalance learn.
         Helpful for combating imbalanced data.
-
         Parameters
         ----------
         kwargs
             Additional keyword arguments passed to RandomOverSampler
-
         Returns
         -------
         self
@@ -350,13 +221,11 @@ class CellClassifier:
         """
         Scale training data. Many Scikit-Learn scalers supported, see cytopy.flow.transform.Scaler
         for details. Scaler object is saved to the scaler attribute.
-
         Parameters
         ----------
         method: str (default='standard')
         kwargs:
             Additional keyword arguments passed to Scaler
-
         Returns
         -------
         self
@@ -370,11 +239,9 @@ class CellClassifier:
         """
         Computes class weights per sample; saved to class_weights attribute and passed to
         fit 'sample_weight' parameter.
-
         Returns
         -------
         self
-
         Raises
         ------
         AssertionError
@@ -395,13 +262,11 @@ class CellClassifier:
              **kwargs):
         """
         Internal function for calling fit. Handles class weights.
-
         Parameters
         ----------
         x: Pandas.DataFrame
         y: numpy.ndarray
         kwargs
-
         Returns
         -------
         self
@@ -413,17 +278,34 @@ class CellClassifier:
         return self
 
     @check_model_init
+    def _predict(self, x: pd.DataFrame, threshold: float = 0.5):
+        """
+        Internal function for calling predict.
+        Parameters
+        ----------
+        x: Pandas.DataFrame
+        threshold: float (default=0.5)
+        Returns
+        -------
+        numpy.ndarray, numpy.ndarray or None
+            Predictions, probabilities (if supported)
+        """
+        predict_proba = getattr(self.model, "predict_proba", None)
+        if callable(predict_proba):
+            return self.model.predict(x), self.model.predict_proba(x)
+        return self.model.predict(x), None
+
+    @check_model_init
     @check_data_init
     def fit_train_test_split(self,
                              test_frac: float = 0.3,
-                             metrics: Optional[List[str]] = None,
+                             metrics: list or None = None,
                              return_predictions: bool = True,
-                             train_test_split_kwargs: Optional[Dict] = None,
+                             train_test_split_kwargs: dict or None = None,
                              **fit_kwargs):
         """
         Fits model to training data and performs validation on holdout data. Training and testing
         performed returned as dictionaries.
-
         Parameters
         ----------
         test_frac: float (default=0.3)
@@ -440,13 +322,11 @@ class CellClassifier:
             Additional keyword arguments passed to train_test_split function
         fit_kwargs:
             Additional keyword arguments passed to fit call
-
         Returns
         -------
         dict, dict or None
             Training/testing performance (keys are 'train' and 'test'),
             training/testing predictions (keys are 'train' and 'test')
-
         Raises
         ------
         AssertionError
@@ -478,14 +358,13 @@ class CellClassifier:
     @check_model_init
     @check_data_init
     def fit_cv(self,
-               cross_validator: Optional[BaseCrossValidator] = None,
-               metrics: Optional[List[str]] = None,
-               split_kwargs: Optional[Dict] = None,
+               cross_validator: BaseCrossValidator or None = None,
+               metrics: list or None = None,
+               split_kwargs: dict or None = None,
                verbose: bool = True,
                **fit_kwargs):
         """
         Fit model with cross-validation.
-
         Parameters
         ----------
         cross_validator: BaseCrossValidator (default=KFold)
@@ -503,7 +382,6 @@ class CellClassifier:
             Whether to print a progress bar
         fit_kwargs:
             Additional keyword arguments passed to fit call
-
         Returns
         -------
         List, List
@@ -537,7 +415,6 @@ class CellClassifier:
     def fit(self, **kwargs):
         """
         Call fit on model using training data
-
         Parameters
         ----------
         kwargs:
@@ -549,6 +426,91 @@ class CellClassifier:
         self._fit(x=self.x, y=self.y, **kwargs)
         return self
 
+
+class CellClassifier(BaseClassifier):
+    """
+    Use supervised machine learning to predict the classification of single cell data. This is the base
+    class used by SklearnCellClassifier and KerasCellClassifier. Training data should be provided in the form
+    of a FileGroup with existing Populations. Supports multi-class and multi-label classification; if multi-label
+    classification is chosen, the tree structure of training data is NOT conserved - all resulting populations
+    will have the same parent population.
+    Parameters
+    ----------
+    features: list
+        List of channels/markers to use as features in prediction
+    target_populations: list
+        List of populations from training data to predict
+    multi_label: bool (default=False)
+        If True, single cells can belong to more than one population. The tree structure of training data is
+        NOT conserved - all resulting populations will have the same parent population.
+    population_prefix: str (default="CellClassifier_")
+        Prefix applied to populations generated
+    Attributes
+    ----------
+    scaler: Scaler
+        Scaler object
+    transformer: Transformer
+        Transformer object
+    class_weights: dict
+        Sample class weights; key is sample index, value is weight. Set by calling compute_class_weights.
+    x: Pandas.DataFrame
+        Training feature space
+    y: numpy.ndarray
+        Target labels
+    features: list
+    target_populations: list
+    """
+    def __init__(self,
+                 features: list,
+                 target_populations: list,
+                 multi_label: bool = False,
+                 population_prefix: str = "CellClassifier_"):
+        super().__init__(x=None,
+                         y=None,
+                         features=features,
+                         transformer=None,
+                         multi_label=multi_label,
+                         population_prefix=population_prefix,
+                         target_populations=target_populations)
+
+    def load_training_data(self,
+                           experiment: Experiment,
+                           root_population: str,
+                           reference: str):
+        """
+        Load a FileGroup with existing Populations to serve as training data
+        Parameters
+        ----------
+        reference: str
+            Name of the FileGroup to use as training data
+        Returns
+        -------
+        self
+        Raises
+        ------
+        AssertionError
+            If FileGroup is invalid for reasons of missing target populations or
+            an invalid hierarchy; populations must be downstream of the chosen
+            root_population
+        """
+        ref = experiment.get_sample(reference)
+        utils.assert_population_labels(ref=ref,
+                                       expected_labels=self.target_populations)
+        utils.check_downstream_populations(ref=ref,
+                                           root_population=root_population,
+                                           population_labels=self.target_populations)
+        if self.multi_label:
+            self.x, self.y = utils.multilabel(ref=ref,
+                                              root_population=root_population,
+                                              population_labels=self.target_populations,
+                                              features=self.features)
+        else:
+            self.x, self.y = utils.singlelabel(ref=ref,
+                                               root_population=root_population,
+                                               population_labels=self.target_populations,
+                                               features=self.features)
+        return self
+
     def _add_unclassified_population(self,
                                      x: pd.DataFrame,
                                      y_pred: np.ndarray,
@@ -556,14 +518,12 @@ class CellClassifier:
                                      target: FileGroup):
         """
         Add a population for events without a classification (not a member of any target population)
-
         Parameters
         ----------
         x: Pandas.DataFrame
         y_pred: numpy.ndarray
         root_population: str
         target: FileGroup
-
         Returns
         -------
         None
@@ -576,98 +536,57 @@ class CellClassifier:
                                          parent=root_population,
                                          warnings=["supervised_classification"]))
 
-    def _predict(self, x: pd.DataFrame, threshold: float = 0.5):
-        """
-        Internal function for calling predict.
-
-        Parameters
-        ----------
-        x: Pandas.DataFrame
-        threshold: float (default=0.5)
-
-        Returns
-        -------
-        numpy.ndarray, numpy.ndarray or None
-            Predictions, probabilities (if supported)
-        """
-        predict_proba = getattr(self.model, "predict_proba", None)
-        if callable(predict_proba):
-            return self.model.predict(x), self.model.predict_proba(x)
-        return self.model.predict(x), None
-
     @check_model_init
-    @check_target_init
     def predict(self,
+                experiment: Experiment,
+                sample_id: str,
+                root_population: str,
                 threshold: float = 0.5,
                 return_predictions: bool = True) -> Union[FileGroup, Dict] or Union[FileGroup, None]:
         """
         Calls predict on the root population of some unclassified FileGroup, generating
         new populations that will be immediate children of the chosen root population.
         Model must be trained prior to calling predict.
-
         Parameters
         ----------
         threshold: float (default=0.5)
             Only relevant if multi_label is True. Labels will be assigned if probability is greater
-            than or equal to this threshold.
+            than or eaual to this threshold.
         return_predictions: bool (default=True)
             Return predicted labels and scores
-
         Returns
         -------
-        (FileGroup, Dict) or (FileGroup, None)
-            Modified FileGroup with new populations and predictions as dictionary with keys 'y_pred' (predicted
-            labels) and 'y_score' (probabilities) if 'return_predictions' is True
+        FileGroup, dict or None
+            Modified FileGroup with new populations, predictions as dictionary with keys 'y_pred' (predicted
+            labels) and 'y_score' (probabilities)
         """
-        y_pred, y_score = self._predict(x=self._target_sample[self.features], threshold=threshold)
-
-        if self._target_sample is not None:
-            y_pred, y_score = self._map_predictions_to_target(y_pred=y_pred)
-        else:
-            y_pred, y_score = y_pred, y_score
-
+        target = experiment.get_sample(sample_id)
+        x = target.load_population_df(population=root_population,
+                                      transform=None)[self.features]
+        if self.transformer is not None:
+            x = self.transformer.scale(data=x, features=self.features)
+        if self.scaler is not None:
+            x = self.scaler(data=x, features=self.features)
+        y_pred, y_score = self._predict(x=x, threshold=threshold)
         if not self.multi_label:
-            self._add_unclassified_population(x=self._target_data,
+            self._add_unclassified_population(x=x,
                                               y_pred=y_pred,
-                                              root_population=self._target_root,
-                                              target=self._target)
+                                              root_population=root_population,
+                                              target=target)
         for i, pop in enumerate(self.target_populations):
             if self.multi_label:
-                idx = self._target_data.index.values[np.where(y_pred[:, i + 1] == 1)[0]]
+                idx = x.index.values[np.where(y_pred[:, i + 1] == 1)[0]]
             else:
-                idx = self._target_data.index.values[np.where(y_pred == i + 1)[0]]
-            self._target.add_population(Population(population_name=f"{self.population_prefix}_{pop}",
-                                                   source="classifier",
-                                                   index=idx,
-                                                   n=len(idx),
-                                                   parent=self._target_root,
-                                                   warnings=["supervised_classification"]))
+                idx = x.index.values[np.where(y_pred == i + 1)[0]]
+            target.add_population(Population(population_name=f"{self.population_prefix}_{pop}",
+                                             source="classifier",
+                                             index=idx,
+                                             n=len(idx),
+                                             parent=root_population,
+                                             warnings=["supervised_classification"]))
         if return_predictions:
-            return self._target, {"y_pred": y_pred, "y_score": y_score}
-        return self._target, None
-
-    def _get_import_features(self):
-        try:
-            selector = SelectFromModel(estimator=self.model)
-            selector.fit(self.x, self.y)
-            return np.array(self.features)[selector.get_support()]
-        except ValueError:
-            return self.features
-
-    def _map_predictions_to_target(self,
-                                   y_pred: np.ndarray) -> (pd.DataFrame, np.ndarray, np.ndarray):
-        original_space = self._target_data.loc[self._target_sample["original_index"].values]
-        features = self.features if len(self.features) < 10 else self._get_import_features()
-        clf = GridSearchCV(estimator=KNeighborsClassifier(),
-                           param_grid={"k": [int(original_space.shape[0] * 0.01),
-                                             int(original_space.shape[0] * 0.05),
-                                             int(original_space.shape[0] * 0.1)]})
-        clf.fit(original_space[features], y_pred)
-        k = clf.best_params_["k"]
-        meta_learner = KNeighborsClassifier(k=k)
-        meta_learner.fit(original_space[features], y_pred)
-        return meta_learner.predict(self._target_sample[features]),\
-               meta_learner.predict_proba(self._target_sample[features])
+            return target, {"y_pred": y_pred, "y_score": y_score}
+        return target, None
 
     def load_validation(self,
                         experiment: Experiment,
@@ -678,7 +597,6 @@ class CellClassifier:
         target populations e.g. identified by some other method (must share the same name as
         the target populations!). This will generate data from the FileGroup that can be used
         to validate the model.
-
         Parameters
         ----------
         experiment: Experiment
@@ -686,12 +604,10 @@ class CellClassifier:
             Name of the FileGroup to load as validation data
         root_population: str
             Name of the root population from which the target populations descend
-
         Returns
         -------
         Pandas.DataFrame, numpy.ndarray
             Feature space, labels
-
         Raises
         ------
         AssertionError
@@ -730,7 +646,6 @@ class CellClassifier:
         the target populations!). Data and labels will be generated (see load_validation) and
         then the model used to predict the labels of the validation data. The true labels
         will then be compared and validation performance reported.
-
         Parameters
         ----------
         experiment: Experiment
@@ -749,13 +664,11 @@ class CellClassifier:
             (see https://scikit-learn.org/stable/modules/model_evaluation.html).
             Alternatively, list can contain callable functions with the key value in train/test
             dictionary being 'custom_metric_{index}'
-
         Returns
         -------
         dict, dict or None
             Validation performance, predictions as dictionary with keys 'y_pred' (predicted
             labels) and 'y_score' (probabilities)
-
         Raises
         ------
         AssertionError
@@ -773,3 +686,104 @@ class CellClassifier:
         if return_predictions:
             return results, {"y_pred": y_pred, "y_score": y_score}
         return results, None
+
+
+class CalibratedCellClassifier(BaseClassifier):
+    def __init__(self,
+                 experiment: Experiment,
+                 training_id: str,
+                 features: List[str],
+                 root_population: str,
+                 target_populations: List[str],
+                 multi_label: bool = False,
+                 population_prefix: str = "CalibratedCellClassifier_",
+                 sample_size: int = 10000,
+                 sampling_method: str = "uniform",
+                 sampling_level: str = "file",
+                 sampling_kwargs: Optional[Dict] = None,
+                 transform: Optional[Union[str, Dict]] = "logicle",
+                 transform_kwargs: Optional[Dict] = None,
+                 targets: Optional[List[str]] = None,
+                 **harmony_kwargs):
+        transform_kwargs = transform_kwargs or {}
+        super().__init__(x=None,
+                         y=None,
+                         features=features,
+                         transformer=None if transform is None else TRANSFORMERS[transform](**transform_kwargs),
+                         multi_label=multi_label,
+                         population_prefix=population_prefix,
+                         target_populations=target_populations)
+        if not experiment.sample_exists(sample_id=training_id):
+            raise ValueError("Invalid training ID, does not exist for given experiment.")
+        utils.assert_population_labels(experiment.get_sample(training_id),
+                                       expected_labels=target_populations)
+        utils.check_downstream_populations(ref=experiment.get_sample(training_id),
+                                           root_population=root_population,
+                                           population_labels=target_populations)
+        sample_ids = targets + [training_id] if targets is not None else None
+        self.experiment = experiment
+        self.root_population = root_population
+        self.training_id = training_id
+        self.data = single_cell_dataframe(experiment=experiment,
+                                          populations=root_population,
+                                          sample_size=sample_size,
+                                          sampling_kwargs=sampling_kwargs,
+                                          sampling_level=sampling_level,
+                                          sampling_method=sampling_method,
+                                          transform=transform,
+                                          transform_kwargs=transform_kwargs,
+                                          sample_ids=sample_ids)
+        self.calibrator = Harmony(data=self.data,
+                                  features=features,
+                                  transform=transform,
+                                  transform_kwargs=transform_kwargs,
+                                  **harmony_kwargs)
+        self.targets = None
+
+    def calibrate(self):
+        self.calibrator.run(var_use="sample_id")
+        calibrated_data = self.calibrator.batch_corrected()
+        calibrated_training_data = calibrated_data[calibrated_data.sample_id == self.training_id]
+        self._setup_training_data(calibrated_training_data=calibrated_training_data)
+        self.targets = calibrated_data[calibrated_data.sample_id != self.training_id]
+
+    def _setup_training_data(self, calibrated_training_data: pd.DataFrame):
+        reference = self.experiment.get_sample(sample_id=self.training_id)
+        if self.multi_label:
+            self.x, self.y = utils.multilabel(ref=reference,
+                                              root_population=self.root_population,
+                                              population_labels=self.target_populations,
+                                              features=self.features,
+                                              idx=calibrated_training_data["original_index"].values)
+        else:
+            self.x, self.y = utils.singlelabel(ref=reference,
+                                               root_population=self.root_population,
+                                               population_labels=self.target_populations,
+                                               features=self.features,
+                                               idx=calibrated_training_data["original_index"].values)
+
+    def _get_import_features(self):
+        try:
+            selector = SelectFromModel(estimator=self.model)
+            selector.fit(self.x, self.y)
+            return np.array(self.features)[selector.get_support()]
+        except ValueError:
+            return self.features
+
+    def _map_predictions_to_target(self,
+                                   y_pred: np.ndarray) -> (pd.DataFrame, np.ndarray, np.ndarray):
+        original_space = self._target_data.loc[self._target_sample["original_index"].values]
+        features = self.features if len(self.features) < 10 else self._get_import_features()
+        clf = GridSearchCV(estimator=KNeighborsClassifier(),
+                           param_grid={"k": [int(original_space.shape[0] * 0.01),
+                                             int(original_space.shape[0] * 0.05),
+                                             int(original_space.shape[0] * 0.1)]})
+        clf.fit(original_space[features], y_pred)
+        k = clf.best_params_["k"]
+        meta_learner = KNeighborsClassifier(k=k)
+        meta_learner.fit(original_space[features], y_pred)
+        return meta_learner.predict(self._target_sample[features]), \
+               meta_learner.predict_proba(self._target_sample[features])
+
+    def predict(self) -> FileGroup:
+        pass

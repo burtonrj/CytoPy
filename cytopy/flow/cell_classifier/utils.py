@@ -1,5 +1,6 @@
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn import metrics as skmetrics
+from typing import *
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -195,7 +196,8 @@ def check_downstream_populations(ref,
 def multilabel(ref,
                root_population: str,
                population_labels: list,
-               features: list) -> (pd.DataFrame, pd.DataFrame):
+               features: list,
+               idx: Optional[Iterable[int]] = None) -> (pd.DataFrame, pd.DataFrame):
     """
     Load the root population DataFrame from the reference FileGroup (assumed to be the first
     population in 'population_labels'). Then iterate over the remaining population creating a
@@ -215,6 +217,8 @@ def multilabel(ref,
     """
     root = ref.load_population_df(population=root_population,
                                   transform=None)
+    if idx is not None:
+        root = root.loc[idx]
     for pop in population_labels:
         root[pop] = 0
         root.loc[ref.get_population(pop).index, pop] = 1
@@ -224,7 +228,8 @@ def multilabel(ref,
 def singlelabel(ref,
                 root_population: str,
                 population_labels: list,
-                features: list) -> (pd.DataFrame, np.ndarray):
+                features: list,
+                idx: Optional[Iterable[int]] = None) -> (pd.DataFrame, np.ndarray):
     """
     Load the root population DataFrame from the reference FileGroup (assumed to be the first
     population in 'population_labels'). Then iterate over the remaining population creating a
@@ -245,6 +250,8 @@ def singlelabel(ref,
     """
     root = ref.load_population_df(population=root_population,
                                   transform=None)
+    if idx is not None:
+        root = root.loc[idx]
     root["label"] = 0
     for i, pop in enumerate(population_labels):
         pop_idx = ref.get_population(population_name=pop).index
