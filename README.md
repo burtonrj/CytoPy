@@ -80,3 +80,5 @@ Version 3 is cooking! Including:
 * Caching of transformations
 * Logging and improved documentation
 * Now in black!
+
+Coming soon. For more info reach out at burtonrj@cardiff.ac.uk
