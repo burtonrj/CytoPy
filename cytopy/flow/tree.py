@@ -40,8 +40,7 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def _add_leaf(tree: Dict[str, anytree.Node],
-              population: Population):
+def _add_leaf(tree: Dict[str, anytree.Node], population: Population):
     """
     Add a new 'leaf' (node) to the population tree (represented by a dictionary of
     anytree Node objects).
@@ -60,13 +59,13 @@ def _add_leaf(tree: Dict[str, anytree.Node],
 
     if population.parent not in tree.keys():
         return None
-    tree[population.population_name] = anytree.Node(name=population.population_name,
-                                                    parent=tree[population.parent])
+    tree[population.population_name] = anytree.Node(
+        name=population.population_name, parent=tree[population.parent]
+    )
     return tree
 
 
-def _grow_tree(tree: Dict[str, anytree.Node],
-               database_populations: List[Population]):
+def _grow_tree(tree: Dict[str, anytree.Node], database_populations: List[Population]):
     """
     Given a list of Population objects, grow the 'tree' (represented by a dictionary of
     anytree Node objects) according to the 'parent' attribute of each population.
@@ -90,8 +89,11 @@ def _grow_tree(tree: Dict[str, anytree.Node],
         branch = _add_leaf(tree, database_populations[i])
         if branch is not None:
             tree = branch
-            database_populations = [p for p in database_populations
-                                    if p.population_name != database_populations[i].population_name]
+            database_populations = [
+                p
+                for p in database_populations
+                if p.population_name != database_populations[i].population_name
+            ]
         else:
             i = i + 1
     return tree
@@ -120,6 +122,5 @@ def construct_tree(populations: List[Population]) -> Dict[str, anytree.Node]:
     err = "Invalid FileGroup, must contain 'root' population"
     assert "root" in [p.population_name for p in populations], err
     tree = {"root": anytree.Node(name="root", parent=None)}
-    database_populations = [p for p in populations if p.population_name != 'root']
+    database_populations = [p for p in populations if p.population_name != "root"]
     return _grow_tree(tree=tree, database_populations=database_populations)
-

@@ -57,13 +57,11 @@ class Subject(mongoengine.DynamicDocument):
     notes: str
         Additional notes
     """
+
     subject_id = mongoengine.StringField(required=True, unique=True)
     notes = mongoengine.StringField(required=False)
 
-    meta = {
-        'db_alias': 'core',
-        'collection': 'subjects'
-    }
+    meta = {"db_alias": "core", "collection": "subjects"}
 
     @property
     def fields(self) -> List[str]:
@@ -71,7 +69,9 @@ class Subject(mongoengine.DynamicDocument):
 
     @fields.setter
     def fields(self, _):
-        raise ValueError("Fields is read only, access individual fields to edit values.")
+        raise ValueError(
+            "Fields is read only, access individual fields to edit values."
+        )
 
     def to_dict(self, *args, **kwargs) -> Dict:
         return json.loads(self.to_json(*args, **kwargs))
@@ -85,11 +85,11 @@ class Subject(mongoengine.DynamicDocument):
         except KeyError:
             logger.error(f"{field} is not a recognised field")
         except ValueError:
-            return (pd.DataFrame(self.to_dict()[field],
-                                 index=["value"],
-                                 **kwargs).T
-                    .reset_index()
-                    .rename({"index": field}, axis=1))
+            return (
+                pd.DataFrame(self.to_dict()[field], index=["value"], **kwargs)
+                .T.reset_index()
+                .rename({"index": field}, axis=1)
+            )
 
 
 def common_fields(subjects: List[Subject]) -> Set:

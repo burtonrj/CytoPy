@@ -92,12 +92,15 @@ class KerasCellClassifier(CellClassifier):
     features: list
     target_populations: list
     """
-    def __init__(self,
-                 model: Sequential or None = None,
-                 optimizer: str or None = None,
-                 loss: str or None = None,
-                 metrics: list or None = None,
-                 **kwargs):
+
+    def __init__(
+        self,
+        model: Sequential or None = None,
+        optimizer: str or None = None,
+        loss: str or None = None,
+        metrics: list or None = None,
+        **kwargs
+    ):
         self.optimizer = optimizer
         self.loss = loss
         self.metrics = metrics
@@ -105,15 +108,19 @@ class KerasCellClassifier(CellClassifier):
             self.model = model
         else:
             if any([x is None for x in [optimizer, loss, metrics]]):
-                raise ValueError("If model is not provided, must provide optimizer, loss and metrics, and "
-                                 "call 'build_model' prior to fit")
+                raise ValueError(
+                    "If model is not provided, must provide optimizer, loss and metrics, and "
+                    "call 'build_model' prior to fit"
+                )
         super().__init__(**kwargs)
 
-    def build_model(self,
-                    layers: list,
-                    layer_params: list,
-                    input_shape: tuple or None = None,
-                    **compile_kwargs):
+    def build_model(
+        self,
+        layers: list,
+        layer_params: list,
+        input_shape: tuple or None = None,
+        **compile_kwargs
+    ):
         """
         If Sequential model is not constructed and provided at object construction, this method
         can be used to specify a sequential model to be built.
@@ -137,19 +144,19 @@ class KerasCellClassifier(CellClassifier):
         if self.model is not None:
             raise ValueError("Model already defined.")
         input_shape = input_shape or (len(self.features),)
-        self.model = build_keras_model(layers=layers,
-                                       layer_params=layer_params,
-                                       optimizer=self.optimizer,
-                                       loss=self.loss,
-                                       metrics=self.metrics,
-                                       input_shape=input_shape,
-                                       **compile_kwargs)
+        self.model = build_keras_model(
+            layers=layers,
+            layer_params=layer_params,
+            optimizer=self.optimizer,
+            loss=self.loss,
+            metrics=self.metrics,
+            input_shape=input_shape,
+            **compile_kwargs
+        )
         return self
 
     @check_model_init
-    def _predict(self,
-                 x: pd.DataFrame,
-                 threshold: float = 0.5):
+    def _predict(self, x: pd.DataFrame, threshold: float = 0.5):
         """
         Overrides parent _predict method to facilitate Keras predict methods. If multi_class is True,
         then threshold is used to assign labels using the predicted probabilities; positive association
@@ -174,13 +181,15 @@ class KerasCellClassifier(CellClassifier):
             y_pred = np.argmax(self.model.predict(x), axis=-1)
         return y_pred, y_score
 
-    def _fit(self,
-             x: pd.DataFrame,
-             y: np.ndarray,
-             epochs: int = 100,
-             validation_x: pd.DataFrame or None = None,
-             validation_y: np.ndarray or None = None,
-             **kwargs):
+    def _fit(
+        self,
+        x: pd.DataFrame,
+        y: np.ndarray,
+        epochs: int = 100,
+        validation_x: pd.DataFrame or None = None,
+        validation_y: np.ndarray or None = None,
+        **kwargs
+    ):
         """
         Overwrites the _fit method of CellClassifier to support Keras classifier.
         If a validation feature space and labels are provided, then these are passed
@@ -212,18 +221,27 @@ class KerasCellClassifier(CellClassifier):
             validation_y not provided but validation_x is
         """
         if validation_x is not None:
-            assert validation_y is not None, "validation_y cannot be None if validation_x given"
-            return self.model.fit(x, to_categorical(y), epochs=epochs,
-                                  validation_data=(validation_x, validation_y), **kwargs)
+            assert (
+                validation_y is not None
+            ), "validation_y cannot be None if validation_x given"
+            return self.model.fit(
+                x,
+                to_categorical(y),
+                epochs=epochs,
+                validation_data=(validation_x, validation_y),
+                **kwargs
+            )
         return self.model.fit(x, to_categorical(y), epochs=epochs, **kwargs)
 
     @check_model_init
     @check_data_init
-    def fit(self,
-            validation_frac: float or None = 0.3,
-            train_test_split_kwargs: dict or None = None,
-            epochs: int = 100,
-            **kwargs):
+    def fit(
+        self,
+        validation_frac: float or None = 0.3,
+        train_test_split_kwargs: dict or None = None,
+        epochs: int = 100,
+        **kwargs
+    ):
         """
         Fit the Keras model to the associated training data. If 'validation_frac' is provided,
         then a given proportion of the training data will be set apart and given to
@@ -251,19 +269,27 @@ class KerasCellClassifier(CellClassifier):
         validation_x, validation_y = None, None
         x, y = self.x, self.y
         if validation_frac is not None:
-            x, validation_x, y, validation_y = train_test_split(self.x,
-                                                                self.y,
-                                                                test_size=validation_frac,
-                                                                **train_test_split_kwargs)
-        return self._fit(x=x, y=y, validation_x=validation_x, validation_y=validation_y, epochs=epochs, **kwargs)
+            x, validation_x, y, validation_y = train_test_split(
+                self.x, self.y, test_size=validation_frac, **train_test_split_kwargs
+            )
+        return self._fit(
+            x=x,
+            y=y,
+            validation_x=validation_x,
+            validation_y=validation_y,
+            epochs=epochs,
+            **kwargs
+        )
 
     @check_model_init
-    def plot_learning_curve(self,
-                            history: History or None = None,
-                            ax: Axes or None = None,
-                            figsize: tuple = (10, 10),
-                            plot_kwargs: dict or None = None,
-                            **fit_kwargs):
+    def plot_learning_curve(
+        self,
+        history: History or None = None,
+        ax: Axes or None = None,
+        figsize: tuple = (10, 10),
+        plot_kwargs: dict or None = None,
+        **fit_kwargs
+    ):
         """
         This method will generate a learning curve using the History object generated
         from the fit method from the Keras sequential API.

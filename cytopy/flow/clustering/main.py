@@ -63,7 +63,11 @@ from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from sklearn.cluster import *
 from typing import *
-from sklearn.metrics import calinski_harabasz_score, silhouette_score, davies_bouldin_score
+from sklearn.metrics import (
+    calinski_harabasz_score,
+    silhouette_score,
+    davies_bouldin_score,
+)
 from collections import defaultdict
 import seaborn as sns
 import pandas as pd
@@ -73,7 +77,13 @@ import logging
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Žiga Sajovic", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__credits__ = [
+    "Ross Burton",
+    "Žiga Sajovic",
+    "Simone Cuff",
+    "Andreas Artemiou",
+    "Matthias Eberl",
+]
 __license__ = "MIT"
 __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
@@ -88,18 +98,20 @@ class ClusteringError(Exception):
         super().__init__(message)
 
 
-def clustering_performance(data: pd.DataFrame,
-                           labels: list):
-    for x in ["Clustering performance...",
-              f"Silhouette coefficient: {silhouette_score(data.values, labels, metric='euclidean')}",
-              f"Calinski-Harabasz index: {calinski_harabasz_score(data.values, labels)}",
-              f"Davies-Bouldin index: {davies_bouldin_score(data.values, labels)}"]:
+def clustering_performance(data: pd.DataFrame, labels: list):
+    for x in [
+        "Clustering performance...",
+        f"Silhouette coefficient: {silhouette_score(data.values, labels, metric='euclidean')}",
+        f"Calinski-Harabasz index: {calinski_harabasz_score(data.values, labels)}",
+        f"Davies-Bouldin index: {davies_bouldin_score(data.values, labels)}",
+    ]:
         print(x)
         logger.info(x)
 
 
-def remove_null_features(data: pd.DataFrame,
-                         features: Optional[List[str]] = None) -> list:
+def remove_null_features(
+    data: pd.DataFrame, features: Optional[List[str]] = None
+) -> list:
     """
     Check for null values in the dataframe.
     Returns a list of column names for columns with no missing values.
@@ -115,25 +127,26 @@ def remove_null_features(data: pd.DataFrame,
         List of valid columns
     """
     features = features or data.columns.tolist()
-    null_cols = (data[features]
-                 .isnull()
-                 .sum()
-                 [data[features].isnull().sum() > 0]
-                 .index
-                 .values)
+    null_cols = (
+        data[features].isnull().sum()[data[features].isnull().sum() > 0].index.values
+    )
     if null_cols.size != 0:
-        logger.warning(f'The following columns contain null values and will be excluded from '
-                       f'clustering analysis: {null_cols}')
+        logger.warning(
+            f"The following columns contain null values and will be excluded from "
+            f"clustering analysis: {null_cols}"
+        )
     return [x for x in features if x not in null_cols]
 
 
-def sklearn_clustering(data: pd.DataFrame,
-                       features: list,
-                       verbose: bool,
-                       method: str,
-                       global_clustering: bool = False,
-                       print_performance_metrics: bool = True,
-                       **kwargs):
+def sklearn_clustering(
+    data: pd.DataFrame,
+    features: list,
+    verbose: bool,
+    method: str,
+    global_clustering: bool = False,
+    print_performance_metrics: bool = True,
+    **kwargs,
+):
     """
     Perform high-dimensional clustering of single cell data using
     one of the Scikit-Learn unsupervised methods (from the cluster or mixture
@@ -174,19 +187,27 @@ def sklearn_clustering(data: pd.DataFrame,
     """
     data = data.copy()
     if method not in globals().keys():
-        logger.error("Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN")
-        raise ValueError("Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN")
+        logger.error(
+            "Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN"
+        )
+        raise ValueError(
+            "Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN"
+        )
 
     model = globals()[method](**kwargs)
     if global_clustering:
-        logger.info(f"Performing global clustering with the Scikit-Learn clustering algo {method} "
-                    f"using features {features}")
+        logger.info(
+            f"Performing global clustering with the Scikit-Learn clustering algo {method} "
+            f"using features {features}"
+        )
         data["cluster_label"] = model.fit_predict(data[features])
         if print_performance_metrics:
             clustering_performance(data[features], data["cluster_label"].values)
         return data, None, None
 
-    logger.info(f"Performing clustering with the Scikit-Learn clustering algo {method} using features {features}")
+    logger.info(
+        f"Performing clustering with the Scikit-Learn clustering algo {method} using features {features}"
+    )
     for _id, df in progress_bar(data.groupby("sample_id"), verbose=verbose):
         logger.info(f"========== Clustering {_id} ==========")
         df["cluster_label"] = model.fit_predict(df[features])
@@ -197,11 +218,13 @@ def sklearn_clustering(data: pd.DataFrame,
     return data, None, None
 
 
-def phenograph_clustering(data: pd.DataFrame,
-                          features: list,
-                          global_clustering: bool = False,
-                          print_performance_metrics: bool = True,
-                          **kwargs):
+def phenograph_clustering(
+    data: pd.DataFrame,
+    features: list,
+    global_clustering: bool = False,
+    print_performance_metrics: bool = True,
+    **kwargs,
+):
     """
     Perform high-dimensional clustering of single cell data using the popular
     PhenoGraph algorithm (https://github.com/dpeerlab/PhenoGraph)
@@ -237,7 +260,9 @@ def phenograph_clustering(data: pd.DataFrame,
     data["cluster_label"] = None
 
     if global_clustering:
-        logger.info(f"Performing clustering with the PhenoGraph using features {features}")
+        logger.info(
+            f"Performing clustering with the PhenoGraph using features {features}"
+        )
         communities, graph, q = phenograph.cluster(data[features], **kwargs)
         data["cluster_label"] = communities
         if print_performance_metrics:
@@ -259,8 +284,7 @@ def phenograph_clustering(data: pd.DataFrame,
     return data, graphs, q
 
 
-def _assign_metalabels(data: pd.DataFrame,
-                       metadata: pd.DataFrame):
+def _assign_metalabels(data: pd.DataFrame, metadata: pd.DataFrame):
     """
     Given the original clustered data (data) and the meta-clustering results of
     clustering the clusters of this original data (metadata), assign the meta-cluster
@@ -277,14 +301,20 @@ def _assign_metalabels(data: pd.DataFrame,
     Pandas.DataFrame
     """
     data = data.drop("meta_label", axis=1)
-    return pd.merge(data, metadata[["sample_id", "cluster_label", "meta_label"]], on=["sample_id", "cluster_label"])
+    return pd.merge(
+        data,
+        metadata[["sample_id", "cluster_label", "meta_label"]],
+        on=["sample_id", "cluster_label"],
+    )
 
 
-def summarise_clusters(data: pd.DataFrame,
-                       features: list,
-                       scale: str or None = None,
-                       scale_kwargs: dict or None = None,
-                       summary_method: str = "median"):
+def summarise_clusters(
+    data: pd.DataFrame,
+    features: list,
+    scale: str or None = None,
+    scale_kwargs: dict or None = None,
+    summary_method: str = "median",
+):
     """
     Average cluster parameters along columns average to generated a centroid for
     meta-clustering
@@ -312,9 +342,15 @@ def summarise_clusters(data: pd.DataFrame,
         If invalid method provided
     """
     if summary_method == "median":
-        data = data.groupby(["sample_id", "cluster_label"])[features].median().reset_index()
+        data = (
+            data.groupby(["sample_id", "cluster_label"])[features]
+            .median()
+            .reset_index()
+        )
     elif summary_method == "mean":
-        data = data.groupby(["sample_id", "cluster_label"])[features].mean().reset_index()
+        data = (
+            data.groupby(["sample_id", "cluster_label"])[features].mean().reset_index()
+        )
     else:
         raise ValueError("summary_method should be 'mean' or 'median'")
     scale_kwargs = scale_kwargs or {}
@@ -324,14 +360,16 @@ def summarise_clusters(data: pd.DataFrame,
     return data
 
 
-def sklearn_metaclustering(data: pd.DataFrame,
-                           features: list,
-                           method: str,
-                           summary_method: str = "median",
-                           print_performance_metrics: bool = True,
-                           scale_method: str or None = None,
-                           scale_kwargs: dict or None = None,
-                           **kwargs):
+def sklearn_metaclustering(
+    data: pd.DataFrame,
+    features: list,
+    method: str,
+    summary_method: str = "median",
+    print_performance_metrics: bool = True,
+    scale_method: str or None = None,
+    scale_kwargs: dict or None = None,
+    **kwargs,
+):
     """
     Meta-clustering with a Scikit-learn clustering/mixture model algorithm. This function
     will summarise the clusters in 'data' (where cluster IDs should be contained in a column
@@ -372,11 +410,15 @@ def sklearn_metaclustering(data: pd.DataFrame,
     """
     data = data.copy()
     if method not in globals().keys():
-        raise ValueError("Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN")
+        raise ValueError(
+            "Not a recognised method from the Scikit-Learn cluster/mixture modules or HDBSCAN"
+        )
 
     model = globals()[method](**kwargs)
     logger.info(f"Meta clustering with {method}")
-    metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
+    metadata = summarise_clusters(
+        data, features, scale_method, scale_kwargs, summary_method
+    )
     metadata["meta_label"] = model.fit_predict(metadata[features].values)
 
     if print_performance_metrics:
@@ -387,14 +429,16 @@ def sklearn_metaclustering(data: pd.DataFrame,
     return data, None, None
 
 
-def phenograph_metaclustering(data: pd.DataFrame,
-                              features: list,
-                              verbose: bool = True,
-                              summary_method: str = "median",
-                              scale_method: str or None = None,
-                              scale_kwargs: dict or None = None,
-                              print_performance_metrics: bool = True,
-                              **kwargs):
+def phenograph_metaclustering(
+    data: pd.DataFrame,
+    features: list,
+    verbose: bool = True,
+    summary_method: str = "median",
+    scale_method: str or None = None,
+    scale_kwargs: dict or None = None,
+    print_performance_metrics: bool = True,
+    **kwargs,
+):
     """
     Meta-clustering with a the PhenoGraph algorithm. This function
     will summarise the clusters in 'data' (where cluster IDs should be contained in a column
@@ -427,7 +471,9 @@ def phenograph_metaclustering(data: pd.DataFrame,
     """
     data = data.copy()
     logger.info(f"Meta clustering with PhenoGraph")
-    metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
+    metadata = summarise_clusters(
+        data, features, scale_method, scale_kwargs, summary_method
+    )
 
     communities, graph, q = phenograph.cluster(metadata[features].values, **kwargs)
     metadata["meta_label"] = communities
@@ -441,19 +487,21 @@ def phenograph_metaclustering(data: pd.DataFrame,
     return data, graph, q
 
 
-def consensus_metacluster(data: pd.DataFrame,
-                          features: list,
-                          cluster_class: object,
-                          verbose: bool = True,
-                          summary_method: str = "median",
-                          scale_method: str or None = None,
-                          scale_kwargs: dict or None = None,
-                          smallest_cluster_n: int = 5,
-                          largest_cluster_n: int = 15,
-                          n_resamples: int = 10,
-                          resample_proportion: float = 0.5,
-                          print_performance_metrics: bool = True,
-                          **kwargs):
+def consensus_metacluster(
+    data: pd.DataFrame,
+    features: list,
+    cluster_class: object,
+    verbose: bool = True,
+    summary_method: str = "median",
+    scale_method: str or None = None,
+    scale_kwargs: dict or None = None,
+    smallest_cluster_n: int = 5,
+    largest_cluster_n: int = 15,
+    n_resamples: int = 10,
+    resample_proportion: float = 0.5,
+    print_performance_metrics: bool = True,
+    **kwargs,
+):
     """
     Meta-clustering with the consensus clustering algorithm, as first described here:
     https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf. This function
@@ -507,22 +555,28 @@ def consensus_metacluster(data: pd.DataFrame,
         one sample
     """
     data = data.copy()
-    metadata = summarise_clusters(data, features, scale_method, scale_kwargs, summary_method)
+    metadata = summarise_clusters(
+        data, features, scale_method, scale_kwargs, summary_method
+    )
     if (metadata.shape[0] * resample_proportion) < largest_cluster_n:
-        err = f"Maximum number of meta clusters (largest_cluster_n) is currently set to " \
-              f"{largest_cluster_n} but there are only {metadata.shape[0] * resample_proportion} " \
-              f"clusters to cluster in each sample. Either decrease largest_cluster_n or increase " \
-              f"resample_proportion."
+        err = (
+            f"Maximum number of meta clusters (largest_cluster_n) is currently set to "
+            f"{largest_cluster_n} but there are only {metadata.shape[0] * resample_proportion} "
+            f"clusters to cluster in each sample. Either decrease largest_cluster_n or increase "
+            f"resample_proportion."
+        )
         logging.error(err)
         raise ValueError(err)
 
     logger.info("Performing consensus meta-clustering")
-    consensus_clust = ConsensusCluster(cluster=cluster_class,
-                                       smallest_cluster_n=smallest_cluster_n,
-                                       largest_cluster_n=largest_cluster_n,
-                                       n_resamples=n_resamples,
-                                       resample_proportion=resample_proportion,
-                                       **kwargs)
+    consensus_clust = ConsensusCluster(
+        cluster=cluster_class,
+        smallest_cluster_n=smallest_cluster_n,
+        largest_cluster_n=largest_cluster_n,
+        n_resamples=n_resamples,
+        resample_proportion=resample_proportion,
+        **kwargs,
+    )
 
     consensus_clust.fit(metadata[features].values)
     metadata["meta_label"] = consensus_clust.predict_data(metadata[features])
@@ -535,13 +589,15 @@ def consensus_metacluster(data: pd.DataFrame,
     return data, None, None
 
 
-def _flowsom_clustering(data: pd.DataFrame,
-                        features: list,
-                        verbose: bool,
-                        meta_cluster_class: object,
-                        init_kwargs: dict or None = None,
-                        training_kwargs: dict or None = None,
-                        meta_cluster_kwargs: dict or None = None):
+def _flowsom_clustering(
+    data: pd.DataFrame,
+    features: list,
+    verbose: bool,
+    meta_cluster_class: object,
+    init_kwargs: dict or None = None,
+    training_kwargs: dict or None = None,
+    meta_cluster_kwargs: dict or None = None,
+):
     """
     Wrapper of the FlowSOM method (see cytopy.flow.clustering.flowsom for local
     implementation). Takes a dataframe to cluster and returns a trained FlowSOM
@@ -574,25 +630,23 @@ def _flowsom_clustering(data: pd.DataFrame,
     init_kwargs = init_kwargs or {}
     training_kwargs = training_kwargs or {}
     meta_cluster_kwargs = meta_cluster_kwargs or {}
-    cluster = FlowSOM(data=data,
-                      features=features,
-                      verbose=verbose,
-                      **init_kwargs)
+    cluster = FlowSOM(data=data, features=features, verbose=verbose, **init_kwargs)
     cluster.train(**training_kwargs)
-    cluster.meta_cluster(cluster_class=meta_cluster_class,
-                         **meta_cluster_kwargs)
+    cluster.meta_cluster(cluster_class=meta_cluster_class, **meta_cluster_kwargs)
     return cluster
 
 
-def flowsom_clustering(data: pd.DataFrame,
-                       features: list,
-                       verbose: bool,
-                       meta_cluster_class: callable,
-                       global_clustering: bool = False,
-                       init_kwargs: dict or None = None,
-                       training_kwargs: dict or None = None,
-                       meta_cluster_kwargs: dict or None = None,
-                       print_performance_metrics: bool = True):
+def flowsom_clustering(
+    data: pd.DataFrame,
+    features: list,
+    verbose: bool,
+    meta_cluster_class: callable,
+    global_clustering: bool = False,
+    init_kwargs: dict or None = None,
+    training_kwargs: dict or None = None,
+    meta_cluster_kwargs: dict or None = None,
+    print_performance_metrics: bool = True,
+):
     """
     Perform high-dimensional clustering of single cell data using the popular
     FlowSOM algorithm (https://pubmed.ncbi.nlm.nih.gov/25573116/). For details
@@ -636,13 +690,15 @@ def flowsom_clustering(data: pd.DataFrame,
     data = data.copy()
     if global_clustering:
         logger.info(f"Performing global clustering with FlowSOM on features {features}")
-        cluster = _flowsom_clustering(data=data,
-                                      features=features,
-                                      verbose=verbose,
-                                      meta_cluster_class=meta_cluster_class,
-                                      init_kwargs=init_kwargs,
-                                      training_kwargs=training_kwargs,
-                                      meta_cluster_kwargs=meta_cluster_kwargs)
+        cluster = _flowsom_clustering(
+            data=data,
+            features=features,
+            verbose=verbose,
+            meta_cluster_class=meta_cluster_class,
+            init_kwargs=init_kwargs,
+            training_kwargs=training_kwargs,
+            meta_cluster_kwargs=meta_cluster_kwargs,
+        )
         data["cluster_label"] = cluster.predict()
         if print_performance_metrics:
             clustering_performance(data[features], data["cluster_label"].values)
@@ -652,13 +708,15 @@ def flowsom_clustering(data: pd.DataFrame,
     for _id, df in data.groupby("sample_id"):
 
         logger.info(f"========== Clustering {_id} ==========")
-        cluster = _flowsom_clustering(data=df,
-                                      features=features,
-                                      verbose=verbose,
-                                      meta_cluster_class=meta_cluster_class,
-                                      init_kwargs=init_kwargs,
-                                      training_kwargs=training_kwargs,
-                                      meta_cluster_kwargs=meta_cluster_kwargs)
+        cluster = _flowsom_clustering(
+            data=df,
+            features=features,
+            verbose=verbose,
+            meta_cluster_class=meta_cluster_class,
+            init_kwargs=init_kwargs,
+            training_kwargs=training_kwargs,
+            meta_cluster_kwargs=meta_cluster_kwargs,
+        )
 
         df["cluster_label"] = cluster.predict()
         if print_performance_metrics:
@@ -741,16 +799,20 @@ class Clustering:
         - meta_label: meta cluster label (between samples)
     """
 
-    def __init__(self,
-                 experiment: Experiment,
-                 features: list,
-                 sample_ids: list or None = None,
-                 root_population: str = "root",
-                 transform: str = "logicle",
-                 transform_kwargs: dict or None = None,
-                 verbose: bool = True,
-                 population_prefix: str = "cluster"):
-        logger.info(f"Creating new Clustering object with connection to {experiment.experiment_id}")
+    def __init__(
+        self,
+        experiment: Experiment,
+        features: list,
+        sample_ids: list or None = None,
+        root_population: str = "root",
+        transform: str = "logicle",
+        transform_kwargs: dict or None = None,
+        verbose: bool = True,
+        population_prefix: str = "cluster",
+    ):
+        logger.info(
+            f"Creating new Clustering object with connection to {experiment.experiment_id}"
+        )
         self.experiment = experiment
         self.verbose = verbose
         self.features = features
@@ -761,19 +823,20 @@ class Clustering:
         self.population_prefix = population_prefix
 
         logger.info(f"Obtaining data for clustering for population {root_population}")
-        self.data = single_cell_dataframe(experiment=experiment,
-                                          sample_ids=sample_ids,
-                                          transform=transform,
-                                          transform_kwargs=transform_kwargs,
-                                          populations=root_population)
+        self.data = single_cell_dataframe(
+            experiment=experiment,
+            sample_ids=sample_ids,
+            transform=transform,
+            transform_kwargs=transform_kwargs,
+            populations=root_population,
+        )
         self.data["meta_label"] = None
         self.data["cluster_label"] = None
         logging.info("Ready to cluster!")
 
-    def cluster(self,
-                func: Callable,
-                overwrite_features: Optional[List[str]] = None,
-                **kwargs):
+    def cluster(
+        self, func: Callable, overwrite_features: Optional[List[str]] = None, **kwargs
+    ):
         """
         Perform clustering with a suitable clustering function from cytopy.flow.clustering.main:
             * sklearn_clustering - access any of the Scikit-Learn cluster/mixture classes for unsupervised learning;
@@ -799,10 +862,9 @@ class Clustering:
         self
         """
         features = remove_null_features(self.data, features=overwrite_features)
-        self.data, self.graph, self.metrics = func(data=self.data,
-                                                   features=features,
-                                                   verbose=self.verbose,
-                                                   **kwargs)
+        self.data, self.graph, self.metrics = func(
+            data=self.data, features=features, verbose=self.verbose, **kwargs
+        )
         return self
 
     def reset_clusters(self):
@@ -828,12 +890,14 @@ class Clustering:
         self.data["meta_label"] = None
         return self
 
-    def meta_cluster(self,
-                     func: callable,
-                     summary_method: str = "median",
-                     scale_method: str or None = None,
-                     scale_kwargs: dict or None = None,
-                     **kwargs):
+    def meta_cluster(
+        self,
+        func: callable,
+        summary_method: str = "median",
+        scale_method: str or None = None,
+        scale_kwargs: dict or None = None,
+        **kwargs,
+    ):
         """
         Perform meta-clustering using one of the meta-clustering functions from
         cytopy.flow.clustering.main:
@@ -871,17 +935,17 @@ class Clustering:
         None
         """
         features = remove_null_features(data=self.data, features=self.features)
-        self.data, self.graph, self.metrics = func(data=self.data,
-                                                   features=features,
-                                                   verbose=self.verbose,
-                                                   summary_method=summary_method,
-                                                   scale_method=scale_method,
-                                                   scale_kwargs=scale_kwargs,
-                                                   **kwargs)
+        self.data, self.graph, self.metrics = func(
+            data=self.data,
+            features=features,
+            verbose=self.verbose,
+            summary_method=summary_method,
+            scale_method=scale_method,
+            scale_kwargs=scale_kwargs,
+            **kwargs,
+        )
 
-    def rename_clusters(self,
-                        sample_id: str,
-                        mappings: dict):
+    def rename_clusters(self, sample_id: str, mappings: dict):
         """
         Given a dictionary of mappings, replace the current IDs stored
         in cluster_label column for a particular sample
@@ -898,12 +962,13 @@ class Clustering:
         """
         if sample_id is not "all":
             idx = self.data[self.data.sample_id == sample_id].index
-            self.data.loc[idx, "cluster_label"] = self.data.loc[idx]["cluster_label"].replace(mappings)
+            self.data.loc[idx, "cluster_label"] = self.data.loc[idx][
+                "cluster_label"
+            ].replace(mappings)
         else:
             self.data["cluster_label"] = self.data["cluster_label"].replace(mappings)
 
-    def rename_meta_clusters(self,
-                             mappings: dict):
+    def rename_meta_clusters(self, mappings: dict):
         """
         Given a dictionary of mappings, replace the current IDs stored
         in meta_label column of the data attribute with new IDs
@@ -919,10 +984,9 @@ class Clustering:
         """
         self.data["meta_label"].replace(mappings, inplace=True)
 
-    def load_meta_variable(self,
-                           variable: str,
-                           verbose: bool = True,
-                           embedded: list or None = None):
+    def load_meta_variable(
+        self, variable: str, verbose: bool = True, embedded: list or None = None
+    ):
         """
         Load a meta-variable for each Subject, adding this variable as a new column. If a sample
         is not associated to a Subject or the meta variable is missing from a Subject, value will be
@@ -941,8 +1005,7 @@ class Clustering:
         None
         """
         self.data[variable] = None
-        for _id in progress_bar(self.data.subject_id.unique(),
-                                verbose=verbose):
+        for _id in progress_bar(self.data.subject_id.unique(), verbose=verbose):
             if _id is None:
                 continue
             p = Subject.objects(subject_id=_id).get()
@@ -955,13 +1018,12 @@ class Clustering:
                 else:
                     self.data.loc[self.data.subject_id == _id, variable] = p[variable]
             except KeyError:
-                logger.warning(f'{_id} is missing meta-variable {variable}')
+                logger.warning(f"{_id} is missing meta-variable {variable}")
                 self.data.loc[self.data.subject_id == _id, variable] = None
 
-    def dimension_reduction(self,
-                            method: Union[str, Type],
-                            n_components: int = 2,
-                            **kwargs):
+    def dimension_reduction(
+        self, method: Union[str, Type], n_components: int = 2, **kwargs
+    ):
         """
         Perform dimension reduction on associated data. This will generate new latent features
         that can be used for clustering. Latent variables will be stored as indexed columns in
@@ -980,19 +1042,19 @@ class Clustering:
         -------
         None
         """
-        reducer = DimensionReduction(method=method,
-                                     n_components=n_components,
-                                     **kwargs)
+        reducer = DimensionReduction(method=method, n_components=n_components, **kwargs)
         self.data = reducer.fit_transform(data=self.data, features=self.features)
 
-    def single_cell_plot(self,
-                         sample_size: Union[int, None] = 100000,
-                         sampling_method: str = "uniform",
-                         method: Union[str, Type] = "UMAP",
-                         dim_reduction_kwargs: dict or None = None,
-                         label: str = "cluster_label",
-                         discrete: bool = True,
-                         **kwargs):
+    def single_cell_plot(
+        self,
+        sample_size: Union[int, None] = 100000,
+        sampling_method: str = "uniform",
+        method: Union[str, Type] = "UMAP",
+        dim_reduction_kwargs: dict or None = None,
+        label: str = "cluster_label",
+        discrete: bool = True,
+        **kwargs,
+    ):
         """
         Plot the entire single cell dataframe (the data attribute). WARNING: this can be computationally
         expensive so if you have limited resource, try specifying a sample size first.
@@ -1024,32 +1086,36 @@ class Clustering:
         plot_data = self.data
         if sample_size is not None:
             if sampling_method == "uniform":
-                plot_data = sample_dataframe_uniform_groups(data=self.data,
-                                                            group_id="sample_id",
-                                                            sample_size=sample_size)
+                plot_data = sample_dataframe_uniform_groups(
+                    data=self.data, group_id="sample_id", sample_size=sample_size
+                )
             else:
                 if sample_size < self.data.shape[0]:
                     plot_data = self.data.sample(sample_size)
 
         dim_reduction_kwargs = dim_reduction_kwargs or {}
-        reducer = DimensionReduction(method=method,
-                                     n_components=2,
-                                     **dim_reduction_kwargs)
+        reducer = DimensionReduction(
+            method=method, n_components=2, **dim_reduction_kwargs
+        )
         df = reducer.fit_transform(data=plot_data, features=self.features)
-        return single_cell_plot(data=df,
-                                x=f"{method}1",
-                                y=f"{method}2",
-                                label=label,
-                                discrete=discrete,
-                                **kwargs)
+        return single_cell_plot(
+            data=df,
+            x=f"{method}1",
+            y=f"{method}2",
+            label=label,
+            discrete=discrete,
+            **kwargs,
+        )
 
-    def plot_sample_clusters(self,
-                             sample_id: str,
-                             method: Union[str, Type] = "UMAP",
-                             dim_reduction_kwargs: dict or None = None,
-                             label: str = "cluster_label",
-                             discrete: bool = True,
-                             **kwargs):
+    def plot_sample_clusters(
+        self,
+        sample_id: str,
+        method: Union[str, Type] = "UMAP",
+        dim_reduction_kwargs: dict or None = None,
+        label: str = "cluster_label",
+        discrete: bool = True,
+        **kwargs,
+    ):
         """
         Generate a single cell plot (see cytopy.flow.plotting.single_cell_plot) for a single sample,
         with cells coloured by cluster membership (default)
@@ -1075,23 +1141,27 @@ class Clustering:
         """
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         df = self.data[self.data.sample_id == sample_id].copy()
-        reducer = DimensionReduction(method=method,
-                                     n_components=2,
-                                     **dim_reduction_kwargs)
+        reducer = DimensionReduction(
+            method=method, n_components=2, **dim_reduction_kwargs
+        )
         df = reducer.fit_transform(data=df, features=self.features)
-        return single_cell_plot(data=df,
-                                x=f"{method}1",
-                                y=f"{method}2",
-                                label=label,
-                                discrete=discrete,
-                                **kwargs)
+        return single_cell_plot(
+            data=df,
+            x=f"{method}1",
+            y=f"{method}2",
+            label=label,
+            discrete=discrete,
+            **kwargs,
+        )
 
-    def plot_meta_clusters(self,
-                           colour_label: str = "meta_label",
-                           discrete: bool = True,
-                           method: str = "UMAP",
-                           dim_reduction_kwargs: dict or None = None,
-                           **kwargs):
+    def plot_meta_clusters(
+        self,
+        colour_label: str = "meta_label",
+        discrete: bool = True,
+        method: str = "UMAP",
+        dim_reduction_kwargs: dict or None = None,
+        **kwargs,
+    ):
         """
         Generate a cluster bubble plot (see cytopy.flow.plotting.cluster_bubble_plot) where each
         data point (bubble) is a single cluster centroid from a unique patient. Size of the data points represents
@@ -1115,21 +1185,25 @@ class Clustering:
         -------
         Matplotlib.Axes
         """
-        return cluster_bubble_plot(data=self.data,
-                                   features=self.features,
-                                   cluster_label="cluster_label",
-                                   sample_label="sample_id",
-                                   colour_label=colour_label,
-                                   discrete=discrete,
-                                   dim_reduction_method=method,
-                                   dim_reduction_kwargs=dim_reduction_kwargs,
-                                   **kwargs)
+        return cluster_bubble_plot(
+            data=self.data,
+            features=self.features,
+            cluster_label="cluster_label",
+            sample_label="sample_id",
+            colour_label=colour_label,
+            discrete=discrete,
+            dim_reduction_method=method,
+            dim_reduction_kwargs=dim_reduction_kwargs,
+            **kwargs,
+        )
 
-    def clustered_heatmap(self,
-                          features: list,
-                          sample_id: str or None = None,
-                          meta_label: bool = True,
-                          **kwargs):
+    def clustered_heatmap(
+        self,
+        features: list,
+        sample_id: str or None = None,
+        meta_label: bool = True,
+        **kwargs,
+    ):
         """
         Generate a clustered heatmap (using Seaborn Clustermap function). This function is capable of producing
         different types of heatmaps depending on the input and the clustered dataframe (data attribute):
@@ -1164,7 +1238,11 @@ class Clustering:
         elif sample_id is None and not meta_label:
             data = self.data.groupby(["cluster_label"])[self.features].median()
         else:
-            data = self.data[self.data.sample_id == sample_id].groupby(["cluster_label"]).median()
+            data = (
+                self.data[self.data.sample_id == sample_id]
+                .groupby(["cluster_label"])
+                .median()
+            )
         data[features] = data[features].apply(pd.to_numeric)
         kwargs = kwargs or {}
         kwargs["col_cluster"] = kwargs.get("col_cluster", True)
@@ -1173,10 +1251,9 @@ class Clustering:
         kwargs["cmap"] = kwargs.get("cmap", "viridis")
         return sns.clustermap(data[features], **kwargs)
 
-    def _create_parent_populations(self,
-                                   population_var: str,
-                                   parent_populations: Dict,
-                                   verbose: bool = True):
+    def _create_parent_populations(
+        self, population_var: str, parent_populations: Dict, verbose: bool = True
+    ):
         """
         Form parent populations from existing clusters
 
@@ -1208,23 +1285,32 @@ class Clustering:
             for parent, children in parent_child_mappings.items():
                 cluster_data = sample_data[sample_data[population_var].isin(children)]
                 if cluster_data.shape[0] == 0:
-                    logger.warning(f"No clusters found for {sample_id} to generate requested parent {parent}")
+                    logger.warning(
+                        f"No clusters found for {sample_id} to generate requested parent {parent}"
+                    )
                     continue
-                parent_population_name = parent if self.population_prefix is None \
+                parent_population_name = (
+                    parent
+                    if self.population_prefix is None
                     else f"{self.population_prefix}_{parent}"
-                pop = Population(population_name=parent_population_name,
-                                 n=cluster_data.shape[0],
-                                 parent=self.root_population,
-                                 source="cluster",
-                                 signature=cluster_data.mean().to_dict())
+                )
+                pop = Population(
+                    population_name=parent_population_name,
+                    n=cluster_data.shape[0],
+                    parent=self.root_population,
+                    source="cluster",
+                    signature=cluster_data.mean().to_dict(),
+                )
                 pop.index = cluster_data.original_index.values
                 fg.add_population(population=pop)
             fg.save()
 
-    def save(self,
-             verbose: bool = True,
-             population_var: str = "meta_label",
-             parent_populations: Optional[Dict] = None):
+    def save(
+        self,
+        verbose: bool = True,
+        population_var: str = "meta_label",
+        parent_populations: Optional[Dict] = None,
+    ):
         """
         Clusters are saved as new Populations in each FileGroup in the attached Experiment
         according to the sample_id in data.
@@ -1253,8 +1339,9 @@ class Clustering:
                 raise ValueError("Meta clustering has not been performed")
 
         if parent_populations is not None:
-            self._create_parent_populations(population_var=population_var,
-                                            parent_populations=parent_populations)
+            self._create_parent_populations(
+                population_var=population_var, parent_populations=parent_populations
+            )
         parent_populations = parent_populations or {}
 
         for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
@@ -1262,16 +1349,24 @@ class Clustering:
             sample_data = self.data[self.data.sample_id == sample_id].copy()
 
             for cluster_label, cluster in sample_data.groupby(population_var):
-                population_name = str(cluster_label) if self.population_prefix is None \
+                population_name = (
+                    str(cluster_label)
+                    if self.population_prefix is None
                     else f"{self.population_prefix}_{cluster_label}"
+                )
                 parent = parent_populations.get(cluster_label, self.root_population)
-                parent = parent if self.population_prefix is None or parent == self.root_population \
+                parent = (
+                    parent
+                    if self.population_prefix is None or parent == self.root_population
                     else f"{self.population_prefix}_{parent}"
-                pop = Population(population_name=population_name,
-                                 n=cluster.shape[0],
-                                 parent=parent,
-                                 source="cluster",
-                                 signature=cluster.mean().to_dict())
+                )
+                pop = Population(
+                    population_name=population_name,
+                    n=cluster.shape[0],
+                    parent=parent,
+                    source="cluster",
+                    signature=cluster.mean().to_dict(),
+                )
                 pop.index = cluster.original_index.values
                 fg.add_population(population=pop)
             fg.save()
@@ -1289,10 +1384,7 @@ def _assert_unique_label(x):
 
 def _scatterplot_defaults(**kwargs):
     updated_kwargs = {k: v for k, v in kwargs.items()}
-    defaults = {"edgecolor": "black",
-                "alpha": 0.75,
-                "linewidth": 2,
-                "s": 5}
+    defaults = {"edgecolor": "black", "alpha": 0.75, "linewidth": 2, "s": 5}
     for k, v in defaults.items():
         if k not in updated_kwargs.keys():
             updated_kwargs[k] = v

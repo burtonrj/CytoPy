@@ -57,14 +57,16 @@ def _valid_multi_label(model):
     AssertionError
         Not a valid multi-label classifier
     """
-    valid = ["DescisionTreeClassifier",
-             "ExtraTreeClassifier",
-             "ExtraTreesClassifier",
-             "KNeighborsClassifier",
-             "MLPClassifier",
-             "RadiusNeighborsClassifier",
-             "RandomForestClassifier",
-             "RidgeClassifierCV"]
+    valid = [
+        "DescisionTreeClassifier",
+        "ExtraTreeClassifier",
+        "ExtraTreesClassifier",
+        "KNeighborsClassifier",
+        "MLPClassifier",
+        "RadiusNeighborsClassifier",
+        "RandomForestClassifier",
+        "RidgeClassifierCV",
+    ]
     err = f"Invalid Scikit-Learn class for multi-label classification, should be one of: {valid}"
     assert model.__class__.__name__ in valid, err
 
@@ -74,9 +76,11 @@ def _valid_classifier(model):
         try:
             getattr(model, x)
         except AttributeError:
-            raise AttributeError("Invalid classifier provided to SklearnCellClassifier, must be a "
-                                 "valid Scikit-Learn class or follow the conventions of the Scikit-Learn "
-                                 "ecosystem; that is, contains methods 'fit' and 'predict'")
+            raise AttributeError(
+                "Invalid classifier provided to SklearnCellClassifier, must be a "
+                "valid Scikit-Learn class or follow the conventions of the Scikit-Learn "
+                "ecosystem; that is, contains methods 'fit' and 'predict'"
+            )
 
 
 class SklearnCellClassifier(CellClassifier):
@@ -125,11 +129,8 @@ class SklearnCellClassifier(CellClassifier):
     features: list
     target_populations: list
     """
-    def __init__(self,
-                 model,
-                 params: dict,
-                 multi_label: bool = False,
-                 **kwargs):
+
+    def __init__(self, model, params: dict, multi_label: bool = False, **kwargs):
         super().__init__(multi_label=multi_label, **kwargs)
         _valid_classifier(model)
         self.model = model(**params)
@@ -139,9 +140,7 @@ class SklearnCellClassifier(CellClassifier):
             err = "Class weights defined yet the specified model does not support this"
             assert "sample_weight" in signature(self.model.fit).parameters.keys(), err
 
-    def _predict(self,
-                 x: pd.DataFrame,
-                 threshold: float = 0.5):
+    def _predict(self, x: pd.DataFrame, threshold: float = 0.5):
         """
         Overrides CellClassifier._predict. Checks that the model has
         been initialised and calls relevant predict methods. If the model
@@ -200,16 +199,17 @@ class SklearnCellClassifier(CellClassifier):
                 sample_weight = np.array([self.class_weights.get(i) for i in y])
                 self.model.fit(x, y, sample_weight=sample_weight, **kwargs)
             else:
-                warn("Class weights defined yet the specified model does not support this.")
+                warn(
+                    "Class weights defined yet the specified model does not support this."
+                )
                 self.model.fit(x, y, **kwargs)
         else:
             self.model.fit(x, y, **kwargs)
 
     @check_data_init
-    def hyperparameter_tuning(self,
-                              param_grid: dict,
-                              method: str = "grid_search",
-                              **kwargs):
+    def hyperparameter_tuning(
+        self, param_grid: dict, method: str = "grid_search", **kwargs
+    ):
         """
         Perform hyperparameter tuning using either exhaustive grid search
         or randomised grid search.
@@ -232,30 +232,34 @@ class SklearnCellClassifier(CellClassifier):
         AssertionError
             Invalid method
         """
-        assert method in ["grid_search", "random"], "Method should either be 'grid_search' for " \
-                                                    "exhaustive search or 'random' for randomised " \
-                                                    "grid search"
+        assert method in ["grid_search", "random"], (
+            "Method should either be 'grid_search' for "
+            "exhaustive search or 'random' for randomised "
+            "grid search"
+        )
         if method == "grid_search":
-            search_cv = GridSearchCV(estimator=self.model,
-                                     param_grid=param_grid,
-                                     **kwargs)
+            search_cv = GridSearchCV(
+                estimator=self.model, param_grid=param_grid, **kwargs
+            )
         else:
-            search_cv = RandomizedSearchCV(estimator=self.model,
-                                           param_distributions=param_grid,
-                                           **kwargs)
+            search_cv = RandomizedSearchCV(
+                estimator=self.model, param_distributions=param_grid, **kwargs
+            )
         search_cv.fit(self.x, self.y)
         return search_cv
 
-    def plot_learning_curve(self,
-                            experiment: Experiment or None = None,
-                            validation_id: str or None = None,
-                            root_population: str or None = None,
-                            ax: Axes or None = None,
-                            x_label: str = "Training examples",
-                            y_label: str = "Score",
-                            train_sizes: np.array or None = None,
-                            verbose: int = 1,
-                            **kwargs):
+    def plot_learning_curve(
+        self,
+        experiment: Experiment or None = None,
+        validation_id: str or None = None,
+        root_population: str or None = None,
+        ax: Axes or None = None,
+        x_label: str = "Training examples",
+        y_label: str = "Score",
+        train_sizes: np.array or None = None,
+        verbose: int = 1,
+        **kwargs,
+    ):
         """
         This method will generate a learning curve using the Scikit-Learn utility function
         sklearn.model_selection.learning_curve.
@@ -297,47 +301,66 @@ class SklearnCellClassifier(CellClassifier):
         """
         x, y = self.x, self.y
         if validation_id is not None:
-            assert all([x is not None for x in [experiment, root_population]]), \
-                "For plotting learning curve for validation, must provide validation ID, experiment " \
+            assert all([x is not None for x in [experiment, root_population]]), (
+                "For plotting learning curve for validation, must provide validation ID, experiment "
                 "object, and root population"
-            x, y = self.load_validation(validation_id=validation_id,
-                                        root_population=root_population,
-                                        experiment=experiment)
+            )
+            x, y = self.load_validation(
+                validation_id=validation_id,
+                root_population=root_population,
+                experiment=experiment,
+            )
         train_sizes = train_sizes or np.linspace(0.1, 1.0, 10)
         ax = ax or plt.subplots(figsize=(5, 5))[1]
-        train_sizes, train_scores, test_scores = learning_curve(self.model,
-                                                                x,
-                                                                y,
-                                                                verbose=verbose,
-                                                                return_times=False,
-                                                                train_sizes=train_sizes,
-                                                                **kwargs)
+        train_sizes, train_scores, test_scores = learning_curve(
+            self.model,
+            x,
+            y,
+            verbose=verbose,
+            return_times=False,
+            train_sizes=train_sizes,
+            **kwargs,
+        )
         train_scores_mean = np.mean(train_scores, axis=1)
         train_scores_std = np.std(train_scores, axis=1)
         test_scores_mean = np.mean(test_scores, axis=1)
         test_scores_std = np.std(test_scores, axis=1)
         ax.grid()
-        ax.fill_between(train_sizes, train_scores_mean - train_scores_std,
-                        train_scores_mean + train_scores_std, alpha=0.1,
-                        color="r")
-        ax.fill_between(train_sizes, test_scores_mean - test_scores_std,
-                        test_scores_mean + test_scores_std, alpha=0.1,
-                        color="g")
-        ax.plot(train_sizes, train_scores_mean, 'o-', color="r",
-                label="Training score")
-        ax.plot(train_sizes, test_scores_mean, 'o-', color="g",
-                label="Cross-validation score")
+        ax.fill_between(
+            train_sizes,
+            train_scores_mean - train_scores_std,
+            train_scores_mean + train_scores_std,
+            alpha=0.1,
+            color="r",
+        )
+        ax.fill_between(
+            train_sizes,
+            test_scores_mean - test_scores_std,
+            test_scores_mean + test_scores_std,
+            alpha=0.1,
+            color="g",
+        )
+        ax.plot(train_sizes, train_scores_mean, "o-", color="r", label="Training score")
+        ax.plot(
+            train_sizes,
+            test_scores_mean,
+            "o-",
+            color="g",
+            label="Cross-validation score",
+        )
         ax.legend(loc="best")
         ax.set_xlabel(xlabel=x_label)
         ax.set_ylabel(ylabel=y_label)
         return ax
 
-    def plot_confusion_matrix(self,
-                              cmap: str or None = None,
-                              figsize: tuple = (10, 5),
-                              x: pd.DataFrame or None = None,
-                              y: np.ndarray or None = None,
-                              **kwargs):
+    def plot_confusion_matrix(
+        self,
+        cmap: str or None = None,
+        figsize: tuple = (10, 5),
+        x: pd.DataFrame or None = None,
+        y: np.ndarray or None = None,
+        **kwargs,
+    ):
         """
         Wraps cytopy.flow.supervised.confusion_matrix_plots (see for more details).
         Given some feature space and target labels, use the model to generate a confusion
@@ -367,18 +390,24 @@ class SklearnCellClassifier(CellClassifier):
         AssertionError
             Invalid x, y input
         """
-        assert not sum([x is not None, y is not None]) == 1, "Cannot provide x without y and vice-versa"
+        assert (
+            not sum([x is not None, y is not None]) == 1
+        ), "Cannot provide x without y and vice-versa"
         if x is None:
             x, y = self.x, self.y
-        assert sum([i is None for i in [x, y]]) in [0, 2], \
-            "If you provide 'x' you must provide 'y' and vice versa."
-        return utils.confusion_matrix_plots(classifier=self.model,
-                                            x=x,
-                                            y=y,
-                                            class_labels=["Unclassified"] + self.target_populations,
-                                            cmap=cmap,
-                                            figsize=figsize,
-                                            **kwargs)
+        assert sum([i is None for i in [x, y]]) in [
+            0,
+            2,
+        ], "If you provide 'x' you must provide 'y' and vice versa."
+        return utils.confusion_matrix_plots(
+            classifier=self.model,
+            x=x,
+            y=y,
+            class_labels=["Unclassified"] + self.target_populations,
+            cmap=cmap,
+            figsize=figsize,
+            **kwargs,
+        )
 
     def save_model(self, path: str, **kwargs):
         """
@@ -416,4 +445,3 @@ class SklearnCellClassifier(CellClassifier):
         None
         """
         self.model = pickle.load(open(path, "rb"), **kwargs)
-

@@ -7,10 +7,14 @@ def example_channel_map():
     return ChannelMap(channel="test channel", marker="test marker")
 
 
-@pytest.mark.parametrize("channel,marker,expected",
-                         [("test channel", "test marker", True),
-                          ("test marker", "test channel", False),
-                          ("invalid", "test marker", False)])
+@pytest.mark.parametrize(
+    "channel,marker,expected",
+    [
+        ("test channel", "test marker", True),
+        ("test marker", "test channel", False),
+        ("invalid", "test marker", False),
+    ],
+)
 def test_matching_pair(example_channel_map, channel, marker, expected):
     cm = example_channel_map
     assert cm.check_matched_pair(channel=channel, marker=marker) == expected

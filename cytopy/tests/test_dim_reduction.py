@@ -5,8 +5,9 @@ import pandas as pd
 import pytest
 
 
-@pytest.mark.parametrize("method",
-                         ["UMAP", "tSNE", "PCA", "KernelPCA", "MDS", "Isomap", "PHATE"])
+@pytest.mark.parametrize(
+    "method", ["UMAP", "tSNE", "PCA", "KernelPCA", "MDS", "Isomap", "PHATE"]
+)
 def test_init(method):
     reducer = DimensionReduction(method=method, n_components=2)
     assert isinstance(reducer, DimensionReduction)
@@ -21,7 +22,7 @@ def test_init_error():
 
 
 def load_iris() -> (pd.DataFrame, List[str]):
-    iris = sns.load_dataset('iris')
+    iris = sns.load_dataset("iris")
     features = ["sepal_length", "sepal_width", "petal_length", "petal_width"]
     return iris, features
 

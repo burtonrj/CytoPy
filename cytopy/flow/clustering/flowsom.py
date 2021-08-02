@@ -36,7 +36,13 @@ import logging
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Žiga Sajovic", "Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__credits__ = [
+    "Žiga Sajovic",
+    "Ross Burton",
+    "Simone Cuff",
+    "Andreas Artemiou",
+    "Matthias Eberl",
+]
 __license__ = "MIT"
 __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
@@ -66,20 +72,27 @@ class FlowSOM:
     normalisation : bool
         if True, min max normalisation applied prior to computation
     """
-    def __init__(self,
-                 data: pd.DataFrame,
-                 features: list,
-                 neighborhood_function: str = 'gaussian',
-                 normalisation: bool = False,
-                 verbose: bool = True):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        features: list,
+        neighborhood_function: str = "gaussian",
+        normalisation: bool = False,
+        verbose: bool = True,
+    ):
 
         self.data = data[features].values
         self.normalisation = normalisation
         if normalisation:
             self.data = MinMaxScaler().fit_transform(self.data)
         self.dims = len(features)
-        assert neighborhood_function in ['gaussian', 'mexican_hat', 'bubble', 'triangle'], \
-            'Invalid neighborhood function, must be one of "gaussian", "mexican_hat", "bubble", or "triangle"'
+        assert neighborhood_function in [
+            "gaussian",
+            "mexican_hat",
+            "bubble",
+            "triangle",
+        ], 'Invalid neighborhood function, must be one of "gaussian", "mexican_hat", "bubble", or "triangle"'
         self.verbose = verbose
         self.nf = neighborhood_function
         self.xn = None
@@ -92,13 +105,15 @@ class FlowSOM:
         self.meta_flatten = None
         self.meta_class = None
 
-    def train(self,
-              som_dim: tuple = (50, 50),
-              sigma: float = 1.0,
-              learning_rate: float = 0.5,
-              batch_size: int = 500,
-              seed: int = 42,
-              weight_init: str = 'random'):
+    def train(
+        self,
+        som_dim: tuple = (50, 50),
+        sigma: float = 1.0,
+        learning_rate: float = 0.5,
+        batch_size: int = 500,
+        seed: int = 42,
+        weight_init: str = "random",
+    ):
 
         """Train self-organising map.
         Parameters
@@ -121,22 +136,29 @@ class FlowSOM:
         None
         """
 
-        som = MiniSom(som_dim[0],
-                      som_dim[1],
-                      self.dims, sigma=sigma,
-                      learning_rate=learning_rate,
-                      neighborhood_function=self.nf,
-                      random_seed=seed)
-        if weight_init == 'random':
+        som = MiniSom(
+            som_dim[0],
+            som_dim[1],
+            self.dims,
+            sigma=sigma,
+            learning_rate=learning_rate,
+            neighborhood_function=self.nf,
+            random_seed=seed,
+        )
+        if weight_init == "random":
             som.random_weights_init(self.data)
-        elif weight_init == 'pca':
+        elif weight_init == "pca":
             if not self.normalisation:
-                logger.warning('It is strongly recommended to normalize the data before initializing '
-                               'the weights if using PCA.')
+                logger.warning(
+                    "It is strongly recommended to normalize the data before initializing "
+                    "the weights if using PCA."
+                )
             som.pca_weights_init(self.data)
         else:
-            logger.warning('Invalid value provided for "weight_init", valid input is either "random" or "pca". '
-                           'Defaulting to random initialisation of weights')
+            logger.warning(
+                'Invalid value provided for "weight_init", valid input is either "random" or "pca". '
+                "Defaulting to random initialisation of weights"
+            )
             som.random_weights_init(self.data)
 
         logger.info("------------- Training SOM -------------")
@@ -145,16 +167,18 @@ class FlowSOM:
         self.yn = som_dim[1]
         self.map = som
         self.weights = som.get_weights()
-        self.flatten_weights = self.weights.reshape(self.xn*self.yn, self.dims)
+        self.flatten_weights = self.weights.reshape(self.xn * self.yn, self.dims)
         logger.info("Training complete!")
         logger.info("----------------------------------------")
 
-    def meta_cluster(self,
-                     cluster_class: callable,
-                     min_n: int = 5,
-                     max_n: int = 50,
-                     iter_n: int = 10,
-                     resample_proportion: float = 0.5):
+    def meta_cluster(
+        self,
+        cluster_class: callable,
+        min_n: int = 5,
+        max_n: int = 50,
+        iter_n: int = 10,
+        resample_proportion: float = 0.5,
+    ):
         """Perform meta-clustering. Implementation of Consensus clustering, following the paper
         https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf
         Parameters
@@ -175,18 +199,26 @@ class FlowSOM:
         None
         """
 
-        assert self.map is not None, 'SOM must be trained prior to meta-clustering; call train before meta_cluster'
+        assert (
+            self.map is not None
+        ), "SOM must be trained prior to meta-clustering; call train before meta_cluster"
         # initialize cluster
-        cluster_ = ConsensusCluster(cluster_class,
-                                    min_n,
-                                    max_n,
-                                    iter_n,
-                                    resample_proportion=resample_proportion,
-                                    verbose=self.verbose)
-        cluster_.fit(self.flatten_weights)  # fitting SOM weights into clustering algorithm
+        cluster_ = ConsensusCluster(
+            cluster_class,
+            min_n,
+            max_n,
+            iter_n,
+            resample_proportion=resample_proportion,
+            verbose=self.verbose,
+        )
+        cluster_.fit(
+            self.flatten_weights
+        )  # fitting SOM weights into clustering algorithm
 
         self.meta_map = cluster_
-        self.meta_bestk = cluster_.bestK  # the best number of clusters in range(min_n, max_n)
+        self.meta_bestk = (
+            cluster_.bestK
+        )  # the best number of clusters in range(min_n, max_n)
 
         # get the prediction of each weight vector on meta clusters (on bestK)
         self.meta_flatten = cluster_.predict_data(self.flatten_weights)
@@ -203,16 +235,20 @@ class FlowSOM:
         numpy.ndarray
             Predicted labels
         """
-        err_msg = 'SOM must be trained prior to predicting cell clustering allegation; call train followed ' \
-                  'by meta_cluster'
+        err_msg = (
+            "SOM must be trained prior to predicting cell clustering allegation; call train followed "
+            "by meta_cluster"
+        )
         assert self.map is not None, err_msg
         assert self.meta_class is not None, err_msg
         labels = []
-        logger.info('---------- Predicting Labels ----------')
+        logger.info("---------- Predicting Labels ----------")
         for i in progress_bar(range(len(self.data)), verbose=self.verbose):
             xx = self.data[i, :]  # fetch the sample data
-            winner = self.map.winner(xx)  # make prediction, prediction = the closest entry location in the SOM
+            winner = self.map.winner(
+                xx
+            )  # make prediction, prediction = the closest entry location in the SOM
             c = self.meta_class[winner]  # from the location info get cluster info
             labels.append(c)
-        logger.info('---------------------------------------')
+        logger.info("---------------------------------------")
         return labels

@@ -56,9 +56,7 @@ class SamplingError(Exception):
         super().__init__(message)
 
 
-def uniform_downsampling(data: pd.DataFrame,
-                         sample_size: Union[int, float],
-                         **kwargs):
+def uniform_downsampling(data: pd.DataFrame, sample_size: Union[int, float], **kwargs):
     """
     Uniform downsampling. Wraps the Pandas DataFrame sample method
     with some additional error handling for when the requested sample
@@ -84,8 +82,10 @@ def uniform_downsampling(data: pd.DataFrame,
     """
     if isinstance(sample_size, int):
         if sample_size >= data.shape[0]:
-            logger.warning(f"Number of observations larger than requested sample size {sample_size}, "
-                           f"returning complete data (n={data.shape[0]})")
+            logger.warning(
+                f"Number of observations larger than requested sample size {sample_size}, "
+                f"returning complete data (n={data.shape[0]})"
+            )
             return data
         return data.sample(n=sample_size, **kwargs)
     if isinstance(sample_size, float):
@@ -93,8 +93,7 @@ def uniform_downsampling(data: pd.DataFrame,
     raise SamplingError("sample_size should be an int or float value")
 
 
-def faithful_downsampling(data: np.array,
-                          h: float):
+def faithful_downsampling(data: np.array, h: float):
     """
     An implementation of faithful downsampling as described in:  Zare H, Shooshtari P, Gupta A, Brinkman R.
     Data reduction for spectral clustering to analyze high throughput flow cytometry data.
@@ -124,13 +123,13 @@ def faithful_downsampling(data: np.array,
         if communities is None:
             communities = data[registering_idx]
         else:
-            communities = np.unique(np.concatenate((communities, data[registering_idx]), 0), axis=0)
+            communities = np.unique(
+                np.concatenate((communities, data[registering_idx]), 0), axis=0
+            )
     return communities
 
 
-def prob_downsample(local_d: int,
-                    target_d: int,
-                    outlier_d: int):
+def prob_downsample(local_d: int, target_d: int, outlier_d: int):
     """
     Given local, target and outlier density (as estimated by KNN) calculate
     the probability of retaining the event. If local density is less than or
@@ -160,15 +159,17 @@ def prob_downsample(local_d: int,
         return target_d / local_d
 
 
-def density_dependent_downsampling(data: pd.DataFrame,
-                                   features: Optional[List[str]] = None,
-                                   sample_size: Union[int, float] = 0.1,
-                                   alpha: int = 5,
-                                   distance_metric: str = "manhattan",
-                                   tree_sample: Union[int, float] = 0.1,
-                                   outlier_dens: int = 1,
-                                   target_dens: int = 5,
-                                   njobs: int = -1):
+def density_dependent_downsampling(
+    data: pd.DataFrame,
+    features: Optional[List[str]] = None,
+    sample_size: Union[int, float] = 0.1,
+    alpha: int = 5,
+    distance_metric: str = "manhattan",
+    tree_sample: Union[int, float] = 0.1,
+    outlier_dens: int = 1,
+    target_dens: int = 5,
+    njobs: int = -1,
+):
     """
     Perform density dependent down-sampling to remove risk of under-sampling rare populations;
     adapted from SPADE*
@@ -214,29 +215,35 @@ def density_dependent_downsampling(data: pd.DataFrame,
     df = data.copy()
     features = features or df.columns.tolist()
     tree_sample = uniform_downsampling(data=df, sample_size=tree_sample)
-    prob = density_probability_assignment(sample=tree_sample[features],
-                                          data=df[features],
-                                          distance_metric=distance_metric,
-                                          alpha=alpha,
-                                          outlier_dens=outlier_dens,
-                                          target_dens=target_dens,
-                                          njobs=njobs)
+    prob = density_probability_assignment(
+        sample=tree_sample[features],
+        data=df[features],
+        distance_metric=distance_metric,
+        alpha=alpha,
+        outlier_dens=outlier_dens,
+        target_dens=target_dens,
+        njobs=njobs,
+    )
     if sum(prob) == 0:
-        logger.warning('Error: density dependendent downsampling failed; weights sum to zero. '
-                       'Defaulting to uniform sampling')
+        logger.warning(
+            "Error: density dependendent downsampling failed; weights sum to zero. "
+            "Defaulting to uniform sampling"
+        )
         return uniform_downsampling(data=data, sample_size=sample_size)
     if isinstance(sample_size, int):
         return df.sample(n=sample_size, weights=prob)
     return df.sample(frac=sample_size, weights=prob)
 
 
-def density_probability_assignment(sample: pd.DataFrame,
-                                   data: pd.DataFrame,
-                                   distance_metric: str = "manhattan",
-                                   alpha: int = 5,
-                                   outlier_dens: int = 1,
-                                   target_dens: int = 5,
-                                   njobs: int = -1):
+def density_probability_assignment(
+    sample: pd.DataFrame,
+    data: pd.DataFrame,
+    distance_metric: str = "manhattan",
+    alpha: int = 5,
+    outlier_dens: int = 1,
+    target_dens: int = 5,
+    njobs: int = -1,
+):
     """
     Generate an estimation of local density amongst single cell population
     using the KDTree algorithm from Scikit-Learn. Using this representation
@@ -290,16 +297,18 @@ def density_probability_assignment(sample: pd.DataFrame,
     return np.array(prob)
 
 
-def upsample_density(data: pd.DataFrame,
-                     features: list or None = None,
-                     upsample_factor: int = 2,
-                     sample_size: int or None = None,
-                     tree_sample: int or float = 0.1,
-                     distance_metric: str = "manhattan",
-                     alpha: int = 5,
-                     outlier_dens: int = 1,
-                     target_dens: int = 5,
-                     njobs: int = -1):
+def upsample_density(
+    data: pd.DataFrame,
+    features: list or None = None,
+    upsample_factor: int = 2,
+    sample_size: int or None = None,
+    tree_sample: int or float = 0.1,
+    distance_metric: str = "manhattan",
+    alpha: int = 5,
+    outlier_dens: int = 1,
+    target_dens: int = 5,
+    njobs: int = -1,
+):
     """
     Perform upsampling in a density dependent manner; neighbourhoods of cells of low
     density will have a high probability of being upsampled versus dense neighbourhoods.
@@ -344,14 +353,16 @@ def upsample_density(data: pd.DataFrame,
     """
     features = features or data.columns.tolist()
     tree_sample = uniform_downsampling(data=data, sample_size=tree_sample)
-    prob = density_probability_assignment(sample=tree_sample[features],
-                                          data=data[features],
-                                          distance_metric=distance_metric,
-                                          alpha=alpha,
-                                          outlier_dens=outlier_dens,
-                                          target_dens=target_dens,
-                                          njobs=njobs)
-    low_dens_idx = np.where(prob > 1.)
+    prob = density_probability_assignment(
+        sample=tree_sample[features],
+        data=data[features],
+        distance_metric=distance_metric,
+        alpha=alpha,
+        outlier_dens=outlier_dens,
+        target_dens=target_dens,
+        njobs=njobs,
+    )
+    low_dens_idx = np.where(prob > 1.0)
     low_dens_regions = data.iloc[low_dens_idx]
     upsampled_data = [low_dens_regions for _ in range(upsample_factor)]
     data = pd.concat([data] + upsampled_data)
@@ -360,12 +371,14 @@ def upsample_density(data: pd.DataFrame,
     return uniform_downsampling(data=data, sample_size=sample_size)
 
 
-def upsample_knn(sample: pd.DataFrame,
-                 original_data: pd.DataFrame,
-                 labels: list,
-                 features: list,
-                 scoring: str = "balanced_accuracy",
-                 **kwargs):
+def upsample_knn(
+    sample: pd.DataFrame,
+    original_data: pd.DataFrame,
+    labels: list,
+    features: list,
+    scoring: str = "balanced_accuracy",
+    **kwargs,
+):
     """
     Given some sampled dataframe and the original dataframe from which it was derived, use the
     given labels (which should correspond to the sampled dataframe row index) to fit a nearest
@@ -398,20 +411,23 @@ def upsample_knn(sample: pd.DataFrame,
     n = kwargs.get("n_neighbors", None)
     if n is None:
         logger.info("Calculating optimal n_neighbours by grid search CV...")
-        n, score = calculate_optimal_neighbours(x=sample[features].values,
-                                                y=labels,
-                                                scoring=scoring,
-                                                **kwargs)
-        logger.info(f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}...")
+        n, score = calculate_optimal_neighbours(
+            x=sample[features].values, y=labels, scoring=scoring, **kwargs
+        )
+        logger.info(
+            f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}..."
+        )
     logger.info("Training...")
-    train_acc, val_acc, model = knn(data=sample,
-                                    features=features,
-                                    labels=np.array(labels),
-                                    n_neighbours=n,
-                                    holdout_size=0.2,
-                                    random_state=42,
-                                    return_model=True,
-                                    **kwargs)
+    train_acc, val_acc, model = knn(
+        data=sample,
+        features=features,
+        labels=np.array(labels),
+        n_neighbours=n,
+        holdout_size=0.2,
+        random_state=42,
+        return_model=True,
+        **kwargs,
+    )
     logger.info(f"...training balanced accuracy score: {train_acc}")
     logger.info(f"...validation balanced accuracy score: {val_acc}")
     logger.info("Predicting labels in original data...")
@@ -420,10 +436,12 @@ def upsample_knn(sample: pd.DataFrame,
     return new_labels
 
 
-def sample_dataframe(data: pd.DataFrame,
-                     sample_size: Union[int, float] = 0.1,
-                     method: str = "uniform",
-                     **kwargs) -> pd.DataFrame:
+def sample_dataframe(
+    data: pd.DataFrame,
+    sample_size: Union[int, float] = 0.1,
+    method: str = "uniform",
+    **kwargs,
+) -> pd.DataFrame:
     """
     Convenient wrapper function for common sampling methods.
 
@@ -448,17 +466,19 @@ def sample_dataframe(data: pd.DataFrame,
     if method == "uniform":
         return uniform_downsampling(data=data, sample_size=sample_size, **kwargs)
     elif method == "density":
-        return density_dependent_downsampling(data=data, sample_size=sample_size, **kwargs)
+        return density_dependent_downsampling(
+            data=data, sample_size=sample_size, **kwargs
+        )
     elif method == "faithful":
         return faithful_downsampling(data=data, **kwargs)
     else:
-        valid = ['uniform', 'density', 'faithful']
+        valid = ["uniform", "density", "faithful"]
         raise SamplingError(f"Invalid method, must be one of {valid}")
 
 
-def sample_dataframe_uniform_groups(data: pd.DataFrame,
-                                    group_id: str,
-                                    sample_size: int):
+def sample_dataframe_uniform_groups(
+    data: pd.DataFrame, group_id: str, sample_size: int
+):
     sample_data = list()
     n = int(sample_size / data[group_id].nunique())
     for _, df in data.groupby(group_id):

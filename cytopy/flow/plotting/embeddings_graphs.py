@@ -48,23 +48,24 @@ __status__ = "Production"
 
 def _scatterplot_defaults(**kwargs):
     updated_kwargs = {k: v for k, v in kwargs.items()}
-    defaults = {"alpha": 0.75,
-                "linewidth": 0}
+    defaults = {"alpha": 0.75, "linewidth": 0}
     for k, v in defaults.items():
         if k not in updated_kwargs.keys():
             updated_kwargs[k] = v
     return updated_kwargs
 
 
-def discrete_scatterplot(data: pd.DataFrame,
-                         x: str,
-                         y: str,
-                         z: str or None,
-                         label: str,
-                         cmap: str,
-                         size: int or str or None,
-                         fig: plt.Figure,
-                         **kwargs):
+def discrete_scatterplot(
+    data: pd.DataFrame,
+    x: str,
+    y: str,
+    z: str or None,
+    label: str,
+    cmap: str,
+    size: int or str or None,
+    fig: plt.Figure,
+    **kwargs,
+):
     """
     Scatterplot with discrete label
 
@@ -93,38 +94,37 @@ def discrete_scatterplot(data: pd.DataFrame,
             s = size
             if isinstance(size, str):
                 s = df[size].values
-            ax.scatter(df[x].values,
-                       df[y].values,
-                       df[z].values,
-                       s=s,
-                       color=c,
-                       label=l,
-                       **kwargs)
+            ax.scatter(
+                df[x].values,
+                df[y].values,
+                df[z].values,
+                s=s,
+                color=c,
+                label=l,
+                **kwargs,
+            )
         return ax
     ax = fig.add_subplot(111)
     for (l, df), c in zip(data.groupby(label), colours):
         s = size
         if isinstance(size, str):
             s = df[size].values
-        ax.scatter(df[x].values,
-                   df[y].values,
-                   color=c,
-                   label=l,
-                   s=s,
-                   **kwargs)
+        ax.scatter(df[x].values, df[y].values, color=c, label=l, s=s, **kwargs)
     return ax
 
 
-def cont_scatterplot(data: pd.DataFrame,
-                     x: str,
-                     y: str,
-                     z: str or None,
-                     label: str,
-                     cmap: str,
-                     size: int or str or None,
-                     fig: plt.Figure,
-                     cbar_kwargs: dict,
-                     **kwargs):
+def cont_scatterplot(
+    data: pd.DataFrame,
+    x: str,
+    y: str,
+    z: str or None,
+    label: str,
+    cmap: str,
+    size: int or str or None,
+    fig: plt.Figure,
+    cbar_kwargs: dict,
+    **kwargs,
+):
     """
     Scatterplot with continuous label
 
@@ -151,39 +151,45 @@ def cont_scatterplot(data: pd.DataFrame,
         size = data[size].values
     if z is not None:
         ax = fig.add_subplot(111, projection="3d")
-        im = ax.scatter(data[x].values,
-                        data[y].values,
-                        data[z].values,
-                        c=data[label].values,
-                        s=size,
-                        cmap=cmap,
-                        **kwargs)
+        im = ax.scatter(
+            data[x].values,
+            data[y].values,
+            data[z].values,
+            c=data[label].values,
+            s=size,
+            cmap=cmap,
+            **kwargs,
+        )
     else:
         ax = fig.add_subplot(111)
-        im = ax.scatter(data[x].values,
-                        data[y].values,
-                        c=data[label].values,
-                        s=size,
-                        cmap=cmap,
-                        **kwargs)
+        im = ax.scatter(
+            data[x].values,
+            data[y].values,
+            c=data[label].values,
+            s=size,
+            cmap=cmap,
+            **kwargs,
+        )
     fig.colorbar(im, ax=ax, **cbar_kwargs)
     return ax
 
 
-def single_cell_plot(data: pd.DataFrame,
-                     x: str,
-                     y: str,
-                     z: str or None = None,
-                     label: str or None = None,
-                     discrete: bool or None = None,
-                     scale: str or None = None,
-                     figsize: tuple = (8, 8),
-                     include_legend: bool = False,
-                     cmap: str = "tab20",
-                     size: int or str or None = 10,
-                     legend_kwargs: dict or None = None,
-                     cbar_kwargs: dict or None = None,
-                     **kwargs):
+def single_cell_plot(
+    data: pd.DataFrame,
+    x: str,
+    y: str,
+    z: str or None = None,
+    label: str or None = None,
+    discrete: bool or None = None,
+    scale: str or None = None,
+    figsize: tuple = (8, 8),
+    include_legend: bool = False,
+    cmap: str = "tab20",
+    size: int or str or None = 10,
+    legend_kwargs: dict or None = None,
+    cbar_kwargs: dict or None = None,
+    **kwargs,
+):
     """
     Single cell plot, to be used with a dimensionality reduction method for example. Takes a
     DataFrame of single cell data and the name of two or three columns (generates a 3D plot if third
@@ -233,30 +239,38 @@ def single_cell_plot(data: pd.DataFrame,
     fig = plt.figure(figsize=figsize)
     if label is not None:
         if discrete:
-            ax = discrete_scatterplot(data=data,
-                                      x=x,
-                                      y=y,
-                                      z=z,
-                                      label=label,
-                                      size=size,
-                                      cmap=cmap,
-                                      fig=fig,
-                                      **kwargs)
+            ax = discrete_scatterplot(
+                data=data,
+                x=x,
+                y=y,
+                z=z,
+                label=label,
+                size=size,
+                cmap=cmap,
+                fig=fig,
+                **kwargs,
+            )
         else:
             if scale == "zscore":
-                data[label] = StandardScaler().fit_transform(data[label].values.reshape(-1, 1))
+                data[label] = StandardScaler().fit_transform(
+                    data[label].values.reshape(-1, 1)
+                )
             elif scale == "minmax":
-                data[label] = MinMaxScaler().fit_transform(data[label].values.reshape(-1, 1))
-            ax = cont_scatterplot(data=data,
-                                  x=x,
-                                  y=y,
-                                  z=z,
-                                  label=label,
-                                  size=size,
-                                  cmap=cmap,
-                                  fig=fig,
-                                  cbar_kwargs=cbar_kwargs,
-                                  **kwargs)
+                data[label] = MinMaxScaler().fit_transform(
+                    data[label].values.reshape(-1, 1)
+                )
+            ax = cont_scatterplot(
+                data=data,
+                x=x,
+                y=y,
+                z=z,
+                label=label,
+                size=size,
+                cmap=cmap,
+                fig=fig,
+                cbar_kwargs=cbar_kwargs,
+                **kwargs,
+            )
     else:
         if isinstance(size, str):
             size = data[size].values
@@ -281,52 +295,53 @@ def _assert_unique_label(x):
     return x[0]
 
 
-def _cluster_centroids(data: pd.DataFrame,
-                       features: list,
-                       sample_label: str,
-                       cluster_label: str):
+def _cluster_centroids(
+    data: pd.DataFrame, features: list, sample_label: str, cluster_label: str
+):
     return data.groupby([sample_label, cluster_label])[features].median().reset_index()
 
 
-def _sample_n(data: pd.DataFrame,
-              sample_label: str):
+def _sample_n(data: pd.DataFrame, sample_label: str):
     sample_size = data[sample_label].value_counts()
     sample_size.name = "sample_n"
-    return pd.DataFrame(sample_size).reset_index().rename({"index": sample_label}, axis=1)
+    return (
+        pd.DataFrame(sample_size).reset_index().rename({"index": sample_label}, axis=1)
+    )
 
 
-def _cluster_n(data: pd.DataFrame,
-               cluster_label: str,
-               sample_label: str):
+def _cluster_n(data: pd.DataFrame, cluster_label: str, sample_label: str):
     sample_cluster_counts = data.groupby(sample_label)[cluster_label].value_counts()
     sample_cluster_counts.name = "cluster_n"
     return pd.DataFrame(sample_cluster_counts).reset_index()
 
 
-def _cluster_size(sample_n: pd.DataFrame,
-                  cluster_n: pd.DataFrame):
+def _cluster_size(sample_n: pd.DataFrame, cluster_n: pd.DataFrame):
     cluster_size = cluster_n.merge(sample_n, on="sample_id")
     cluster_size["cluster_size"] = cluster_size["cluster_n"] / cluster_size["sample_n"]
     return cluster_size
 
 
-def _label_centroids(data: pd.DataFrame,
-                     centroids: pd.DataFrame,
-                     sample_label: str,
-                     cluster_label: str,
-                     target_label: str):
+def _label_centroids(
+    data: pd.DataFrame,
+    centroids: pd.DataFrame,
+    sample_label: str,
+    cluster_label: str,
+    target_label: str,
+):
     data = data[[sample_label, cluster_label, target_label]].drop_duplicates()
     return centroids.merge(data, on=[sample_label, cluster_label])
 
 
-def _generate_cluster_centroids(data: pd.DataFrame,
-                                features: list,
-                                cluster_label: str,
-                                sample_label: str,
-                                colour_label: str or None,
-                                dim_reduction_method: str or None,
-                                n_components: int = 2,
-                                dim_reduction_kwargs: dict or None = None):
+def _generate_cluster_centroids(
+    data: pd.DataFrame,
+    features: list,
+    cluster_label: str,
+    sample_label: str,
+    colour_label: str or None,
+    dim_reduction_method: str or None,
+    n_components: int = 2,
+    dim_reduction_kwargs: dict or None = None,
+):
     """
     Generate centroids for clusters in given dataframe
 
@@ -362,45 +377,56 @@ def _generate_cluster_centroids(data: pd.DataFrame,
     dim_reduction_kwargs = dim_reduction_kwargs or {}
     assert n_components in [2, 3], "n_components must be 2 or 3"
     data = data.dropna(axis=1, how="any")
-    centroids = _cluster_centroids(data=data,
-                                   features=features,
-                                   sample_label=sample_label,
-                                   cluster_label=cluster_label)
+    centroids = _cluster_centroids(
+        data=data,
+        features=features,
+        sample_label=sample_label,
+        cluster_label=cluster_label,
+    )
     if dim_reduction_method is not None:
-        reducer = DimensionReduction(method=dim_reduction_method,
-                                     n_components=n_components,
-                                     **dim_reduction_kwargs)
+        reducer = DimensionReduction(
+            method=dim_reduction_method,
+            n_components=n_components,
+            **dim_reduction_kwargs,
+        )
         centroids = reducer.fit_transform(data=centroids, features=features)
-    centroids = centroids.merge(_cluster_size(_sample_n(data=data,
-                                                        sample_label=sample_label),
-                                              _cluster_n(data=data,
-                                                         sample_label=sample_label,
-                                                         cluster_label=cluster_label)))
+    centroids = centroids.merge(
+        _cluster_size(
+            _sample_n(data=data, sample_label=sample_label),
+            _cluster_n(
+                data=data, sample_label=sample_label, cluster_label=cluster_label
+            ),
+        )
+    )
     if colour_label is not None:
         if colour_label != cluster_label:
-            centroids = _label_centroids(data=data,
-                                         centroids=centroids,
-                                         sample_label=sample_label,
-                                         cluster_label=cluster_label,
-                                         target_label=colour_label)
+            centroids = _label_centroids(
+                data=data,
+                centroids=centroids,
+                sample_label=sample_label,
+                cluster_label=cluster_label,
+                target_label=colour_label,
+            )
     return centroids
 
 
-def cluster_bubble_plot(data: pd.DataFrame,
-                        features: list,
-                        cluster_label: str,
-                        sample_label: str,
-                        colour_label: str or None = "meta_label",
-                        zscore: bool = False,
-                        discrete: bool = True,
-                        cmap: str = "tab20",
-                        dim_reduction_method: str or None = "UMAP",
-                        n_components: int = 2,
-                        dim_reduction_kwargs: dict or None = None,
-                        figsize: tuple = (8, 8),
-                        legend_kwargs: dict or None = None,
-                        cbar_kwargs: dict or None = None,
-                        **kwargs):
+def cluster_bubble_plot(
+    data: pd.DataFrame,
+    features: list,
+    cluster_label: str,
+    sample_label: str,
+    colour_label: str or None = "meta_label",
+    zscore: bool = False,
+    discrete: bool = True,
+    cmap: str = "tab20",
+    dim_reduction_method: str or None = "UMAP",
+    n_components: int = 2,
+    dim_reduction_kwargs: dict or None = None,
+    figsize: tuple = (8, 8),
+    legend_kwargs: dict or None = None,
+    cbar_kwargs: dict or None = None,
+    **kwargs,
+):
     """
     Generate a cluster 'bubble' plot where each data point (bubble) is a single cluster centroid
     from a unique patient. Size of the data points represents the fraction of events with membership
@@ -447,59 +473,71 @@ def cluster_bubble_plot(data: pd.DataFrame,
     legend_kwargs = legend_kwargs or {}
     cbar_kwargs = cbar_kwargs or {}
     kwargs = _bubbleplot_defaults(**kwargs)
-    centroids = _generate_cluster_centroids(data=data,
-                                            features=features,
-                                            cluster_label=cluster_label,
-                                            sample_label=sample_label,
-                                            colour_label=colour_label,
-                                            dim_reduction_method=dim_reduction_method,
-                                            n_components=n_components,
-                                            dim_reduction_kwargs=dim_reduction_kwargs)
+    centroids = _generate_cluster_centroids(
+        data=data,
+        features=features,
+        cluster_label=cluster_label,
+        sample_label=sample_label,
+        colour_label=colour_label,
+        dim_reduction_method=dim_reduction_method,
+        n_components=n_components,
+        dim_reduction_kwargs=dim_reduction_kwargs,
+    )
     if colour_label:
         if discrete:
             centroids[colour_label] = centroids[colour_label].astype(str)
         elif zscore:
-            centroids[colour_label] = StandardScaler().fit_transform(centroids[colour_label].values.reshape(-1, 1))
+            centroids[colour_label] = StandardScaler().fit_transform(
+                centroids[colour_label].values.reshape(-1, 1)
+            )
         if n_components == 2:
             ax = fig.add_subplot(111)
-            ax = sns.scatterplot(data=centroids,
-                                 x=f"{dim_reduction_method}1",
-                                 y=f"{dim_reduction_method}2",
-                                 hue=colour_label,
-                                 palette=cmap,
-                                 ax=ax,
-                                 size="cluster_size",
-                                 **kwargs)
+            ax = sns.scatterplot(
+                data=centroids,
+                x=f"{dim_reduction_method}1",
+                y=f"{dim_reduction_method}2",
+                hue=colour_label,
+                palette=cmap,
+                ax=ax,
+                size="cluster_size",
+                **kwargs,
+            )
         else:
-            ax = discrete_scatterplot(data=centroids,
-                                      x=f"{dim_reduction_method}1",
-                                      y=f"{dim_reduction_method}2",
-                                      z=f"{dim_reduction_method}3",
-                                      size="cluster_size",
-                                      label=colour_label,
-                                      cmap=cmap,
-                                      fig=fig,
-                                      **kwargs)
+            ax = discrete_scatterplot(
+                data=centroids,
+                x=f"{dim_reduction_method}1",
+                y=f"{dim_reduction_method}2",
+                z=f"{dim_reduction_method}3",
+                size="cluster_size",
+                label=colour_label,
+                cmap=cmap,
+                fig=fig,
+                **kwargs,
+            )
     else:
         if n_components == 2:
             ax = fig.add_subplot(111)
-            ax = sns.scatterplot(data=centroids,
-                                 x=f"{dim_reduction_method}1",
-                                 y=f"{dim_reduction_method}2",
-                                 ax=ax,
-                                 size="cluster_size",
-                                 **kwargs)
+            ax = sns.scatterplot(
+                data=centroids,
+                x=f"{dim_reduction_method}1",
+                y=f"{dim_reduction_method}2",
+                ax=ax,
+                size="cluster_size",
+                **kwargs,
+            )
         else:
-            ax = cont_scatterplot(data=data,
-                                  x=f"{dim_reduction_method}1",
-                                  y=f"{dim_reduction_method}2",
-                                  z=f"{dim_reduction_method}3",
-                                  label=colour_label,
-                                  size="cluster_size",
-                                  cmap=cmap,
-                                  fig=fig,
-                                  cbar_kwargs=cbar_kwargs,
-                                  **kwargs)
+            ax = cont_scatterplot(
+                data=data,
+                x=f"{dim_reduction_method}1",
+                y=f"{dim_reduction_method}2",
+                z=f"{dim_reduction_method}3",
+                label=colour_label,
+                size="cluster_size",
+                cmap=cmap,
+                fig=fig,
+                cbar_kwargs=cbar_kwargs,
+                **kwargs,
+            )
     legend_kwargs = legend_kwargs or {}
     legend_kwargs["bbox_to_anchor"] = legend_kwargs.get("bbox_to_anchor", (1.1, 1.0))
     ax.legend(*ax.get_legend_handles_labels(), **legend_kwargs)
@@ -508,22 +546,26 @@ def cluster_bubble_plot(data: pd.DataFrame,
 
 def _bubbleplot_defaults(**kwargs):
     updated_kwargs = {k: v for k, v in kwargs.items()}
-    defaults = {"edgecolor": "black",
-                "alpha": 0.75,
-                "linewidth": 2,
-                "sizes": (100, 1000)}
+    defaults = {
+        "edgecolor": "black",
+        "alpha": 0.75,
+        "linewidth": 2,
+        "sizes": (100, 1000),
+    }
     for k, v in defaults.items():
         if k not in updated_kwargs.keys():
             updated_kwargs[k] = v
     return updated_kwargs
 
 
-def plot_min_spanning_tree(data: pd.DataFrame,
-                           features: list,
-                           cluster_label: str,
-                           sample_label: str,
-                           colour_label: str or None = "meta_label",
-                           **kwargs):
+def plot_min_spanning_tree(
+    data: pd.DataFrame,
+    features: list,
+    cluster_label: str,
+    sample_label: str,
+    colour_label: str or None = "meta_label",
+    **kwargs,
+):
     """
     Experimental method in version 2.0. Generates a minimum spanning tree of cluster centroids.
 
@@ -546,17 +588,18 @@ def plot_min_spanning_tree(data: pd.DataFrame,
     -------
     Matplotlib.Axes
     """
-    centroids = _generate_cluster_centroids(data=data,
-                                            features=features,
-                                            cluster_label=cluster_label,
-                                            sample_label=sample_label,
-                                            colour_label=colour_label,
-                                            dim_reduction_method=None,
-                                            n_components=2,
-                                            dim_reduction_kwargs={})
+    centroids = _generate_cluster_centroids(
+        data=data,
+        features=features,
+        cluster_label=cluster_label,
+        sample_label=sample_label,
+        colour_label=colour_label,
+        dim_reduction_method=None,
+        n_components=2,
+        dim_reduction_kwargs={},
+    )
     graph = nx.Graph()
-    distance_matrix = squareform(pdist(centroids[features]),
-                                 "minkowski")
+    distance_matrix = squareform(pdist(centroids[features]), "minkowski")
     for i in range(len(distance_matrix)):
         for j in range(i + 1, len(distance_matrix)):
             w = distance_matrix[i][j]
@@ -569,14 +612,16 @@ def plot_min_spanning_tree(data: pd.DataFrame,
     fig, ax = plt.subplots(figsize=(10, 10))
     pos = nx.spring_layout(mst, iterations=300, scale=3, dim=2)
     sizes = centroids["cluster_size"].values * 2000
-    nx.draw(mst,
-            pos=pos,
-            with_labels=False,
-            node_size=sizes,
-            node_color=colours,
-            width=2,
-            alpha=0.5,
-            ax=ax,
-            **kwargs)
+    nx.draw(
+        mst,
+        pos=pos,
+        with_labels=False,
+        node_size=sizes,
+        node_color=colours,
+        width=2,
+        alpha=0.5,
+        ax=ax,
+        **kwargs,
+    )
     ax.legend()
     return ax

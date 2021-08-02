@@ -1,4 +1,5 @@
 import logging
+
 logger = logging.getLogger("data")
 
 
@@ -69,8 +70,7 @@ class MissingPopulationError(Exception):
 
 
 class InsufficientEventsError(Exception):
-    def __init__(self,
-                 population_id: str,
-                 filegroup_id: str):
-        super(self).__init__(f"Insufficient events in {population_id} does not exists for {filegroup_id}!")
-
+    def __init__(self, population_id: str, filegroup_id: str):
+        super(self).__init__(
+            f"Insufficient events in {population_id} does not exists for {filegroup_id}!"
+        )

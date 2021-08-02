@@ -24,20 +24,32 @@ def make_examples():
 
 
 def test_filter_fcs_files(make_examples):
-    assert len(read_write.filter_fcs_files(f"{os.getcwd()}/test_filter",
-                                           exclude_comps=True,
-                                           exclude_dir="ignore")) == 5
-    assert len(read_write.filter_fcs_files(f"{os.getcwd()}/test_filter",
-                                           exclude_comps=False,
-                                           exclude_dir="ignore")) == 10
+    assert (
+        len(
+            read_write.filter_fcs_files(
+                f"{os.getcwd()}/test_filter", exclude_comps=True, exclude_dir="ignore"
+            )
+        )
+        == 5
+    )
+    assert (
+        len(
+            read_write.filter_fcs_files(
+                f"{os.getcwd()}/test_filter", exclude_comps=False, exclude_dir="ignore"
+            )
+        )
+        == 10
+    )
 
 
 def test_get_fcs_file_paths(make_examples):
-    tree = read_write.get_fcs_file_paths(f"{os.getcwd()}/test_filter",
-                                         control_names=["CD45", "CD80", "CD85", "CD40"],
-                                         ctrl_id="FMO",
-                                         ignore_comp=True,
-                                         exclude_dir="ignore")
+    tree = read_write.get_fcs_file_paths(
+        f"{os.getcwd()}/test_filter",
+        control_names=["CD45", "CD80", "CD85", "CD40"],
+        ctrl_id="FMO",
+        ignore_comp=True,
+        exclude_dir="ignore",
+    )
     assert tree.get("primary")[0] == f"{os.getcwd()}/test_filter/primary.fcs"
     assert len(tree.get("controls")) == 4
 
@@ -53,5 +65,3 @@ def test_explore_channel_mappings():
     assert isinstance(mappings, list)
     x = [i for i in mappings if dict(i)["channel"] == "FL2 Log"]
     assert x[0].get("marker") == "IgG1-PE"
-
-

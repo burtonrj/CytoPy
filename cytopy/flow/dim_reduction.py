@@ -83,36 +83,41 @@ class DimensionReduction:
     embeddings: None or Numpy.Array
         Embeddings generated from fit_transform method
     """
-    base_methods = {"UMAP": UMAP,
-                    "PCA": PCA,
-                    "tSNE": TSNE,
-                    "PHATE": phate.PHATE,
-                    "KernelPCA": KernelPCA,
-                    "MDS": MDS,
-                    "Isomap": Isomap}
 
-    def __init__(self,
-                 method: Union[str, Type],
-                 n_components: int = 2,
-                 **kwargs):
+    base_methods = {
+        "UMAP": UMAP,
+        "PCA": PCA,
+        "tSNE": TSNE,
+        "PHATE": phate.PHATE,
+        "KernelPCA": KernelPCA,
+        "MDS": MDS,
+        "Isomap": Isomap,
+    }
+
+    def __init__(self, method: Union[str, Type], n_components: int = 2, **kwargs):
         params = dict(n_components=n_components)
         params = {**params, **kwargs}
         try:
             if isinstance(method, str):
                 self.method = self.base_methods[method](**params)
         except KeyError:
-            raise KeyError(f"Invalid method, must be one of: {self.base_methods.keys()} or a valid class with "
-                           f"method: fit_transform")
+            raise KeyError(
+                f"Invalid method, must be one of: {self.base_methods.keys()} or a valid class with "
+                f"method: fit_transform"
+            )
         except TypeError as e:
-            logger.error(f"Type error when initiating dim reduction method {method}; invalid argument")
+            logger.error(
+                f"Type error when initiating dim reduction method {method}; invalid argument"
+            )
             logger.exception(e)
-            raise TypeError(f"Type error when initiating dim reduction method {method}; invalid argument", e)
+            raise TypeError(
+                f"Type error when initiating dim reduction method {method}; invalid argument",
+                e,
+            )
         self.embeddings = None
         self._method_name = type(self.method).__name__
 
-    def fit(self,
-            data: pd.DataFrame,
-            features: List[str]) -> Union[None, pd.DataFrame]:
+    def fit(self, data: pd.DataFrame, features: List[str]) -> Union[None, pd.DataFrame]:
         """
         Fit the underlying method. Will call 'fit_transform' if fit is not supported.
 
@@ -128,13 +133,13 @@ class DimensionReduction:
             If fit is not supported, will returns a Pandas DataFrame.
         """
         if not hasattr(self.method, "fit"):
-            logger.warning(f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead.")
+            logger.warning(
+                f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead."
+            )
             return self.fit_transform(data=data, features=features)
         self.method.fit(data[features])
 
-    def fit_transform(self,
-                      data: pd.DataFrame,
-                      features: List[str]) -> pd.DataFrame:
+    def fit_transform(self, data: pd.DataFrame, features: List[str]) -> pd.DataFrame:
         """
         Fit the underlying method and generate transformed embeddings. Transformed embeddings are
         stored as new columns in the Pandas DataFrame. DataFrame is copied and not mutated.
@@ -152,12 +157,10 @@ class DimensionReduction:
         data = data.copy()
         self.embeddings = self.method.fit_transform(data[features])
         for i, e in enumerate(self.embeddings.T):
-            data[f'{self._method_name}{i + 1}'] = e
+            data[f"{self._method_name}{i + 1}"] = e
         return data
 
-    def transform(self,
-                  data: pd.DataFrame,
-                  features: List[str]) -> pd.DataFrame:
+    def transform(self, data: pd.DataFrame, features: List[str]) -> pd.DataFrame:
         """
         Generate embeddings for the given DataFrame using the current fitted method. Transformed embeddings are
         stored as new columns in the Pandas DataFrame. DataFrame is copied and not mutated.
@@ -175,12 +178,13 @@ class DimensionReduction:
         Pandas.DataFrame
         """
         if not hasattr(self.method, "transform"):
-            logger.warning(f"Method {self._method_name} has no method 'transform', calling 'fit_transform' instead.")
+            logger.warning(
+                f"Method {self._method_name} has no method 'transform', calling 'fit_transform' instead."
+            )
             return self.fit_transform(data=data, features=features)
 
         data = data.copy()
         embeddings = self.method.transform(data[features])
         for i, e in enumerate(embeddings.T):
-            data[f'{self._method_name}{i + 1}'] = e
+            data[f"{self._method_name}{i + 1}"] = e
         return data
-

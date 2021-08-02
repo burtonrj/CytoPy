@@ -52,7 +52,11 @@ import math
 
 np.random.seed(42)
 
-COLOURS = list(cm.get_cmap("tab20").colors) + list(cm.get_cmap("tab20b").colors) + list(cm.get_cmap("tab20c").colors)
+COLOURS = (
+    list(cm.get_cmap("tab20").colors)
+    + list(cm.get_cmap("tab20b").colors)
+    + list(cm.get_cmap("tab20c").colors)
+)
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -65,12 +69,14 @@ __status__ = "Production"
 logger = logging.getLogger("Variance")
 
 
-def bw_optimisation(data: pd.DataFrame,
-                    features: List[str],
-                    kernel: str = "gaussian",
-                    bandwidth: Tuple[float] = (0.01, 0.1, 10),
-                    cv: int = 10,
-                    verbose: int = 0) -> float:
+def bw_optimisation(
+    data: pd.DataFrame,
+    features: List[str],
+    kernel: str = "gaussian",
+    bandwidth: Tuple[float] = (0.01, 0.1, 10),
+    cv: int = 10,
+    verbose: int = 0,
+) -> float:
     """
     Using GridSearchCV and the Scikit-Learn implementation of KDE, find the optimal
     bandwidth for the given data using grid search cross-validation
@@ -92,18 +98,20 @@ def bw_optimisation(data: pd.DataFrame,
     """
     bandwidth = np.linspace(*bandwidth)
     kde = KernelDensity(kernel=kernel)
-    grid = GridSearchCV(estimator=kde,
-                        param_grid={"bandwidth": bandwidth},
-                        cv=cv,
-                        n_jobs=-1,
-                        verbose=verbose)
+    grid = GridSearchCV(
+        estimator=kde,
+        param_grid={"bandwidth": bandwidth},
+        cv=cv,
+        n_jobs=-1,
+        verbose=verbose,
+    )
     grid.fit(data[features])
     return grid.best_params_.get("bandwidth")
 
 
-def calculate_ref_sample(data: pd.DataFrame,
-                         features: Union[List[str], None] = None,
-                         verbose: bool = True) -> str:
+def calculate_ref_sample(
+    data: pd.DataFrame, features: Union[List[str], None] = None, verbose: bool = True
+) -> str:
     """
 
     This is performed as described in Li et al paper (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5860171/) on
@@ -126,13 +134,17 @@ def calculate_ref_sample(data: pd.DataFrame,
         Sample ID of reference sample
     """
     feedback = vprint(verbose)
-    feedback('Calculate covariance matrix for each sample...')
+    feedback("Calculate covariance matrix for each sample...")
     # Calculate covar for each
     data = data.dropna(axis=1, how="any")
     features = features or list(data.columns)
-    covar = {k: np.cov(v[features].astype(np.float32), rowvar=False)
-             for k, v in data.groupby(by="sample_id")}
-    feedback('Search for sample with smallest average euclidean distance to all other samples...')
+    covar = {
+        k: np.cov(v[features].astype(np.float32), rowvar=False)
+        for k, v in data.groupby(by="sample_id")
+    }
+    feedback(
+        "Search for sample with smallest average euclidean distance to all other samples..."
+    )
     # Make comparisons
     sample_ids = list(covar.keys())
     n = len(sample_ids)
@@ -141,23 +153,25 @@ def calculate_ref_sample(data: pd.DataFrame,
     for i, sample_i in enumerate(sample_ids):
         for j, sample_j in enumerate(sample_ids):
             cov_diff = covar.get(sample_i) - covar.get(sample_j)
-            norms[i, j] = np.linalg.norm(cov_diff, ord='fro')
+            norms[i, j] = np.linalg.norm(cov_diff, ord="fro")
             norms[j, i] = norms[i, j]
             avg = np.mean(norms, axis=1)
             ref_ind = np.argmin(avg)
     return sample_ids[int(ref_ind)]
 
 
-def marker_variance(data: pd.DataFrame,
-                    reference: str,
-                    comparison_samples: Union[List[str], None] = None,
-                    markers: Union[List[str], None] = None,
-                    figsize: tuple = (10, 10),
-                    xlim: Union[Tuple[float], None] = None,
-                    verbose: bool = True,
-                    kernel: str = "gaussian",
-                    kde_bw: Union[str, float] = "silverman",
-                    **kwargs):
+def marker_variance(
+    data: pd.DataFrame,
+    reference: str,
+    comparison_samples: Union[List[str], None] = None,
+    markers: Union[List[str], None] = None,
+    figsize: tuple = (10, 10),
+    xlim: Union[Tuple[float], None] = None,
+    verbose: bool = True,
+    kernel: str = "gaussian",
+    kde_bw: Union[str, float] = "silverman",
+    **kwargs,
+):
     """
     Compare the kernel density estimates for each marker in the associated experiment for the given
     comparison samples. The estimated distributions of the comparison samples will be plotted against
@@ -194,19 +208,22 @@ def marker_variance(data: pd.DataFrame,
     if reference not in data.sample_id.unique():
         raise ValueError("Reference absent from given data")
 
-    comparison_samples = comparison_samples or [x for x in data.sample_id.unique() if x != reference]
+    comparison_samples = comparison_samples or [
+        x for x in data.sample_id.unique() if x != reference
+    ]
     fig = plt.figure(figsize=figsize)
     markers = markers or data.get(reference).columns.tolist()
     i = 0
     nrows = math.ceil(len(markers) / 3)
-    fig.suptitle(f'Per-channel KDE, Reference: {reference}', y=1.02)
+    fig.suptitle(f"Per-channel KDE, Reference: {reference}", y=1.02)
     for marker in progress_bar(markers, verbose=verbose):
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
-        x, y = (FFTKDE(kernel=kernel,
-                       bw=kde_bw)
-                .fit(data[data.sample_id == reference][marker].values)
-                .evaluate())
+        x, y = (
+            FFTKDE(kernel=kernel, bw=kde_bw)
+            .fit(data[data.sample_id == reference][marker].values)
+            .evaluate()
+        )
         ax.plot(x, y, color="b", **kwargs)
         ax.fill_between(x, 0, y, facecolor="b", alpha=0.2)
         ax.set_title(marker)
@@ -215,12 +232,13 @@ def marker_variance(data: pd.DataFrame,
         for comparison_sample_id in comparison_samples:
             df = data[data.sample_id == comparison_sample_id]
             if marker not in df.columns:
-                warn(f"{marker} missing from {comparison_sample_id}, this marker will be ignored")
+                warn(
+                    f"{marker} missing from {comparison_sample_id}, this marker will be ignored"
+                )
             else:
-                x, y = (FFTKDE(kernel=kernel,
-                               bw=kde_bw)
-                        .fit(df[marker].values)
-                        .evaluate())
+                x, y = (
+                    FFTKDE(kernel=kernel, bw=kde_bw).fit(df[marker].values).evaluate()
+                )
                 ax.plot(x, y, color="r", **kwargs)
                 if ax.get_legend() is not None:
                     ax.get_legend().remove()
@@ -229,15 +247,17 @@ def marker_variance(data: pd.DataFrame,
     return fig
 
 
-def dim_reduction_grid(data: pd.DataFrame,
-                       reference: str,
-                       features: List[str],
-                       comparison_samples: Union[List[str], None] = None,
-                       figsize: Tuple[int] = (10, 10),
-                       method: str = 'PCA',
-                       kde: bool = False,
-                       verbose: bool = True,
-                       dim_reduction_kwargs: Optional[Dict] = None):
+def dim_reduction_grid(
+    data: pd.DataFrame,
+    reference: str,
+    features: List[str],
+    comparison_samples: Union[List[str], None] = None,
+    figsize: Tuple[int] = (10, 10),
+    method: str = "PCA",
+    kde: bool = False,
+    verbose: bool = True,
+    dim_reduction_kwargs: Optional[Dict] = None,
+):
     """
     Generate a grid of embeddings using a valid dimensionality reduction technique, in each plot a reference sample
     is shown in blue and a comparison sample in red. The reference sample is conserved across all plots.
@@ -277,44 +297,60 @@ def dim_reduction_grid(data: pd.DataFrame,
     """
     assert reference in data.sample_id.unique(), "Reference absent from given data"
     data = data.dropna(axis=1, how="any")
-    comparison_samples = comparison_samples or [x for x in data.sample_id.unique() if x != reference]
+    comparison_samples = comparison_samples or [
+        x for x in data.sample_id.unique() if x != reference
+    ]
     dim_reduction_kwargs = dim_reduction_kwargs or {}
     fig = plt.figure(figsize=figsize)
     nrows = math.ceil(len(comparison_samples) / 3)
     reference_df = data[data.sample_id == reference].copy()
     if not all([f in reference_df.columns for f in features]):
-        raise ValueError(f'Invalid features; valid are: {reference_df.columns}')
-    reducer = DimensionReduction(method=method,
-                                 n_components=2,
-                                 **dim_reduction_kwargs)
-    reference_df = reducer.fit_transform(data=reference_df.reset_index(),
-                                         features=features)
+        raise ValueError(f"Invalid features; valid are: {reference_df.columns}")
+    reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
+    reference_df = reducer.fit_transform(
+        data=reference_df.reset_index(), features=features
+    )
     i = 0
-    fig.suptitle(f'{method}, Reference: {reference}', y=1.05)
+    fig.suptitle(f"{method}, Reference: {reference}", y=1.05)
     for sample_id in progress_bar(comparison_samples, verbose=verbose):
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
-        embeddings = reducer.transform(data[data.sample_id == sample_id].reset_index(), features=features)
-        x = f'{method}1'
-        y = f'{method}2'
-        ax.scatter(reference_df[x], reference_df[y], c='blue', s=4, alpha=0.2)
+        embeddings = reducer.transform(
+            data[data.sample_id == sample_id].reset_index(), features=features
+        )
+        x = f"{method}1"
+        y = f"{method}2"
+        ax.scatter(reference_df[x], reference_df[y], c="blue", s=4, alpha=0.2)
         if kde:
-            sns.kdeplot(reference_df[x], reference_df[y], c='blue', n_levels=100, ax=ax, shade=False)
-        ax.scatter(embeddings[:, 0], embeddings[:, 1], c='red', s=4, alpha=0.1)
+            sns.kdeplot(
+                reference_df[x],
+                reference_df[y],
+                c="blue",
+                n_levels=100,
+                ax=ax,
+                shade=False,
+            )
+        ax.scatter(embeddings[:, 0], embeddings[:, 1], c="red", s=4, alpha=0.1)
         if kde:
-            sns.kdeplot(embeddings[:, 0], embeddings[:, 1], c='red',
-                        n_levels=100, ax=ax, shade=False)
+            sns.kdeplot(
+                embeddings[:, 0],
+                embeddings[:, 1],
+                c="red",
+                n_levels=100,
+                ax=ax,
+                shade=False,
+            )
         ax.set_title(sample_id)
         ax.set_yticklabels([])
         ax.set_xticklabels([])
-        ax.set(aspect='auto')
+        ax.set(aspect="auto")
     fig.tight_layout()
     return fig
 
 
-def generate_groups(linkage_matrix: np.ndarray,
-                    sample_ids: Union[List[str], np.ndarray],
-                    n_groups: int):
+def generate_groups(
+    linkage_matrix: np.ndarray, sample_ids: Union[List[str], np.ndarray], n_groups: int
+):
     """
     Given the output of SimilarityMatrix (that is the linkage matrix and ordered list of sample
     IDs) and a desired number of groups, return a Pandas DataFrame of sample IDs and assigned group ID, generated by
@@ -331,10 +367,18 @@ def generate_groups(linkage_matrix: np.ndarray,
     -------
     Pandas.DataFrame
     """
-    groups = pd.DataFrame({'sample_id': sample_ids,
-                           'group': list(map(lambda x: x + 1,
-                                             hierarchy.cut_tree(linkage_matrix, n_groups).flatten()))})
-    groups = groups.sort_values('group')
+    groups = pd.DataFrame(
+        {
+            "sample_id": sample_ids,
+            "group": list(
+                map(
+                    lambda x: x + 1,
+                    hierarchy.cut_tree(linkage_matrix, n_groups).flatten(),
+                )
+            ),
+        }
+    )
+    groups = groups.sort_values("group")
     return groups
 
 
@@ -388,16 +432,21 @@ class Harmony:
     scaler: Scaler
         Scaler object; used to inverse the scale when saving data back to the database after correction
     """
-    def __init__(self,
-                 data: pd.DataFrame,
-                 features: List[str],
-                 transform: Optional[str] = "logicle",
-                 transform_kwargs: Union[Dict[str, str], None] = None,
-                 scale: Optional[str] = "standard",
-                 scale_kwargs: Optional[Dict] = None):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        features: List[str],
+        transform: Optional[str] = "logicle",
+        transform_kwargs: Union[Dict[str, str], None] = None,
+        scale: Optional[str] = "standard",
+        scale_kwargs: Optional[Dict] = None,
+    ):
         logger.info("Preparing Harmony for application to an Experiment")
         transform_kwargs = transform_kwargs or {}
-        self.transformer = None if transform is None else TRANSFORMERS[transform](**transform_kwargs)
+        self.transformer = (
+            None if transform is None else TRANSFORMERS[transform](**transform_kwargs)
+        )
         self.data = data
         self.data = self.data.dropna(axis=1, how="any")
         self.features = [x for x in features if x in self.data.columns]
@@ -410,9 +459,7 @@ class Harmony:
             self.data = scale(data=self.data, features=self.features)
             self.scaler = scale
 
-    def run(self,
-            var_use: str = "sample_id",
-            **kwargs):
+    def run(self, var_use: str = "sample_id", **kwargs):
         """
         Run the harmony algorithm (see https://github.com/slowkow/harmonypy for details). Resulting object
         is stored in 'harmony' attribute
@@ -428,10 +475,9 @@ class Harmony:
         """
         logger.info("Running harmony")
         data = self.data[self.features].astype(float)
-        self.harmony = harmonypy.run_harmony(data_mat=data.values,
-                                             meta_data=self.meta,
-                                             vars_use=var_use,
-                                             **kwargs)
+        self.harmony = harmonypy.run_harmony(
+            data_mat=data.values, meta_data=self.meta, vars_use=var_use, **kwargs
+        )
         return
 
     def plot_kde(self, var: Union[str, List[str]]):
@@ -450,18 +496,13 @@ class Harmony:
         v = self.data[var].values
         if isinstance(var, list):
             v = np.sum([self.data[x].values for x in var], axis=0)
-        x, y = (FFTKDE(kernel="gaussian",
-                       bw="silverman")
-                .fit(v)
-                .evaluate())
+        x, y = FFTKDE(kernel="gaussian", bw="silverman").fit(v).evaluate()
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.plot(x, y)
         ax.set_xlabel(var)
         return fig, ax
 
-    def add_meta_var(self,
-                     mask: pd.DataFrame,
-                     meta_var_name: str):
+    def add_meta_var(self, mask: pd.DataFrame, meta_var_name: str):
         """
         Add a binary meta variable. Should provide a mask to the 'data' attribute; rows that
         return True for this mask will have a value of 'P' in 'meta_var_name' column of 'meta',
@@ -482,9 +523,7 @@ class Harmony:
         self.data.drop(meta_var_name, axis=1, inplace=True)
         return self
 
-    def batch_lisi(self,
-                   meta_var: str = "sample_id",
-                   sample: float = 1.):
+    def batch_lisi(self, meta_var: str = "sample_id", sample: float = 1.0):
         """
         Compute LISI using the given meta_var as label
 
@@ -507,15 +546,18 @@ class Harmony:
         if meta_var not in self.meta.columns:
             logger.error(f"{meta_var} missing from meta attribute")
             raise ValueError(f"{meta_var} missing from meta attribute")
-        idx = np.random.randint(self.data.shape[0], size=int(self.data.shape[0] * sample))
-        return harmonypy.lisi.compute_lisi(self.batch_corrected()[self.features].values[idx],
-                                           metadata=self.meta.iloc[idx],
-                                           label_colnames=[meta_var])
+        idx = np.random.randint(
+            self.data.shape[0], size=int(self.data.shape[0] * sample)
+        )
+        return harmonypy.lisi.compute_lisi(
+            self.batch_corrected()[self.features].values[idx],
+            metadata=self.meta.iloc[idx],
+            label_colnames=[meta_var],
+        )
 
-    def batch_lisi_distribution(self,
-                                meta_var: str = "sample_id",
-                                sample: Union[float, None] = 0.1,
-                                **kwargs):
+    def batch_lisi_distribution(
+        self, meta_var: str = "sample_id", sample: Union[float, None] = 0.1, **kwargs
+    ):
         """
         Plot the distribution of LISI using the given meta_var as label
 
@@ -532,12 +574,20 @@ class Harmony:
         -------
         Matplotlib.Axes
         """
-        idx = np.random.randint(self.data.shape[0], size=int(self.data.shape[0] * sample))
-        before = harmonypy.lisi.compute_lisi(self.data[self.features].values[idx],
-                                             metadata=self.meta.iloc[idx],
-                                             label_colnames=[meta_var])
-        data = pd.DataFrame({"Before": before.reshape(-1),
-                             "After": self.batch_lisi(meta_var=meta_var, sample=sample).reshape(-1)})
+        idx = np.random.randint(
+            self.data.shape[0], size=int(self.data.shape[0] * sample)
+        )
+        before = harmonypy.lisi.compute_lisi(
+            self.data[self.features].values[idx],
+            metadata=self.meta.iloc[idx],
+            label_colnames=[meta_var],
+        )
+        data = pd.DataFrame(
+            {
+                "Before": before.reshape(-1),
+                "After": self.batch_lisi(meta_var=meta_var, sample=sample).reshape(-1),
+            }
+        )
         data = data.melt(var_name="Data", value_name="LISI")
         kwargs = kwargs or {}
         kwargs["ax"] = kwargs.get("ax", plt.subplots(figsize=(5, 5))[1])
@@ -563,10 +613,12 @@ class Harmony:
         corrected["original_index"] = self.data["original_index"]
         return corrected
 
-    def save(self,
-             experiment: Experiment,
-             prefix: str = "Corrected_",
-             subject_mappings: Union[Dict[str, str], None] = None):
+    def save(
+        self,
+        experiment: Experiment,
+        prefix: str = "Corrected_",
+        subject_mappings: Union[Dict[str, str], None] = None,
+    ):
         """
         Saved the batch corrected data to an Experiment with each biological specimen (batch) saved
         to an individual FileGroup.
@@ -591,23 +643,25 @@ class Harmony:
         """
         assert self.harmony is not None, "Call 'run' first"
         subject_mappings = subject_mappings or {}
-        for sample_id, df in progress_bar(self.batch_corrected().groupby("sample_id"),
-                                          verbose=True,
-                                          total=self.meta.sample_id.nunique()):
+        for sample_id, df in progress_bar(
+            self.batch_corrected().groupby("sample_id"),
+            verbose=True,
+            total=self.meta.sample_id.nunique(),
+        ):
             if self.scaler is not None:
                 df = self.scaler.inverse(data=df, features=self.features)
             if self.transformer is not None:
                 df = self.transformer.inverse_scale(data=df, features=self.features)
-            experiment.add_dataframes(sample_id=str(prefix) + str(sample_id),
-                                      primary_data=df[self.features],
-                                      mappings=[{"channel": x, "marker": x} for x in self.features],
-                                      verbose=False,
-                                      subject_id=subject_mappings.get(sample_id, None))
+            experiment.add_dataframes(
+                sample_id=str(prefix) + str(sample_id),
+                primary_data=df[self.features],
+                mappings=[{"channel": x, "marker": x} for x in self.features],
+                verbose=False,
+                subject_id=subject_mappings.get(sample_id, None),
+            )
 
 
-def create_experiment(project,
-                      features: List[str],
-                      experiment_name: str) -> Experiment:
+def create_experiment(project, features: List[str], experiment_name: str) -> Experiment:
     """
     Utility function for creating an experiment with FileGroups that contain
     the given features. Useful for creating an Experiment to house batch corrected
@@ -623,11 +677,14 @@ def create_experiment(project,
     -------
     Experiment
     """
-    markers = [{"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""}
-               for x in features]
-    channels = [{"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""}
-                for x in features]
+    markers = [
+        {"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""} for x in features
+    ]
+    channels = [
+        {"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""} for x in features
+    ]
     mappings = [(x, x) for x in features]
     panel_definition = {"markers": markers, "channels": channels, "mappings": mappings}
-    return project.add_experiment(experiment_id=experiment_name,
-                                  panel_definition=panel_definition)
+    return project.add_experiment(
+        experiment_id=experiment_name, panel_definition=panel_definition
+    )

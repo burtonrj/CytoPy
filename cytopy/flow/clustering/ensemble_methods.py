@@ -10,8 +10,7 @@ import pandas as pd
 import numpy as np
 
 
-def get_adjacent_cliques(clique: frozenset,
-                         membership_dict: Dict):
+def get_adjacent_cliques(clique: frozenset, membership_dict: Dict):
     adjacent_cliques = set()
     for n in clique:
         for adj_clique in membership_dict[n]:
@@ -20,8 +19,7 @@ def get_adjacent_cliques(clique: frozenset,
     return adjacent_cliques
 
 
-def get_percolated_cliques(graph: nx.Graph,
-                           k: int):
+def get_percolated_cliques(graph: nx.Graph, k: int):
     perc_graph = nx.Graph()
     cliques = [frozenset(c) for c in nx.find_cliques(graph) if len(c) >= k]
     perc_graph.add_nodes_from(cliques)
@@ -52,18 +50,20 @@ def gather_single_partition(labels: np.ndarray):
         itemindex = np.where(labels == clusterid)[0]
         for i, x in enumerate(itemindex[0:]):
             co_matrix[x, x] += 1
-            for j, y in enumerate(itemindex[i + 1:]):
+            for j, y in enumerate(itemindex[i + 1 :]):
                 co_matrix[x, y] += 1
                 co_matrix[y, x] += 1
     return co_matrix
 
 
 class CoMatrix:
-    def __init__(self,
-                 data: pd.DataFrame,
-                 clustering_permuations: Dict,
-                 features: list,
-                 index: Optional[str] = None):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        clustering_permuations: Dict,
+        features: list,
+        index: Optional[str] = None,
+    ):
         self.data = data
         self.features = features
         self.clusterings = clustering_permuations
@@ -78,7 +78,11 @@ class CoMatrix:
         for labels in [x["labels"] for x in self.clusterings.values()]:
             co_matrix += gather_single_partition(labels)
         co_matrix_f = co_matrix / self.n_ensembles
-        header = self.data.index.values if self.index is None else self.data[self.index].values
+        header = (
+            self.data.index.values
+            if self.index is None
+            else self.data[self.index].values
+        )
         co_matrix_df = pd.DataFrame(index=header, data=co_matrix_f, columns=header)
         return co_matrix_df
 
@@ -93,7 +97,7 @@ class CoMatrix:
         """
         # return a new dataframe in list with index equal to the pairs being
         # considered
-        df = pd.DataFrame(columns=['site_1', 'site_2', 'pairwise'])
+        df = pd.DataFrame(columns=["site_1", "site_2", "pairwise"])
         header = list(self.co_matrix)
 
         for i in range(0, len(header) - 1):
@@ -101,27 +105,24 @@ class CoMatrix:
                 s = pd.Series()
                 h = header[i]
                 j = header[x]
-                s['pairwise'] = self.co_matrix.loc[h, j]
-                s['site_1'] = h
-                s['site_2'] = j
+                s["pairwise"] = self.co_matrix.loc[h, j]
+                s["site_1"] = h
+                s["site_2"] = j
                 s.name = f"{h}; {j}"
                 df = df.append(s)
         return df
 
-    def _linkage(self,
-                 linkage: str = "average",
-                 **kwargs):
+    def _linkage(self, linkage: str = "average", **kwargs):
         kwargs["metric"] = kwargs.get("metric", "euclidean")
         kwargs["optimal_ordering"] = kwargs.get("optimal_ordering", True)
-        lnk = hierarchical_cluster.linkage(ssd.squareform(1 - self.co_matrix),
-                                           method=linkage,
-                                           **kwargs)
+        lnk = hierarchical_cluster.linkage(
+            ssd.squareform(1 - self.co_matrix), method=linkage, **kwargs
+        )
         return lnk
 
-    def cluster_co_occurrence(self,
-                              threshold: Union[str, float] = "avg",
-                              linkage: str = "average",
-                              **kwargs):
+    def cluster_co_occurrence(
+        self, threshold: Union[str, float] = "avg", linkage: str = "average", **kwargs
+    ):
         """
         Generates a final clustering solution for an ensemble. Cut the clustering at
         the given threshold and returns the labels from the resulting cut. Scipy Hierarchical clustering
@@ -142,7 +143,7 @@ class CoMatrix:
         if threshold == "avg":
             threshold = self.avg_dist
         lnk = self._linkage(linkage=linkage, **kwargs)
-        return hierarchical_cluster.fcluster(lnk, threshold, 'distance')
+        return hierarchical_cluster.fcluster(lnk, threshold, "distance")
 
     def majority_vote(self, threshold: float = 0.5):
         """
@@ -165,7 +166,9 @@ class CoMatrix:
                     if labels[i] and labels[j]:
                         cluster_num = min(labels[i], labels[j])
                         cluster_to_change = max(labels[i], labels[j])
-                        idx = [ii for ii, c in enumerate(labels) if c == cluster_to_change]
+                        idx = [
+                            ii for ii, c in enumerate(labels) if c == cluster_to_change
+                        ]
                         labels[idx] = cluster_num
                     elif not labels[i] and not labels[j]:
                         # a new cluster
@@ -193,9 +196,7 @@ class CoMatrix:
                 clusters[i + 1] = cluster_num
         return labels
 
-    def graph_closure(self,
-                      threshold: float,
-                      clique_size: int = 3):
+    def graph_closure(self, threshold: float, clique_size: int = 3):
         binary_matrix = np.array(self.co_matrix.values >= threshold).astype(int)
         graph = nx.from_numpy_matrix(binary_matrix)
         y = get_percolated_cliques(graph=graph, k=clique_size)
@@ -208,35 +209,40 @@ class CoMatrix:
             cluster_num += 1
         return labels.astype(int)
 
-    def plot_matrix(self,
-                    linkage: str = "average",
-                    **kwargs):
+    def plot_matrix(self, linkage: str = "average", **kwargs):
         kwargs["standard_scale"] = kwargs.get("standard_scale", 1)
         kwargs["figsize"] = kwargs.get("figsize", (10, 10))
         kwargs["cmap"] = kwargs.get("cmap", "Spectral_r")
-        return sns.clustermap(data=self.data[self.features], row_linkage=self._linkage(linkage=linkage), **kwargs)
+        return sns.clustermap(
+            data=self.data[self.features],
+            row_linkage=self._linkage(linkage=linkage),
+            **kwargs,
+        )
 
-    def plot_dendrogram(self,
-                        threshold: Union[str, float] = "avg",
-                        linkage: str = "average",
-                        figsize: Tuple[int, int] = (10, 5),
-                        linkage_kwargs: Optional[Dict] = None,
-                        **kwargs):
+    def plot_dendrogram(
+        self,
+        threshold: Union[str, float] = "avg",
+        linkage: str = "average",
+        figsize: Tuple[int, int] = (10, 5),
+        linkage_kwargs: Optional[Dict] = None,
+        **kwargs,
+    ):
         fig, ax = plt.subplots(figsize=figsize)
         linkage_kwargs = linkage_kwargs or {}
         lnk = self._linkage(linkage=linkage, **linkage_kwargs)
         label_vec = None if self.index is None else self.data[self.index]
-        hierarchical_cluster.dendrogram(lnk,
-                                        orientation='top',
-                                        color_threshold=threshold,
-                                        ax=ax,
-                                        labels=label_vec,
-                                        **kwargs)
+        hierarchical_cluster.dendrogram(
+            lnk,
+            orientation="top",
+            color_threshold=threshold,
+            ax=ax,
+            labels=label_vec,
+            **kwargs,
+        )
         return fig
 
 
-def gather_partitions(labels: List[List[int]],
-                      n: int):
+def gather_partitions(labels: List[List[int]], n: int):
     h = len(labels)
     list_parts = np.concatenate(labels).reshape(h, n)
 
@@ -256,9 +262,7 @@ def generate_kj(y: pd.DataFrame):
     return k
 
 
-def init_v(y: pd.DataFrame,
-           k: int,
-           kj: List):
+def init_v(y: pd.DataFrame, k: int, kj: List):
     v = list()
     [v.append([]) for _ in range(y.shape[1])]
 
@@ -293,9 +297,7 @@ def pi_consensus(expz: np.ndarray):
 
 
 class MixtureModel:
-    def __init__(self,
-                 data: pd.DataFrame,
-                 clustering_permuations: Dict):
+    def __init__(self, data: pd.DataFrame, clustering_permuations: Dict):
         self.labels = [x["labels"] for _, x in clustering_permuations.items()]
         self.data = data
         self.n = data.shape[0]
@@ -314,10 +316,15 @@ class MixtureModel:
             for m in range(self.alpha.shape[0]):
                 ix = 0
                 for k in self.kj[j]:
-                    num = sum(vec_simga(self.y.iloc[:, j], k) * np.array(self.expz[:, m]))
+                    num = sum(
+                        vec_simga(self.y.iloc[:, j], k) * np.array(self.expz[:, m])
+                    )
                     den = 0
                     for kx in self.kj[j]:
-                        den += sum(vec_simga(self.y.iloc[:, j], kx) * np.asarray(self.expz[:, m]))
+                        den += sum(
+                            vec_simga(self.y.iloc[:, j], kx)
+                            * np.asarray(self.expz[:, m])
+                        )
                     self.v[j][m][ix] = float(num) / float(den)
                     ix += 1
 
@@ -333,7 +340,7 @@ class MixtureModel:
                 for j in range(self.y.shape[1]):
                     ix1 = 0
                     for k in self.kj[j]:
-                        prod1 *= (self.v[j][m] ** sigma(self.y.iloc[i][j], k))
+                        prod1 *= self.v[j][m] ** sigma(self.y.iloc[i][j], k)
                         ix1 += 1
                 num += self.alpha[m] * prod1
 
@@ -344,7 +351,7 @@ class MixtureModel:
                     for j2 in range(self.y.shape[1]):
                         ix2 = 0
                         for k in self.kj[j2]:
-                            prod2 *= (self.v[j2][n][ix2] ** sigma(self.y.iloc[i][j2], k))
+                            prod2 *= self.v[j2][n][ix2] ** sigma(self.y.iloc[i][j2], k)
                             ix2 += 1
                     den += self.alpha[n] * prod2
 
