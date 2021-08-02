@@ -41,6 +41,7 @@ from .errors import *
 from typing import *
 from collections import Counter
 from datetime import datetime
+from functools import wraps
 from warnings import warn
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -79,16 +80,16 @@ def _load_excel_to_dataframe(path: str) -> (pd.DataFrame, pd.DataFrame):
 
     Raises
     ------
-    ExperimentError
+    ValueError
         If Excel sheet names are incorrect
     """
     xls = xlrd.open_workbook(path, on_demand=True)
 
-    if not all([x in ['nomenclature', 'mappings'] for x in xls.sheet_names()]):
-        raise ExperimentError(f"Template must contain two sheets: nomenclature and mappings")
+    if not all([x in ["nomenclature", "mappings"] for x in xls.sheet_names()]):
+        raise ValueError(f"Template must contain two sheets: nomenclature and mappings")
 
-    nomenclature = pd.read_excel(path, sheet_name='nomenclature')
-    mappings = pd.read_excel(path, sheet_name='mappings')
+    nomenclature = pd.read_excel(path, sheet_name="nomenclature")
+    mappings = pd.read_excel(path, sheet_name="mappings")
     return mappings, nomenclature
 
 
@@ -106,12 +107,16 @@ def _check_nomenclature_headings(nomenclature: pd.DataFrame) -> None:
 
     Raises
     -------
-    ExperimentError
+    ValueError
         If Nomenclature column names are incorrect
     """
-    if not all([x in ['name', 'regex', 'permutations', 'case'] for x in nomenclature.columns]):
-        raise ExperimentError("Nomenclature sheet of excel template must contain the following column headers: "
-                              "'name','regex','case','permutations'")
+    if not all(
+        [x in ["name", "regex", "permutations", "case"] for x in nomenclature.columns]
+    ):
+        raise ValueError(
+            "Nomenclature sheet of excel template must contain the following column headers: "
+            "'name','regex','case','permutations'"
+        )
 
 
 def _check_mappings_headings(mappings: pd.DataFrame):
@@ -128,12 +133,12 @@ def _check_mappings_headings(mappings: pd.DataFrame):
 
     Raises
     -------
-    ExperimentError
+    ValueError
         If Mappings column names are incorrect
     """
     err = "Mappings sheet of excel template must contain the following column headers: 'channel', 'marker'"
-    if not all([x in ['channel', 'marker'] for x in mappings.columns]):
-        raise ExperimentError(err)
+    if not all([x in ["channel", "marker"] for x in mappings.columns]):
+        raise ValueError(err)
 
 
 def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
@@ -152,7 +157,7 @@ def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
 
     Raises
     ------
-    ExperimentError
+    ValueError
         If duplicate entries or missing entries in excel template
     """
     try:
@@ -160,21 +165,25 @@ def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
         _check_nomenclature_headings(nomenclature)
         _check_mappings_headings(mappings)
         # Check for duplicate entries
-        err = 'Duplicate entries in nomenclature, please remove duplicates before continuing'
-        assert sum(nomenclature['name'].duplicated()) == 0, err
+        err = "Duplicate entries in nomenclature, please remove duplicates before continuing"
+        assert sum(nomenclature["name"].duplicated()) == 0, err
         # Check that all mappings have a corresponding entry in nomenclature
-        for x in ['channel', 'marker']:
+        for x in ["channel", "marker"]:
             for name in mappings[x]:
                 if pd.isnull(name):
                     continue
                 if name not in nomenclature.name.values:
-                    logger.error(f'{name} missing from nomenclature, please review template')
-                    raise ValueError(f'{name} missing from nomenclature, please review template')
+                    logger.error(
+                        f"{name} missing from nomenclature, please review template"
+                    )
+                    raise ValueError(
+                        f"{name} missing from nomenclature, please review template"
+                    )
         return nomenclature, mappings
     except AssertionError as e:
-        raise ExperimentError(e)
+        raise ValueError(e)
     except ValueError as e:
-        raise ExperimentError(e)
+        raise ValueError(e)
 
 
 def check_duplication(x: List[str]) -> bool:
@@ -191,9 +200,11 @@ def check_duplication(x: List[str]) -> bool:
         True if duplicates are found, else False
     """
     x = [i if i else None for i in x]
-    duplicates = [item for item, count in Counter(x).items() if count > 1 and item is not None]
+    duplicates = [
+        item for item, count in Counter(x).items() if count > 1 and item is not None
+    ]
     if duplicates:
-        logger.warning(f'Duplicate channel/markers identified: {duplicates}')
+        logger.warning(f"Duplicate channel/markers identified: {duplicates}")
         return True
     return False
 
@@ -215,6 +226,7 @@ class NormalisedName(mongoengine.EmbeddedDocument):
         is the nomenclature case sensitive? This would be false for something like 'CD3' for example,
         where 'cd3' and 'CD3' are synonymous
     """
+
     standard = mongoengine.StringField(required=True)
     regex_str = mongoengine.StringField()
     permutations = mongoengine.StringField()
@@ -242,14 +254,13 @@ class NormalisedName(mongoengine.EmbeddedDocument):
         if re.search(self.regex_str, x, re.IGNORECASE):
             return self.standard
         if self.permutations:
-            for p in self.permutations.split(','):
+            for p in self.permutations.split(","):
                 if x == p:
                     return self.standard
         return None
 
 
-def query_normalised_list(x: Optional[str],
-                          ref: List[NormalisedName]) -> str:
+def query_normalised_list(x: Optional[str], ref: List[NormalisedName]) -> str:
     """
     Query a channel/marker against a reference list of NormalisedName's
 
@@ -274,11 +285,13 @@ def query_normalised_list(x: Optional[str],
     corrected = list(filter(None.__ne__, [n.query(x) for n in ref]))
 
     if len(corrected) == 0:
-        raise ValueError(f'Unable to normalise {x}; no match in linked panel')
+        raise ValueError(f"Unable to normalise {x}; no match in linked panel")
 
     if len(corrected) > 1:
-        raise ValueError(f'Unable to normalise {x}; matched multiple in linked panel, check '
-                         f'panel for incorrect definitions. Matches found: {corrected}')
+        raise ValueError(
+            f"Unable to normalise {x}; matched multiple in linked panel, check "
+            f"panel for incorrect definitions. Matches found: {corrected}"
+        )
     return corrected[0]
 
 
@@ -290,8 +303,9 @@ def _is_empty(x: str):
     return x
 
 
-def check_pairing(channel_marker: Dict[str, str],
-                  ref_mappings: List[ChannelMap]) -> bool:
+def check_pairing(
+    channel_marker: Dict[str, str], ref_mappings: List[ChannelMap]
+) -> bool:
     """
     Given a channel and marker check that a valid pairing exists in the list
     of given mappings.
@@ -308,16 +322,19 @@ def check_pairing(channel_marker: Dict[str, str],
         True if pairing exists, else False
     """
     logging.debug(f"Checking {channel_marker} has valid pairing in reference mappings")
-    channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(channel_marker.get("marker"))
-    if not any([n.check_matched_pair(channel=channel, marker=marker) for n in ref_mappings]):
+    channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(
+        channel_marker.get("marker")
+    )
+    if not any(
+        [n.check_matched_pair(channel=channel, marker=marker) for n in ref_mappings]
+    ):
         return False
     return True
 
 
-def _standardise(x: str or None,
-                 ref: List[NormalisedName],
-                 mappings: List[ChannelMap],
-                 alt: str) -> str:
+def _standardise(
+    x: Optional[str], ref: List[NormalisedName], mappings: List[ChannelMap], alt: str
+) -> str:
     """
     Given a channel/marker, either return the corresponding standard name
     according to a list of standards (ref) or if the channel/marker is None,
@@ -346,10 +363,12 @@ def _standardise(x: str or None,
     return default.channel
 
 
-def standardise_names(channel_marker: Dict,
-                      ref_channels: List[NormalisedName],
-                      ref_markers: List[NormalisedName],
-                      ref_mappings: List[ChannelMap]) -> Dict[str, str]:
+def standardise_names(
+    channel_marker: Dict,
+    ref_channels: List[NormalisedName],
+    ref_markers: List[NormalisedName],
+    ref_mappings: List[ChannelMap],
+) -> Dict[str, str]:
     """
     Given a dictionary detailing a channel/marker pair ({"channel": str, "marker": str})
     standardise its contents using the reference material provided.
@@ -371,10 +390,13 @@ def standardise_names(channel_marker: Dict,
         If channel and marker are missing
     """
     logging.debug(f"Normalising channel/marker pairing {channel_marker}")
-    channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(channel_marker.get("marker"))
+    channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(
+        channel_marker.get("marker")
+    )
     if channel is None and marker is None:
-        logging.error("Cannot standardise column names because both channel and marker missing from mappings")
-        raise ValueError("Cannot standardise column names because both channel and marker missing from mappings")
+        ValueError(
+            "Cannot standardise column names because both channel and marker missing from mappings"
+        )
     channel = _standardise(channel, ref_channels, ref_mappings, marker)
     marker = _standardise(marker, ref_markers, ref_mappings, channel)
     normalised = {"channel": channel, "marker": marker}
@@ -403,18 +425,16 @@ def duplicate_mappings(mappings: List[dict]) -> None:
     logging.debug(f"Checking for duplicate mappings in {mappings}")
     channels = [x.get("channel") for x in mappings]
     if check_duplication(channels):
-        logging.error("Duplicate channels provided")
         raise ValueError("Duplicate channels provided")
 
     markers = [x.get("marker") for x in mappings]
     if check_duplication(markers):
-        logging.error("Duplicate markers provided")
         raise ValueError("Duplicate markers provided")
 
 
-def missing_channels(mappings: List[dict],
-                     channels: List[NormalisedName],
-                     errors: str = "raise") -> None:
+def missing_channels(
+    mappings: List[dict], channels: List[NormalisedName], errors: str = "raise"
+) -> None:
     """
     Check a list of channel/marker dictionaries for missing channels according to
     the reference channels given.
@@ -434,12 +454,13 @@ def missing_channels(mappings: List[dict],
     KeyError
         If channel is missing
     """
-    logging.debug(f"Checking {mappings} for missing channels according to reference channels")
+    logging.debug(
+        f"Checking {mappings} for missing channels according to reference channels"
+    )
     existing_channels = [x.get("channel") for x in mappings]
     for x in channels:
         if x.standard not in existing_channels:
             if errors == "raise":
-                logging.error(f"Missing channel {x.standard}")
                 raise KeyError(f"Missing channel {x.standard}")
             elif errors == "warn":
                 logging.warning(f"Missing channel {x.standard}", stacklevel=2)
@@ -460,17 +481,15 @@ class Panel(mongoengine.EmbeddedDocument):
     mappings: EmbeddedDocListField
         list of channel/marker mappings; see ChannelMap
     initiation_date: DateTime
-        date of creationfiles['controls']
+        date of creation
 
     """
+
     markers = mongoengine.EmbeddedDocumentListField(NormalisedName)
     channels = mongoengine.EmbeddedDocumentListField(NormalisedName)
     mappings = mongoengine.EmbeddedDocumentListField(ChannelMap)
     initiation_date = mongoengine.DateTimeField(default=datetime.now)
-    meta = {
-        'db_alias': 'core',
-        'collection': 'fcs_panels'
-    }
+    meta = {"db_alias": "core", "collection": "fcs_panels"}
 
     def create_from_excel(self, path: str) -> None:
         """
@@ -490,23 +509,33 @@ class Panel(mongoengine.EmbeddedDocument):
         ValueError
             If file path is invalid
         """
-        logger.info(f"Generating new Panel definition from Excel file template at {path}")
+        logger.info(f"Generating new Panel definition from Excel file template {path}")
 
         if not os.path.isfile(path):
-            raise ValueError('No such file {path}')
+            raise ValueError("No such file {path}")
 
         nomenclature, mappings = check_excel_template(path)
-        for col_name, attr in zip(['channel', 'marker'], [self.channels, self.markers]):
+        for col_name, attr in zip(["channel", "marker"], [self.channels, self.markers]):
             for name in mappings[col_name]:
                 if not pd.isnull(name):
-                    d = nomenclature[nomenclature['name'] == name].fillna('').to_dict(orient='list')
-                    attr.append(NormalisedName(standard=d['name'][0],
-                                               regex_str=d['regex'][0],
-                                               case_sensitive=d['case'][0],
-                                               permutations=d['permutations'][0]))
-        mappings = mappings.fillna('').to_dict(orient='list')
-        self.mappings = [ChannelMap(channel=c, marker=m)
-                         for c, m in zip(mappings['channel'], mappings['marker'])]
+                    d = (
+                        nomenclature[nomenclature["name"] == name]
+                        .fillna("")
+                        .to_dict(orient="list")
+                    )
+                    attr.append(
+                        NormalisedName(
+                            standard=d["name"][0],
+                            regex_str=d["regex"][0],
+                            case_sensitive=d["case"][0],
+                            permutations=d["permutations"][0],
+                        )
+                    )
+        mappings = mappings.fillna("").to_dict(orient="list")
+        self.mappings = [
+            ChannelMap(channel=c, marker=m)
+            for c, m in zip(mappings["channel"], mappings["marker"])
+        ]
 
     def create_from_dict(self, x: dict):
         """
@@ -530,31 +559,40 @@ class Panel(mongoengine.EmbeddedDocument):
         # Check validity of input dictionary
         logger.info(f"Generating new Panel definition from dictionary template")
 
-        err = 'Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers, & mappings'
-        if not all([k in ['channels', 'markers', 'mappings'] for k in x.keys()]):
-            logger.error(err)
+        err = "Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers, & mappings"
+        if not all([k in ["channels", "markers", "mappings"] for k in x.keys()]):
             raise ValueError(err)
 
-        if not isinstance(x['mappings'], list):
-            logger.error(err)
-            raise ValueError('Invalid template dictionary; mappings must be a list of tuples')
+        if not isinstance(x["mappings"], list):
+            raise ValueError(
+                "Invalid template dictionary; mappings must be a list of tuples"
+            )
 
-        if not all([len(i) == 2 for i in x['mappings']]):
-            logger.error(err)
-            raise ValueError('Invalid template dictionary; mappings should be of shape (n,2) where n is the number of '
-                             'channel/marker pairs')
+        if not all([len(i) == 2 for i in x["mappings"]]):
+            raise ValueError(
+                "Invalid template dictionary; mappings should be of shape (n,2) where n is the number of "
+                "channel/marker pairs"
+            )
 
-        self.markers = [NormalisedName(standard=k['name'],
-                                       regex_str=k['regex'],
-                                       case_sensitive=k['case'],
-                                       permutations=k['permutations'])
-                        for k in x['markers']]
-        self.channels = [NormalisedName(standard=k['name'],
-                                        regex_str=k['regex'],
-                                        case_sensitive=k['case'],
-                                        permutations=k['permutations'])
-                         for k in x['channels']]
-        self.mappings = [ChannelMap(channel=c, marker=m) for c, m in x['mappings']]
+        self.markers = [
+            NormalisedName(
+                standard=k["name"],
+                regex_str=k["regex"],
+                case_sensitive=k["case"],
+                permutations=k["permutations"],
+            )
+            for k in x["markers"]
+        ]
+        self.channels = [
+            NormalisedName(
+                standard=k["name"],
+                regex_str=k["regex"],
+                case_sensitive=k["case"],
+                permutations=k["permutations"],
+            )
+            for k in x["channels"]
+        ]
+        self.mappings = [ChannelMap(channel=c, marker=m) for c, m in x["mappings"]]
 
     def list_channels(self) -> list:
         """
@@ -577,8 +615,7 @@ class Panel(mongoengine.EmbeddedDocument):
         return [cm.marker for cm in self.mappings]
 
 
-def compenstate(x: np.ndarray,
-                spill_matrix: np.ndarray) -> np.ndarray:
+def compensate_data(x: np.ndarray, spill_matrix: np.ndarray) -> np.ndarray:
     """
     Compensate the given data, x, using the spillover matrix by solving for their linear
     combination.
@@ -600,10 +637,10 @@ def panel_defined(func: Callable) -> Callable:
     Wrapper that will raise ValueError if Panel definition does not exist in provided Experiment
     """
 
+    @wraps(func)
     def wrapper(*args, **kwargs):
         if args[0].panel is None:
             err = f"No panel defined for experiment {args[0].experiment_id}"
-            logger.error(err)
             raise ValueError(err)
         return func(*args, **kwargs)
 
@@ -630,17 +667,17 @@ class Experiment(mongoengine.Document):
     notes: str, optional
         Additional free text comments
     """
+
     experiment_id = mongoengine.StringField(required=True, unique=True)
     panel = mongoengine.EmbeddedDocumentField(Panel)
-    fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4))
+    fcs_files = mongoengine.ListField(
+        mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4)
+    )
     data_directory = mongoengine.StringField(required=True)
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
 
-    meta = {
-        'db_alias': 'core',
-        'collection': 'experiments'
-    }
+    meta = {"db_alias": "core", "collection": "experiments"}
 
     @staticmethod
     def _check_panel(panel_definition: str or None):
@@ -662,15 +699,12 @@ class Experiment(mongoengine.Document):
             Given parameters are invalid
         """
         if not os.path.isfile(panel_definition):
-            logger.error(f"{panel_definition} does not exist")
             raise ValueError(f"{panel_definition} does not exist")
 
         if not os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"]:
-            logger.error("Panel definition is not a valid Excel document")
             raise ValueError("Panel definition is not a valid Excel document")
 
-    def generate_panel(self,
-                       panel_definition: Union[str, dict]) -> None:
+    def generate_panel(self, panel_definition: Union[str, dict]) -> None:
         """
         Generate a new panel using the panel definition provided (path to a valid template).
 
@@ -695,12 +729,10 @@ class Experiment(mongoengine.Document):
         elif isinstance(panel_definition, dict):
             new_panel.create_from_dict(panel_definition)
         else:
-            logger.error(f"{self.experiment_id}; panel_definition should be type string or dict")
             raise ValueError("panel_definition should be type string or dict")
         self.panel = new_panel
 
-    def delete_all_populations(self,
-                               sample_id: str) -> None:
+    def delete_all_populations(self, sample_id: str) -> None:
         """
         Delete population data associated to experiment. Give a value of 'all' for sample_id to remove all population
         data for every sample.
@@ -716,9 +748,13 @@ class Experiment(mongoengine.Document):
         None
         """
         for f in self.fcs_files:
-            if sample_id == 'all' or f.primary_id == sample_id:
-                logger.info(f"Deleting all populations from FileGroup {sample_id}; {f.id}")
-                f.populations = [p for p in f.populations if p.population_name == "root"]
+            if sample_id == "all" or f.primary_id == sample_id:
+                logger.info(
+                    f"Deleting all populations from FileGroup {sample_id}; {f.id}"
+                )
+                f.populations = [
+                    p for p in f.populations if p.population_name == "root"
+                ]
                 f.save()
 
     def sample_exists(self, sample_id: str) -> bool:
@@ -739,8 +775,7 @@ class Experiment(mongoengine.Document):
             return False
         return True
 
-    def get_sample(self,
-                   sample_id: str) -> FileGroup:
+    def get_sample(self, sample_id: str) -> FileGroup:
         """
         Given a sample ID, return the corresponding FileGroup object
 
@@ -760,12 +795,14 @@ class Experiment(mongoengine.Document):
         """
         logger.debug(f"Attempting to fetch FileGroup {sample_id}")
         if not self.sample_exists(sample_id):
-            logger.error(f"Invalid sample: {sample_id} not associated with experiment {self.experiment_id}")
-            raise MissingSampleError(f"Invalid sample: {sample_id} not associated with this experiment")
+            raise MissingSampleError(
+                f"Invalid sample: {sample_id} not associated with this experiment"
+            )
         return [f for f in self.fcs_files if f.primary_id == sample_id][0]
 
-    def filter_samples_by_subject(self,
-                                  query: str or mongoengine.queryset.visitor.Q) -> List:
+    def filter_samples_by_subject(
+        self, query: Union[str, mongoengine.queryset.visitor.Q]
+    ) -> List:
         """
         Filter FileGroups associated to this experiment based on some subject meta-data
 
@@ -778,7 +815,9 @@ class Experiment(mongoengine.Document):
         -------
         List
         """
-        logger.debug(f"Fetching list of FileGroups associated to Subject on query {query}")
+        logger.debug(
+            f"Fetching list of FileGroups associated to Subject on query {query}"
+        )
         matches = list()
         for f in self.fcs_files:
             try:
@@ -788,12 +827,13 @@ class Experiment(mongoengine.Document):
                 logger.debug(f"No subject associated to {f.primary_id}; {f.id}")
                 continue
             except mongoengine.MultipleObjectsReturned:
-                logger.debug(f"Multiple matches to subject meta data for {f.primary_id}; {f.id}")
+                logger.debug(
+                    f"Multiple matches to subject meta data for {f.primary_id}; {f.id}"
+                )
                 matches.append(f.primary_id)
         return matches
 
-    def list_samples(self,
-                     valid_only: bool = True) -> list:
+    def list_samples(self, valid_only: bool = True) -> list:
         """
         Generate a list IDs of file groups associated to experiment
 
@@ -824,7 +864,7 @@ class Experiment(mongoengine.Document):
         --------
         None
         """
-        logger.info(f"Deleting {sample_id}")
+        logger.debug(f"Deleting {sample_id}")
         filegrp = self.get_sample(sample_id)
         self.fcs_files = [f for f in self.fcs_files if f.primary_id != sample_id]
         filegrp.delete()
@@ -832,22 +872,61 @@ class Experiment(mongoengine.Document):
 
     def _sample_exists(self, sample_id: str):
         if self.sample_exists(sample_id):
-            logger.error(f'A file group with id {sample_id} already exists')
-            raise DuplicateSampleError(f'A file group with id {sample_id} already exists')
+            raise DuplicateSampleError(
+                f"A file group with id {sample_id} already exists"
+            )
 
-    def _add_data(self,
-                  sample_id: str,
-                  compensated: bool,
-                  primary_data: Union[pd.DataFrame, FCSFile],
-                  mappings: Optional[List[Dict]] = None,
-                  controls: Optional[Dict] = None,
-                  subject_id: Optional[str] = None,
-                  processing_datetime: Optional[str] = None,
-                  collection_datetime: Optional[str] = None,
-                  missing_error: str = "raise",
-                  cache_transforms: Optional[List[str]] = None,
-                  transform_kwargs: Optional[Dict] = None):
+    def _add_data(
+        self,
+        sample_id: str,
+        compensated: bool,
+        primary_data: Union[pd.DataFrame, FCSFile],
+        mappings: Optional[List[Dict]] = None,
+        controls: Optional[Dict] = None,
+        subject_id: Optional[str] = None,
+        processing_datetime: Optional[str] = None,
+        collection_datetime: Optional[str] = None,
+        missing_error: str = "raise",
+        cache_transforms: Optional[List[str]] = None,
+        transform_kwargs: Optional[Dict] = None,
+    ) -> None:
+        """
+        Create a new FileGroup and associate with this experiment. This is an internal method
+        called from add_dataframes or add_fcs_files. Expects data in the form of a DataFrame or
+        FCSFile object.
 
+        Parameters
+        ----------
+        sample_id: str
+        compensated: bool
+            Specifies if data has been compensated
+        primary_data: Pandas.DataFrame or FCSFile
+            The data attaining to the primary staining. Should either be a processed DataFrame (in which
+            case 'mappings' should be provided) or an FCSFile object.
+        mappings: List[Dict], optional
+            List of mappings with keys 'channel' and 'marker'. Only required if passing DataFrame to primary
+            data.
+        controls: Dict, optional
+            Dictionary of DataFrames or FCSFile objects - should correspond to control staining where the
+            keys of the dictionaries are the control IDs
+        subject_id: str, optional
+            Subject to associate FileGroup to
+        missing_error: str, (default="raise")
+            How to handle missing channels (channels present in the experiment staining panel but
+            absent from mappings). Should either be "raise" (raises an error) or "warn".
+        cache_transforms: List[str], optional
+            If provided, should be the names of valid transformation methods. Additional transformed data will be stored
+            with the FileGroup to avoid costly recalculation later.
+        transform_kwargs: Dict, optional
+            Transform arguments to accompany the transforms listed in cache_transforms - keys should match
+            the name of the transform
+        processing_datetime: str, optional
+        collection_datetime: str, optional
+
+        Returns
+        -------
+        None
+        """
         self._sample_exists(sample_id)
         processing_datetime = processing_datetime or datetime.now()
         collection_datetime = collection_datetime or datetime.now()
@@ -857,11 +936,9 @@ class Experiment(mongoengine.Document):
 
         try:
             mappings = mappings or primary_data.channel_mappings
-            mappings = self._standardise_mappings(mappings,
-                                                  missing_error=missing_error)
+            mappings = self._standardise_mappings(mappings, missing_error=missing_error)
         except ValueError as err:
             logger.exception(f"Failed to add {sample_id}: {err}")
-            warn(f"Failed to add {sample_id}: {str(err)}")
             del primary_data
             del controls
             gc.collect()
@@ -874,20 +951,24 @@ class Experiment(mongoengine.Document):
         else:
             data = primary_data.event_data
 
-        filegrp = FileGroup(data=data,
-                            channels=[x.get("channel") for x in mappings],
-                            markers=[x.get("marker") for x in mappings],
-                            primary_id=sample_id,
-                            compensated=compensated,
-                            collection_datetime=collection_datetime,
-                            processing_datetime=processing_datetime,
-                            data_directory=self.data_directory)
+        filegrp = FileGroup(
+            data=data,
+            channels=[x.get("channel") for x in mappings],
+            markers=[x.get("marker") for x in mappings],
+            primary_id=sample_id,
+            compensated=compensated,
+            collection_datetime=collection_datetime,
+            processing_datetime=processing_datetime,
+            data_directory=self.data_directory,
+        )
 
         for transform in cache_transforms:
             logger.info(f"Caching transform {transform}")
-            filegrp.transform_and_cache(source="primary",
-                                        transform=transform,
-                                        **transform_kwargs.get(transform, {}))
+            filegrp.transform_and_cache(
+                source="primary",
+                transform=transform,
+                **transform_kwargs.get(transform, {}),
+            )
 
         for ctrl_id, ctrl_data in controls.items():
             logger.info(f"Adding control file {ctrl_id}...")
@@ -895,41 +976,47 @@ class Experiment(mongoengine.Document):
                 data = ctrl_data.values
             else:
                 data = ctrl_data.event_data
-            filegrp.add_ctrl_file(data=data,
-                                  ctrl_id=ctrl_id)
+            filegrp.add_ctrl_file(data=data, ctrl_id=ctrl_id)
             for transform in cache_transforms:
                 logger.info(f"Caching transform {transform} for {ctrl_id}")
-                filegrp.transform_and_cache(source=ctrl_id,
-                                            transform=transform,
-                                            **transform_kwargs.get(transform, {}))
+                filegrp.transform_and_cache(
+                    source=ctrl_id,
+                    transform=transform,
+                    **transform_kwargs.get(transform, {}),
+                )
 
         if subject_id is not None:
             try:
                 filegrp.subject = Subject.objects(subject_id=subject_id).get()
             except mongoengine.errors.DoesNotExist:
-                warn(f'Error: no such patient {subject_id}, continuing without association.')
-                logger.warning(f'Error: no such patient {subject_id}, continuing without association.')
+                logger.warning(
+                    f"Error: no such patient {subject_id}, continuing without association."
+                )
         filegrp.save()
 
-        logger.info(f'Successfully created {sample_id} and associated to {self.experiment_id}')
+        logger.info(
+            f"Successfully created {sample_id} and associated to {self.experiment_id}"
+        )
         self.fcs_files.append(filegrp)
         self.save()
         del filegrp
         gc.collect()
 
     @panel_defined
-    def add_dataframes(self,
-                       sample_id: str,
-                       primary_data: pd.DataFrame,
-                       mappings: List[Dict],
-                       controls: Optional[Dict] = None,
-                       comp_matrix: Optional[pd.DataFrame] = None,
-                       subject_id: Optional[str] = None,
-                       processing_datetime: Optional[str] = None,
-                       collection_datetime: Optional[str] = None,
-                       missing_error: str = "raise",
-                       cache_transforms: Optional[List[str]] = None,
-                       transform_kwargs: Optional[Dict] = None):
+    def add_dataframes(
+        self,
+        sample_id: str,
+        primary_data: pd.DataFrame,
+        mappings: List[Dict],
+        controls: Optional[Dict] = None,
+        comp_matrix: Optional[pd.DataFrame] = None,
+        subject_id: Optional[str] = None,
+        processing_datetime: Optional[str] = None,
+        collection_datetime: Optional[str] = None,
+        missing_error: str = "raise",
+        cache_transforms: Optional[List[str]] = None,
+        transform_kwargs: Optional[Dict] = None,
+    ) -> None:
         """
         Add new single cell cytometry data to the experiment, under a new sample ID, using
         Pandas DataFrame(s) as the input; generates a new FileGroup associated to this experiment.
@@ -961,6 +1048,12 @@ class Experiment(mongoengine.Document):
         missing_error: str, (default="raise")
             How to handle missing channels (channels present in the experiment staining panel but
             absent from mappings). Should either be "raise" (raises an error) or "warn".
+        cache_transforms: List[str], optional
+            If provided, should be the names of valid transformation methods. Additional transformed data will be stored
+            with the FileGroup to avoid costly recalculation later.
+        transform_kwargs: Dict, optional
+            Transform arguments to accompany the transforms listed in cache_transforms - keys should match
+            the name of the transform
 
         Returns
         -------
@@ -971,40 +1064,48 @@ class Experiment(mongoengine.Document):
         DuplicateSampleError
             If a FileGroup with the sample ID already exists
         """
-        logger.info(f"Creating new FileGroup {sample_id} and adding to experiment {self.experiment_id} "
-                    f"using Pandas DataFrame(s)")
+        logger.info(
+            f"Creating new FileGroup {sample_id} and adding to experiment {self.experiment_id} "
+            f"using Pandas DataFrame(s)"
+        )
         compensated = False
         if comp_matrix is not None:
             logger.info("Applying compensation...")
-            primary_data = compenstate(primary_data.values, comp_matrix.values)
-            controls = {ctrl_id: compenstate(ctrl_data, comp_matrix.values)
-                        for ctrl_id, ctrl_data in controls.items()}
+            primary_data = compensate_data(primary_data.values, comp_matrix.values)
+            controls = {
+                ctrl_id: compensate_data(ctrl_data, comp_matrix.values)
+                for ctrl_id, ctrl_data in controls.items()
+            }
             compensated = True
-        self._add_data(sample_id=sample_id,
-                       compensated=compensated,
-                       primary_data=primary_data,
-                       mappings=mappings,
-                       controls=controls,
-                       subject_id=subject_id,
-                       processing_datetime=processing_datetime,
-                       collection_datetime=collection_datetime,
-                       missing_error=missing_error,
-                       cache_transforms=cache_transforms,
-                       transform_kwargs=transform_kwargs)
+        self._add_data(
+            sample_id=sample_id,
+            compensated=compensated,
+            primary_data=primary_data,
+            mappings=mappings,
+            controls=controls,
+            subject_id=subject_id,
+            processing_datetime=processing_datetime,
+            collection_datetime=collection_datetime,
+            missing_error=missing_error,
+            cache_transforms=cache_transforms,
+            transform_kwargs=transform_kwargs,
+        )
 
     @panel_defined
-    def add_fcs_files(self,
-                      sample_id: str,
-                      primary_data: Union[str, FCSFile],
-                      controls: Optional[Dict] = None,
-                      compensate: bool = True,
-                      comp_matrix: Optional[pd.DataFrame] = None,
-                      subject_id: Optional[str] = None,
-                      processing_datetime: Optional[str] = None,
-                      collection_datetime: Optional[str] = None,
-                      missing_error: str = "raise",
-                      cache_transforms: Optional[List[str]] = None,
-                      transform_kwargs: Optional[Dict] = None):
+    def add_fcs_files(
+        self,
+        sample_id: str,
+        primary_data: Union[str, FCSFile],
+        controls: Optional[Dict] = None,
+        compensate: bool = True,
+        comp_matrix: Optional[pd.DataFrame] = None,
+        subject_id: Optional[str] = None,
+        processing_datetime: Optional[str] = None,
+        collection_datetime: Optional[str] = None,
+        missing_error: str = "raise",
+        cache_transforms: Optional[List[str]] = None,
+        transform_kwargs: Optional[Dict] = None,
+    ):
         """
         Add new single cell cytometry data to the experiment, under a new sample ID, using
         filepath to fcs file(s) as the input; generates a new FileGroup associated to this experiment.
@@ -1014,7 +1115,7 @@ class Experiment(mongoengine.Document):
         ----------
         sample_id: str
             Unique sample identifier (unique to this Experiment)
-        primary: str or FCSFile
+        primary_data: str or FCSFile
             Single cell cytometry data for primary staining
         controls: dict, optional
             Dictionary of filepaths/FCSFiles for single cell cytometry data for control staining e.g.
@@ -1034,6 +1135,12 @@ class Experiment(mongoengine.Document):
         missing_error: str, (default="raise")
             How to handle missing channels (channels present in the experiment staining panel but
             absent from mappings). Should either be "raise" (raises an error) or "warn".
+        cache_transforms: List[str], optional
+            If provided, should be the names of valid transformation methods. Additional transformed data will be stored
+            with the FileGroup to avoid costly recalculation later.
+        transform_kwargs: Dict, optional
+            Transform arguments to accompany the transforms listed in cache_transforms - keys should match
+            the name of the transform
 
         Returns
         -------
@@ -1048,7 +1155,8 @@ class Experiment(mongoengine.Document):
             Raised on failure to standardise mappings using panel definition
         """
         logger.info(
-            f"Creating new FileGroup {sample_id} and adding to experiment {self.experiment_id} using an FCS file")
+            f"Creating new FileGroup {sample_id} and adding to experiment {self.experiment_id} using an FCS file"
+        )
 
         if isinstance(primary_data, str):
             primary_data = FCSFile(filepath=primary_data, comp_matrix=comp_matrix)
@@ -1071,33 +1179,35 @@ class Experiment(mongoengine.Document):
             if compensate:
                 control_data[ctrl_id].compensate()
 
-        self._add_data(sample_id=sample_id,
-                       compensated=compensated,
-                       primary_data=primary_data,
-                       mappings=None,
-                       controls=control_data,
-                       subject_id=subject_id,
-                       processing_datetime=processing_datetime,
-                       collection_datetime=collection_datetime,
-                       missing_error=missing_error,
-                       cache_transforms=cache_transforms,
-                       transform_kwargs=transform_kwargs)
+        self._add_data(
+            sample_id=sample_id,
+            compensated=compensated,
+            primary_data=primary_data,
+            mappings=None,
+            controls=control_data,
+            subject_id=subject_id,
+            processing_datetime=processing_datetime,
+            collection_datetime=collection_datetime,
+            missing_error=missing_error,
+            cache_transforms=cache_transforms,
+            transform_kwargs=transform_kwargs,
+        )
 
-    def _standardise_mappings(self,
-                              mappings: List[Dict],
-                              missing_error: str) -> List[Dict]:
+    def _standardise_mappings(
+        self, mappings: List[Dict], missing_error: str
+    ) -> List[Dict]:
         """
         Given some mappings (list of dictionaries with keys: channel, marker) compare the
         mappings to the Experiment Panel. Returns the standardised mappings.
 
         Parameters
         ----------
-        mappings: list
+        mappings: List[Dict]
         missing_error: str
 
         Returns
         -------
-        list
+        List[Dict]
 
         Raises
         ------
@@ -1105,19 +1215,29 @@ class Experiment(mongoengine.Document):
             Channel/marker does not match panel mappings
         """
         logger.debug(f"Standardising channel/marker mappings {mappings}")
-        mappings = list(map(lambda x: standardise_names(channel_marker=x,
-                                                        ref_channels=self.panel.channels,
-                                                        ref_markers=self.panel.markers,
-                                                        ref_mappings=self.panel.mappings),
-                            mappings))
+        mappings = list(
+            map(
+                lambda x: standardise_names(
+                    channel_marker=x,
+                    ref_channels=self.panel.channels,
+                    ref_markers=self.panel.markers,
+                    ref_mappings=self.panel.mappings,
+                ),
+                mappings,
+            )
+        )
         for cm in mappings:
             if not check_pairing(ref_mappings=self.panel.mappings, channel_marker=cm):
-                raise ValueError(f'The channel/marker pairing {cm} does not correspond to any defined in panel')
-        missing_channels(mappings=mappings, channels=self.panel.channels, errors=missing_error)
+                raise ValueError(
+                    f"The channel/marker pairing {cm} does not correspond to any defined in panel"
+                )
+        missing_channels(
+            mappings=mappings, channels=self.panel.channels, errors=missing_error
+        )
         duplicate_mappings(mappings)
         return mappings
 
-    def control_counts(self, ax: plt.Axes or None = None) -> plt.Axes:
+    def control_counts(self, ax: Optional[plt.Axes] = None) -> plt.Axes:
         """
         Generates a barplot of total counts of each control in Experiment FileGroup's
 
@@ -1136,8 +1256,9 @@ class Experiment(mongoengine.Document):
         ax.bar(ctrl_counts.keys(), ctrl_counts.values())
         return ax
 
-    def population_statistics(self,
-                              populations: Union[List, None] = None) -> pd.DataFrame:
+    def population_statistics(
+        self, populations: Union[List, None] = None
+    ) -> pd.DataFrame:
         """
         Generates a Pandas DataFrame of population statistics for all FileGroups
         of an Experiment, for the given populations or all available populations
@@ -1154,7 +1275,9 @@ class Experiment(mongoengine.Document):
         data = list()
         for f in self.fcs_files:
             for p in populations or f.list_populations():
-                df = pd.DataFrame({k: [v] for k, v in f.population_stats(population=p).items()})
+                df = pd.DataFrame(
+                    {k: [v] for k, v in f.population_stats(population=p).items()}
+                )
                 df["sample_id"] = f.primary_id
                 s = f.subject
                 if s is not None:
@@ -1162,8 +1285,7 @@ class Experiment(mongoengine.Document):
                 data.append(df)
         return pd.concat(data).reset_index(drop=True)
 
-    def merge_populations(self,
-                          mergers: Dict):
+    def merge_populations(self, mergers: Dict):
         """
         For each FileGroup in sequence, merge populations. Given dictionary should contain
         a key corresponding to the new population name and value being a list of populations
@@ -1183,10 +1305,14 @@ class Experiment(mongoengine.Document):
             for f in self.fcs_files:
                 pops = [p for p in targets if p in f.list_populations()]
                 try:
-                    f.merge_non_geom_populations(populations=pops, new_population_name=new_population_name)
+                    f.merge_non_geom_populations(
+                        populations=pops, new_population_name=new_population_name
+                    )
                     f.save()
                 except ValueError as e:
-                    logger.warning(f"Failed to merge populations for {f.primary_id}: {str(e)}")
+                    logger.warning(
+                        f"Failed to merge populations for {f.primary_id}: {str(e)}"
+                    )
 
     def delete(self, signal_kwargs=None, **write_concern):
         """
@@ -1205,20 +1331,22 @@ class Experiment(mongoengine.Document):
         logger.info("Experiment successfully deleted.")
 
 
-def single_cell_dataframe(experiment: Experiment,
-                          populations: Optional[Union[str, List[str]]] = None,
-                          regex: Optional[str] = None,
-                          transform: Union[str, Dict] = "logicle",
-                          transform_kwargs: Optional[Dict] = None,
-                          sample_ids: Optional[List[str]] = None,
-                          verbose: bool = True,
-                          ctrl: Optional[str] = None,
-                          label_parent: bool = False,
-                          frac_of: Optional[List[str]] = None,
-                          sample_size: Optional[Union[int, float]] = None,
-                          sampling_level: str = "file",
-                          sampling_method: str = "uniform",
-                          sampling_kwargs: Optional[Dict] = None):
+def single_cell_dataframe(
+    experiment: Experiment,
+    populations: Optional[Union[str, List[str]]] = None,
+    regex: Optional[str] = None,
+    transform: Union[str, Dict] = "logicle",
+    transform_kwargs: Optional[Dict] = None,
+    sample_ids: Optional[List[str]] = None,
+    verbose: bool = True,
+    ctrl: Optional[str] = None,
+    label_parent: bool = False,
+    frac_of: Optional[List[str]] = None,
+    sample_size: Optional[Union[int, float]] = None,
+    sampling_level: str = "file",
+    sampling_method: str = "uniform",
+    sampling_kwargs: Optional[Dict] = None,
+):
     """
     Generate a single cell DataFrame that is a concatenation of population data from many
     samples from a single Experiment. Population level data is identifiable from the 'population_label'
@@ -1263,19 +1391,23 @@ def single_cell_dataframe(experiment: Experiment,
     data = list()
 
     method = "load_population_df"
-    kwargs = dict(population=populations,
-                  transform=transform,
-                  transform_kwargs=transform_kwargs,
-                  label_parent=label_parent,
-                  frac_of=frac_of)
+    kwargs = dict(
+        population=populations,
+        transform=transform,
+        transform_kwargs=transform_kwargs,
+        label_parent=label_parent,
+        frac_of=frac_of,
+    )
     if isinstance(populations, list) or regex is not None:
         method = "load_multiple_populations"
         kwargs["regex"] = regex
         kwargs["populations"] = populations
         kwargs.pop("population")
         if ctrl:
-            raise ValueError("load_multiple_populations does not support control data. Load ctrl populations "
-                             "individually and merge post-hoc.")
+            raise ValueError(
+                "load_multiple_populations does not support control data. Load ctrl populations "
+                "individually and merge post-hoc."
+            )
     elif ctrl:
         method = "load_ctrl_population_df"
         kwargs.pop("label_parent")
@@ -1294,19 +1426,24 @@ def single_cell_dataframe(experiment: Experiment,
         if fg.subject:
             pop_data["subject_id"] = fg.subject.subject_id
         if sample_size is not None and sampling_level == "file":
-            pop_data = sample_dataframe(data=pop_data,
-                                        sample_size=sample_size,
-                                        method=sampling_method,
-                                        **sampling_kwargs)
+            pop_data = sample_dataframe(
+                data=pop_data,
+                sample_size=sample_size,
+                method=sampling_method,
+                **sampling_kwargs,
+            )
         data.append(pop_data)
 
-    data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1)
-                      for df in data]).reset_index(drop=True)
+    data = pd.concat(
+        [df.reset_index().rename({"index": "original_index"}, axis=1) for df in data]
+    ).reset_index(drop=True)
     data.index = list(data.index)
 
     if sample_size is not None and sampling_level == "experiment":
-        data = sample_dataframe(data=data,
-                                sample_size=sample_size,
-                                method=sampling_method,
-                                **sampling_kwargs).reset_index(drop=True)
+        data = sample_dataframe(
+            data=data,
+            sample_size=sample_size,
+            method=sampling_method,
+            **sampling_kwargs,
+        ).reset_index(drop=True)
     return data

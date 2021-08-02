@@ -2,9 +2,7 @@ from tqdm import tqdm_notebook, tqdm
 from IPython import get_ipython
 
 
-def progress_bar(x: iter,
-                 verbose: bool = True,
-                 **kwargs) -> callable:
+def progress_bar(x: iter, verbose: bool = True, **kwargs) -> callable:
     """
     Generate a progress bar using the tqdm library. If execution environment is Jupyter, return tqdm_notebook
     otherwise used tqdm.
@@ -21,7 +19,7 @@ def progress_bar(x: iter,
     """
     if not verbose:
         return x
-    if which_environment() == 'jupyter':
+    if which_environment() == "jupyter":
         return tqdm_notebook(x, **kwargs)
     return tqdm(x, **kwargs)
 
@@ -37,12 +35,12 @@ def which_environment() -> str:
     """
     try:
         ipy_str = str(type(get_ipython()))
-        if 'zmqshell' in ipy_str:
-            return 'jupyter'
-        if 'terminal' in ipy_str:
-            return 'ipython'
+        if "zmqshell" in ipy_str:
+            return "jupyter"
+        if "terminal" in ipy_str:
+            return "ipython"
     except:
-        return 'terminal'
+        return "terminal"
 
 
 def vprint(verbose: bool):
@@ -58,4 +56,3 @@ def vprint(verbose: bool):
     callable
     """
     return print if verbose else lambda *a, **k: None
-

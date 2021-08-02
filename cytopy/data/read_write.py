@@ -41,7 +41,13 @@ import os
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Scott White", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
+__credits__ = [
+    "Ross Burton",
+    "Scott White",
+    "Simone Cuff",
+    "Andreas Artemiou",
+    "Matthias Eberl",
+]
 __license__ = "MIT"
 __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
@@ -49,9 +55,9 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def filter_fcs_files(fcs_dir: str,
-                     exclude_comps: bool = True,
-                     exclude_dir: str = 'DUPLICATES') -> list:
+def filter_fcs_files(
+    fcs_dir: str, exclude_comps: bool = True, exclude_dir: str = "DUPLICATES"
+) -> list:
     """
     Given a directory, return file paths for all fcs files in directory and subdirectories contained within
 
@@ -74,19 +80,25 @@ def filter_fcs_files(fcs_dir: str,
         if os.path.basename(root) == exclude_dir:
             continue
         if exclude_comps:
-            fcs = [f for f in files if f.lower().endswith('.fcs') and f.lower().find('comp') == -1]
+            fcs = [
+                f
+                for f in files
+                if f.lower().endswith(".fcs") and f.lower().find("comp") == -1
+            ]
         else:
-            fcs = [f for f in files if f.lower().endswith('.fcs')]
+            fcs = [f for f in files if f.lower().endswith(".fcs")]
         fcs = [os.path.join(root, f) for f in fcs]
         fcs_files = fcs_files + fcs
     return fcs_files
 
 
-def get_fcs_file_paths(fcs_dir: str,
-                       control_names: list,
-                       ctrl_id: str,
-                       ignore_comp: bool = True,
-                       exclude_dir: str = "DUPLICATE") -> dict:
+def get_fcs_file_paths(
+    fcs_dir: str,
+    control_names: list,
+    ctrl_id: str,
+    ignore_comp: bool = True,
+    exclude_dir: str = "DUPLICATE",
+) -> dict:
     """
     Generate a standard dictionary object of fcs files in given directory
     Parameters
@@ -107,26 +119,29 @@ def get_fcs_file_paths(fcs_dir: str,
         standard dictionary of fcs files contained in target directory
     """
     file_tree = dict(primary=[], controls={})
-    fcs_files = filter_fcs_files(fcs_dir, exclude_comps=ignore_comp, exclude_dir=exclude_dir)
+    fcs_files = filter_fcs_files(
+        fcs_dir, exclude_comps=ignore_comp, exclude_dir=exclude_dir
+    )
     ctrl_files = [f for f in fcs_files if f.find(ctrl_id) != -1]
     primary = [f for f in fcs_files if f.find(ctrl_id) == -1]
     for c_name in control_names:
         matched_controls = list(filter(lambda x: x.find(c_name) != -1, ctrl_files))
         if not matched_controls:
-            print(f'Warning: no file found for {c_name} control')
+            print(f"Warning: no file found for {c_name} control")
             continue
         if len(matched_controls) > 1:
-            print(f'Warning: multiple files found for {c_name} control')
-        file_tree['controls'][c_name] = matched_controls
+            print(f"Warning: multiple files found for {c_name} control")
+        file_tree["controls"][c_name] = matched_controls
 
     if len(primary) > 1:
-        print('Warning! Multiple non-control (primary) files found in directory. Check before proceeding.')
-    file_tree['primary'] = primary
+        print(
+            "Warning! Multiple non-control (primary) files found in directory. Check before proceeding."
+        )
+    file_tree["primary"] = primary
     return file_tree
 
 
-def chunks(df_list: list,
-           n: int) -> pd.DataFrame:
+def chunks(df_list: list, n: int) -> pd.DataFrame:
     """
     Yield successive n-sized chunks from l.
     ref: https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks
@@ -143,7 +158,7 @@ def chunks(df_list: list,
         Yields successive n-sized DataFrames
     """
     for i in range(0, len(df_list), n):
-        yield df_list[i:i + n]
+        yield df_list[i : i + n]
 
 
 def fcs_mappings(path: str) -> list or None:
@@ -163,13 +178,12 @@ def fcs_mappings(path: str) -> list or None:
     try:
         fo = FCSFile(path)
     except ValueError as e:
-        print(f'Failed to load file {path}; {e}')
+        print(f"Failed to load file {path}; {e}")
         return None
     return fo.channel_mappings
 
 
-def explore_channel_mappings(fcs_dir: str,
-                             exclude_comps: bool = True) -> list:
+def explore_channel_mappings(fcs_dir: str, exclude_comps: bool = True) -> list:
     """
     Given a directory, explore all fcs files and find all permutations of channel/marker mappings
 
@@ -211,15 +225,17 @@ def _get_spill_matrix(matrix_string: str) -> pd.DataFrame:
     --------
     Pandas.DataFrame
     """
-    matrix_list = matrix_string.split(',')
+    matrix_list = matrix_string.split(",")
     n = int(matrix_list[0])
-    header = matrix_list[1:(n+1)]
-    header = [i.strip().replace('\n', '') for i in header]
-    values = [i.strip().replace('\n', '') for i in matrix_list[n+1:]]
+    header = matrix_list[1 : (n + 1)]
+    header = [i.strip().replace("\n", "") for i in header]
+    values = [i.strip().replace("\n", "") for i in matrix_list[n + 1 :]]
     matrix = np.reshape(list(map(float, values)), (n, n))
     matrix_df = pd.DataFrame(matrix)
-    matrix_df = matrix_df.rename(index={k: v for k, v in zip(matrix_df.columns.to_list(), header)},
-                                 columns={k: v for k, v in zip(matrix_df.columns.to_list(), header)})
+    matrix_df = matrix_df.rename(
+        index={k: v for k, v in zip(matrix_df.columns.to_list(), header)},
+        columns={k: v for k, v in zip(matrix_df.columns.to_list(), header)},
+    )
     return matrix_df
 
 
@@ -242,12 +258,12 @@ def _get_channel_mappings(fluoro_dict: dict) -> list:
     fm = [x[1] for x in sorted(fm, key=lambda x: x[0])]
     mappings = []
     for fm_ in fm:
-        channel = fm_['PnN'].replace('_', '-')
-        if 'PnS' in fm_.keys():
-            marker = fm_['PnS'].replace('_', '-')
+        channel = fm_["PnN"].replace("_", "-")
+        if "PnS" in fm_.keys():
+            marker = fm_["PnS"].replace("_", "-")
         else:
-            marker = ''
-        mappings.append({'channel': channel, 'marker': marker})
+            marker = ""
+        mappings.append({"channel": channel, "marker": marker})
     return mappings
 
 
@@ -263,29 +279,38 @@ class FCSFile:
         csv file containing compensation matrix (optional, not required if a
         spillover matrix is already linked to the file)
     """
-    def __init__(self, filepath: str, comp_matrix: Optional[Union[pd.DataFrame, str]] = None):
+
+    def __init__(
+        self, filepath: str, comp_matrix: Optional[Union[pd.DataFrame, str]] = None
+    ):
         fcs = flowio.FlowData(filepath)
-        self.filename = fcs.text.get('fil', 'Unknown_filename')
-        self.sys = fcs.text.get('sys', 'Unknown_system')
-        self.total_events = int(fcs.text.get('tot', 0))
-        self.tube_name = fcs.text.get('tube name', 'Unknown')
-        self.exp_name = fcs.text.get('experiment name', 'Unknown')
-        self.cytometer = fcs.text.get('cyt', 'Unknown')
-        self.creator = fcs.text.get('creator', 'Unknown')
-        self.operator = fcs.text.get('export user name', 'Unknown')
+        self.filename = fcs.text.get("fil", "Unknown_filename")
+        self.sys = fcs.text.get("sys", "Unknown_system")
+        self.total_events = int(fcs.text.get("tot", 0))
+        self.tube_name = fcs.text.get("tube name", "Unknown")
+        self.exp_name = fcs.text.get("experiment name", "Unknown")
+        self.cytometer = fcs.text.get("cyt", "Unknown")
+        self.creator = fcs.text.get("creator", "Unknown")
+        self.operator = fcs.text.get("export user name", "Unknown")
         self.channel_mappings = _get_channel_mappings(fcs.channels)
         self.cst_pass = False
         self.data = fcs.events
-        self.event_data = np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count))
-        if 'threshold' in fcs.text.keys():
-            self.threshold = [{'channel': c, 'threshold': v} for c, v in chunks(fcs.text["threshold"].split(','), 2)]
+        self.event_data = np.reshape(
+            np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count)
+        )
+        if "threshold" in fcs.text.keys():
+            self.threshold = [
+                {"channel": c, "threshold": v}
+                for c, v in chunks(fcs.text["threshold"].split(","), 2)
+            ]
         else:
-            self.threshold = 'Unknown'
+            self.threshold = "Unknown"
         try:
-            self.processing_date = date_parser.parse(fcs.text['date'] +
-                                                     ' ' + fcs.text['etim']).isoformat()
+            self.processing_date = date_parser.parse(
+                fcs.text["date"] + " " + fcs.text["etim"]
+            ).isoformat()
         except KeyError:
-            self.processing_date = 'Unknown'
+            self.processing_date = "Unknown"
         if comp_matrix is not None:
             if isinstance(comp_matrix, str):
                 self.spill = pd.read_csv(comp_matrix)
@@ -293,24 +318,26 @@ class FCSFile:
                 self.spill = comp_matrix
             self.spill_txt = None
         else:
-            if 'spill' in fcs.text.keys():
-                self.spill_txt = fcs.text['spill']
+            if "spill" in fcs.text.keys():
+                self.spill_txt = fcs.text["spill"]
 
-            elif 'spillover' in fcs.text.keys():
-                self.spill_txt = fcs.text['spillover']
+            elif "spillover" in fcs.text.keys():
+                self.spill_txt = fcs.text["spillover"]
             else:
                 self.spill_txt = None
             if self.spill_txt is not None:
-                if(len(self.spill_txt)) < 1:
-                    print("""Warning: no spillover matrix found, please provide
-                    path to relevant csv file with 'comp_matrix' argument if compensation is necessary""")
+                if (len(self.spill_txt)) < 1:
+                    print(
+                        """Warning: no spillover matrix found, please provide
+                    path to relevant csv file with 'comp_matrix' argument if compensation is necessary"""
+                    )
                     self.spill = None
                 else:
                     self.spill = _get_spill_matrix(self.spill_txt)
             else:
                 self.spill = None
-        if 'cst_setup_status' in fcs.text:
-            if fcs.text['cst setup status'] == 'SUCCESS':
+        if "cst_setup_status" in fcs.text:
+            if fcs.text["cst setup status"] == "SUCCESS":
                 self.cst_pass = True
 
     def compensate(self):
@@ -321,12 +348,19 @@ class FCSFile:
         -------
         None
         """
-        assert self.spill is not None, f'Unable to locate spillover matrix, please provide a compensation matrix'
-        channel_idx = [i for i, x in enumerate(self.channel_mappings) if x['marker'] != '']
+        assert (
+            self.spill is not None
+        ), f"Unable to locate spillover matrix, please provide a compensation matrix"
+        channel_idx = [
+            i for i, x in enumerate(self.channel_mappings) if x["marker"] != ""
+        ]
         if len(channel_idx) == 0:
             # No markers defined in file
-            channel_idx = [i for i, x in enumerate(self.channel_mappings) if all([z not in x['channel'].lower()
-                                                                                  for z in ['fsc', 'ssc', 'time']])]
+            channel_idx = [
+                i
+                for i, x in enumerate(self.channel_mappings)
+                if all([z not in x["channel"].lower() for z in ["fsc", "ssc", "time"]])
+            ]
         comp_data = self.event_data[:, channel_idx]
         comp_data = np.linalg.solve(self.spill.values.T, comp_data.T).T
         self.event_data[:, channel_idx] = comp_data

@@ -50,8 +50,7 @@ class TransformError(Exception):
     pass
 
 
-def _get_dataframe_column_index(data: pd.DataFrame,
-                                features: list):
+def _get_dataframe_column_index(data: pd.DataFrame, features: list):
     """
     Given the features of interest (columns in data) return the index of these features
 
@@ -88,17 +87,14 @@ class Transformer:
     kwargs: dict
     """
 
-    def __init__(self,
-                 transform_function: callable,
-                 inverse_function: callable,
-                 **kwargs):
+    def __init__(
+        self, transform_function: callable, inverse_function: callable, **kwargs
+    ):
         self.transform = transform_function
         self.inverse = inverse_function
         self.kwargs = kwargs or {}
 
-    def scale(self,
-              data: pd.DataFrame,
-              features: list):
+    def scale(self, data: pd.DataFrame, features: list):
         """
         Scale features (columns) of given dataframe
 
@@ -122,25 +118,25 @@ class Transformer:
         data[features] = data[features].astype(float)
         idx = _get_dataframe_column_index(data, features)
         if "channel_indices" in self.transform.__code__.co_varnames:
-            data = pd.DataFrame(self.transform(data=data.values,
-                                               channel_indices=idx,
-                                               **self.kwargs),
-                                columns=data.columns,
-                                index=original_index)
+            data = pd.DataFrame(
+                self.transform(data=data.values, channel_indices=idx, **self.kwargs),
+                columns=data.columns,
+                index=original_index,
+            )
         elif "channels" in self.transform.__code__.co_varnames:
-            data = pd.DataFrame(self.transform(data=data.values,
-                                               channels=idx,
-                                               **self.kwargs),
-                                columns=data.columns,
-                                index=original_index)
+            data = pd.DataFrame(
+                self.transform(data=data.values, channels=idx, **self.kwargs),
+                columns=data.columns,
+                index=original_index,
+            )
         else:
-            raise TransformError("Invalid transform function, missing argument 'channel_indices' or 'channels'")
+            raise TransformError(
+                "Invalid transform function, missing argument 'channel_indices' or 'channels'"
+            )
         data[features] = data[features].astype(float)
         return data
 
-    def inverse_scale(self,
-                      data: pd.DataFrame,
-                      features: list):
+    def inverse_scale(self, data: pd.DataFrame, features: list):
         """
         Apply inverse scale to features (columns) of given dataframe, under the assumption that
         these features have previously been transformed with this Transformer
@@ -165,19 +161,21 @@ class Transformer:
         data[features] = data[features].astype(float)
         idx = _get_dataframe_column_index(data, features)
         if "channel_indices" in self.inverse.__code__.co_varnames:
-            data = pd.DataFrame(self.inverse(data=data.values,
-                                             channel_indices=idx,
-                                             **self.kwargs),
-                                columns=data.columns,
-                                index=original_index)
+            data = pd.DataFrame(
+                self.inverse(data=data.values, channel_indices=idx, **self.kwargs),
+                columns=data.columns,
+                index=original_index,
+            )
         elif "channels" in self.inverse.__code__.co_varnames:
-            data = pd.DataFrame(self.inverse(data=data.values,
-                                             channels=idx,
-                                             **self.kwargs),
-                                columns=data.columns,
-                                index=original_index)
+            data = pd.DataFrame(
+                self.inverse(data=data.values, channels=idx, **self.kwargs),
+                columns=data.columns,
+                index=original_index,
+            )
         else:
-            raise TransformError("Invalid inverse transform function, missing argument 'channel_indices' or 'channels'")
+            raise TransformError(
+                "Invalid inverse transform function, missing argument 'channel_indices' or 'channels'"
+            )
         data[features] = data[features].astype(float)
         return data
 
@@ -208,17 +206,15 @@ class LogicleTransformer(Transformer):
         Top of the linear scale
     """
 
-    def __init__(self,
-                 w: float = 0.5,
-                 m: float = 4.5,
-                 a: float = 0.0,
-                 t: int = 262144):
-        super().__init__(transform_function=transforms.logicle,
-                         inverse_function=transforms.logicle_inverse,
-                         w=w,
-                         m=m,
-                         a=a,
-                         t=t)
+    def __init__(self, w: float = 0.5, m: float = 4.5, a: float = 0.0, t: int = 262144):
+        super().__init__(
+            transform_function=transforms.logicle,
+            inverse_function=transforms.logicle_inverse,
+            w=w,
+            m=m,
+            a=a,
+            t=t,
+        )
 
 
 class HyperlogTransformer(Transformer):
@@ -249,17 +245,15 @@ class HyperlogTransformer(Transformer):
         Top of the linear scale
     """
 
-    def __init__(self,
-                 w: float = 0.5,
-                 m: float = 4.5,
-                 a: float = 0.0,
-                 t: int = 262144):
-        super().__init__(transform_function=transforms.hyperlog,
-                         inverse_function=transforms.hyperlog_inverse,
-                         w=w,
-                         m=m,
-                         a=a,
-                         t=t)
+    def __init__(self, w: float = 0.5, m: float = 4.5, a: float = 0.0, t: int = 262144):
+        super().__init__(
+            transform_function=transforms.hyperlog,
+            inverse_function=transforms.hyperlog_inverse,
+            w=w,
+            m=m,
+            a=a,
+            t=t,
+        )
 
 
 class AsinhTransformer(Transformer):
@@ -276,15 +270,14 @@ class AsinhTransformer(Transformer):
         Top of the linear scale
     """
 
-    def __init__(self,
-                 m: float = 4.5,
-                 a: float = 0.0,
-                 t: int = 262144):
-        super().__init__(transform_function=transforms.asinh,
-                         inverse_function=transforms.asinh_inverse,
-                         m=m,
-                         a=a,
-                         t=t)
+    def __init__(self, m: float = 4.5, a: float = 0.0, t: int = 262144):
+        super().__init__(
+            transform_function=transforms.asinh,
+            inverse_function=transforms.asinh_inverse,
+            m=m,
+            a=a,
+            t=t,
+        )
 
 
 class LogTransformer(Transformer):
@@ -307,30 +300,39 @@ class LogTransformer(Transformer):
         Invalid LogTransformer method
     """
 
-    def __init__(self,
-                 base: str or int = "parametrized",
-                 m: float = 4.5,
-                 t: int = 262144,
-                 **kwargs):
+    def __init__(
+        self,
+        base: str or int = "parametrized",
+        m: float = 4.5,
+        t: int = 262144,
+        **kwargs,
+    ):
         if base == "parametrized":
-            super().__init__(transform_function=lambda x: (1. / m) * np.log10(x / t) + 1.,
-                             inverse_function=lambda x: t * (10 ** ((x - 1) * m)))
+            super().__init__(
+                transform_function=lambda x: (1.0 / m) * np.log10(x / t) + 1.0,
+                inverse_function=lambda x: t * (10 ** ((x - 1) * m)),
+            )
         elif base == 10:
-            super().__init__(transform_function=partial(np.log10, **kwargs),
-                             inverse_function=lambda x: 10 ** x)
+            super().__init__(
+                transform_function=partial(np.log10, **kwargs),
+                inverse_function=lambda x: 10 ** x,
+            )
         elif base == 2:
-            super().__init__(transform_function=partial(np.log2, **kwargs),
-                             inverse_function=lambda x: 2 ** x)
+            super().__init__(
+                transform_function=partial(np.log2, **kwargs),
+                inverse_function=lambda x: 2 ** x,
+            )
         elif base == "natural":
-            super().__init__(transform_function=partial(np.log, **kwargs),
-                             inverse_function=np.exp)
+            super().__init__(
+                transform_function=partial(np.log, **kwargs), inverse_function=np.exp
+            )
         else:
-            raise TransformError("Invalid LogTransformer method, expected one of:"
-                                 "'parametrized', 10, 2, or 'natural'")
+            raise TransformError(
+                "Invalid LogTransformer method, expected one of:"
+                "'parametrized', 10, 2, or 'natural'"
+            )
 
-    def scale(self,
-              data: pd.DataFrame,
-              features: list):
+    def scale(self, data: pd.DataFrame, features: list):
         """
         Scale features (columns) of given dataframe using log transform
 
@@ -347,9 +349,7 @@ class LogTransformer(Transformer):
         data[features] = self.transform(data[features].values)
         return data
 
-    def inverse_scale(self,
-                      data: pd.DataFrame,
-                      features: list):
+    def inverse_scale(self, data: pd.DataFrame, features: list):
         """
         Apply inverse of log transform to features (columns) of given dataframe,
         under the assumption that these features have previously been transformed with LogTransformer
@@ -385,17 +385,13 @@ class Normalise:
          normalize each feature.
     """
 
-    def __init__(self,
-                 norm: str = "l2",
-                 axis: int = 1):
+    def __init__(self, norm: str = "l2", axis: int = 1):
         self.norm = norm
         self.axis = axis
         self._norms = None
         self._shape = None
 
-    def __call__(self,
-                 data: pd.DataFrame,
-                 features: list):
+    def __call__(self, data: pd.DataFrame, features: list):
         """
         Normalise columns (features) for given dataframe. Returns copy of DataFrame
         with chosen columns normalised
@@ -411,16 +407,13 @@ class Normalise:
         """
         data = data.copy()
         self._shape = data[features].shape
-        x, self._norms = preprocessing.normalize(data[features].values,
-                                                 norm=self.norm,
-                                                 axis=self.axis,
-                                                 return_norm=True)
+        x, self._norms = preprocessing.normalize(
+            data[features].values, norm=self.norm, axis=self.axis, return_norm=True
+        )
         data[features] = x
         return data
 
-    def inverse(self,
-                data: pd.DataFrame,
-                features: list):
+    def inverse(self, data: pd.DataFrame, features: list):
         """
         Perform inverse of normalisation to given dataframe. Returns copy of DataFrame
         with inverse normalisation applied to chosen columns (features)
@@ -441,21 +434,25 @@ class Normalise:
         ValueError
             Inverse called prior to normalisation
         """
-        assert data[features].shape == self._shape, "Shape of given dataframe does not match the data " \
-                                                    f"transformed originally: {self._shape} != {data.shape}"
+        assert data[features].shape == self._shape, (
+            "Shape of given dataframe does not match the data "
+            f"transformed originally: {self._shape} != {data.shape}"
+        )
         if self._norms is None:
             "Call Normalise object to first normalise target data prior to attempting inverse"
         data[features] = data[features] * self._norms
         return data
 
 
-SCALERS = {"standard": preprocessing.StandardScaler,
-           "minmax": preprocessing.MinMaxScaler,
-           "robust": preprocessing.RobustScaler,
-           "maxabs": preprocessing.MaxAbsScaler,
-           "quantile": preprocessing.QuantileTransformer,
-           "yeo_johnson": preprocessing.PowerTransformer,
-           "box_cox": preprocessing.PowerTransformer}
+SCALERS = {
+    "standard": preprocessing.StandardScaler,
+    "minmax": preprocessing.MinMaxScaler,
+    "robust": preprocessing.RobustScaler,
+    "maxabs": preprocessing.MaxAbsScaler,
+    "quantile": preprocessing.QuantileTransformer,
+    "yeo_johnson": preprocessing.PowerTransformer,
+    "box_cox": preprocessing.PowerTransformer,
+}
 
 
 class Scaler:
@@ -488,9 +485,7 @@ class Scaler:
         Name of scikit-learn transformer to use
     """
 
-    def __init__(self,
-                 method: str = "standard",
-                 **kwargs):
+    def __init__(self, method: str = "standard", **kwargs):
         """
         Initialise object and create transformer
 
@@ -501,7 +496,9 @@ class Scaler:
             Additional keyword arguments used when initialising Scikit-Learn object
         """
         if method not in SCALERS.keys():
-            raise TransformError(f"Method not supported, must be one of: {list(SCALERS.keys())}")
+            raise TransformError(
+                f"Method not supported, must be one of: {list(SCALERS.keys())}"
+            )
         kwargs = kwargs or {}
         if method == "yeo_johnson":
             kwargs["method"] = "yeo-johnson"
@@ -509,9 +506,7 @@ class Scaler:
             kwargs["method"] = "box_cox"
         self._scaler = SCALERS.get(method)(**kwargs)
 
-    def __call__(self,
-                 data: pd.DataFrame,
-                 features: list):
+    def __call__(self, data: pd.DataFrame, features: list):
         """
         Using a given dataframe and a list of columns (features) to transform,
         call 'fit_transform' on Scikit-Learn transformer. Returns copy of
@@ -551,7 +546,9 @@ class Scaler:
             If the chosen Scikit-Learn method does not support inverse transform
         """
         if getattr(self._scaler, "inverse_transform", None) is None:
-            raise TransformError("Chosen scaler method does not support inverse transformation")
+            raise TransformError(
+                "Chosen scaler method does not support inverse transformation"
+            )
         else:
             data = data.copy()
             data[features] = self._scaler.inverse_transform(data[features].values)
@@ -573,17 +570,21 @@ class Scaler:
         self._scaler.set_params(**kwargs)
 
 
-TRANSFORMERS = {"logicle": LogicleTransformer,
-                "hyperlog": HyperlogTransformer,
-                "asinh": AsinhTransformer,
-                "log": LogTransformer}
+TRANSFORMERS = {
+    "logicle": LogicleTransformer,
+    "hyperlog": HyperlogTransformer,
+    "asinh": AsinhTransformer,
+    "log": LogTransformer,
+}
 
 
-def apply_transform(data: pd.DataFrame,
-                    features: list or dict,
-                    method: str or None = "logicle",
-                    return_transformer: bool = False,
-                    **kwargs):
+def apply_transform(
+    data: pd.DataFrame,
+    features: list or dict,
+    method: str or None = "logicle",
+    return_transformer: bool = False,
+    **kwargs,
+):
     """
     Apply a transformation to the given DataFrame and the chosen
     columns (features). Transformation method is specified using the
@@ -621,7 +622,9 @@ def apply_transform(data: pd.DataFrame,
             return data, None
         return data
     if method not in TRANSFORMERS.keys():
-        raise TransformError(f"Invalid transform, must be one of: {list(TRANSFORMERS.keys())}")
+        raise TransformError(
+            f"Invalid transform, must be one of: {list(TRANSFORMERS.keys())}"
+        )
     method = TRANSFORMERS.get(method)(**kwargs)
     if return_transformer:
         x = method.scale(data=data, features=features)
@@ -629,9 +632,9 @@ def apply_transform(data: pd.DataFrame,
     return method.scale(data=data, features=features)
 
 
-def apply_transform_map(data: pd.DataFrame,
-                        feature_method: dict,
-                        kwargs: dict or None = None):
+def apply_transform_map(
+    data: pd.DataFrame, feature_method: dict, kwargs: dict or None = None
+):
     """
     Wrapper function to cytopy.flow.transform.apply_transform; takes a dictionary (feature_method) where
     each key is the name of a feature and the value the transform to be applied to that feature.
@@ -652,16 +655,17 @@ def apply_transform_map(data: pd.DataFrame,
     kwargs = kwargs or {}
     for feature, method in feature_method.items():
         transform_kwargs = kwargs.get(feature, {})
-        data = apply_transform(data=data,
-                               features=[feature],
-                               method=method,
-                               return_transformer=False,
-                               **transform_kwargs)
+        data = apply_transform(
+            data=data,
+            features=[feature],
+            method=method,
+            return_transformer=False,
+            **transform_kwargs,
+        )
     return data
 
 
-def remove_negative_values(data: pd.DataFrame,
-                           features: list):
+def remove_negative_values(data: pd.DataFrame, features: list):
     """
     For each feature (as given in 'features') in data, check for negative values and
     replace with minimum value in range for that feature.
@@ -684,8 +688,10 @@ def remove_negative_values(data: pd.DataFrame,
     data = data.copy()
     for f in features:
         if (data[f] <= 0).any():
-            warn(f"Feature {f} contains negative values. Chosen Transformer requires values "
-                 f">=0, all values <=0 will be forced to the minimum valid values in {f}")
+            warn(
+                f"Feature {f} contains negative values. Chosen Transformer requires values "
+                f">=0, all values <=0 will be forced to the minimum valid values in {f}"
+            )
             valid_range = data[data[f] > 0][f].values
             if len(valid_range) == 0:
                 raise TransformError(f"All values for {f} <= 0")

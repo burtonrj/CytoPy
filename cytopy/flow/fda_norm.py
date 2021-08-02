@@ -35,7 +35,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 
-from skfda.preprocessing.registration import landmark_registration_warping, landmark_shift_deltas
+from skfda.preprocessing.registration import (
+    landmark_registration_warping,
+    landmark_shift_deltas,
+)
 from skfda.representation.grid import FDataGrid
 from sklearn.cluster import KMeans
 from detecta import detect_peaks
@@ -54,9 +57,7 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def peaks(y: np.ndarray,
-          x: np.ndarray,
-          **kwargs):
+def peaks(y: np.ndarray, x: np.ndarray, **kwargs):
     """
     Detect peaks of some function, y, in the grid space, x.
 
@@ -75,9 +76,7 @@ def peaks(y: np.ndarray,
     return [x[i] for i in p]
 
 
-def filter_by_closest_centroid(x: np.ndarray,
-                               labels: np.ndarray,
-                               centroid: float):
+def filter_by_closest_centroid(x: np.ndarray, labels: np.ndarray, centroid: float):
     """
     Filter peaks ('x') to keep only those
     closest to their nearest centroid (centroid of clustered peaks).
@@ -109,8 +108,7 @@ def filter_by_closest_centroid(x: np.ndarray,
     return y1, y2
 
 
-def cluster_landmarks(p: np.ndarray,
-                      plabels: np.ndarray):
+def cluster_landmarks(p: np.ndarray, plabels: np.ndarray):
     """
     Cluster peaks (p). plabels indicate where the peak originated from; either target
     sample (0) or reference (1). The number of clusters, determined by KMeans clustering
@@ -128,16 +126,15 @@ def cluster_landmarks(p: np.ndarray,
     numpy.ndarray, numpy.ndarray
         K Means labels for each peak, cluster centroids
     """
-    km = KMeans(n_clusters=len(np.where(np.array(plabels) == 0)[0]),
-                random_state=42)
+    km = KMeans(n_clusters=len(np.where(np.array(plabels) == 0)[0]), random_state=42)
     km_labels = km.fit_predict(np.array(p).reshape(-1, 1))
     centroids = km.cluster_centers_.reshape(-1)
     return km_labels, centroids
 
 
-def zero_entropy_clusters(km_labels: np.ndarray,
-                          plabels: np.ndarray,
-                          centroids: np.ndarray):
+def zero_entropy_clusters(
+    km_labels: np.ndarray, plabels: np.ndarray, centroids: np.ndarray
+):
     """
     Determine which clusters (if any) have zero entropy (only contains
     peaks from a single sample; either target or reference)
@@ -164,10 +161,9 @@ def zero_entropy_clusters(km_labels: np.ndarray,
     return zero_entropy
 
 
-def unique_clusters_filter_nearest_centroid(p: np.ndarray,
-                                            plabels: np.ndarray,
-                                            km_labels: np.ndarray,
-                                            centroids: np.ndarray):
+def unique_clusters_filter_nearest_centroid(
+    p: np.ndarray, plabels: np.ndarray, km_labels: np.ndarray, centroids: np.ndarray
+):
     """
     Under the assumption that clusters have zero entropy (that is, all
     peaks within a cluster originate from the same sample), filter
@@ -198,7 +194,9 @@ def unique_clusters_filter_nearest_centroid(p: np.ndarray,
     updated_plabels = list()
     for i, centroid in enumerate(centroids):
         cluster_plabels = plabels[np.where(km_labels == i)]
-        assert len(np.unique(cluster_plabels)) == 1, "Zero entropy cluster is not unique"
+        assert (
+            len(np.unique(cluster_plabels)) == 1
+        ), "Zero entropy cluster is not unique"
         updated_peaks.append(p[np.where(km_labels == i)])
         updated_plabels.append(np.unique(cluster_plabels)[0])
     return updated_peaks, updated_plabels
@@ -229,9 +227,9 @@ def match_landmarks(p: np.ndarray, plabels: np.ndarray):
         # If all clusters have zero entropy
         # Keep peaks closest to centroid, update peaks and peak labels, and
         # perform recursive call
-        match_landmarks(*unique_clusters_filter_nearest_centroid(p, plabels,
-                                                                 km_labels,
-                                                                 centroids))
+        match_landmarks(
+            *unique_clusters_filter_nearest_centroid(p, plabels, km_labels, centroids)
+        )
 
     else:
         # Ignoring clusters with zero entropy, filter clusters to contain
@@ -239,18 +237,18 @@ def match_landmarks(p: np.ndarray, plabels: np.ndarray):
         matching_peaks = list()
         for i, centroid in enumerate(centroids):
             if centroid not in zero_entropy:
-                x = filter_by_closest_centroid(p[np.where(km_labels == i)],
-                                               plabels[np.where(km_labels == i)],
-                                               centroid)
+                x = filter_by_closest_centroid(
+                    p[np.where(km_labels == i)],
+                    plabels[np.where(km_labels == i)],
+                    centroid,
+                )
                 matching_peaks.append(x)
         matching_peaks = np.array(matching_peaks)
         matching_peaks = [np.sort(matching_peaks[:, 0]), np.sort(matching_peaks[:, 1])]
         return matching_peaks
 
 
-def estimate_pdfs(target: pd.DataFrame,
-                  ref: pd.DataFrame,
-                  var: str):
+def estimate_pdfs(target: pd.DataFrame, ref: pd.DataFrame, var: str):
     """
     Given some target and reference DataFrame, estimate PDF for each using convolution based
     kernel density estimation (see KDEpy). 'var' is the variable of interest and should be a
@@ -269,17 +267,9 @@ def estimate_pdfs(target: pd.DataFrame,
     """
     min_ = np.min([target[var].min(), ref[var].min()])
     max_ = np.max([target[var].max(), ref[var].max()])
-    x = np.linspace(min_ - 0.1,
-                    max_ + 0.1,
-                    100000)
-    y1 = (FFTKDE(kernel="gaussian",
-                 bw="silverman")
-          .fit(target[var].values)
-          .evaluate(x))
-    y2 = (FFTKDE(kernel="gaussian",
-                 bw="silverman")
-          .fit(ref[var].values)
-          .evaluate(x))
+    x = np.linspace(min_ - 0.1, max_ + 0.1, 100000)
+    y1 = FFTKDE(kernel="gaussian", bw="silverman").fit(target[var].values).evaluate(x)
+    y2 = FFTKDE(kernel="gaussian", bw="silverman").fit(ref[var].values).evaluate(x)
     return y1, y2, x
 
 
@@ -338,16 +328,23 @@ class LandmarkReg:
     landmark_shift_deltas: numpy.ndarray
         Corresponding shifts to align the landmarks of the PDFs described in original_functions
     """
-    def __init__(self,
-                 target: pd.DataFrame,
-                 ref: pd.DataFrame,
-                 var: str,
-                 mpt: float = 0.001,
-                 **kwargs):
+
+    def __init__(
+        self,
+        target: pd.DataFrame,
+        ref: pd.DataFrame,
+        var: str,
+        mpt: float = 0.001,
+        **kwargs
+    ):
         y1, y2, x = estimate_pdfs(target, ref, var)
         landmarks = [peaks(y, x, mph=mpt * y.max(), **kwargs) for y in [y1, y2]]
-        plabels = np.concatenate([[0 for i in range(len(landmarks[0]))],
-                                  [1 for i in range(len(landmarks[1]))]])
+        plabels = np.concatenate(
+            [
+                [0 for i in range(len(landmarks[0]))],
+                [1 for i in range(len(landmarks[1]))],
+            ]
+        )
         landmarks = np.array([x for sl in landmarks for x in sl])
         self.landmarks = match_landmarks(landmarks, plabels)
         self.original_functions = FDataGrid([y1, y2], grid_points=x)
@@ -363,11 +360,15 @@ class LandmarkReg:
         -------
         self
         """
-        self.warping_function = landmark_registration_warping(self.original_functions,
-                                                              self.landmarks,
-                                                              location=np.mean(self.landmarks, axis=0))
+        self.warping_function = landmark_registration_warping(
+            self.original_functions,
+            self.landmarks,
+            location=np.mean(self.landmarks, axis=0),
+        )
         self.adjusted_functions = self.original_functions.compose(self.warping_function)
-        self.landmark_shift_deltas = landmark_shift_deltas(self.original_functions, self.landmarks)
+        self.landmark_shift_deltas = landmark_shift_deltas(
+            self.original_functions, self.landmarks
+        )
         return self
 
     def plot_warping(self, ax: list or None = None):
@@ -395,8 +396,7 @@ class LandmarkReg:
         ax[0].legend(labels=["Target", "Reference"])
         return ax
 
-    def shift_data(self,
-                   x: np.ndarray):
+    def shift_data(self, x: np.ndarray):
         """
         Provided the original vector of data to transform, use the warping
         function to normalise the data and align the reference.
@@ -418,9 +418,7 @@ class LandmarkReg:
         assert self.warping_function is not None, "No warping function defined"
         return self.warping_function.evaluate(x)[1].reshape(-1)
 
-    def plot_shift(self,
-                   x: np.ndarray,
-                   ax: plt.Axes or None = None):
+    def plot_shift(self, x: np.ndarray, ax: plt.Axes or None = None):
         """
         Plot the reference PDF and overlay the target data before and after landmark
         registration.
@@ -437,13 +435,8 @@ class LandmarkReg:
         """
         ax = ax or plt.subplots(figsize=(5, 5))[1]
         shifted = self.shift_data(x)
-        x = np.linspace(np.min(x) - 0.1,
-                        np.max(x) + 0.1,
-                        10000)
-        y2 = (FFTKDE(kernel="gaussian",
-                     bw="silverman")
-              .fit(shifted)
-              .evaluate(x))
+        x = np.linspace(np.min(x) - 0.1, np.max(x) + 0.1, 10000)
+        y2 = FFTKDE(kernel="gaussian", bw="silverman").fit(shifted).evaluate(x)
 
         self.original_functions.plot(axes=ax)
         ax.plot(x, y2)

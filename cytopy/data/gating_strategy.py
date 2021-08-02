@@ -30,8 +30,17 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from cytopy.flow.plotting.flow_plot import FlowPlot
 from ..feedback import progress_bar, vprint
-from .gate import Gate, ThresholdGate, PolygonGate, EllipseGate, ThresholdGeom, \
-    PolygonGeom, update_polygon, update_threshold, BooleanGate
+from .gate import (
+    Gate,
+    ThresholdGate,
+    PolygonGate,
+    EllipseGate,
+    ThresholdGeom,
+    PolygonGeom,
+    update_polygon,
+    update_threshold,
+    BooleanGate,
+)
 from ..flow.transform import apply_transform
 from ..flow.gate_search import hyperparameter_gate
 from ..flow.fda_norm import LandmarkReg
@@ -61,9 +70,7 @@ __status__ = "Production"
 logger = logging.getLogger("GatingStrategy")
 
 
-def gate_stats(gate: Gate,
-               populations: list,
-               parent_data: pd.DataFrame):
+def gate_stats(gate: Gate, populations: list, parent_data: pd.DataFrame):
     """
     Print the statistics of populations generated from a Gate
 
@@ -83,7 +90,9 @@ def gate_stats(gate: Gate,
     parent_n = parent_data.shape[0]
     print(f"Parent ({gate.parent}) n: {parent_n}")
     for p in populations:
-        print(f"...child {p.population_name} n: {p.n}; {p.n / parent_n * 100}% of parent")
+        print(
+            f"...child {p.population_name} n: {p.n}; {p.n / parent_n * 100}% of parent"
+        )
     print("------------------------")
 
 
@@ -115,27 +124,25 @@ class GatingStrategy(mongoengine.Document):
     normalisation: dict
         Normalisation definitions; populated using the add_normalisation method
     """
+
     name = mongoengine.StringField(required=True, unique=True)
-    gates = mongoengine.ListField(mongoengine.ReferenceField(Gate, reverse_delete_rule=mongoengine.PULL))
+    gates = mongoengine.ListField(
+        mongoengine.ReferenceField(Gate, reverse_delete_rule=mongoengine.PULL)
+    )
     hyperparameter_search = mongoengine.DictField()
     normalisation = mongoengine.DictField()
     creation_date = mongoengine.DateTimeField(default=datetime.now)
     last_edit = mongoengine.DateTimeField(default=datetime.now)
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
-    meta = {
-        'db_alias': 'core',
-        'collection': 'gating_strategy'
-    }
+    meta = {"db_alias": "core", "collection": "gating_strategy"}
 
     def __init__(self, *args, **values):
         self.verbose = values.pop("verbose", True)
         super().__init__(*args, **values)
         self.filegroup = None
 
-    def load_data(self,
-                  experiment: Experiment,
-                  sample_id: str):
+    def load_data(self, experiment: Experiment, sample_id: str):
         """
         Load a FileGroup into the GatingStrategy ready for gating.
 
@@ -177,8 +184,7 @@ class GatingStrategy(mongoengine.Document):
         assert self.filegroup is not None, "No FileGroup associated"
         return list(self.filegroup.list_populations())
 
-    def _gate_exists(self,
-                     gate: str):
+    def _gate_exists(self, gate: str):
         """
         Raises AssertionError if given gate does not exist
 
@@ -193,8 +199,7 @@ class GatingStrategy(mongoengine.Document):
         """
         assert gate in self.list_gates(), f"Gate {gate} does not exist"
 
-    def get_gate(self,
-                 gate: str) -> Gate:
+    def get_gate(self, gate: str) -> Gate:
         """
         Given the name of a gate, return the Gate object
 
@@ -209,10 +214,12 @@ class GatingStrategy(mongoengine.Document):
         self._gate_exists(gate=gate)
         return [g for g in self.gates if g.gate_name == gate][0]
 
-    def preview_gate(self,
-                     gate: str or ThresholdGate or PolygonGate or EllipseGate,
-                     create_plot_kwargs: Optional[Dict] = None,
-                     plot_gate_kwargs: Optional[Dict] = None):
+    def preview_gate(
+        self,
+        gate: str or ThresholdGate or PolygonGate or EllipseGate,
+        create_plot_kwargs: Optional[Dict] = None,
+        plot_gate_kwargs: Optional[Dict] = None,
+    ):
         """
         Preview the results of some given Gate
 
@@ -237,24 +244,31 @@ class GatingStrategy(mongoengine.Document):
             data, plot_data = self._load_gate_dataframes_boolean(gate=gate)
             ctrl_parent_data = None
         else:
-            data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=False)
+            data, ctrl_parent_data = self._load_gate_dataframes(
+                gate=gate, fda_norm=False
+            )
             plot_data = data
         gate.fit(data=data, ctrl_data=ctrl_parent_data)
-        create_plot_kwargs["transform_x"] = create_plot_kwargs.get("transform_x", None) or gate.transform_x
-        create_plot_kwargs["transform_y"] = create_plot_kwargs.get("transform_y", None) or gate.transform_y
-        create_plot_kwargs["transform_x_kwargs"] = create_plot_kwargs.get("transform_x_kwargs",
-                                                                          None) or gate.transform_x_kwargs
-        create_plot_kwargs["transform_y_kwargs"] = create_plot_kwargs.get("transform_y_kwargs",
-                                                                          None) or gate.transform_y_kwargs
+        create_plot_kwargs["transform_x"] = (
+            create_plot_kwargs.get("transform_x", None) or gate.transform_x
+        )
+        create_plot_kwargs["transform_y"] = (
+            create_plot_kwargs.get("transform_y", None) or gate.transform_y
+        )
+        create_plot_kwargs["transform_x_kwargs"] = (
+            create_plot_kwargs.get("transform_x_kwargs", None)
+            or gate.transform_x_kwargs
+        )
+        create_plot_kwargs["transform_y_kwargs"] = (
+            create_plot_kwargs.get("transform_y_kwargs", None)
+            or gate.transform_y_kwargs
+        )
         plot = FlowPlot(**create_plot_kwargs)
-        return plot.plot_gate_children(gate=gate,
-                                       parent=plot_data,
-                                       **plot_gate_kwargs)
+        return plot.plot_gate_children(gate=gate, parent=plot_data, **plot_gate_kwargs)
 
-    def add_hyperparameter_grid(self,
-                                gate_name: str,
-                                params: dict,
-                                cost: Optional[str] = None):
+    def add_hyperparameter_grid(
+        self, gate_name: str, params: dict, cost: Optional[str] = None
+    ):
         """
         Add a hyperparameter grid to search when applying the given gate to new data.
         This hyperparameter grid should correspond to valid hyperparameters for the
@@ -304,22 +318,24 @@ class GatingStrategy(mongoengine.Document):
             valid_metrics = ["manhattan", "threshold_dist", "euclidean"]
             err = f"For threshold gate 'cost' should either be one of {valid_metrics}"
             assert cost in valid_metrics, err
-        if isinstance(self.get_gate(gate_name), PolygonGate) or isinstance(self.get_gate(gate_name), EllipseGate):
+        if isinstance(self.get_gate(gate_name), PolygonGate) or isinstance(
+            self.get_gate(gate_name), EllipseGate
+        ):
             cost = cost or "hausdorff"
             valid_metrics = ["hausdorff", "manhattan", "euclidean"]
             err = f"For threshold gate 'cost' should either be one of {valid_metrics}"
             assert cost in valid_metrics, err
-        err = "'params' must be a dictionary with each key corresponding to a valid " \
-              "hyperparameter and each value a list of parameter values"
+        err = (
+            "'params' must be a dictionary with each key corresponding to a valid "
+            "hyperparameter and each value a list of parameter values"
+        )
         assert isinstance(params, dict), err
         assert all([isinstance(x, list) for x in params.values()]), err
-        self.hyperparameter_search[gate_name] = {"grid": params,
-                                                 "cost": cost}
+        self.hyperparameter_search[gate_name] = {"grid": params, "cost": cost}
 
-    def add_normalisation(self,
-                          gate_name: str,
-                          reference: Union[FileGroup, None] = None,
-                          **kwargs):
+    def add_normalisation(
+        self, gate_name: str, reference: Union[FileGroup, None] = None, **kwargs
+    ):
         """
         Add landmark registration for normalisation to a Gate. In short, if normalisation is added
         to a gate (specified by 'gate_name') data that this gate is applied too, will be 'aligned'
@@ -350,11 +366,12 @@ class GatingStrategy(mongoengine.Document):
         """
         reference = reference or self.filegroup
         assert gate_name in self.list_gates(), "Invalid gate name"
-        self.normalisation[gate_name] = {"reference": str(reference.id),
-                                         "kwargs": kwargs}
+        self.normalisation[gate_name] = {
+            "reference": str(reference.id),
+            "kwargs": kwargs,
+        }
 
-    def normalise_data(self,
-                       gate_name: str):
+    def normalise_data(self, gate_name: str):
         """
         Given the name of an existing Gate, perform normalisation of the parent
         population using the details specified in the normalisation attribute. If
@@ -370,48 +387,59 @@ class GatingStrategy(mongoengine.Document):
         Pandas.DataFrame
         """
         if gate_name not in self.normalisation.keys():
-            return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)[0]
+            return self._load_gate_dataframes(
+                gate=self.get_gate(gate_name), fda_norm=False
+            )[0]
         gate = self.get_gate(gate_name)
         if self.normalisation.get(gate_name).get("reference") == str(self.filegroup.id):
-            return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)[0]
-        ref = FileGroup.objects(id=self.normalisation.get(gate_name).get("reference")).get()
+            return self._load_gate_dataframes(
+                gate=self.get_gate(gate_name), fda_norm=False
+            )[0]
+        ref = FileGroup.objects(
+            id=self.normalisation.get(gate_name).get("reference")
+        ).get()
         kwargs = self.normalisation.get(gate_name).get("kwargs")
-        data = self.filegroup.load_population_df(population=gate.parent,
-                                                 transform=None)
-        for d, t, tkwargs in zip([gate.x, gate.y],
-                                 [gate.transform_x, gate.transform_y],
-                                 [gate.transform_x_kwargs, gate.transform_y_kwargs]):
+        data = self.filegroup.load_population_df(population=gate.parent, transform=None)
+        for d, t, tkwargs in zip(
+            [gate.x, gate.y],
+            [gate.transform_x, gate.transform_y],
+            [gate.transform_x_kwargs, gate.transform_y_kwargs],
+        ):
             if d is None:
                 continue
-            ref_df = ref.load_population_df(population=gate.parent,
-                                            transform=t,
-                                            transform_kwargs=tkwargs)
-            target_df = self.filegroup.load_population_df(population=gate.parent,
-                                                          transform=None)
-            target_df, transformer = apply_transform(data=target_df,
-                                                     method=t,
-                                                     return_transformer=True,
-                                                     features=[d],
-                                                     **tkwargs)
+            ref_df = ref.load_population_df(
+                population=gate.parent, transform=t, transform_kwargs=tkwargs
+            )
+            target_df = self.filegroup.load_population_df(
+                population=gate.parent, transform=None
+            )
+            target_df, transformer = apply_transform(
+                data=target_df,
+                method=t,
+                return_transformer=True,
+                features=[d],
+                **tkwargs,
+            )
             try:
-                lr = LandmarkReg(target=target_df,
-                                 ref=ref_df,
-                                 var=d,
-                                 **kwargs)
+                lr = LandmarkReg(target=target_df, ref=ref_df, var=d, **kwargs)
                 target_df[d] = lr().shift_data(target_df[d].values)
             except ValueError as e:
-                warn(f"Failed to normalise data in {d} dimension, continuing without normalisation; "
-                     f"{str(e)}")
+                warn(
+                    f"Failed to normalise data in {d} dimension, continuing without normalisation; "
+                    f"{str(e)}"
+                )
             if transformer is not None:
                 target_df = transformer.inverse_scale(data=target_df, features=[d])
             data[d] = target_df[d]
         return data
 
-    def _load_gate_dataframes(self,
-                              gate: Gate,
-                              fda_norm: bool = False,
-                              verbose: bool = True,
-                              ctrl: bool = True):
+    def _load_gate_dataframes(
+        self,
+        gate: Gate,
+        fda_norm: bool = False,
+        verbose: bool = True,
+        ctrl: bool = True,
+    ):
         """
         Load the parent population dataframe ready for a Gate to be applied.
 
@@ -431,9 +459,9 @@ class GatingStrategy(mongoengine.Document):
         Pandas.DataFrame, Pandas.DataFrame or None
             Parent population, control population (if Gate is a control gate, otherwise None)
         """
-        parent = self.filegroup.load_population_df(population=gate.parent,
-                                                   transform=None,
-                                                   label_downstream_affiliations=False)
+        parent = self.filegroup.load_population_df(
+            population=gate.parent, transform=None, label_downstream_affiliations=False
+        )
         if fda_norm:
             return self.normalise_data(gate_name=gate.gate_name), None
         if gate.ctrl_x is not None and ctrl:
@@ -443,20 +471,24 @@ class GatingStrategy(mongoengine.Document):
             if not verbose:
                 kwargs["verbose"] = False
             if gate.ctrl_x is not None:
-                x = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_x,
-                                                           population=gate.parent,
-                                                           classifier=gate.ctrl_classifier,
-                                                           classifier_params=ctrl_classifier_params,
-                                                           verbose=verbose,
-                                                           **kwargs)
+                x = self.filegroup.load_ctrl_population_df(
+                    ctrl=gate.ctrl_x,
+                    population=gate.parent,
+                    classifier=gate.ctrl_classifier,
+                    classifier_params=ctrl_classifier_params,
+                    verbose=verbose,
+                    **kwargs,
+                )
                 ctrls[gate.ctrl_x] = x[gate.ctrl_x].values
             if gate.ctrl_y is not None:
-                y = self.filegroup.load_ctrl_population_df(ctrl=gate.ctrl_y,
-                                                           population=gate.parent,
-                                                           classifier=gate.ctrl_classifier,
-                                                           classifier_params=ctrl_classifier_params,
-                                                           verbose=verbose,
-                                                           **kwargs)
+                y = self.filegroup.load_ctrl_population_df(
+                    ctrl=gate.ctrl_y,
+                    population=gate.parent,
+                    classifier=gate.ctrl_classifier,
+                    classifier_params=ctrl_classifier_params,
+                    verbose=verbose,
+                    **kwargs,
+                )
                 ctrls[gate.ctrl_y] = y[gate.ctrl_y].values
                 if len(ctrls[gate.ctrl_x]) != len(ctrls[gate.ctrl_y]):
                     min_ = min([x.shape[0] for x in ctrls.values()])
@@ -465,8 +497,7 @@ class GatingStrategy(mongoengine.Document):
             return parent, ctrls
         return parent, None
 
-    def _load_gate_dataframes_boolean(self,
-                                      gate: BooleanGate):
+    def _load_gate_dataframes_boolean(self, gate: BooleanGate):
         """
         Load Population dataframes for BooleanGate
 
@@ -479,24 +510,28 @@ class GatingStrategy(mongoengine.Document):
         List
             List of DataFrames
         """
-        parent_data = self.filegroup.load_population_df(population=gate.parent,
-                                                        transform=None,
-                                                        label_downstream_affiliations=False)
-        return [self.filegroup.load_population_df(population=pop,
-                                                  transform=None,
-                                                  label_downstream_affiliations=False)
-                for pop in gate.populations], parent_data
+        parent_data = self.filegroup.load_population_df(
+            population=gate.parent, transform=None, label_downstream_affiliations=False
+        )
+        return [
+            self.filegroup.load_population_df(
+                population=pop, transform=None, label_downstream_affiliations=False
+            )
+            for pop in gate.populations
+        ], parent_data
 
-    def apply_gate(self,
-                   gate: Union[str, Gate, ThresholdGate, BooleanGate, PolygonGate, EllipseGate],
-                   plot: bool = True,
-                   verbose: bool = True,
-                   add_to_strategy: bool = True,
-                   create_plot_kwargs: Optional[Dict] = None,
-                   plot_gate_kwargs: Optional[Dict] = None,
-                   hyperparam_search: bool = True,
-                   fda_norm: bool = False,
-                   overwrite_method_kwargs: Optional[Dict] = None):
+    def apply_gate(
+        self,
+        gate: Union[str, Gate, ThresholdGate, BooleanGate, PolygonGate, EllipseGate],
+        plot: bool = True,
+        verbose: bool = True,
+        add_to_strategy: bool = True,
+        create_plot_kwargs: Optional[Dict] = None,
+        plot_gate_kwargs: Optional[Dict] = None,
+        hyperparam_search: bool = True,
+        fda_norm: bool = False,
+        overwrite_method_kwargs: Optional[Dict] = None,
+    ):
         """
         Apply a gate to the associated FileGroup. The gate must be previously defined;
         children associated and labeled. Either a Gate object can be provided or the name
@@ -544,8 +579,10 @@ class GatingStrategy(mongoengine.Document):
 
         if add_to_strategy:
             if gate.gate_name in self.list_gates():
-                raise DuplicateGateError(f"Gate with name {gate.gate_name} already exists. "
-                                         f"To continue set add_to_strategy to False")
+                raise DuplicateGateError(
+                    f"Gate with name {gate.gate_name} already exists. "
+                    f"To continue set add_to_strategy to False"
+                )
 
         create_plot_kwargs = create_plot_kwargs or {}
         plot_gate_kwargs = plot_gate_kwargs or {}
@@ -553,22 +590,31 @@ class GatingStrategy(mongoengine.Document):
             ctrl_parent_data = None
             data, parent_data = self._load_gate_dataframes_boolean(gate=gate)
         else:
-            data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm, verbose=verbose)
+            data, ctrl_parent_data = self._load_gate_dataframes(
+                gate=gate, fda_norm=fda_norm, verbose=verbose
+            )
             parent_data = data
         original_method_kwargs = gate.method_kwargs.copy()
 
         if overwrite_method_kwargs is not None:
             gate.method_kwargs = overwrite_method_kwargs
         if gate.ctrl_x is not None:
-            assert isinstance(gate, ThresholdGate), "Control gate only supported for ThresholdGate"
+            assert isinstance(
+                gate, ThresholdGate
+            ), "Control gate only supported for ThresholdGate"
             populations = gate.fit_predict(data=data, ctrl_data=ctrl_parent_data)
-        elif gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search and not isinstance(gate,
-                                                                                                          BooleanGate):
-            populations = hyperparameter_gate(gate=gate,
-                                              grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
-                                              cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
-                                              parent=data,
-                                              verbose=verbose)
+        elif (
+            gate.gate_name in self.hyperparameter_search.keys()
+            and hyperparam_search
+            and not isinstance(gate, BooleanGate)
+        ):
+            populations = hyperparameter_gate(
+                gate=gate,
+                grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
+                cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
+                parent=data,
+                verbose=verbose,
+            )
         else:
             populations = gate.fit_predict(data=data)
         for p in populations:
@@ -579,16 +625,18 @@ class GatingStrategy(mongoengine.Document):
             self.gates.append(gate)
         if plot:
             plot = FlowPlot(**create_plot_kwargs)
-            return plot.plot_population_geoms(parent=parent_data,
-                                              children=populations,
-                                              **plot_gate_kwargs)
+            return plot.plot_population_geoms(
+                parent=parent_data, children=populations, **plot_gate_kwargs
+            )
         gate.method_kwargs = original_method_kwargs
         return None
 
-    def apply_all(self,
-                  verbose: bool = True,
-                  fda_norm: bool = False,
-                  hyperparam_search: bool = False):
+    def apply_all(
+        self,
+        verbose: bool = True,
+        fda_norm: bool = False,
+        hyperparam_search: bool = False,
+    ):
         """
         Apply all the gates associated to this GatingStrategy
 
@@ -625,8 +673,10 @@ class GatingStrategy(mongoengine.Document):
         populations_created = [[c.name for c in g.children] for g in self.gates]
         populations_created = [x for sl in populations_created for x in sl]
         assert len(self.gates) > 0, "No gates to apply"
-        err = "One or more of the populations generated from this gating strategy are already " \
-              "presented in the population tree"
+        err = (
+            "One or more of the populations generated from this gating strategy are already "
+            "presented in the population tree"
+        )
         if not all([x not in self.list_populations() for x in populations_created]):
             raise DuplicatePopulationError(err)
         gates_to_apply = list(self.gates)
@@ -639,29 +689,39 @@ class GatingStrategy(mongoengine.Document):
             gate = gates_to_apply[i]
             if gate.parent in self.list_populations():
                 if self.filegroup.population_stats(gate.parent).get("n") <= 3:
-                    raise InsufficientEventsError(f"Insufficient events in parent population {gate.parent}")
+                    raise InsufficientEventsError(
+                        f"Insufficient events in parent population {gate.parent}"
+                    )
                 feedback(f"------ Applying {gate.gate_name} ------")
-                self.apply_gate(gate=gate,
-                                plot=False,
-                                verbose=verbose,
-                                add_to_strategy=False,
-                                fda_norm=fda_norm,
-                                hyperparam_search=hyperparam_search)
+                self.apply_gate(
+                    gate=gate,
+                    plot=False,
+                    verbose=verbose,
+                    add_to_strategy=False,
+                    fda_norm=fda_norm,
+                    hyperparam_search=hyperparam_search,
+                )
                 feedback("----------------------------------------")
-                gates_to_apply = [g for g in gates_to_apply if g.gate_name != gate.gate_name]
+                gates_to_apply = [
+                    g for g in gates_to_apply if g.gate_name != gate.gate_name
+                ]
             i += 1
             iteration_limit -= 1
             if iteration_limit == 0:
-                raise OverflowError("Maximum number of iterations reached. This means that one or more parent "
-                                    "populations are not being identified.")
+                raise OverflowError(
+                    "Maximum number of iterations reached. This means that one or more parent "
+                    "populations are not being identified."
+                )
 
-    def apply_to_experiment(self,
-                            experiment: Experiment,
-                            fda_norm: bool = False,
-                            hyperparam_search: bool = False,
-                            plots_path: Optional[str] = None,
-                            sample_ids: Union[list, None] = None,
-                            verbose: bool = True):
+    def apply_to_experiment(
+        self,
+        experiment: Experiment,
+        fda_norm: bool = False,
+        hyperparam_search: bool = False,
+        plots_path: Optional[str] = None,
+        sample_ids: Union[list, None] = None,
+        verbose: bool = True,
+    ):
         """
         Apply all the gates associated to this GatingStrategy to each FileGroup of
         an Experiment in sequence.
@@ -689,17 +749,23 @@ class GatingStrategy(mongoengine.Document):
         -------
         None
         """
-        logger.info(f" -- Gating {experiment.experiment_id} using {self.name} strategy --")
+        logger.info(
+            f" -- Gating {experiment.experiment_id} using {self.name} strategy --"
+        )
 
         sample_ids = sample_ids or experiment.list_samples()
         if plots_path is not None:
-            assert os.path.isdir(plots_path), "Invalid plots_path, directory does not exist"
+            assert os.path.isdir(
+                plots_path
+            ), "Invalid plots_path, directory does not exist"
         for s in progress_bar(sample_ids, verbose=verbose):
             self.load_data(experiment=experiment, sample_id=s)
             try:
-                self.apply_all(verbose=False,
-                               fda_norm=fda_norm,
-                               hyperparam_search=hyperparam_search)
+                self.apply_all(
+                    verbose=False,
+                    fda_norm=fda_norm,
+                    hyperparam_search=hyperparam_search,
+                )
                 self.save(save_strategy=False, save_filegroup=True)
                 logger.info(f"{s} - gated successfully!")
                 if plots_path is not None:
@@ -734,15 +800,15 @@ class GatingStrategy(mongoengine.Document):
         fig = plt.figure(figsize=(12, 5 * rows))
         for i in range(n):
             ax = fig.add_subplot(gs[i])
-            self.plot_gate(gate=self.gates[i].gate_name,
-                           create_plot_kwargs={"ax": ax,
-                                               "downsample": 0.25})
+            self.plot_gate(
+                gate=self.gates[i].gate_name,
+                create_plot_kwargs={"ax": ax, "downsample": 0.25},
+            )
             ax.set_title(self.gates[i].gate_name)
         fig.tight_layout()
         return fig
 
-    def delete_gate(self,
-                    gate_name: str):
+    def delete_gate(self, gate_name: str):
         """
         Remove a gate from this GatingStrategy. Note: populations generated from this
         gate will not be deleted. These populations must be deleted separately by calling
@@ -758,8 +824,7 @@ class GatingStrategy(mongoengine.Document):
         """
         self.gates = [g for g in self.gates if g.gate_name != gate_name]
 
-    def delete_populations(self,
-                           populations: Union[str, list]):
+    def delete_populations(self, populations: Union[str, list]):
         """
         Delete given populations. Populations downstream from delete population(s) will
         also be removed.
@@ -776,10 +841,7 @@ class GatingStrategy(mongoengine.Document):
         """
         self.filegroup.delete_populations(populations=populations)
 
-    def plot_gate(self,
-                  gate: str,
-                  create_plot_kwargs: Optional[Dict] = None,
-                  **kwargs):
+    def plot_gate(self, gate: str, create_plot_kwargs: Optional[Dict] = None, **kwargs):
         """
         Plot a gate. Must provide the name of a Gate currently associated to this GatingStrategy.
         This will plot the parent population this gate acts on along with the geometries
@@ -805,25 +867,31 @@ class GatingStrategy(mongoengine.Document):
             FileGroup
         """
         create_plot_kwargs = create_plot_kwargs or {}
-        assert isinstance(gate, str), "Provide the name of an existing Gate in this GatingStrategy"
-        assert gate in self.list_gates(), \
-            f"Gate {gate} not recognised. Have you applied it and added it to the strategy?"
+        assert isinstance(
+            gate, str
+        ), "Provide the name of an existing Gate in this GatingStrategy"
+        assert (
+            gate in self.list_gates()
+        ), f"Gate {gate} not recognised. Have you applied it and added it to the strategy?"
         gate = self.get_gate(gate=gate)
         fda_norm = gate.gate_name in self.normalisation.keys()
         parent, _ = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm, ctrl=False)
         plotting = FlowPlot(**create_plot_kwargs)
-        return plotting.plot_population_geoms(parent=parent,
-                                              children=[self.filegroup.get_population(c.name)
-                                                        for c in gate.children],
-                                              **kwargs)
+        return plotting.plot_population_geoms(
+            parent=parent,
+            children=[self.filegroup.get_population(c.name) for c in gate.children],
+            **kwargs,
+        )
 
-    def plot_backgate(self,
-                      parent: str,
-                      overlay: list,
-                      x: str,
-                      y: Optional[str] = None,
-                      create_plot_kwargs: Optional[Dict] = None,
-                      **backgate_kwargs):
+    def plot_backgate(
+        self,
+        parent: str,
+        overlay: list,
+        x: str,
+        y: Optional[str] = None,
+        create_plot_kwargs: Optional[Dict] = None,
+        **backgate_kwargs,
+    ):
         """
         Given some population as the backdrop (parent) and a list of one or more
         populations that occur downstream of the parent (overlay), plot the downstream
@@ -855,33 +923,38 @@ class GatingStrategy(mongoengine.Document):
         if parent not in self.list_populations():
             raise MissingPopulationError("Parent population does not exist")
         if not all([x in self.list_populations() for x in overlay]):
-            raise MissingPopulationError("One or more given populations could not be found")
+            raise MissingPopulationError(
+                "One or more given populations could not be found"
+            )
         downstream = self.filegroup.list_downstream_populations(population=parent)
-        assert all([x in downstream for x in overlay]), \
-            "One or more of the given populations is not downstream of the given parent"
+        assert all(
+            [x in downstream for x in overlay]
+        ), "One or more of the given populations is not downstream of the given parent"
         create_plot_kwargs = create_plot_kwargs or {}
         plotting = FlowPlot(**create_plot_kwargs)
-        parent = self.filegroup.load_population_df(population=parent,
-                                                   transform=None,
-                                                   label_downstream_affiliations=False)
-        children = {x: self.filegroup.load_population_df(population=x,
-                                                         transform=None,
-                                                         label_downstream_affiliations=False)
-                    for x in overlay}
-        return plotting.backgate(parent=parent,
-                                 children=children,
-                                 x=x,
-                                 y=y,
-                                 **backgate_kwargs)
+        parent = self.filegroup.load_population_df(
+            population=parent, transform=None, label_downstream_affiliations=False
+        )
+        children = {
+            x: self.filegroup.load_population_df(
+                population=x, transform=None, label_downstream_affiliations=False
+            )
+            for x in overlay
+        }
+        return plotting.backgate(
+            parent=parent, children=children, x=x, y=y, **backgate_kwargs
+        )
 
-    def plot_population(self,
-                        population: str,
-                        x: str,
-                        y: Optional[str] = None,
-                        transform_x: Optional[str] = "logicle",
-                        transform_y: Optional[str] = "logicle",
-                        create_plot_kwargs: Optional[Dict] = None,
-                        **plot_kwargs):
+    def plot_population(
+        self,
+        population: str,
+        x: str,
+        y: Optional[str] = None,
+        transform_x: Optional[str] = "logicle",
+        transform_y: Optional[str] = "logicle",
+        create_plot_kwargs: Optional[Dict] = None,
+        **plot_kwargs,
+    ):
         """
         Plot an existing population in the associate FileGroup.
 
@@ -908,13 +981,13 @@ class GatingStrategy(mongoengine.Document):
         """
         if population not in self.list_populations():
             raise MissingPopulationError(f"{population} does not exist")
-        data = self.filegroup.load_population_df(population=population,
-                                                 transform=None,
-                                                 label_downstream_affiliations=False)
+        data = self.filegroup.load_population_df(
+            population=population, transform=None, label_downstream_affiliations=False
+        )
         create_plot_kwargs = create_plot_kwargs or {}
-        plotting = FlowPlot(transform_x=transform_x,
-                            transform_y=transform_y,
-                            **create_plot_kwargs)
+        plotting = FlowPlot(
+            transform_x=transform_x, transform_y=transform_y, **create_plot_kwargs
+        )
         return plotting.plot(data=data, x=x, y=y, **plot_kwargs)
 
     def print_population_tree(self, **kwargs):
@@ -933,11 +1006,13 @@ class GatingStrategy(mongoengine.Document):
         """
         self.filegroup.print_population_tree(**kwargs)
 
-    def edit_gate(self,
-                  gate_name: str,
-                  x_threshold: float or None = None,
-                  y_threshold: float or None = None,
-                  coords: dict or None = None):
+    def edit_gate(
+        self,
+        gate_name: str,
+        x_threshold: float or None = None,
+        y_threshold: float or None = None,
+        coords: dict or None = None,
+    ):
         """
         Edit an existing gate (i.e. the polygon or threshold shape that generates the resulting
         populations). The altered geometry will be applied to the parent population resulting
@@ -973,56 +1048,80 @@ class GatingStrategy(mongoengine.Document):
         """
         gate = self.get_gate(gate=gate_name)
         err = "Cannot edit a gate that has not been applied; gate children not present in population tree."
-        assert all([x in self.filegroup.tree.keys() for x in [c.name for c in gate.children]]), err
+        assert all(
+            [x in self.filegroup.tree.keys() for x in [c.name for c in gate.children]]
+        ), err
         transforms, transform_kwargs = gate.transform_info()
-        parent = self.filegroup.load_population_df(population=gate.parent,
-                                                   transform=transforms,
-                                                   transform_kwargs=transform_kwargs)
+        parent = self.filegroup.load_population_df(
+            population=gate.parent,
+            transform=transforms,
+            transform_kwargs=transform_kwargs,
+        )
 
         for child in gate.children:
             pop = self.filegroup.get_population(population_name=child.name)
             if isinstance(pop.geom, ThresholdGeom):
                 if x_threshold is None:
-                    raise ValueError("For threshold geometry, please provide x_threshold")
-                xt = apply_transform(pd.DataFrame({"x": [x_threshold]}),
-                                     features=["x"],
-                                     method=transforms.get(gate.x),
-                                     **transform_kwargs.get(gate.x)).x.values[0]
+                    raise ValueError(
+                        "For threshold geometry, please provide x_threshold"
+                    )
+                xt = apply_transform(
+                    pd.DataFrame({"x": [x_threshold]}),
+                    features=["x"],
+                    method=transforms.get(gate.x),
+                    **transform_kwargs.get(gate.x),
+                ).x.values[0]
                 yt = None
                 if pop.geom.y_threshold is not None:
                     if y_threshold is None:
-                        raise ValueError("For 2D threshold geometry, please provide y_threshold")
-                    yt = apply_transform(pd.DataFrame({"x": [y_threshold]}),
-                                         features=["x"],
-                                         method=transforms.get(gate.y),
-                                         **transform_kwargs.get(gate.y)).x.values[0]
-                self.filegroup.update_population(update_threshold(population=pop,
-                                                                  parent_data=parent,
-                                                                  x_threshold=xt,
-                                                                  y_threshold=yt))
+                        raise ValueError(
+                            "For 2D threshold geometry, please provide y_threshold"
+                        )
+                    yt = apply_transform(
+                        pd.DataFrame({"x": [y_threshold]}),
+                        features=["x"],
+                        method=transforms.get(gate.y),
+                        **transform_kwargs.get(gate.y),
+                    ).x.values[0]
+                self.filegroup.update_population(
+                    update_threshold(
+                        population=pop,
+                        parent_data=parent,
+                        x_threshold=xt,
+                        y_threshold=yt,
+                    )
+                )
             elif isinstance(pop.geom, PolygonGeom):
                 if pop.population_name not in coords.keys():
-                    raise MissingPopulationError(f"{pop.population_name} missing from coords")
+                    raise MissingPopulationError(
+                        f"{pop.population_name} missing from coords"
+                    )
                 if not len(coords.get(pop.population_name)) == 2:
-                    raise ValueError("coords values should be array of shape (2, n) where "
-                                     "n is the desired number of coordinates")
+                    raise ValueError(
+                        "coords values should be array of shape (2, n) where "
+                        "n is the desired number of coordinates"
+                    )
                 x_values, y_values = coords.get(pop.population_name)
-                xc = apply_transform(pd.DataFrame({"x": [x_values]}),
-                                     features=["x"],
-                                     method=transforms.get(gate.x),
-                                     **transform_kwargs.get(gate.x)).x.values[0]
-                yc = apply_transform(pd.DataFrame({"y": [y_values]}),
-                                     features=["y"],
-                                     method=transforms.get(gate.y),
-                                     **transform_kwargs.get(gate.y)).y.values[0]
-                self.filegroup.update_population(update_polygon(population=pop,
-                                                                parent_data=parent,
-                                                                x_values=xc,
-                                                                y_values=yc))
+                xc = apply_transform(
+                    pd.DataFrame({"x": [x_values]}),
+                    features=["x"],
+                    method=transforms.get(gate.x),
+                    **transform_kwargs.get(gate.x),
+                ).x.values[0]
+                yc = apply_transform(
+                    pd.DataFrame({"y": [y_values]}),
+                    features=["y"],
+                    method=transforms.get(gate.y),
+                    **transform_kwargs.get(gate.y),
+                ).y.values[0]
+                self.filegroup.update_population(
+                    update_polygon(
+                        population=pop, parent_data=parent, x_values=xc, y_values=yc
+                    )
+                )
             self._edit_downstream_effects(population_name=child.name)
 
-    def _edit_downstream_effects(self,
-                                 population_name: str):
+    def _edit_downstream_effects(self, population_name: str):
         """
         Echos the downstream effects of an edited gate by iterating over the Population
         dependencies and reapplying their geometries to the modified data. Should be
@@ -1036,30 +1135,44 @@ class GatingStrategy(mongoengine.Document):
         -------
         None
         """
-        downstream_populations = self.filegroup.list_downstream_populations(population=population_name)
+        downstream_populations = self.filegroup.list_downstream_populations(
+            population=population_name
+        )
         for pop in downstream_populations:
             pop = self.filegroup.get_population(pop)
-            transforms = {k: v for k, v in zip([pop.geom.x, pop.geom.y],
-                                               [pop.geom.transform_x, pop.geom.transform_y])
-                          if k is not None}
-            parent = self.filegroup.load_population_df(population=pop.parent,
-                                                       transform=transforms)
+            transforms = {
+                k: v
+                for k, v in zip(
+                    [pop.geom.x, pop.geom.y],
+                    [pop.geom.transform_x, pop.geom.transform_y],
+                )
+                if k is not None
+            }
+            parent = self.filegroup.load_population_df(
+                population=pop.parent, transform=transforms
+            )
             if isinstance(pop.geom, ThresholdGeom):
-                self.filegroup.update_population(update_threshold(population=pop,
-                                                                  parent_data=parent,
-                                                                  x_threshold=pop.geom.x_threshold,
-                                                                  y_threshold=pop.geom.y_threshold))
+                self.filegroup.update_population(
+                    update_threshold(
+                        population=pop,
+                        parent_data=parent,
+                        x_threshold=pop.geom.x_threshold,
+                        y_threshold=pop.geom.y_threshold,
+                    )
+                )
             elif isinstance(pop.geom, PolygonGeom):
-                self.filegroup.update_population(update_polygon(population=pop,
-                                                                parent_data=parent,
-                                                                x_values=pop.geom.x_values,
-                                                                y_values=pop.geom.y_values))
+                self.filegroup.update_population(
+                    update_polygon(
+                        population=pop,
+                        parent_data=parent,
+                        x_values=pop.geom.x_values,
+                        y_values=pop.geom.y_values,
+                    )
+                )
 
-    def save(self,
-             save_strategy: bool = True,
-             save_filegroup: bool = True,
-             *args,
-             **kwargs):
+    def save(
+        self, save_strategy: bool = True, save_filegroup: bool = True, *args, **kwargs
+    ):
         """
         Save GatingStrategy and the populations generated for the associated
         FileGroup.
@@ -1088,10 +1201,13 @@ class GatingStrategy(mongoengine.Document):
             if self.filegroup is not None:
                 self.filegroup.save()
 
-    def delete(self,
-               delete_gates: bool = True,
-               remove_associations: bool = True,
-               *args, **kwargs):
+    def delete(
+        self,
+        delete_gates: bool = True,
+        remove_associations: bool = True,
+        *args,
+        **kwargs,
+    ):
         """
         Delete gating strategy. If delete_gates is True, then associated Gate objects will
         also be deleted. If remove_associations is True, then populations generated from
@@ -1122,10 +1238,14 @@ class GatingStrategy(mongoengine.Document):
             for f in progress_bar(FileGroup.objects(), verbose=self.verbose):
                 try:
                     if self.name in f.gating_strategy:
-                        f.gating_strategy = [gs for gs in f.gating_strategy if gs != self.name]
+                        f.gating_strategy = [
+                            gs for gs in f.gating_strategy if gs != self.name
+                        ]
                         f.delete_populations(populations=populations)
                         f.save()
                 except ValueError as e:
-                    logger.warning(f"Could not delete associations in {f.primary_id}: {e}")
+                    logger.warning(
+                        f"Could not delete associations in {f.primary_id}: {e}"
+                    )
 
         logger.info(f"{self.name} successfully deleted.")

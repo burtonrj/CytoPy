@@ -44,10 +44,7 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def calculate_optimal_neighbours(x: pd.DataFrame,
-                                 y: np.array,
-                                 scoring: str,
-                                 **kwargs):
+def calculate_optimal_neighbours(x: pd.DataFrame, y: np.array, scoring: str, **kwargs):
     """
     Calculate the optimal n_neighbours parameter for KNeighborsClassifier using GridSearchCV.
     Returns optimal n and highest score
@@ -72,23 +69,23 @@ def calculate_optimal_neighbours(x: pd.DataFrame,
     max_ = 500
     if (max_ - 5) > x.shape[0]:
         max_ = 250
-    n = np.arange(5,
-                  max_,
-                  10, dtype=np.int64)
+    n = np.arange(5, max_, 10, dtype=np.int64)
     knn_ = KNeighborsClassifier(**kwargs)
     grid_cv = GridSearchCV(knn_, {"n_neighbors": n}, scoring=scoring, n_jobs=-1, cv=10)
     grid_cv.fit(x, y)
     return grid_cv.best_params_.get("n_neighbors"), grid_cv.best_score_
 
 
-def knn(data: pd.DataFrame,
-        labels: np.array,
-        features: list,
-        n_neighbours: int,
-        holdout_size: float = 0.2,
-        random_state: int = 42,
-        return_model: bool = False,
-        **kwargs):
+def knn(
+    data: pd.DataFrame,
+    labels: np.array,
+    features: list,
+    n_neighbours: int,
+    holdout_size: float = 0.2,
+    random_state: int = 42,
+    return_model: bool = False,
+    **kwargs
+):
     """
     Train a nearest neighbours classifier (scikit-learn implementation) and return
     the balanced accuracy score for both training and validation.
@@ -111,10 +108,9 @@ def knn(data: pd.DataFrame,
         Training balanced accuracy score, Validation balanced accuracy score,
         Classifier (if return_model is True)
     """
-    x_train, x_test, y_train, y_test = train_test_split(data[features].values,
-                                                        labels,
-                                                        test_size=holdout_size,
-                                                        random_state=random_state)
+    x_train, x_test, y_train, y_test = train_test_split(
+        data[features].values, labels, test_size=holdout_size, random_state=random_state
+    )
     knn_ = KNeighborsClassifier(n_neighbors=n_neighbours, **kwargs)
     knn_.fit(x_train, y_train)
     train_acc = balanced_accuracy_score(y_pred=knn_.predict(x_train), y_true=y_train)

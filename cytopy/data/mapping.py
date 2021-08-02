@@ -50,6 +50,7 @@ class ChannelMap(mongoengine.EmbeddedDocument):
     marker: str
         name of marker (e.g. protein)
     """
+
     channel = mongoengine.StringField()
     marker = mongoengine.StringField()
 
@@ -83,4 +84,4 @@ class ChannelMap(mongoengine.EmbeddedDocument):
         --------
         dict
         """
-        return {'channel': self.channel, 'marker': self.marker}
+        return {"channel": self.channel, "marker": self.marker}

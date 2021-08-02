@@ -83,33 +83,33 @@ class Project(mongoengine.Document):
     data_directory: str, required
         Path to the local directory for storing HDF5 files.
     """
+
     project_id = mongoengine.StringField(required=True, unique=True)
-    subjects = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
+    subjects = mongoengine.ListField(
+        mongoengine.ReferenceField(Subject, reverse_delete_rule=4)
+    )
     start_date = mongoengine.DateTimeField(default=datetime.datetime.now)
     owner = mongoengine.StringField(requred=True)
-    experiments = mongoengine.ListField(mongoengine.ReferenceField(Experiment, reverse_delete_rule=4))
+    experiments = mongoengine.ListField(
+        mongoengine.ReferenceField(Experiment, reverse_delete_rule=4)
+    )
     data_directory = mongoengine.StringField(required=True)
 
-    meta = {
-        'db_alias': 'core',
-        'collection': 'projects'
-    }
+    meta = {"db_alias": "core", "collection": "projects"}
 
-    def __init__(self,
-                 *args,
-                 **values):
+    def __init__(self, *args, **values):
         super().__init__(*args, **values)
         if not os.path.isdir(self.data_directory):
             if self.id:
-                logger.warning(f"Could not locate data directory at path {self.data_directory}",
-                               stacklevel=2)
+                logger.warning(
+                    f"Could not locate data directory at path {self.data_directory}",
+                    stacklevel=2,
+                )
                 raise FileNotFoundError(f"{self.data_directory} does not exist")
             else:
                 os.mkdir(self.data_directory)
 
-    def update_data_directory(self,
-                              data_directory: str,
-                              move: bool = True):
+    def update_data_directory(self, data_directory: str, move: bool = True):
         """
         Update the data directory for this Project. It is recommended that you let cytopy migrate the
         existing directory by letting 'move' equal True.
@@ -132,7 +132,9 @@ class Project(mongoengine.Document):
         """
         if not os.path.isdir(data_directory):
             logger.error(f"Could not find directory at path {data_directory}")
-            raise InvalidDataDirectory(f"Could not find directory at path {data_directory}")
+            raise InvalidDataDirectory(
+                f"Could not find directory at path {data_directory}"
+            )
         for e in self.experiments:
             for f in e.fcs_files:
                 f.data_directory = data_directory
@@ -168,11 +170,13 @@ class Project(mongoengine.Document):
             return [e for e in self.experiments if e.experiment_id == experiment_id][0]
         except IndexError:
             logger.error(f"Invalid experiment; {experiment_id} does not exist")
-            raise MissingExperimentError(f"Invalid experiment; {experiment_id} does not exist")
+            raise MissingExperimentError(
+                f"Invalid experiment; {experiment_id} does not exist"
+            )
 
-    def add_experiment(self,
-                       experiment_id: str,
-                       panel_definition: str or dict) -> Experiment:
+    def add_experiment(
+        self, experiment_id: str, panel_definition: str or dict
+    ) -> Experiment:
         """
         Add new experiment to project. Note you must provide either a path to an excel template for the panel
         definition (panel_definition) or the name of an existing panel (panel_name). If panel_definition is provided,
@@ -198,17 +202,19 @@ class Project(mongoengine.Document):
         """
         if experiment_id in [x.experiment_id for x in self.experiments]:
             logger.error(f"Experiment with id {experiment_id} already exists!")
-            raise DuplicateExperimentError(f"Experiment with id {experiment_id} already exists!")
-        exp = Experiment(experiment_id=experiment_id, data_directory=self.data_directory)
+            raise DuplicateExperimentError(
+                f"Experiment with id {experiment_id} already exists!"
+            )
+        exp = Experiment(
+            experiment_id=experiment_id, data_directory=self.data_directory
+        )
         exp.generate_panel(panel_definition=panel_definition)
         exp.save()
         self.experiments.append(exp)
         self.save()
         return exp
 
-    def add_subject(self,
-                    subject_id: str,
-                    **kwargs) -> Subject:
+    def add_subject(self, subject_id: str, **kwargs) -> Subject:
         """
         Create a new subject and associated to project; a subject is an individual element of a study
         e.g. a patient or a mouse
@@ -259,8 +265,7 @@ class Project(mongoengine.Document):
         """
         return [e.experiment_id for e in self.experiments]
 
-    def get_subject(self,
-                    subject_id: str) -> Subject:
+    def get_subject(self, subject_id: str) -> Subject:
         """
         Given a subject ID associated to Project, return the Subject document
 
@@ -280,7 +285,9 @@ class Project(mongoengine.Document):
         """
         if subject_id not in self.list_subjects():
             logger.error(f"Invalid subject ID {subject_id}, does not exist")
-            raise MissingSubjectError(f"Invalid subject ID {subject_id}, does not exist")
+            raise MissingSubjectError(
+                f"Invalid subject ID {subject_id}, does not exist"
+            )
         return Subject.objects(subject_id=subject_id).get()
 
     def delete_experiment(self, experiment_id: str):
@@ -301,10 +308,7 @@ class Project(mongoengine.Document):
         exp = self.get_experiment(experiment_id)
         exp.delete()
 
-    def delete(self,
-               delete_h5_data: bool = True,
-               *args,
-               **kwargs) -> None:
+    def delete(self, delete_h5_data: bool = True, *args, **kwargs) -> None:
         """
         Delete project (wrapper function of mongoengine.Document.delete)
 

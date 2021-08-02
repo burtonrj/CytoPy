@@ -49,8 +49,8 @@ class Config(SimpleNamespace):
     path: str, optional
         Use for testing purposes. Bypasses the default config file and will use the given JSON instead.
     """
-    def __init__(self,
-                 path: Optional[str] = None):
+
+    def __init__(self, path: Optional[str] = None):
         cytopy_path = os.path.dirname(cytopy.__file__)
         path = path or os.path.join(cytopy_path, "config.json")
         with open(path, "r") as f:
@@ -71,36 +71,35 @@ class Config(SimpleNamespace):
     def __str__(self):
         return json.dumps(self.__dict__, indent=4)
 
-    def update_logger_level(self,
-                            handler_id: str,
-                            level: Union[str, int]):
+    def update_logger_level(self, handler_id: str, level: Union[str, int]):
         levels = {
             "CRITICAL": 50,
             "ERROR": 40,
             "WARNING": 30,
             "INFO": 20,
             "DEBUG": 10,
-            "NOTSET": 0
+            "NOTSET": 0,
         }
         try:
             level = level if isinstance(level, int) else levels[level.upper()]
         except KeyError:
-            raise KeyError(f"{level} is not a valid level, must be one of {levels.keys()}")
+            raise KeyError(
+                f"{level} is not a valid level, must be one of {levels.keys()}"
+            )
 
         try:
             self.__getitem__("logging_config")["handlers"][handler_id] = level
         except KeyError:
             raise KeyError("Logging config not defined or invalid handler")
 
-    def save(self,
-             path: Optional[str] = None):
+    def save(self, path: Optional[str] = None):
         with open(path, "w") as f:
             json.dump(self.options, f)
 
 
-def global_init(database_name: str,
-                config_path: Optional[str] = None,
-                **kwargs) -> None:
+def global_init(
+    database_name: str, config_path: Optional[str] = None, **kwargs
+) -> None:
     """
     Global initializer for mongogengine ORM and logging. Logging is managed using the loguru package.
 
@@ -129,4 +128,3 @@ def global_init(database_name: str,
     dictConfig(config.logging_config)
     mongoengine.register_connection(alias="core", name=database_name, **kwargs)
     logging.info(f"Connected to {database_name} database.")
-

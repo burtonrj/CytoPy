@@ -34,6 +34,7 @@ from cytopy.data.experiment import Experiment
 from cytopy.data.fcs import FileGroup
 from cytopy.flow.variance import load_and_sample
 import numpy as np
+
 np.random.seed(42)
 
 __author__ = "Ross Burton"
@@ -46,13 +47,15 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def create_ref_sample(experiment: Experiment,
-                      new_file_name: str,
-                      sample_size: int or float = 2500,
-                      sampling_method: str = "uniform",
-                      sampling_kwargs: dict or None = None,
-                      root_population='root',
-                      sample_ids: list or None = None) -> None:
+def create_ref_sample(
+    experiment: Experiment,
+    new_file_name: str,
+    sample_size: int or float = 2500,
+    sampling_method: str = "uniform",
+    sampling_kwargs: dict or None = None,
+    root_population="root",
+    sample_ids: list or None = None,
+) -> None:
     """
     Given some experiment and a root population that is common to all fcs file groups within this experiment, take
     a sample from each and create a new file group from the concatenation of these data. New file group will be created
@@ -87,24 +90,28 @@ def create_ref_sample(experiment: Experiment,
     """
     sampling_kwargs = sampling_kwargs or {}
     sample_ids = sample_ids or experiment.list_samples()
-    new_file_name = new_file_name or f'{experiment.experiment_id}_sampled_data'
-    assert all([s in experiment.list_samples() for s in sample_ids]), \
-        'One or more samples specified do not belong to experiment'
-    data = load_and_sample(experiment=experiment,
-                           population=root_population,
-                           sample_size=sample_size,
-                           sample_ids=sample_ids,
-                           sampling_method=sampling_method,
-                           transform=None,
-                           **sampling_kwargs)[0]
+    new_file_name = new_file_name or f"{experiment.experiment_id}_sampled_data"
+    assert all(
+        [s in experiment.list_samples() for s in sample_ids]
+    ), "One or more samples specified do not belong to experiment"
+    data = load_and_sample(
+        experiment=experiment,
+        population=root_population,
+        sample_size=sample_size,
+        sample_ids=sample_ids,
+        sampling_method=sampling_method,
+        transform=None,
+        **sampling_kwargs,
+    )[0]
     features = [x for x in data.columns if x != "sample_id"]
-    new_filegroup = FileGroup(primary_id=new_file_name,
-                              data=data[features],
-                              channels=features,
-                              markers=features,
-                              data_directory=experiment.data_directory)
-    new_filegroup.notes = 'sampled data'
+    new_filegroup = FileGroup(
+        primary_id=new_file_name,
+        data=data[features],
+        channels=features,
+        markers=features,
+        data_directory=experiment.data_directory,
+    )
+    new_filegroup.notes = "sampled data"
     new_filegroup.save()
     experiment.fcs_files.append(new_filegroup)
     experiment.save()
-

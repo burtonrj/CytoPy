@@ -33,7 +33,13 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 
-from ..data.gate import PolygonGate, ThresholdGate, EllipseGate, ChildPolygon, ChildThreshold
+from ..data.gate import (
+    PolygonGate,
+    ThresholdGate,
+    EllipseGate,
+    ChildPolygon,
+    ChildThreshold,
+)
 from ..feedback import vprint, progress_bar
 from sklearn.model_selection import ParameterGrid
 from scipy.spatial.distance import euclidean, cityblock
@@ -52,8 +58,7 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def signature_to_vector(signature: dict,
-                        filter_: list):
+def signature_to_vector(signature: dict, filter_: list):
     """
     Convert a signature (dictionary of average parameters) to Numpy array
 
@@ -69,14 +74,13 @@ def signature_to_vector(signature: dict,
     return np.array([v for k, v in signature.items() if k in filter_])
 
 
-def common_features(target_signature: dict,
-                    pop_signature: dict):
+def common_features(target_signature: dict, pop_signature: dict):
     return list(set(target_signature.keys()).intersection(pop_signature.keys()))
 
 
-def closest_signature_to_target(method: str,
-                                search_space: list,
-                                target: ChildPolygon or ChildThreshold):
+def closest_signature_to_target(
+    method: str, search_space: list, target: ChildPolygon or ChildThreshold
+):
     """
     Returns population (in search_space) who's signature is closest to some given target population signature
 
@@ -98,14 +102,25 @@ def closest_signature_to_target(method: str,
     AssertionError
         Target does not contain a signature
     """
-    assert hasattr(target, "signature"), "Invalid child populations for manhattan or euclidean dist; " \
-                                         "requires 'signature' attribute"
+    assert hasattr(target, "signature"), (
+        "Invalid child populations for manhattan or euclidean dist; "
+        "requires 'signature' attribute"
+    )
     f = {"euclidean": euclidean, "manhattan": cityblock}.get(method, cityblock)
-    idx = np.argmin([f(signature_to_vector(target.signature,
-                                           filter_=common_features(target.signature, p.signature)),
-                       signature_to_vector(p.signature,
-                                           filter_=common_features(target.signature, p.signature)))
-                     for p in search_space])
+    idx = np.argmin(
+        [
+            f(
+                signature_to_vector(
+                    target.signature,
+                    filter_=common_features(target.signature, p.signature),
+                ),
+                signature_to_vector(
+                    p.signature, filter_=common_features(target.signature, p.signature)
+                ),
+            )
+            for p in search_space
+        ]
+    )
     return search_space[int(idx)]
 
 
@@ -126,9 +141,7 @@ def remove_null_populations(population_grid):
     return updated_grid
 
 
-def cost_func(target: ChildPolygon or ChildThreshold,
-              populations: list,
-              method: str):
+def cost_func(target: ChildPolygon or ChildThreshold, populations: list, method: str):
     """
     Given some Child of a Gate and the population grid of resulting populations after
     testing across the range of possible hyperparameters, filter the population grid
@@ -153,34 +166,47 @@ def cost_func(target: ChildPolygon or ChildThreshold,
     ValueError
         Invalid method
     """
-    search_space = [[x for x in pops if x.population_name == target.name]
-                    for pops in populations]
+    search_space = [
+        [x for x in pops if x.population_name == target.name] for pops in populations
+    ]
     search_space = [x for sl in search_space for x in sl]
     if len(search_space) == 0:
         warn(f"No populations generated for target population {target.name}")
         return None
     if method in ["euclidean", "manhattan"]:
-        return closest_signature_to_target(method=method, search_space=search_space, target=target)
+        return closest_signature_to_target(
+            method=method, search_space=search_space, target=target
+        )
     if method == "threshold_dist":
         if target.geom.y_threshold:
-            idx = np.argmin([abs(target.geom.x_threshold - p.geom.x_threshold) +
-                             abs(target.geom.y_threshold - p.geom.y_threshold)
-                             for p in search_space])
+            idx = np.argmin(
+                [
+                    abs(target.geom.x_threshold - p.geom.x_threshold)
+                    + abs(target.geom.y_threshold - p.geom.y_threshold)
+                    for p in search_space
+                ]
+            )
             return search_space[int(idx)]
-        idx = np.argmin([abs(target.geom.x_threshold - p.geom.x_threshold)
-                         for p in search_space])
+        idx = np.argmin(
+            [abs(target.geom.x_threshold - p.geom.x_threshold) for p in search_space]
+        )
         return search_space[int(idx)]
     if method == "hausdorff":
-        idx = np.argmin([target.geom.shape.hausdorff_distance(p.geom.shape)
-                         for p in search_space])
+        idx = np.argmin(
+            [target.geom.shape.hausdorff_distance(p.geom.shape) for p in search_space]
+        )
         return search_space[int(idx)]
-    raise ValueError("Unrecognised cost metric; should be either euclidean, manhattan, threshold_dict "
-                     "or hausdorff")
+    raise ValueError(
+        "Unrecognised cost metric; should be either euclidean, manhattan, threshold_dict "
+        "or hausdorff"
+    )
 
 
-def fit_gate(updated_params: dict,
-             gate: PolygonGate or ThresholdGate or EllipseGate,
-             data: pd.DataFrame) -> list:
+def fit_gate(
+    updated_params: dict,
+    gate: PolygonGate or ThresholdGate or EllipseGate,
+    data: pd.DataFrame,
+) -> list:
     """
     Update the Gate method parameters and fit to the given data, predicting matching
     Populations that are returned as a list
@@ -203,9 +229,9 @@ def fit_gate(updated_params: dict,
     return gate.fit_predict(data=data)
 
 
-def optimal_populations(population_grid: list,
-                        gate: PolygonGate or ThresholdGate or EllipseGate,
-                        cost: str) -> list:
+def optimal_populations(
+    population_grid: list, gate: PolygonGate or ThresholdGate or EllipseGate, cost: str
+) -> list:
     """
     Given a grid Population results where each row represents the Populations generated
     under one set of hyperparameter conditions, find the optimal Population (i.e. the one
@@ -231,11 +257,13 @@ def optimal_populations(population_grid: list,
     return list(map(f, gate.children))
 
 
-def hyperparameter_gate(gate: ThresholdGate or PolygonGate or EllipseGate,
-                        grid: dict,
-                        cost: str,
-                        parent: pd.DataFrame,
-                        verbose: bool = True) -> list:
+def hyperparameter_gate(
+    gate: ThresholdGate or PolygonGate or EllipseGate,
+    grid: dict,
+    cost: str,
+    parent: pd.DataFrame,
+    verbose: bool = True,
+) -> list:
     """
     Fit a Gate to some parent data whilst searching the hyperparameter space (grid)
     for the optimal 'fit' as defined by minimising some cost (e.g. the distance between the
@@ -296,9 +324,7 @@ def hyperparameter_gate(gate: ThresholdGate or PolygonGate or EllipseGate,
         populations.append(fitter(params))
     feedback("Matching optimal populations...")
     populations = remove_null_populations(population_grid=populations)
-    pops = optimal_populations(population_grid=populations,
-                               gate=gate,
-                               cost=cost)
+    pops = optimal_populations(population_grid=populations, gate=gate, cost=cost)
     gate.method_kwargs = original_kwargs
     feedback(f"------------------ complete ------------------")
     return [p for p in pops if p is not None]

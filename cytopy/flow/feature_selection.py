@@ -36,7 +36,12 @@ from .cell_classifier import utils as classifier_utils
 from . import transform
 from sklearn.linear_model import Lasso, LogisticRegression, SGDClassifier, SGDRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree, export_graphviz
+from sklearn.tree import (
+    DecisionTreeClassifier,
+    DecisionTreeRegressor,
+    plot_tree,
+    export_graphviz,
+)
 from sklearn.inspection import permutation_importance
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA as SkPCA
@@ -56,6 +61,7 @@ import graphviz
 import pingouin
 import logging
 import shap
+
 logger = logging.getLogger("feature_selection")
 
 __author__ = "Ross Burton"
@@ -67,27 +73,33 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
-STATS = {"mean": np.mean,
-         "SD": np.std,
-         "median": np.median,
-         "CV": scipy_stats.variation,
-         "skew": scipy_stats.skew,
-         "kurtosis": scipy_stats.kurtosis,
-         "gmean": scipy_stats.gmean}
+STATS = {
+    "mean": np.mean,
+    "SD": np.std,
+    "median": np.median,
+    "CV": scipy_stats.variation,
+    "skew": scipy_stats.skew,
+    "kurtosis": scipy_stats.kurtosis,
+    "gmean": scipy_stats.gmean,
+}
 
-L1CLASSIFIERS = {"log": [LogisticRegression, dict(penalty="l1", solver="liblinear")],
-                 "SGD": [SGDClassifier, dict(penalty="l1")],
-                 "SVM": [LinearSVC, dict(penalty="l1", loss="squared_hinge", dual=False)]}
+L1CLASSIFIERS = {
+    "log": [LogisticRegression, dict(penalty="l1", solver="liblinear")],
+    "SGD": [SGDClassifier, dict(penalty="l1")],
+    "SVM": [LinearSVC, dict(penalty="l1", loss="squared_hinge", dual=False)],
+}
 
-L1REGRESSORS = {"lasso": [Lasso, dict()],
-                "SGD": [SGDRegressor, dict(penalty="l1")],
-                "SVM": [LinearSVR, dict(loss="epsilon_insensitive")]}
+L1REGRESSORS = {
+    "lasso": [Lasso, dict()],
+    "SGD": [SGDRegressor, dict(penalty="l1")],
+    "SVM": [LinearSVR, dict(loss="epsilon_insensitive")],
+}
 
 
-def _fetch_population_statistics(files: list,
-                                 populations: set):
-    return {f.primary_id: {p: f.population_stats(p) for p in populations}
-            for f in files}
+def _fetch_population_statistics(files: list, populations: set):
+    return {
+        f.primary_id: {p: f.population_stats(p) for p in populations} for f in files
+    }
 
 
 def _fetch_subject(x) -> str or None:
@@ -135,20 +147,25 @@ class FeatureSpace:
     meta_labels: dict
     """
 
-    def __init__(self,
-                 experiment: Experiment,
-                 sample_ids: list or None = None,
-                 filter_pops: str or None = None):
+    def __init__(
+        self,
+        experiment: Experiment,
+        sample_ids: list or None = None,
+        filter_pops: str or None = None,
+    ):
         sample_ids = sample_ids or experiment.list_samples()
-        self._fcs_files = [x for x in experiment.fcs_files
-                           if x.primary_id in sample_ids] or experiment.fcs_files
+        self._fcs_files = [
+            x for x in experiment.fcs_files if x.primary_id in sample_ids
+        ] or experiment.fcs_files
         self.subject_ids = {x.primary_id: _fetch_subject(x) for x in self._fcs_files}
         self.subject_ids = {k: v for k, v in self.subject_ids.items() if v is not None}
         populations = [x.list_populations() for x in self._fcs_files]
         self.populations = set([x for sl in populations for x in sl])
         if filter_pops is not None:
             self.populations = set([p for p in self.populations if filter_pops in p])
-        self.population_statistics = _fetch_population_statistics(files=self._fcs_files, populations=self.populations)
+        self.population_statistics = _fetch_population_statistics(
+            files=self._fcs_files, populations=self.populations
+        )
         self.ratios = defaultdict(dict)
         self.channel_desc = defaultdict(dict)
         self.meta_labels = defaultdict(dict)
@@ -160,13 +177,11 @@ class FeatureSpace:
                 try:
                     n = self.population_statistics[f.primary_id][pop]["n"]
                     child_n = self.population_statistics[f.primary_id][pop2]["n"]
-                    self.frac[f.primary_id][f"{pop2}_frac_of_{pop}"] = child_n/n
+                    self.frac[f.primary_id][f"{pop2}_frac_of_{pop}"] = child_n / n
                 except KeyError:
                     self.frac[f.primary_id][f"{pop2}_frac_of_{pop}"] = None
 
-    def compute_ratios(self,
-                       pop1: str,
-                       pop2: str or None = None):
+    def compute_ratios(self, pop1: str, pop2: str or None = None):
         """
         For each sample compute the ratio of pop1 to pop2. If pop2 is not defined, will compute
         the ratio between pop1 and all other populations. Saved as dictionary to 'ratios' attribute.
@@ -203,13 +218,15 @@ class FeatureSpace:
                     self.ratios[f.primary_id][f"{pop1}:{pop2}"] = p1n / p2n
         return self
 
-    def channel_desc_stats(self,
-                           channel: str,
-                           stats: list or None = None,
-                           channel_transform: str or None = None,
-                           transform_kwargs: dict or None = None,
-                           populations: list or None = None,
-                           verbose: bool = True):
+    def channel_desc_stats(
+        self,
+        channel: str,
+        stats: list or None = None,
+        channel_transform: str or None = None,
+        transform_kwargs: dict or None = None,
+        populations: list or None = None,
+        verbose: bool = True,
+    ):
         """
         For the given channel, generate the statistics given in 'stats', which should contain
         one or more of the following:
@@ -247,7 +264,9 @@ class FeatureSpace:
         """
         populations = populations or self.populations
         stats = stats or ["mean", "SD"]
-        assert all([x in STATS.keys() for x in stats]), f"Invalid stats; valid stats are: {STATS.keys()}"
+        assert all(
+            [x in STATS.keys() for x in stats]
+        ), f"Invalid stats; valid stats are: {STATS.keys()}"
         for f in progress_bar(self._fcs_files, verbose=verbose):
             for p in populations:
                 if p not in f.list_populations():
@@ -255,17 +274,19 @@ class FeatureSpace:
                     for s in stats:
                         self.channel_desc[f.primary_id][f"{p}_{channel}_{s}"] = None
                 else:
-                    x = f.load_population_df(population=p,
-                                             transform=channel_transform,
-                                             features_to_transform=[channel],
-                                             transform_kwargs=transform_kwargs)[channel].values
+                    x = f.load_population_df(
+                        population=p,
+                        transform=channel_transform,
+                        features_to_transform=[channel],
+                        transform_kwargs=transform_kwargs,
+                    )[channel].values
                     for s in stats:
-                        self.channel_desc[f.primary_id][f"{p}_{channel}_{s}"] = STATS.get(s)(x)
+                        self.channel_desc[f.primary_id][
+                            f"{p}_{channel}_{s}"
+                        ] = STATS.get(s)(x)
         return self
 
-    def add_meta_labels(self,
-                        key: str or list,
-                        meta_label: str or None = None):
+    def add_meta_labels(self, key: str or list, meta_label: str or None = None):
         """
         Search associated subjects for meta variables. You should provide a key as a string or a list of
         strings. If it is a string, this should be the name of an immediate field in the Subject document
@@ -300,17 +321,21 @@ class FeatureSpace:
                     meta_label = meta_label or key[len(key) - 1]
                     self.meta_labels[f.primary_id][meta_label] = node
             except KeyError:
-                logger.warning(f"{f.primary_id} missing meta variable {key} in Subject document")
+                logger.warning(
+                    f"{f.primary_id} missing meta variable {key} in Subject document"
+                )
                 if meta_label is None:
                     meta_label = key if isinstance(key, str) else key[0]
                 self.meta_labels[f.primary_id][meta_label] = None
         return self
 
-    def construct_dataframe(self,
-                            n: bool = True,
-                            frac_of_root: bool = True,
-                            frac_of_parent: bool = True,
-                            pop_prefix: str = ""):
+    def construct_dataframe(
+        self,
+        n: bool = True,
+        frac_of_root: bool = True,
+        frac_of_parent: bool = True,
+        pop_prefix: str = "",
+    ):
         """
         Generate a DataFrame of the feature space collected within this FeatureSpace object, detailing
         populations of an experiment with the addition of ratios, channel stats, and meta labels.
@@ -327,9 +352,13 @@ class FeatureSpace:
                 if n:
                     data[f"{pop_prefix}{pop_name}_N"].append(pop_stats["n"])
                 if frac_of_root:
-                    data[f"{pop_prefix}{pop_name}_FOR"].append(pop_stats["frac_of_root"])
+                    data[f"{pop_prefix}{pop_name}_FOR"].append(
+                        pop_stats["frac_of_root"]
+                    )
                 if frac_of_parent:
-                    data[f"{pop_prefix}{pop_name}_FOP"].append(pop_stats["frac_of_parent"])
+                    data[f"{pop_prefix}{pop_name}_FOP"].append(
+                        pop_stats["frac_of_parent"]
+                    )
 
             if self.ratios:
                 for n, r in self.ratios.get(sample_id).items():
@@ -343,13 +372,15 @@ class FeatureSpace:
         return pd.DataFrame(data)
 
 
-def clustered_heatmap(data: pd.DataFrame,
-                      features: list,
-                      index: str,
-                      row_colours: str or None = None,
-                      row_colours_cmap: str = "tab10",
-                      legend_kwargs: dict or None = None,
-                      **kwargs):
+def clustered_heatmap(
+    data: pd.DataFrame,
+    features: list,
+    index: str,
+    row_colours: str or None = None,
+    row_colours_cmap: str = "tab10",
+    legend_kwargs: dict or None = None,
+    **kwargs,
+):
     """
     Generate a clustered heatmap using Seaborn's clustermap function. Has the additional
     option to colour rows using some specified column in data.
@@ -381,25 +412,30 @@ def clustered_heatmap(data: pd.DataFrame,
         row_colours = data[row_colours].map(lut)
         handles = [Patch(facecolor=lut[name]) for name in lut]
         g = sns.clustermap(df, row_colors=row_colours.values, **kwargs)
-        plt.legend(handles, lut,
-                   title=row_colours_title,
-                   bbox_to_anchor=legend_kwargs.get("bbox_to_anchor", (1, 1)),
-                   bbox_transform=plt.gcf().transFigure,
-                   loc=legend_kwargs.get("log", 'upper right'))
+        plt.legend(
+            handles,
+            lut,
+            title=row_colours_title,
+            bbox_to_anchor=legend_kwargs.get("bbox_to_anchor", (1, 1)),
+            bbox_transform=plt.gcf().transFigure,
+            loc=legend_kwargs.get("log", "upper right"),
+        )
     else:
         g = sns.clustermap(df, **kwargs)
     return g
 
 
-def box_swarm_plot(plot_df: pd.DataFrame,
-                   x: str,
-                   y: str,
-                   hue: str or None = None,
-                   ax: plt.Axes or None = None,
-                   palette: str or None = None,
-                   overlay: bool = True,
-                   boxplot_kwargs: dict or None = None,
-                   overlay_kwargs: dict or None = None):
+def box_swarm_plot(
+    plot_df: pd.DataFrame,
+    x: str,
+    y: str,
+    hue: str or None = None,
+    ax: plt.Axes or None = None,
+    palette: str or None = None,
+    overlay: bool = True,
+    boxplot_kwargs: dict or None = None,
+    overlay_kwargs: dict or None = None,
+):
     """
     Convenience function for generating a boxplot with a swarmplot/stripplot overlaid showing
     individual datapoints (using tools from Seaborn library)
@@ -432,24 +468,28 @@ def box_swarm_plot(plot_df: pd.DataFrame,
     boxplot_kwargs = boxplot_kwargs or {}
     overlay_kwargs = overlay_kwargs or {}
     ax = ax or plt.subplots(figsize=(10, 5))[1]
-    sns.boxplot(data=plot_df,
-                x=x,
-                y=y,
-                hue=hue,
-                ax=ax,
-                showfliers=False,
-                boxprops=dict(alpha=.3),
-                palette=palette,
-                **boxplot_kwargs)
+    sns.boxplot(
+        data=plot_df,
+        x=x,
+        y=y,
+        hue=hue,
+        ax=ax,
+        showfliers=False,
+        boxprops=dict(alpha=0.3),
+        palette=palette,
+        **boxplot_kwargs,
+    )
     if overlay:
-        sns.stripplot(data=plot_df,
-                      x=x,
-                      y=y,
-                      hue=hue,
-                      ax=ax,
-                      dodge=True,
-                      palette=palette,
-                      **overlay_kwargs)
+        sns.stripplot(
+            data=plot_df,
+            x=x,
+            y=y,
+            hue=hue,
+            ax=ax,
+            dodge=True,
+            palette=palette,
+            **overlay_kwargs,
+        )
     return ax
 
 
@@ -475,11 +515,13 @@ class InferenceTesting:
     scaler: CytoPy.flow.transform.Scaler
     """
 
-    def __init__(self,
-                 data: pd.DataFrame,
-                 scale: str or None = None,
-                 scale_vars: list or None = None,
-                 scale_kwargs: dict or None = None):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        scale: str or None = None,
+        scale_vars: list or None = None,
+        scale_kwargs: dict or None = None,
+    ):
         self.data = data.copy()
         self.scaler = None
         if scale is not None:
@@ -488,9 +530,7 @@ class InferenceTesting:
             assert scale_vars is not None, "Must provide variables to scale"
             self.data = self.scaler(data=self.data, features=scale_vars)
 
-    def qq_plot(self,
-                var: str,
-                **kwargs):
+    def qq_plot(self, var: str, **kwargs):
         """
         Generate a QQ plot for the given variable
 
@@ -534,16 +574,21 @@ class InferenceTesting:
         results = {"Variable": list(), "Normal": list()}
         for i in var:
             results["Variable"].append(i)
-            results["Normal"].append(pingouin.normality(self.data[i].values, method=method, alpha=alpha)
-                                     .iloc[0]["normal"])
+            results["Normal"].append(
+                pingouin.normality(
+                    self.data[i].values, method=method, alpha=alpha
+                ).iloc[0]["normal"]
+            )
         return pd.DataFrame(results)
 
-    def anova(self,
-              dep_var: str,
-              between: str,
-              post_hoc: bool = True,
-              post_hoc_kwargs: dict or None = None,
-              **kwargs):
+    def anova(
+        self,
+        dep_var: str,
+        between: str,
+        post_hoc: bool = True,
+        post_hoc_kwargs: dict or None = None,
+        **kwargs,
+    ):
         """
         Classic one-way analysis of variance; performs welch anova if assumption of equal variance is broken.
 
@@ -573,27 +618,43 @@ class InferenceTesting:
         """
         post_hoc_kwargs = post_hoc_kwargs or {}
         err = "Chosen dependent variable must be normally distributed"
-        assert all([pingouin.normality(df[dep_var].values).iloc[0]["normal"]
-                    for _, df in self.data.groupby(between)]), err
-        eq_var = all([pingouin.homoscedasticity(df[dep_var].values).iloc[0]["equal_var"]
-                      for _, df in self.data.groupby(between)])
+        assert all(
+            [
+                pingouin.normality(df[dep_var].values).iloc[0]["normal"]
+                for _, df in self.data.groupby(between)
+            ]
+        ), err
+        eq_var = all(
+            [
+                pingouin.homoscedasticity(df[dep_var].values).iloc[0]["equal_var"]
+                for _, df in self.data.groupby(between)
+            ]
+        )
         if eq_var:
             aov = pingouin.anova(data=self.data, dv=dep_var, between=between, **kwargs)
             if post_hoc:
-                return aov, pingouin.pairwise_tukey(data=self.data, dv=dep_var, between=between, **post_hoc_kwargs)
+                return aov, pingouin.pairwise_tukey(
+                    data=self.data, dv=dep_var, between=between, **post_hoc_kwargs
+                )
             return aov, None
-        aov = pingouin.welch_anova(data=self.data, dv=dep_var, between=between, **kwargs)
+        aov = pingouin.welch_anova(
+            data=self.data, dv=dep_var, between=between, **kwargs
+        )
         if post_hoc:
-            return aov, pingouin.pairwise_gameshowell(data=self.data, dv=dep_var, between=between, **post_hoc_kwargs)
+            return aov, pingouin.pairwise_gameshowell(
+                data=self.data, dv=dep_var, between=between, **post_hoc_kwargs
+            )
         return aov, None
 
-    def ttest(self,
-              between: str,
-              dep_var: list,
-              paired: bool = False,
-              multicomp: str = "holm",
-              multicomp_alpha: float = 0.05,
-              **kwargs):
+    def ttest(
+        self,
+        between: str,
+        dep_var: list,
+        paired: bool = False,
+        multicomp: str = "holm",
+        multicomp_alpha: float = 0.05,
+        **kwargs,
+    ):
         """
         Performs a classic T-test; Welch T-test performed if assumption of equal variance is broken.
 
@@ -603,7 +664,7 @@ class InferenceTesting:
             Name of the column containing grouping variable that divides our independent groups
         dep_var: str
             Name of the column containing the dependent variable (what we're interested in measuring).
-            More than one variable can be provided as a list and correction for multiple comparisons 
+            More than one variable can be provided as a list and correction for multiple comparisons
             made according to the method specified in 'multicomp'
         paired: bool (default=False)
             Perform paired T-test (i.e. samples are paired)
@@ -630,46 +691,65 @@ class InferenceTesting:
         if self.data[between].nunique() > 2:
             raise ValueError("More than two groups, consider using 'anova' method")
         x, y = self.data[between].unique()
-        x, y = self.data[self.data[between] == x].copy(), self.data[self.data[between] == y].copy()
+        x, y = (
+            self.data[self.data[between] == x].copy(),
+            self.data[self.data[between] == y].copy(),
+        )
         results = list()
         for i in dep_var:
-            assert all([pingouin.normality(df[i].values).iloc[0]["normal"]
-                        for _, df in self.data.groupby(between)]), f"Groups for {i} are not normally distributed"
-            eq_var = all([pingouin.homoscedasticity(df[i].values).iloc[0]["equal_var"]
-                          for _, df in self.data.groupby(between)])
+            assert all(
+                [
+                    pingouin.normality(df[i].values).iloc[0]["normal"]
+                    for _, df in self.data.groupby(between)
+                ]
+            ), f"Groups for {i} are not normally distributed"
+            eq_var = all(
+                [
+                    pingouin.homoscedasticity(df[i].values).iloc[0]["equal_var"]
+                    for _, df in self.data.groupby(between)
+                ]
+            )
             if eq_var:
-                tstats = pingouin.ttest(x=x[i].values,
-                                        y=y[i].values,
-                                        paired=paired,
-                                        correction=False,
-                                        **kwargs)
+                tstats = pingouin.ttest(
+                    x=x[i].values,
+                    y=y[i].values,
+                    paired=paired,
+                    correction=False,
+                    **kwargs,
+                )
             else:
-                tstats = pingouin.ttest(x=x[i].values,
-                                        y=y[i].values,
-                                        paired=paired,
-                                        correction=True,
-                                        **kwargs)
+                tstats = pingouin.ttest(
+                    x=x[i].values,
+                    y=y[i].values,
+                    paired=paired,
+                    correction=True,
+                    **kwargs,
+                )
             tstats["Variable"] = i
             results.append(tstats)
         results = pd.concat(results)
         if len(dep_var) > 1:
-            results["p-val"] = pingouin.multicomp(results["p-val"].values, alpha=multicomp_alpha, method=multicomp)
+            results["p-val"] = pingouin.multicomp(
+                results["p-val"].values, alpha=multicomp_alpha, method=multicomp
+            )
         return results
 
-    def non_parametric(self,
-                       between: str,
-                       dep_var: list,
-                       paired: bool = False,
-                       multicomp: str = "holm",
-                       multicomp_alpha: float = 0.05,
-                       **kwargs):
+    def non_parametric(
+        self,
+        between: str,
+        dep_var: list,
+        paired: bool = False,
+        multicomp: str = "holm",
+        multicomp_alpha: float = 0.05,
+        **kwargs,
+    ):
         """
         Non-parametric tests for paired and un-paired samples:
         * If more than two unique groups, performs Friedman test for paired samples or Kruskal–Wallis
         for unpaired
-        * If only two unique groups, performs Wilcoxon signed-rank test for paired samples or 
+        * If only two unique groups, performs Wilcoxon signed-rank test for paired samples or
         Mann-Whitney U test for unpaired
-        
+
         Parameters
         ----------
         between: str
@@ -695,23 +775,24 @@ class InferenceTesting:
         if self.data[between].nunique() > 2:
             if paired:
                 for i in dep_var:
-                    np_stats = pingouin.friedman(data=self.data,
-                                                 dv=i,
-                                                 within=between,
-                                                 **kwargs)
+                    np_stats = pingouin.friedman(
+                        data=self.data, dv=i, within=between, **kwargs
+                    )
                     np_stats["Variable"] = i
                     results.append(np_stats)
             else:
                 for i in dep_var:
-                    np_stats = pingouin.kruskal(data=self.data,
-                                                dv=i,
-                                                between=between,
-                                                **kwargs)
+                    np_stats = pingouin.kruskal(
+                        data=self.data, dv=i, between=between, **kwargs
+                    )
                     np_stats["Variable"] = i
                     results.append(np_stats)
         else:
             x, y = self.data[between].unique()
-            x, y = self.data[self.data[between] == x].copy(), self.data[self.data[between] == y].copy()
+            x, y = (
+                self.data[self.data[between] == x].copy(),
+                self.data[self.data[between] == y].copy(),
+            )
             if paired:
                 for i in dep_var:
                     np_stats = pingouin.wilcoxon(x[i].values, y[i].values, **kwargs)
@@ -724,16 +805,20 @@ class InferenceTesting:
                     results.append(np_stats)
         results = pd.concat(results)
         if len(dep_var) > 1:
-            results["p-val"] = pingouin.multicomp(results["p-val"].values, alpha=multicomp_alpha, method=multicomp)[1]
+            results["p-val"] = pingouin.multicomp(
+                results["p-val"].values, alpha=multicomp_alpha, method=multicomp
+            )[1]
         return results
 
 
-def plot_multicollinearity(data: pd.DataFrame,
-                           features: list,
-                           method: str = "spearman",
-                           ax: plt.Axes or None = None,
-                           plot_type: str = "ellipse",
-                           **kwargs):
+def plot_multicollinearity(
+    data: pd.DataFrame,
+    features: list,
+    method: str = "spearman",
+    ax: plt.Axes or None = None,
+    plot_type: str = "ellipse",
+    **kwargs,
+):
     """
     Generate a pairwise correlation matrix to help detect multicollinearity between
     independent variables.
@@ -763,15 +848,23 @@ def plot_multicollinearity(data: pd.DataFrame,
     """
     corr = data[features].corr(method=method)
     if plot_type == "ellipse":
-        ax = ax or plt.subplots(figsize=(8, 8), subplot_kw={'aspect': 'equal'})[1]
+        ax = ax or plt.subplots(figsize=(8, 8), subplot_kw={"aspect": "equal"})[1]
         ax.set_xlim(-0.5, corr.shape[1] - 0.5)
         ax.set_ylim(-0.5, corr.shape[0] - 0.5)
         xy = np.indices(corr.shape)[::-1].reshape(2, -1).T
         w = np.ones_like(corr.values).ravel()
         h = 1 - np.abs(corr.values).ravel()
         a = 45 * np.sign(corr.values).ravel()
-        ec = EllipseCollection(widths=w, heights=h, angles=a, units='x', offsets=xy,
-                               transOffset=ax.transData, array=corr.values.ravel(), **kwargs)
+        ec = EllipseCollection(
+            widths=w,
+            heights=h,
+            angles=a,
+            units="x",
+            offsets=xy,
+            transOffset=ax.transData,
+            array=corr.values.ravel(),
+            **kwargs,
+        )
         ax.add_collection(ec)
         ax.set_xticks(np.arange(corr.shape[1]))
         ax.set_xticklabels(corr.columns, rotation=90)
@@ -811,17 +904,22 @@ class PCA:
     embeddings: numpy.ndarray
         Principle components of shape (n_samples, n_components). Populated upon call to 'fit', otherwise None.
     """
-    def __init__(self,
-                 data: pd.DataFrame,
-                 features: list,
-                 scale: str or None = "standard",
-                 scale_kwargs: dict or None = None,
-                 **kwargs):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        features: list,
+        scale: str or None = "standard",
+        scale_kwargs: dict or None = None,
+        **kwargs,
+    ):
         self.scaler = None
         self.data = data.dropna(axis=0).reset_index(drop=True)
         self.features = features
         if scale is None:
-            warn("PCA requires that input variables have unit variance and therefore scaling is recommended")
+            warn(
+                "PCA requires that input variables have unit variance and therefore scaling is recommended"
+            )
         else:
             scale_kwargs = scale_kwargs or {}
             self.scaler = transform.Scaler(method=scale, **scale_kwargs)
@@ -863,12 +961,17 @@ class PCA:
             If function called prior to calling 'fit'
         """
         assert self.embeddings is not None, "Call fit first"
-        var = pd.DataFrame({"Variance Explained": self.pca.explained_variance_ratio_,
-                            "PC": [f"PC{i + 1}" for i in range(len(self.pca.explained_variance_ratio_))]})
+        var = pd.DataFrame(
+            {
+                "Variance Explained": self.pca.explained_variance_ratio_,
+                "PC": [
+                    f"PC{i + 1}" for i in range(len(self.pca.explained_variance_ratio_))
+                ],
+            }
+        )
         return sns.barplot(data=var, x="PC", y="Variance Explained", ci=None, **kwargs)
 
-    def loadings(self,
-                 component: int = 0):
+    def loadings(self, component: int = 0):
         """
         The loadings of a component are the coefficients of the linear combination of
         the original variables from which the principle component was constructed. They
@@ -888,23 +991,29 @@ class PCA:
             feature within this component)
         """
         assert self.embeddings is not None, "Call fit first"
-        return pd.DataFrame({"Feature": self.features,
-                             "EV Magnitude": abs(self.pca.components_)[component]})
+        return pd.DataFrame(
+            {
+                "Feature": self.features,
+                "EV Magnitude": abs(self.pca.components_)[component],
+            }
+        )
 
-    def plot(self,
-             label: str,
-             size: int = 5,
-             components: list or None = None,
-             discrete: bool = True,
-             cmap: str = "tab10",
-             loadings: bool = False,
-             limit_loadings: list or None = None,
-             arrow_kwargs: dict or None = None,
-             ellipse: bool = False,
-             ellipse_kwargs: dict or None = None,
-             figsize: tuple or None = (5, 5),
-             cbar_kwargs: dict or None = None,
-             **kwargs):
+    def plot(
+        self,
+        label: str,
+        size: int = 5,
+        components: list or None = None,
+        discrete: bool = True,
+        cmap: str = "tab10",
+        loadings: bool = False,
+        limit_loadings: list or None = None,
+        arrow_kwargs: dict or None = None,
+        ellipse: bool = False,
+        ellipse_kwargs: dict or None = None,
+        figsize: tuple or None = (5, 5),
+        cbar_kwargs: dict or None = None,
+        **kwargs,
+    ):
         """
         Generate a plot of either 2 or 3 components (the latter generates a 3D plot). Data
         point are coloured using an existing column in 'data' attribute.
@@ -967,34 +1076,40 @@ class PCA:
         if not 2 <= len(components) <= 3:
             raise ValueError("Components should be of length 2 or 3")
         assert self.embeddings is not None, "Call fit first"
-        plot_df = pd.DataFrame({f"PC{i + 1}": self.embeddings[:, i] for i in components})
+        plot_df = pd.DataFrame(
+            {f"PC{i + 1}": self.embeddings[:, i] for i in components}
+        )
         plot_df[label] = self.data[label]
         fig = plt.figure(figsize=figsize)
         z = None
         if len(components) == 3:
             z = f"PC{components[2] + 1}"
         if discrete:
-            ax = discrete_scatterplot(data=plot_df,
-                                      x=f"PC{components[0] + 1}",
-                                      y=f"PC{components[1] + 1}",
-                                      z=z,
-                                      label=label,
-                                      cmap=cmap,
-                                      size=size,
-                                      fig=fig,
-                                      **kwargs)
+            ax = discrete_scatterplot(
+                data=plot_df,
+                x=f"PC{components[0] + 1}",
+                y=f"PC{components[1] + 1}",
+                z=z,
+                label=label,
+                cmap=cmap,
+                size=size,
+                fig=fig,
+                **kwargs,
+            )
         else:
             cbar_kwargs = cbar_kwargs or {}
-            ax = cont_scatterplot(data=plot_df,
-                                  x=f"PC{components[0] + 1}",
-                                  y=f"PC{components[1] + 1}",
-                                  z=z,
-                                  label=label,
-                                  cmap=cmap,
-                                  size=size,
-                                  fig=fig,
-                                  cbar_kwargs=cbar_kwargs,
-                                  **kwargs)
+            ax = cont_scatterplot(
+                data=plot_df,
+                x=f"PC{components[0] + 1}",
+                y=f"PC{components[1] + 1}",
+                z=z,
+                label=label,
+                cmap=cmap,
+                size=size,
+                fig=fig,
+                cbar_kwargs=cbar_kwargs,
+                **kwargs,
+            )
         if loadings:
             if len(components) != 2:
                 ValueError("cytopy only supports 2D byplots")
@@ -1003,41 +1118,40 @@ class PCA:
             arrow_kwargs["alpha"] = arrow_kwargs.get("alpha", 0.5)
             features_i = list(range(len(self.features)))
             if limit_loadings:
-                features_i = [i for i, x in enumerate(self.features) if x in limit_loadings]
-            ax = self._add_loadings(components=components,
-                                    ax=ax,
-                                    features_i=features_i,
-                                    **arrow_kwargs)
+                features_i = [
+                    i for i, x in enumerate(self.features) if x in limit_loadings
+                ]
+            ax = self._add_loadings(
+                components=components, ax=ax, features_i=features_i, **arrow_kwargs
+            )
         if ellipse:
             if len(components) != 2:
                 ValueError("cytopy only supports confidence ellipse for 2D plots")
             if not discrete:
                 TypeError("Ellipse only value for discrete label")
             ellipse_kwargs = ellipse_kwargs or {}
-            ax = self._add_ellipse(components=components,
-                                   label=label,
-                                   cmap=cmap,
-                                   ax=ax,
-                                   **ellipse_kwargs)
+            ax = self._add_ellipse(
+                components=components, label=label, cmap=cmap, ax=ax, **ellipse_kwargs
+            )
         return fig, ax
 
-    def _add_loadings(self,
-                      components: list,
-                      ax: plt.Axes,
-                      features_i: list,
-                      **kwargs):
+    def _add_loadings(self, components: list, ax: plt.Axes, features_i: list, **kwargs):
         coeffs = np.transpose(self.pca.components_[np.array(components), :])
         for i in features_i:
             ax.arrow(0, 0, coeffs[i, 0], coeffs[i, 1], **kwargs)
-            ax.text(coeffs[i, 0] * 1.15, coeffs[i, 1] * 1.15, self.features[i], color='b', ha='center', va='center')
+            ax.text(
+                coeffs[i, 0] * 1.15,
+                coeffs[i, 1] * 1.15,
+                self.features[i],
+                color="b",
+                ha="center",
+                va="center",
+            )
         return ax
 
-    def _add_ellipse(self,
-                     components: list,
-                     label: str,
-                     cmap: str,
-                     ax: plt.Axes,
-                     **kwargs):
+    def _add_ellipse(
+        self, components: list, label: str, cmap: str, ax: plt.Axes, **kwargs
+    ):
         kwargs = kwargs or {}
         s = kwargs.pop("s", 3)
         kwargs["linewidth"] = kwargs.get("linewidth", 2)
@@ -1048,16 +1162,21 @@ class PCA:
             raise IndexError("Chosen cmap doesn't contain enough unique colours")
         for l, c in zip(self.data[label].unique(), colours):
             idx = self.data[self.data[label] == l].index.values
-            x, y = self.embeddings[idx, components[0]], self.embeddings[idx, components[1]]
+            x, y = (
+                self.embeddings[idx, components[0]],
+                self.embeddings[idx, components[1]],
+            )
             cov = np.cov(x, y)
             v, w = np.linalg.eig(cov)
             v = np.sqrt(v)
-            ellipse = Ellipse(xy=(np.mean(x), np.mean(y)),
-                              width=v[0] * s * 2,
-                              height=v[1] * s * 2,
-                              angle=np.rad2deg(np.arccos(w[0, 0])),
-                              facecolor=c,
-                              **kwargs)
+            ellipse = Ellipse(
+                xy=(np.mean(x), np.mean(y)),
+                width=v[0] * s * 2,
+                height=v[1] * s * 2,
+                angle=np.rad2deg(np.arccos(w[0, 0])),
+                facecolor=c,
+                **kwargs,
+            )
             ax.add_artist(ellipse)
         return ax
 
@@ -1126,25 +1245,34 @@ class L1Selection:
         Feature coefficients under a given value for the regularisation penalty; populated
         upon calling 'fit'
     """
-    def __init__(self,
-                 data: pd.DataFrame,
-                 target: str,
-                 features: list,
-                 model: str,
-                 category: str = "classification",
-                 scale: str or None = "standard",
-                 scale_kwargs: dict or None = None,
-                 **kwargs):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        target: str,
+        features: list,
+        model: str,
+        category: str = "classification",
+        scale: str or None = "standard",
+        scale_kwargs: dict or None = None,
+        **kwargs,
+    ):
         scale_kwargs = scale_kwargs or {}
 
         if category == "classification":
             self._category = "classification"
-            assert model in L1CLASSIFIERS.keys(), f"Invalid model must be one of: {L1CLASSIFIERS.keys()}"
-            assert data[target].nunique() == 2, "L1Selection only supports binary classification"
+            assert (
+                model in L1CLASSIFIERS.keys()
+            ), f"Invalid model must be one of: {L1CLASSIFIERS.keys()}"
+            assert (
+                data[target].nunique() == 2
+            ), "L1Selection only supports binary classification"
             klass, req_kwargs = L1CLASSIFIERS.get(model)
         elif category == "regression":
             self._category = "regression"
-            assert model in L1REGRESSORS.keys(), f"Invalid model must be one of: {L1REGRESSORS.keys()}"
+            assert (
+                model in L1REGRESSORS.keys()
+            ), f"Invalid model must be one of: {L1REGRESSORS.keys()}"
             klass, req_kwargs = L1REGRESSORS.get(model)
         else:
             raise ValueError("Category should be 'classification' or 'regression'")
@@ -1168,9 +1296,7 @@ class L1Selection:
 
         self.scores = None
 
-    def fit(self,
-            search_space: tuple = (-2, 0, 50),
-            **kwargs):
+    def fit(self, search_space: tuple = (-2, 0, 50), **kwargs):
         """
         Given a range of L1 penalties (search_space) fit the model and store the
         coefficients of each feature in the 'scores' attribute.
@@ -1200,13 +1326,15 @@ class L1Selection:
         self.scores[self._reg_param] = search_space
         return self
 
-    def plot(self,
-             ax: plt.Axes or None = None,
-             title: str = "L1 Penalty",
-             xlabel: str = "Regularisation parameter",
-             ylabel: str = "Coefficient",
-             cmap: str = "tab10",
-             **kwargs):
+    def plot(
+        self,
+        ax: plt.Axes or None = None,
+        title: str = "L1 Penalty",
+        xlabel: str = "Regularisation parameter",
+        ylabel: str = "Coefficient",
+        cmap: str = "tab10",
+        **kwargs,
+    ):
         """
         Plot the coefficients of each feature against L1 penalty. Assumes 'fit' has been called
         prior.
@@ -1234,8 +1362,13 @@ class L1Selection:
         assert self.scores is not None, "Call fit prior to plot"
         colours = plt.get_cmap(cmap).colors
         for i, feature in enumerate(self.features):
-            ax.plot(self.scores[self._reg_param], self.scores[feature], label=feature,
-                    color=colours[i], **kwargs)
+            ax.plot(
+                self.scores[self._reg_param],
+                self.scores[feature],
+                label=feature,
+                color=colours[i],
+                **kwargs,
+            )
         ax.set_xscale("log")
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -1263,8 +1396,12 @@ class L1Selection:
         AssertionError
             plot_residuals only valid for regression models
         """
-        assert self._category == "regression", "plot_residuals only valid for regression models"
-        x_train, x_test, y_train, y_test = train_test_split(self.x, self.y, test_size=val_frac, random_state=42)
+        assert (
+            self._category == "regression"
+        ), "plot_residuals only valid for regression models"
+        x_train, x_test, y_train, y_test = train_test_split(
+            self.x, self.y, test_size=val_frac, random_state=42
+        )
         viz = ResidualsPlot(self.model, **kwargs)
         viz.fit(x_train, y_train)
         viz.score(x_test, y_test)
@@ -1309,21 +1446,26 @@ class DecisionTree:
     features: list
     tree_builder: sklearn.tree.DecisionTreeClassifier/sklearn.tree.DecisionTreeRegressor
     """
-    def __init__(self,
-                 data: pd.DataFrame,
-                 target: str,
-                 features: list,
-                 tree_type: str = "classification",
-                 balance_classes: str = "sample",
-                 sampling_kwargs: dict or None = None,
-                 **kwargs):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        target: str,
+        features: list,
+        tree_type: str = "classification",
+        balance_classes: str = "sample",
+        sampling_kwargs: dict or None = None,
+        **kwargs,
+    ):
         data = data.dropna(axis=0).reset_index(drop=True)
         self.x, self.y = data[features], data[target].values
         self.features = features
         self._balance = None
         if data.shape[0] < len(features):
-            warn("Decision trees tend to overfit when the feature space is large but there are a limited "
-                 "number of samples. Consider limiting the number of features or setting max_depth accordingly")
+            warn(
+                "Decision trees tend to overfit when the feature space is large but there are a limited "
+                "number of samples. Consider limiting the number of features or setting max_depth accordingly"
+            )
         if tree_type == "classification":
             self.tree_builder = DecisionTreeClassifier(**kwargs)
             if balance_classes == "balanced":
@@ -1335,11 +1477,7 @@ class DecisionTree:
         else:
             self.tree_builder = DecisionTreeRegressor(**kwargs)
 
-    def _fit(self,
-             x: np.ndarray,
-             y: np.ndarray,
-             params: dict or None = None,
-             **kwargs):
+    def _fit(self, x: np.ndarray, y: np.ndarray, params: dict or None = None, **kwargs):
         params = params or {}
         if isinstance(self.tree_builder, DecisionTreeClassifier):
             if self._balance == "balanced":
@@ -1347,11 +1485,13 @@ class DecisionTree:
         self.tree_builder.set_params(**params)
         self.tree_builder.fit(x, y, **kwargs)
 
-    def validate_tree(self,
-                      validation_frac: float = 0.5,
-                      params: dict or None = None,
-                      performance_metrics: list or None = None,
-                      **kwargs):
+    def validate_tree(
+        self,
+        validation_frac: float = 0.5,
+        params: dict or None = None,
+        performance_metrics: list or None = None,
+        **kwargs,
+    ):
         """
         Fit decision tree to data and evaluate on holdout data
 
@@ -1373,9 +1513,9 @@ class DecisionTree:
             Training and testing results
         """
         performance_metrics = performance_metrics or ["accuracy_score"]
-        x_train, x_test, y_train, y_test = train_test_split(self.x.values, self.y,
-                                                            test_size=validation_frac,
-                                                            random_state=42)
+        x_train, x_test, y_train, y_test = train_test_split(
+            self.x.values, self.y, test_size=validation_frac, random_state=42
+        )
         self._fit(x_train, y_train, params, **kwargs)
         y_pred_train = self.tree_builder.predict(x_train)
         y_pred_test = self.tree_builder.predict(x_test)
@@ -1383,28 +1523,34 @@ class DecisionTree:
         if isinstance(self.tree_builder, DecisionTreeClassifier):
             y_score_train = self.tree_builder.predict_proba(x_train)
             y_score_test = self.tree_builder.predict_proba(x_test)
-        train_score = classifier_utils.calc_metrics(metrics=performance_metrics,
-                                                    y_true=y_train,
-                                                    y_pred=y_pred_train,
-                                                    y_score=y_score_train)
+        train_score = classifier_utils.calc_metrics(
+            metrics=performance_metrics,
+            y_true=y_train,
+            y_pred=y_pred_train,
+            y_score=y_score_train,
+        )
         train_score["Dataset"] = "Training"
         train_score = pd.DataFrame(train_score, index=[0])
-        test_score = classifier_utils.calc_metrics(metrics=performance_metrics,
-                                                   y_true=y_test,
-                                                   y_pred=y_pred_test,
-                                                   y_score=y_score_test)
+        test_score = classifier_utils.calc_metrics(
+            metrics=performance_metrics,
+            y_true=y_test,
+            y_pred=y_pred_test,
+            y_score=y_score_test,
+        )
         test_score["Dataset"] = "Testing"
         test_score = pd.DataFrame(test_score, index=[1])
         return pd.concat([train_score, test_score])
 
-    def prune(self,
-              depth: tuple = (3,),
-              verbose: bool = True,
-              metric: str = "accuracy_score",
-              validation_frac: float = 0.5,
-              ax: plt.Axes or None = None,
-              fit_kwargs: dict or None = None,
-              **kwargs):
+    def prune(
+        self,
+        depth: tuple = (3,),
+        verbose: bool = True,
+        metric: str = "accuracy_score",
+        validation_frac: float = 0.5,
+        ax: plt.Axes or None = None,
+        fit_kwargs: dict or None = None,
+        **kwargs,
+    ):
         """
         Iterate over a range of values for the 'depth' of a decision tree and plot
         the validation performance. This will highlight overfitting and inform on
@@ -1437,26 +1583,32 @@ class DecisionTree:
             depth = np.arange(depth[0], depth[1], 1)
         depth_performance = list()
         for d in progress_bar(depth, verbose=verbose):
-            performance = self.validate_tree(validation_frac=validation_frac,
-                                             params={"max_depth": d, "random_state": 42},
-                                             performance_metrics=[metric],
-                                             **fit_kwargs)
+            performance = self.validate_tree(
+                validation_frac=validation_frac,
+                params={"max_depth": d, "random_state": 42},
+                performance_metrics=[metric],
+                **fit_kwargs,
+            )
             performance["Max depth"] = d
             depth_performance.append(performance)
         depth_performance = pd.concat(depth_performance)
-        return sns.lineplot(data=depth_performance,
-                            x="Max depth",
-                            y=metric,
-                            ax=ax,
-                            hue="Dataset",
-                            **kwargs)
+        return sns.lineplot(
+            data=depth_performance,
+            x="Max depth",
+            y=metric,
+            ax=ax,
+            hue="Dataset",
+            **kwargs,
+        )
 
-    def plot_tree(self,
-                  plot_type: str = "graphviz",
-                  ax: plt.Axes or None = None,
-                  graphviz_outfile: str or None = None,
-                  fit_kwargs: dict or None = None,
-                  **kwargs):
+    def plot_tree(
+        self,
+        plot_type: str = "graphviz",
+        ax: plt.Axes or None = None,
+        graphviz_outfile: str or None = None,
+        fit_kwargs: dict or None = None,
+        **kwargs,
+    ):
         """
         Plot the decision tree. Will call fit on all available data prior to generating tree.
 
@@ -1483,22 +1635,26 @@ class DecisionTree:
             kwargs["filled"] = kwargs.get("filled", True)
             kwargs["rounded"] = kwargs.get("rounded", True)
             kwargs["special_characters"] = kwargs.get("special_characters", True)
-            graph = export_graphviz(self.tree_builder,
-                                    out_file=graphviz_outfile,
-                                    **kwargs)
+            graph = export_graphviz(
+                self.tree_builder, out_file=graphviz_outfile, **kwargs
+            )
             graph = graphviz.Source(graph)
             return graph
         else:
-            return plot_tree(decision_tree=self.tree_builder,
-                             feature_names=self.features,
-                             ax=ax,
-                             **kwargs)
+            return plot_tree(
+                decision_tree=self.tree_builder,
+                feature_names=self.features,
+                ax=ax,
+                **kwargs,
+            )
 
-    def plot_importance(self,
-                        ax: plt.Axes or None = None,
-                        params: dict or None = None,
-                        fit_kwargs: dict or None = None,
-                        **kwargs):
+    def plot_importance(
+        self,
+        ax: plt.Axes or None = None,
+        params: dict or None = None,
+        fit_kwargs: dict or None = None,
+        **kwargs,
+    ):
         """
         Plot, as a bar chart, the feature importance for each of the variables in the feature space
 
@@ -1517,18 +1673,22 @@ class DecisionTree:
         -------
         Matplotlib.Axes
         """
-        warn("Impurity-based feature importance can be misleading for high cardinality features "
-             "(many unique values). Consider FeatureImportance class to perform more robust permutation "
-             "feature importance")
+        warn(
+            "Impurity-based feature importance can be misleading for high cardinality features "
+            "(many unique values). Consider FeatureImportance class to perform more robust permutation "
+            "feature importance"
+        )
         fit_kwargs = fit_kwargs or {}
         kwargs["color"] = kwargs.get("color", "#688bc4")
         self._fit(self.x, self.y, params=params, **fit_kwargs)
         tree_importance_sorted_idx = np.argsort(self.tree_builder.feature_importances_)
         features = np.array(self.features)[tree_importance_sorted_idx]
-        return sns.barplot(y=features,
-                           x=self.tree_builder.feature_importances_[tree_importance_sorted_idx],
-                           ax=ax,
-                           **kwargs)
+        return sns.barplot(
+            y=features,
+            x=self.tree_builder.feature_importances_[tree_importance_sorted_idx],
+            ax=ax,
+            **kwargs,
+        )
 
 
 class FeatureImportance:
@@ -1580,15 +1740,18 @@ class FeatureImportance:
     y_train: numpy.ndarray
     y_test: numpy.ndarray
     """
-    def __init__(self,
-                 classifier,
-                 data: pd.DataFrame,
-                 features: list,
-                 target: str,
-                 validation_frac: float = 0.5,
-                 balance_by_resampling: bool = False,
-                 sampling_kwargs: dict or None = None,
-                 **kwargs):
+
+    def __init__(
+        self,
+        classifier,
+        data: pd.DataFrame,
+        features: list,
+        target: str,
+        validation_frac: float = 0.5,
+        balance_by_resampling: bool = False,
+        sampling_kwargs: dict or None = None,
+        **kwargs,
+    ):
         self.classifier = classifier
         self.features = features
         data = data.dropna(axis=0).reset_index(drop=True)
@@ -1597,15 +1760,15 @@ class FeatureImportance:
             sampling_kwargs = sampling_kwargs or {}
             sampler = RandomOverSampler(**sampling_kwargs)
             self.x, self.y = sampler.fit_resample(self.x, self.y)
-        tt = train_test_split(self.x.values, self.y,
-                              test_size=validation_frac,
-                              random_state=42)
+        tt = train_test_split(
+            self.x.values, self.y, test_size=validation_frac, random_state=42
+        )
         self.x_train, self.x_test, self.y_train, self.y_test = tt
         self.classifier.fit(self.x_train, self.y_train, **kwargs)
 
-    def validation_performance(self,
-                               performance_metrics: list or None = None,
-                               **kwargs):
+    def validation_performance(
+        self, performance_metrics: list or None = None, **kwargs
+    ):
         """
         Generate a DataFrame of test/train performance of given classifier
 
@@ -1624,19 +1787,21 @@ class FeatureImportance:
         performance_metrics = performance_metrics or ["accuracy_score"]
         y_pred_train = self.classifier.predict(self.x_train, self.y_train, **kwargs)
         y_pred_test = self.classifier.predict(self.x_test, self.y_test, **kwargs)
-        train_score = pd.DataFrame(classifier_utils.calc_metrics(metrics=performance_metrics,
-                                                                 y_true=self.y_train,
-                                                                 y_pred=y_pred_train))
+        train_score = pd.DataFrame(
+            classifier_utils.calc_metrics(
+                metrics=performance_metrics, y_true=self.y_train, y_pred=y_pred_train
+            )
+        )
         train_score["Dataset"] = "Training"
-        test_score = pd.DataFrame(classifier_utils.calc_metrics(metrics=performance_metrics,
-                                                                y_true=self.y_test,
-                                                                y_pred=y_pred_test))
+        test_score = pd.DataFrame(
+            classifier_utils.calc_metrics(
+                metrics=performance_metrics, y_true=self.y_test, y_pred=y_pred_test
+            )
+        )
         test_score["Dataset"] = "Testing"
         return pd.concat([train_score, test_score])
 
-    def importance(self,
-                   ax: plt.Axes or None = None,
-                   **kwargs):
+    def importance(self, ax: plt.Axes or None = None, **kwargs):
         """
         Generate a barplot of feature importance.
 
@@ -1650,20 +1815,26 @@ class FeatureImportance:
         -------
         Matplotlib.Axes
         """
-        warn("Impurity-based feature importance can be misleading for high cardinality features "
-             "(many unique values). Consider permutation_importance function.")
+        warn(
+            "Impurity-based feature importance can be misleading for high cardinality features "
+            "(many unique values). Consider permutation_importance function."
+        )
         tree_importance_sorted_idx = np.argsort(self.classifier.feature_importances_)
         features = np.array(self.features)[tree_importance_sorted_idx]
-        return sns.barplot(y=features,
-                           x=self.classifier.feature_importances_[tree_importance_sorted_idx],
-                           ax=ax,
-                           **kwargs)
+        return sns.barplot(
+            y=features,
+            x=self.classifier.feature_importances_[tree_importance_sorted_idx],
+            ax=ax,
+            **kwargs,
+        )
 
-    def permutation_importance(self,
-                               use_validation: bool = True,
-                               permutation_kwargs: dict or None = None,
-                               boxplot_kwargs: dict or None = None,
-                               overlay_kwargs: dict or None = None):
+    def permutation_importance(
+        self,
+        use_validation: bool = True,
+        permutation_kwargs: dict or None = None,
+        boxplot_kwargs: dict or None = None,
+        overlay_kwargs: dict or None = None,
+    ):
         """
         Assess feature importance using permutations
         (See https://scikit-learn.org/stable/modules/permutation_importance.html for indepth discussion and
@@ -1686,15 +1857,13 @@ class FeatureImportance:
         """
         permutation_kwargs = permutation_kwargs or {}
         if use_validation:
-            result = permutation_importance(self.classifier,
-                                            self.x_test,
-                                            self.y_test,
-                                            **permutation_kwargs)
+            result = permutation_importance(
+                self.classifier, self.x_test, self.y_test, **permutation_kwargs
+            )
         else:
-            result = permutation_importance(self.classifier,
-                                            self.x_train,
-                                            self.y_train,
-                                            **permutation_kwargs)
+            result = permutation_importance(
+                self.classifier, self.x_train, self.y_train, **permutation_kwargs
+            )
         result = pd.DataFrame(result.importances, columns=self.features)
         result = result.melt(var_name="Feature", value_name="Permutation importance")
         perm_sorted_idx = result.importances_mean.argsort()
@@ -1702,11 +1871,13 @@ class FeatureImportance:
         overlay_kwargs = overlay_kwargs or {}
         boxplot_kwargs["order"] = list(np.array(self.features)[perm_sorted_idx])
         overlay_kwargs["order"] = list(np.array(self.features)[perm_sorted_idx])
-        return box_swarm_plot(plot_df=result,
-                              x="Permutation importance",
-                              y="Feature",
-                              boxplot_kwargs=boxplot_kwargs,
-                              overlay_kwargs=overlay_kwargs)
+        return box_swarm_plot(
+            plot_df=result,
+            x="Permutation importance",
+            y="Feature",
+            boxplot_kwargs=boxplot_kwargs,
+            overlay_kwargs=overlay_kwargs,
+        )
 
 
 class SHAP:
@@ -1716,17 +1887,22 @@ class SHAP:
     will include Deep learning explanations.
     """
 
-    def __init__(self,
-                 model,
-                 data: pd.DataFrame,
-                 features: list,
-                 target: str,
-                 explainer: str = "tree",
-                 link: str = "logit",
-                 js_backend: bool = True):
+    def __init__(
+        self,
+        model,
+        data: pd.DataFrame,
+        features: list,
+        target: str,
+        explainer: str = "tree",
+        link: str = "logit",
+        js_backend: bool = True,
+    ):
         if js_backend:
             shap.initjs()
-        assert explainer in ["tree", "kernel"], "explainer must be one of: 'tree', 'kernel'"
+        assert explainer in [
+            "tree",
+            "kernel",
+        ], "explainer must be one of: 'tree', 'kernel'"
         self.x, self.y = data[features], data[target].values
         self.link = link
         if explainer == "tree":
@@ -1736,14 +1912,11 @@ class SHAP:
             self.explainer = shap.KernelExplainer(model, self.x, link=link)
 
     def force_plot(self, **kwargs):
-        return shap.force_plot(self.explainer.expected_value,
-                               self.shap_values,
-                               self.x,
-                               **kwargs)
+        return shap.force_plot(
+            self.explainer.expected_value, self.shap_values, self.x, **kwargs
+        )
 
-    def dependency_plot(self,
-                        feature: str,
-                        **kwargs):
+    def dependency_plot(self, feature: str, **kwargs):
         return shap.dependence_plot(feature, self.shap_values, self.x, **kwargs)
 
     def summary_plot(self, **kwargs):

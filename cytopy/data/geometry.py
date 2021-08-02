@@ -72,13 +72,14 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
     transform_y_kwargs: str
         Transformation keyword arguments for transform method applied to the y-axis
     """
+
     x = mongoengine.StringField()
     y = mongoengine.StringField()
     transform_x = mongoengine.StringField()
     transform_y = mongoengine.StringField()
     transform_x_kwargs = mongoengine.DictField()
     transform_y_kwargs = mongoengine.DictField()
-    meta = {'allow_inheritance': True}
+    meta = {"allow_inheritance": True}
 
 
 class ThresholdGeom(PopulationGeometry):
@@ -94,6 +95,7 @@ class ThresholdGeom(PopulationGeometry):
     y_threshold: float
         Threshold applied to the Y-axis
     """
+
     x_threshold = mongoengine.FloatField()
     y_threshold = mongoengine.FloatField()
 
@@ -111,11 +113,15 @@ class ThresholdGeom(PopulationGeometry):
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_x)(**kwargs)
-            x = transformer.inverse_scale(pd.DataFrame({"x": [self.x_threshold]}), features=["x"])["x"].values[0]
+            x = transformer.inverse_scale(
+                pd.DataFrame({"x": [self.x_threshold]}), features=["x"]
+            )["x"].values[0]
         if self.transform_y:
             kwargs = self.transform_y_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
-            y = transformer.inverse_scale(pd.DataFrame({"y": [self.y_threshold]}), features=["y"])["y"].values[0]
+            y = transformer.inverse_scale(
+                pd.DataFrame({"y": [self.y_threshold]}), features=["y"]
+            )["y"].values[0]
         return x, y
 
 
@@ -132,13 +138,15 @@ class PolygonGeom(PopulationGeometry):
     y_values: list
         Y-axis coordinates
     """
+
     x_values = mongoengine.ListField()
     y_values = mongoengine.ListField()
 
     @property
     def shape(self):
-        assert self.x_values is not None and self.y_values is not None, \
-            "x and y values not defined for this Polygon"
+        assert (
+            self.x_values is not None and self.y_values is not None
+        ), "x and y values not defined for this Polygon"
         return create_polygon(self.x_values, self.y_values)
 
     def transform_to_linear(self):
@@ -155,25 +163,24 @@ class PolygonGeom(PopulationGeometry):
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_x)(**kwargs)
-            x_values = transformer.inverse_scale(pd.DataFrame({"x": self.x_values}), features=["x"])["x"].values
+            x_values = transformer.inverse_scale(
+                pd.DataFrame({"x": self.x_values}), features=["x"]
+            )["x"].values
         if self.transform_y:
             kwargs = self.transform_y_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
-            y_values = transformer.inverse_scale(pd.DataFrame({"y": self.y_values}), features=["y"])["y"].values
+            y_values = transformer.inverse_scale(
+                pd.DataFrame({"y": self.y_values}), features=["y"]
+            )["y"].values
         return x_values, y_values
 
 
-def point_in_poly(coords: np.array,
-                  poly: Polygon):
+def point_in_poly(coords: np.array, poly: Polygon):
     point = Point(coords)
     return poly.contains(point)
 
 
-def inside_polygon(df: pd.DataFrame,
-                   x: str,
-                   y: str,
-                   poly: Polygon,
-                   njobs: int = -1):
+def inside_polygon(df: pd.DataFrame, x: str, y: str, poly: Polygon, njobs: int = -1):
     """
     Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
 
@@ -204,9 +211,7 @@ def inside_polygon(df: pd.DataFrame,
     return df.iloc[mask]
 
 
-def polygon_overlap(poly1: Polygon,
-                    poly2: Polygon,
-                    threshold: float = 0.):
+def polygon_overlap(poly1: Polygon, poly2: Polygon, threshold: float = 0.0):
     """
     Compare the area of two polygons and give the fraction overlap.
     If fraction overlap does not exceed given threshold or the polygon's do not overlap,
@@ -226,11 +231,10 @@ def polygon_overlap(poly1: Polygon,
         overlap = float(poly1.intersection(poly2).area / poly1.area)
         if overlap >= threshold:
             return overlap
-    return 0.
+    return 0.0
 
 
-def create_polygon(x: list,
-                   y: list):
+def create_polygon(x: list, y: list):
     """
     Given a list of x coordinated and a list of y coordinates, generate a shapely Polygon
 
@@ -246,11 +250,13 @@ def create_polygon(x: list,
     return Polygon([(x, y) for x, y in zip(x, y)])
 
 
-def inside_ellipse(data: np.array,
-                   center: tuple,
-                   width: int or float,
-                   height: int or float,
-                   angle: int or float) -> object:
+def inside_ellipse(
+    data: np.array,
+    center: tuple,
+    width: int or float,
+    height: int or float,
+    angle: int or float,
+) -> object:
     """
     Return mask of two dimensional matrix specifying if a data point (row) falls
     within an ellipse
@@ -273,8 +279,8 @@ def inside_ellipse(data: np.array,
     numpy.ndarray
         numpy array of indices for values inside specified ellipse
     """
-    cos_angle = np.cos(np.radians(180. - angle))
-    sin_angle = np.sin(np.radians(180. - angle))
+    cos_angle = np.cos(np.radians(180.0 - angle))
+    sin_angle = np.sin(np.radians(180.0 - angle))
 
     x = data[:, 0]
     y = data[:, 1]
@@ -285,12 +291,12 @@ def inside_ellipse(data: np.array,
     xct = xc * cos_angle - yc * sin_angle
     yct = xc * sin_angle + yc * cos_angle
 
-    rad_cc = (xct ** 2 / (width / 2.) ** 2) + (yct ** 2 / (height / 2.) ** 2)
+    rad_cc = (xct ** 2 / (width / 2.0) ** 2) + (yct ** 2 / (height / 2.0) ** 2)
 
     in_ellipse = []
 
     for r in rad_cc:
-        if r <= 1.:
+        if r <= 1.0:
             # point in ellipse
             in_ellipse.append(True)
         else:
@@ -299,8 +305,7 @@ def inside_ellipse(data: np.array,
     return in_ellipse
 
 
-def probabilistic_ellipse(covariances: np.array,
-                          conf: float):
+def probabilistic_ellipse(covariances: np.array, conf: float):
     """
     Given the covariance matrix of a mixture component, calculate a elliptical shape that
     represents a probabilistic confidence interval.
@@ -319,15 +324,15 @@ def probabilistic_ellipse(covariances: np.array,
     """
     eigen_val, eigen_vec = linalg.eigh(covariances)
     chi2 = stats.chi2.ppf(conf, 2)
-    eigen_val = 2. * np.sqrt(eigen_val) * np.sqrt(chi2)
+    eigen_val = 2.0 * np.sqrt(eigen_val) * np.sqrt(chi2)
     u = eigen_vec[0] / linalg.norm(eigen_vec[0])
-    angle = 180. * np.arctan(u[1] / u[0]) / np.pi
-    return eigen_val[0], eigen_val[1], (180. + angle)
+    angle = 180.0 * np.arctan(u[1] / u[0]) / np.pi
+    return eigen_val[0], eigen_val[1], (180.0 + angle)
 
 
-def create_envelope(x_values: np.array,
-                    y_values: np.array,
-                    alpha: float or None = 0.0) -> Polygon:
+def create_envelope(
+    x_values: np.array, y_values: np.array, alpha: float or None = 0.0
+) -> Polygon:
     """
     Given the x and y coordinates of a cloud of data points generate an envelope (alpha shape)
     that encapsulates these data points.
@@ -357,14 +362,18 @@ def create_envelope(x_values: np.array,
         assert isinstance(poly, Polygon)
         return poly
     except AssertionError:
-        raise GeometryError("Failed to generate alpha shape. Check for insufficient data or whether alpha is too large")
+        raise GeometryError(
+            "Failed to generate alpha shape. Check for insufficient data or whether alpha is too large"
+        )
 
 
-def ellipse_to_polygon(centroid: (float, float),
-                       width: float,
-                       height: float,
-                       angle: float,
-                       ellipse: Ellipse or None = None):
+def ellipse_to_polygon(
+    centroid: (float, float),
+    width: float,
+    height: float,
+    angle: float,
+    ellipse: Ellipse or None = None,
+):
     """
     Convert an ellipse to a shapely Polygon object.
 

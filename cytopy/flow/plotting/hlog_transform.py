@@ -109,19 +109,21 @@ class HlogMajorLocator(Locator):
         pass
 
     def __call__(self):
-        'Return the locations of the ticks'
+        "Return the locations of the ticks"
         vmin, vmax = self.axis.get_view_interval()
         return self.tick_values(vmin, vmax)
 
     def tick_values(self, vmin, vmax):
-        'Every decade, including 0 and negative'
+        "Every decade, including 0 and negative"
 
         vmin, vmax = self.view_limits(vmin, vmax)
         max_decade = 10 ** np.ceil(np.log10(vmax))
 
         if vmin < 0:
             min_decade = -1.0 * 10 ** np.floor(np.log10(-1.0 * vmin))
-            ticks = [-1.0 * 10 ** x for x in np.arange(np.log10(-1.0 * min_decade), 1, -1)]
+            ticks = [
+                -1.0 * 10 ** x for x in np.arange(np.log10(-1.0 * min_decade), 1, -1)
+            ]
             ticks.append(0.0)
             ticks.extend([10 ** x for x in np.arange(2, np.log10(max_decade), 1)])
         else:
@@ -131,7 +133,7 @@ class HlogMajorLocator(Locator):
         return self.raise_if_exceeds(np.asarray(ticks))
 
     def view_limits(self, data_min, data_max):
-        'Try to choose the view limits intelligently'
+        "Try to choose the view limits intelligently"
 
         if data_max < data_min:
             data_min, data_max = data_max, data_min
@@ -165,18 +167,20 @@ class HlogMinorLocator(Locator):
         pass
 
     def __call__(self):
-        'Return the locations of the ticks'
+        "Return the locations of the ticks"
         vmin, vmax = self.axis.get_view_interval()
         return self.tick_values(vmin, vmax)
 
     def tick_values(self, vmin, vmax):
-        'Every tenth decade, including 0 and negative'
+        "Every tenth decade, including 0 and negative"
 
         vmin, vmax = self.view_limits(vmin, vmax)
 
         if vmin < 0:
-            lt = [np.arange(10 ** x, 10 ** (x - 1), -1.0 * (10 ** (x - 1)))
-                  for x in np.arange(np.ceil(np.log10(-1.0 * vmin)), 1, -1)]
+            lt = [
+                np.arange(10 ** x, 10 ** (x - 1), -1.0 * (10 ** (x - 1)))
+                for x in np.arange(np.ceil(np.log10(-1.0 * vmin)), 1, -1)
+            ]
 
             # flatten and take the negative
             lt = [-1.0 * item for sublist in lt for item in sublist]
@@ -184,8 +188,10 @@ class HlogMinorLocator(Locator):
             # whoops! missed an endpoint
             lt.extend([-10.0])
 
-            gt = [np.arange(10 ** x, 10 ** (x + 1), 10 ** x)
-                  for x in np.arange(1, np.log10(vmax))]
+            gt = [
+                np.arange(10 ** x, 10 ** (x + 1), 10 ** x)
+                for x in np.arange(1, np.log10(vmax))
+            ]
 
             # flatten
             gt = [item for sublist in gt for item in sublist]
@@ -194,8 +200,10 @@ class HlogMinorLocator(Locator):
             ticks.extend(gt)
         else:
             vmin = max((vmin, 1))
-            ticks = [np.arange(10 ** x, 10 ** (x + 1), 10 ** x)
-                     for x in np.arange(np.log10(vmin), np.log10(vmax))]
+            ticks = [
+                np.arange(10 ** x, 10 ** (x + 1), 10 ** x)
+                for x in np.arange(np.log10(vmin), np.log10(vmax))
+            ]
             ticks = [item for sublist in ticks for item in sublist]
 
         return self.raise_if_exceeds(np.asarray(ticks))

@@ -19,9 +19,7 @@ def list_all_populations(experiment: Experiment):
     pass
 
 
-def get_population_as_perc_of(files: List[FileGroup],
-                              population: str,
-                              stat: str):
+def get_population_as_perc_of(files: List[FileGroup], population: str, stat: str):
     pattern = re.compile("% of (.*)")
     parent_name = pattern.search(stat).group(1)
     data = {"sample_id": list(), stat: list()}
@@ -34,22 +32,18 @@ def get_population_as_perc_of(files: List[FileGroup],
 
 
 class FeatureSpace:
-    def __init__(self,
-                 project: Project,
-                 verbose: bool = True):
+    def __init__(self, project: Project, verbose: bool = True):
         self.project = project
         self.verbose = verbose
         self._data = pd.DataFrame()
 
-    def add_population_statistics(self,
-                                  experiment: str,
-                                  population: str,
-                                  stat: str):
+    def add_population_statistics(self, experiment: str, population: str, stat: str):
         exp = self.project.get_experiment(experiment_id=experiment)
         if "% of " in stat:
-            data = get_population_as_perc_of(files=exp.fcs_files, population=population, stat=stat)
+            data = get_population_as_perc_of(
+                files=exp.fcs_files, population=population, stat=stat
+            )
             data["experiment"] = exp.experiment_id
-
 
     def add_population_ratios(self):
         pass

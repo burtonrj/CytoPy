@@ -95,15 +95,16 @@ class ClassifierError(Exception):
 
 
 class BaseClassifier:
-
-    def __init__(self,
-                 target_populations: List[str],
-                 population_prefix: str,
-                 x: Optional[pd.DataFrame],
-                 y: Optional[Union[pd.Series, np.ndarray]],
-                 features: List[str],
-                 transformer: Optional[Transformer] = None,
-                 multi_label: bool = False):
+    def __init__(
+        self,
+        target_populations: List[str],
+        population_prefix: str,
+        x: Optional[pd.DataFrame],
+        y: Optional[Union[pd.Series, np.ndarray]],
+        features: List[str],
+        transformer: Optional[Transformer] = None,
+        multi_label: bool = False,
+    ):
         self.model = None
         self.target_populations = target_populations
         self.x = x
@@ -136,10 +137,7 @@ class BaseClassifier:
         return self
 
     @check_data_init
-    def downsample(self,
-                   method: str,
-                   sample_size: int or float,
-                   **kwargs):
+    def downsample(self, method: str, sample_size: int or float, **kwargs):
         """
         Downsample training data
         Parameters
@@ -164,19 +162,19 @@ class BaseClassifier:
         if method == "uniform":
             x = sampling.uniform_downsampling(data=x, sample_size=sample_size, **kwargs)
         elif method == "density":
-            x = sampling.density_dependent_downsampling(data=x, sample_size=sample_size, **kwargs)
+            x = sampling.density_dependent_downsampling(
+                data=x, sample_size=sample_size, **kwargs
+            )
         elif method == "faithful":
             x = sampling.faithful_downsampling(data=x, **kwargs)
         else:
-            valid = ['uniform', 'density', 'faithful']
+            valid = ["uniform", "density", "faithful"]
             raise ValueError(f"Invalid method, must be one of {valid}")
         self.x, self.y = x[self.features], x["y"].values
         return self
 
     @check_data_init
-    def transform(self,
-                  method: str,
-                  **kwargs):
+    def transform(self, method: str, **kwargs):
         """
         Transform training data. Transformer used will be saved to the attribute 'transformer'
         Parameters
@@ -190,11 +188,13 @@ class BaseClassifier:
         -------
         self
         """
-        self.x, self.transformer = apply_transform(data=self.x,
-                                                   features=self.features,
-                                                   method=method,
-                                                   return_transformer=True,
-                                                   **kwargs)
+        self.x, self.transformer = apply_transform(
+            data=self.x,
+            features=self.features,
+            method=method,
+            return_transformer=True,
+            **kwargs,
+        )
         return self
 
     @check_data_init
@@ -215,9 +215,7 @@ class BaseClassifier:
         return self
 
     @check_data_init
-    def scale(self,
-              method: str = "standard",
-              **kwargs):
+    def scale(self, method: str = "standard", **kwargs):
         """
         Scale training data. Many Scikit-Learn scalers supported, see cytopy.flow.transform.Scaler
         for details. Scaler object is saved to the scaler attribute.
@@ -247,7 +245,9 @@ class BaseClassifier:
         AssertionError
             If model does not support sample_weights in it's fit function
         """
-        assert not self.multi_label, "Class weights not supported for multi-class classifiers"
+        assert (
+            not self.multi_label
+        ), "Class weights not supported for multi-class classifiers"
         if self.model is not None:
             err = "Chosen model does not support use of class weights, perhaps try 'oversample' instead?"
             assert "sample_weight" in signature(self.model.fit).parameters.keys(), err
@@ -256,10 +256,7 @@ class BaseClassifier:
 
     @check_data_init
     @check_model_init
-    def _fit(self,
-             x: pd.DataFrame,
-             y: np.ndarray,
-             **kwargs):
+    def _fit(self, x: pd.DataFrame, y: np.ndarray, **kwargs):
         """
         Internal function for calling fit. Handles class weights.
         Parameters
@@ -297,12 +294,14 @@ class BaseClassifier:
 
     @check_model_init
     @check_data_init
-    def fit_train_test_split(self,
-                             test_frac: float = 0.3,
-                             metrics: list or None = None,
-                             return_predictions: bool = True,
-                             train_test_split_kwargs: dict or None = None,
-                             **fit_kwargs):
+    def fit_train_test_split(
+        self,
+        test_frac: float = 0.3,
+        metrics: list or None = None,
+        return_predictions: bool = True,
+        train_test_split_kwargs: dict or None = None,
+        **fit_kwargs,
+    ):
         """
         Fits model to training data and performs validation on holdout data. Training and testing
         performed returned as dictionaries.
@@ -335,34 +334,36 @@ class BaseClassifier:
         metrics = metrics or DEFAULT_METRICS
         train_test_split_kwargs = train_test_split_kwargs or {}
         logger.info("Generating training and testing data")
-        x_train, x_test, y_train, y_test = train_test_split(self.x,
-                                                            self.y,
-                                                            test_size=test_frac,
-                                                            **train_test_split_kwargs)
+        x_train, x_test, y_train, y_test = train_test_split(
+            self.x, self.y, test_size=test_frac, **train_test_split_kwargs
+        )
         logger.info("Training model")
         self._fit(x=x_train, y=y_train, **fit_kwargs)
         results = dict()
         y_hat = dict()
-        for key, (X, y) in zip(["train", "test"], [[x_train, y_train], [x_test, y_test]]):
+        for key, (X, y) in zip(
+            ["train", "test"], [[x_train, y_train], [x_test, y_test]]
+        ):
             logger.info(f"Evaluating {key}ing performance....")
             y_pred, y_score = self._predict(X)
             y_hat[key] = {"y_pred": y_pred, "y_score": y_score}
-            results[key] = utils.calc_metrics(metrics=metrics,
-                                              y_pred=y_pred,
-                                              y_score=y_score,
-                                              y_true=y)
+            results[key] = utils.calc_metrics(
+                metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y
+            )
         if return_predictions:
             return results, y_hat
         return results, None
 
     @check_model_init
     @check_data_init
-    def fit_cv(self,
-               cross_validator: BaseCrossValidator or None = None,
-               metrics: list or None = None,
-               split_kwargs: dict or None = None,
-               verbose: bool = True,
-               **fit_kwargs):
+    def fit_cv(
+        self,
+        cross_validator: BaseCrossValidator or None = None,
+        metrics: list or None = None,
+        split_kwargs: dict or None = None,
+        verbose: bool = True,
+        **fit_kwargs,
+    ):
         """
         Fit model with cross-validation.
         Parameters
@@ -389,25 +390,31 @@ class BaseClassifier:
         """
         metrics = metrics or DEFAULT_METRICS
         split_kwargs = split_kwargs or {}
-        cross_validator = cross_validator or KFold(n_splits=10, random_state=42, shuffle=True)
+        cross_validator = cross_validator or KFold(
+            n_splits=10, random_state=42, shuffle=True
+        )
         training_results = list()
         testing_results = list()
-        for train_idx, test_idx in progress_bar(cross_validator.split(X=self.x, y=self.y, **split_kwargs),
-                                                total=cross_validator.n_splits,
-                                                verbose=verbose):
+        for train_idx, test_idx in progress_bar(
+            cross_validator.split(X=self.x, y=self.y, **split_kwargs),
+            total=cross_validator.n_splits,
+            verbose=verbose,
+        ):
             x_train, x_test = self.x.loc[train_idx], self.x.loc[test_idx]
             y_train, y_test = self.y[train_idx], self.y[test_idx]
             self._fit(x=x_train, y=y_train, **fit_kwargs)
             y_pred, y_score = self._predict(x=x_train)
-            training_results.append(utils.calc_metrics(metrics=metrics,
-                                                       y_pred=y_pred,
-                                                       y_score=y_score,
-                                                       y_true=y_train))
+            training_results.append(
+                utils.calc_metrics(
+                    metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_train
+                )
+            )
             y_pred, y_score = self._predict(x_test)
-            testing_results.append(utils.calc_metrics(metrics=metrics,
-                                                      y_pred=y_pred,
-                                                      y_score=y_score,
-                                                      y_true=y_test))
+            testing_results.append(
+                utils.calc_metrics(
+                    metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_test
+                )
+            )
         return training_results, testing_results
 
     @check_model_init
@@ -460,23 +467,27 @@ class CellClassifier(BaseClassifier):
     features: list
     target_populations: list
     """
-    def __init__(self,
-                 features: list,
-                 target_populations: list,
-                 multi_label: bool = False,
-                 population_prefix: str = "CellClassifier_"):
-        super().__init__(x=None,
-                         y=None,
-                         features=features,
-                         transformer=None,
-                         multi_label=multi_label,
-                         population_prefix=population_prefix,
-                         target_populations=target_populations)
 
-    def load_training_data(self,
-                           experiment: Experiment,
-                           root_population: str,
-                           reference: str):
+    def __init__(
+        self,
+        features: list,
+        target_populations: list,
+        multi_label: bool = False,
+        population_prefix: str = "CellClassifier_",
+    ):
+        super().__init__(
+            x=None,
+            y=None,
+            features=features,
+            transformer=None,
+            multi_label=multi_label,
+            population_prefix=population_prefix,
+            target_populations=target_populations,
+        )
+
+    def load_training_data(
+        self, experiment: Experiment, root_population: str, reference: str
+    ):
         """
         Load a FileGroup with existing Populations to serve as training data
         Parameters
@@ -494,28 +505,35 @@ class CellClassifier(BaseClassifier):
             root_population
         """
         ref = experiment.get_sample(reference)
-        utils.assert_population_labels(ref=ref,
-                                       expected_labels=self.target_populations)
-        utils.check_downstream_populations(ref=ref,
-                                           root_population=root_population,
-                                           population_labels=self.target_populations)
+        utils.assert_population_labels(ref=ref, expected_labels=self.target_populations)
+        utils.check_downstream_populations(
+            ref=ref,
+            root_population=root_population,
+            population_labels=self.target_populations,
+        )
         if self.multi_label:
-            self.x, self.y = utils.multilabel(ref=ref,
-                                              root_population=root_population,
-                                              population_labels=self.target_populations,
-                                              features=self.features)
+            self.x, self.y = utils.multilabel(
+                ref=ref,
+                root_population=root_population,
+                population_labels=self.target_populations,
+                features=self.features,
+            )
         else:
-            self.x, self.y = utils.singlelabel(ref=ref,
-                                               root_population=root_population,
-                                               population_labels=self.target_populations,
-                                               features=self.features)
+            self.x, self.y = utils.singlelabel(
+                ref=ref,
+                root_population=root_population,
+                population_labels=self.target_populations,
+                features=self.features,
+            )
         return self
 
-    def _add_unclassified_population(self,
-                                     x: pd.DataFrame,
-                                     y_pred: np.ndarray,
-                                     root_population: str,
-                                     target: FileGroup):
+    def _add_unclassified_population(
+        self,
+        x: pd.DataFrame,
+        y_pred: np.ndarray,
+        root_population: str,
+        target: FileGroup,
+    ):
         """
         Add a population for events without a classification (not a member of any target population)
         Parameters
@@ -529,20 +547,26 @@ class CellClassifier(BaseClassifier):
         None
         """
         idx = x.index.values[np.where(y_pred == 0)[0]]
-        target.add_population(Population(population_name=f"{self.population_prefix}_Unclassified",
-                                         source="classifier",
-                                         index=idx,
-                                         n=len(idx),
-                                         parent=root_population,
-                                         warnings=["supervised_classification"]))
+        target.add_population(
+            Population(
+                population_name=f"{self.population_prefix}_Unclassified",
+                source="classifier",
+                index=idx,
+                n=len(idx),
+                parent=root_population,
+                warnings=["supervised_classification"],
+            )
+        )
 
     @check_model_init
-    def predict(self,
-                experiment: Experiment,
-                sample_id: str,
-                root_population: str,
-                threshold: float = 0.5,
-                return_predictions: bool = True) -> Union[FileGroup, Dict] or Union[FileGroup, None]:
+    def predict(
+        self,
+        experiment: Experiment,
+        sample_id: str,
+        root_population: str,
+        threshold: float = 0.5,
+        return_predictions: bool = True,
+    ) -> Union[FileGroup, Dict] or Union[FileGroup, None]:
         """
         Calls predict on the root population of some unclassified FileGroup, generating
         new populations that will be immediate children of the chosen root population.
@@ -561,37 +585,40 @@ class CellClassifier(BaseClassifier):
             labels) and 'y_score' (probabilities)
         """
         target = experiment.get_sample(sample_id)
-        x = target.load_population_df(population=root_population,
-                                      transform=None)[self.features]
+        x = target.load_population_df(population=root_population, transform=None)[
+            self.features
+        ]
         if self.transformer is not None:
             x = self.transformer.scale(data=x, features=self.features)
         if self.scaler is not None:
             x = self.scaler(data=x, features=self.features)
         y_pred, y_score = self._predict(x=x, threshold=threshold)
         if not self.multi_label:
-            self._add_unclassified_population(x=x,
-                                              y_pred=y_pred,
-                                              root_population=root_population,
-                                              target=target)
+            self._add_unclassified_population(
+                x=x, y_pred=y_pred, root_population=root_population, target=target
+            )
         for i, pop in enumerate(self.target_populations):
             if self.multi_label:
                 idx = x.index.values[np.where(y_pred[:, i + 1] == 1)[0]]
             else:
                 idx = x.index.values[np.where(y_pred == i + 1)[0]]
-            target.add_population(Population(population_name=f"{self.population_prefix}_{pop}",
-                                             source="classifier",
-                                             index=idx,
-                                             n=len(idx),
-                                             parent=root_population,
-                                             warnings=["supervised_classification"]))
+            target.add_population(
+                Population(
+                    population_name=f"{self.population_prefix}_{pop}",
+                    source="classifier",
+                    index=idx,
+                    n=len(idx),
+                    parent=root_population,
+                    warnings=["supervised_classification"],
+                )
+            )
         if return_predictions:
             return target, {"y_pred": y_pred, "y_score": y_score}
         return target, None
 
-    def load_validation(self,
-                        experiment: Experiment,
-                        validation_id: str,
-                        root_population: str):
+    def load_validation(
+        self, experiment: Experiment, validation_id: str, root_population: str
+    ):
         """
         Load a FileGroup that has existing populations equivalent but not the same as the
         target populations e.g. identified by some other method (must share the same name as
@@ -614,18 +641,23 @@ class CellClassifier(BaseClassifier):
             If target populations are missing in validation data
         """
         val = experiment.get_sample(validation_id)
-        assert all([x in val.tree.keys() for x in self.target_populations]), \
-            f"Validation sample should contain the following populations: {self.target_populations}"
+        assert all(
+            [x in val.tree.keys() for x in self.target_populations]
+        ), f"Validation sample should contain the following populations: {self.target_populations}"
         if self.multi_label:
-            x, y = utils.multilabel(ref=val,
-                                    root_population=root_population,
-                                    population_labels=self.target_populations,
-                                    features=self.features)
+            x, y = utils.multilabel(
+                ref=val,
+                root_population=root_population,
+                population_labels=self.target_populations,
+                features=self.features,
+            )
         else:
-            x, y = utils.singlelabel(ref=val,
-                                     root_population=root_population,
-                                     population_labels=self.target_populations,
-                                     features=self.features)
+            x, y = utils.singlelabel(
+                ref=val,
+                root_population=root_population,
+                population_labels=self.target_populations,
+                features=self.features,
+            )
         if self.transformer is not None:
             x = self.transformer.scale(data=x, features=self.features)
         if self.scaler is not None:
@@ -633,13 +665,15 @@ class CellClassifier(BaseClassifier):
         return x, y
 
     @check_model_init
-    def validate_classifier(self,
-                            experiment: Experiment,
-                            validation_id: str,
-                            root_population: str,
-                            threshold: float = 0.5,
-                            metrics: list or None = None,
-                            return_predictions: bool = True):
+    def validate_classifier(
+        self,
+        experiment: Experiment,
+        validation_id: str,
+        root_population: str,
+        threshold: float = 0.5,
+        metrics: list or None = None,
+        return_predictions: bool = True,
+    ):
         """
         Load a FileGroup that has existing populations equivalent but not the same as the
         target populations e.g. identified by some other method (must share the same name as
@@ -675,92 +709,114 @@ class CellClassifier(BaseClassifier):
             If target populations are missing in validation data
         """
         metrics = metrics or DEFAULT_METRICS
-        x, y = self.load_validation(experiment=experiment,
-                                    validation_id=validation_id,
-                                    root_population=root_population)
+        x, y = self.load_validation(
+            experiment=experiment,
+            validation_id=validation_id,
+            root_population=root_population,
+        )
         y_pred, y_score = self._predict(x, threshold=threshold)
-        results = utils.calc_metrics(metrics=metrics,
-                                     y_true=y,
-                                     y_pred=y_pred,
-                                     y_score=y_score)
+        results = utils.calc_metrics(
+            metrics=metrics, y_true=y, y_pred=y_pred, y_score=y_score
+        )
         if return_predictions:
             return results, {"y_pred": y_pred, "y_score": y_score}
         return results, None
 
 
 class CalibratedCellClassifier(BaseClassifier):
-    def __init__(self,
-                 experiment: Experiment,
-                 training_id: str,
-                 features: List[str],
-                 root_population: str,
-                 target_populations: List[str],
-                 multi_label: bool = False,
-                 population_prefix: str = "CalibratedCellClassifier_",
-                 sample_size: int = 10000,
-                 sampling_method: str = "uniform",
-                 sampling_level: str = "file",
-                 sampling_kwargs: Optional[Dict] = None,
-                 transform: Optional[Union[str, Dict]] = "logicle",
-                 transform_kwargs: Optional[Dict] = None,
-                 targets: Optional[List[str]] = None,
-                 **harmony_kwargs):
+    def __init__(
+        self,
+        experiment: Experiment,
+        training_id: str,
+        features: List[str],
+        root_population: str,
+        target_populations: List[str],
+        multi_label: bool = False,
+        population_prefix: str = "CalibratedCellClassifier_",
+        sample_size: int = 10000,
+        sampling_method: str = "uniform",
+        sampling_level: str = "file",
+        sampling_kwargs: Optional[Dict] = None,
+        transform: Optional[Union[str, Dict]] = "logicle",
+        transform_kwargs: Optional[Dict] = None,
+        targets: Optional[List[str]] = None,
+        **harmony_kwargs,
+    ):
         transform_kwargs = transform_kwargs or {}
-        super().__init__(x=None,
-                         y=None,
-                         features=features,
-                         transformer=None if transform is None else TRANSFORMERS[transform](**transform_kwargs),
-                         multi_label=multi_label,
-                         population_prefix=population_prefix,
-                         target_populations=target_populations)
+        super().__init__(
+            x=None,
+            y=None,
+            features=features,
+            transformer=None
+            if transform is None
+            else TRANSFORMERS[transform](**transform_kwargs),
+            multi_label=multi_label,
+            population_prefix=population_prefix,
+            target_populations=target_populations,
+        )
         if not experiment.sample_exists(sample_id=training_id):
-            raise ValueError("Invalid training ID, does not exist for given experiment.")
-        utils.assert_population_labels(experiment.get_sample(training_id),
-                                       expected_labels=target_populations)
-        utils.check_downstream_populations(ref=experiment.get_sample(training_id),
-                                           root_population=root_population,
-                                           population_labels=target_populations)
+            raise ValueError(
+                "Invalid training ID, does not exist for given experiment."
+            )
+        utils.assert_population_labels(
+            experiment.get_sample(training_id), expected_labels=target_populations
+        )
+        utils.check_downstream_populations(
+            ref=experiment.get_sample(training_id),
+            root_population=root_population,
+            population_labels=target_populations,
+        )
         sample_ids = targets + [training_id] if targets is not None else None
         self.experiment = experiment
         self.root_population = root_population
         self.training_id = training_id
-        self.data = single_cell_dataframe(experiment=experiment,
-                                          populations=root_population,
-                                          sample_size=sample_size,
-                                          sampling_kwargs=sampling_kwargs,
-                                          sampling_level=sampling_level,
-                                          sampling_method=sampling_method,
-                                          transform=transform,
-                                          transform_kwargs=transform_kwargs,
-                                          sample_ids=sample_ids)
-        self.calibrator = Harmony(data=self.data,
-                                  features=features,
-                                  transform=transform,
-                                  transform_kwargs=transform_kwargs,
-                                  **harmony_kwargs)
+        self.data = single_cell_dataframe(
+            experiment=experiment,
+            populations=root_population,
+            sample_size=sample_size,
+            sampling_kwargs=sampling_kwargs,
+            sampling_level=sampling_level,
+            sampling_method=sampling_method,
+            transform=transform,
+            transform_kwargs=transform_kwargs,
+            sample_ids=sample_ids,
+        )
+        self.calibrator = Harmony(
+            data=self.data,
+            features=features,
+            transform=transform,
+            transform_kwargs=transform_kwargs,
+            **harmony_kwargs,
+        )
         self.targets = None
 
     def calibrate(self):
         self.calibrator.run(var_use="sample_id")
         calibrated_data = self.calibrator.batch_corrected()
-        calibrated_training_data = calibrated_data[calibrated_data.sample_id == self.training_id]
+        calibrated_training_data = calibrated_data[
+            calibrated_data.sample_id == self.training_id
+        ]
         self._setup_training_data(calibrated_training_data=calibrated_training_data)
         self.targets = calibrated_data[calibrated_data.sample_id != self.training_id]
 
     def _setup_training_data(self, calibrated_training_data: pd.DataFrame):
         reference = self.experiment.get_sample(sample_id=self.training_id)
         if self.multi_label:
-            self.x, self.y = utils.multilabel(ref=reference,
-                                              root_population=self.root_population,
-                                              population_labels=self.target_populations,
-                                              features=self.features,
-                                              idx=calibrated_training_data["original_index"].values)
+            self.x, self.y = utils.multilabel(
+                ref=reference,
+                root_population=self.root_population,
+                population_labels=self.target_populations,
+                features=self.features,
+                idx=calibrated_training_data["original_index"].values,
+            )
         else:
-            self.x, self.y = utils.singlelabel(ref=reference,
-                                               root_population=self.root_population,
-                                               population_labels=self.target_populations,
-                                               features=self.features,
-                                               idx=calibrated_training_data["original_index"].values)
+            self.x, self.y = utils.singlelabel(
+                ref=reference,
+                root_population=self.root_population,
+                population_labels=self.target_populations,
+                features=self.features,
+                idx=calibrated_training_data["original_index"].values,
+            )
 
     def _get_import_features(self):
         try:
@@ -770,20 +826,32 @@ class CalibratedCellClassifier(BaseClassifier):
         except ValueError:
             return self.features
 
-    def _map_predictions_to_target(self,
-                                   y_pred: np.ndarray) -> (pd.DataFrame, np.ndarray, np.ndarray):
-        original_space = self._target_data.loc[self._target_sample["original_index"].values]
-        features = self.features if len(self.features) < 10 else self._get_import_features()
-        clf = GridSearchCV(estimator=KNeighborsClassifier(),
-                           param_grid={"k": [int(original_space.shape[0] * 0.01),
-                                             int(original_space.shape[0] * 0.05),
-                                             int(original_space.shape[0] * 0.1)]})
+    def _map_predictions_to_target(
+        self, y_pred: np.ndarray
+    ) -> (pd.DataFrame, np.ndarray, np.ndarray):
+        original_space = self._target_data.loc[
+            self._target_sample["original_index"].values
+        ]
+        features = (
+            self.features if len(self.features) < 10 else self._get_import_features()
+        )
+        clf = GridSearchCV(
+            estimator=KNeighborsClassifier(),
+            param_grid={
+                "k": [
+                    int(original_space.shape[0] * 0.01),
+                    int(original_space.shape[0] * 0.05),
+                    int(original_space.shape[0] * 0.1),
+                ]
+            },
+        )
         clf.fit(original_space[features], y_pred)
         k = clf.best_params_["k"]
         meta_learner = KNeighborsClassifier(k=k)
         meta_learner.fit(original_space[features], y_pred)
-        return meta_learner.predict(self._target_sample[features]), \
-               meta_learner.predict_proba(self._target_sample[features])
+        return meta_learner.predict(
+            self._target_sample[features]
+        ), meta_learner.predict_proba(self._target_sample[features])
 
     def predict(self) -> FileGroup:
         pass

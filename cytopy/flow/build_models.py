@@ -8,8 +8,7 @@ from sklearn.ensemble import *
 from sklearn.svm import *
 
 
-def build_sklearn_model(klass: str,
-                        **params):
+def build_sklearn_model(klass: str, **params):
     """
     Initiate a SklearnClassifier object using Classes in the global environment
 
@@ -21,19 +20,22 @@ def build_sklearn_model(klass: str,
     -------
     object
     """
-    assert klass in globals().keys(), \
-        f"Module {klass} not found, is this a Scikit-Learn (or like) classifier? It might " \
+    assert klass in globals().keys(), (
+        f"Module {klass} not found, is this a Scikit-Learn (or like) classifier? It might "
         f"not currently be supported. See the docs for details."
+    )
     return globals()[klass](**params)
 
 
-def build_keras_model(layers: list,
-                      layer_params: list,
-                      optimizer: str,
-                      loss: str,
-                      metrics: list,
-                      input_shape: tuple,
-                      **kwargs):
+def build_keras_model(
+    layers: list,
+    layer_params: list,
+    optimizer: str,
+    loss: str,
+    metrics: list,
+    input_shape: tuple,
+    **kwargs,
+):
     """
     Create and compile a Keras Sequential model using the given KerasClassifier object
 
@@ -63,8 +65,5 @@ def build_keras_model(layers: list,
     for layer_klass, lkwargs in zip(layers[1:], layer_params[1:]):
         layer_klass = globals()[layer_klass](**lkwargs)
         model.add(layer_klass)
-    model.compile(optimizer=optimizer,
-                  loss=loss,
-                  metrics=metrics,
-                  **kwargs)
+    model.compile(optimizer=optimizer, loss=loss, metrics=metrics, **kwargs)
     return model
