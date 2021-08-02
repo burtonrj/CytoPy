@@ -38,7 +38,7 @@ from .subject import Subject
 from .read_write import FCSFile
 from .mapping import ChannelMap
 from .errors import *
-from typing import List, Union, Dict, Callable, Optional
+from typing import *
 from collections import Counter
 from datetime import datetime
 from warnings import warn
@@ -79,14 +79,13 @@ def _load_excel_to_dataframe(path: str) -> (pd.DataFrame, pd.DataFrame):
 
     Raises
     ------
-    ValueError
+    ExperimentError
         If Excel sheet names are incorrect
     """
     xls = xlrd.open_workbook(path, on_demand=True)
 
     if not all([x in ['nomenclature', 'mappings'] for x in xls.sheet_names()]):
-        logger.error(f"Template must contain two sheets: nomenclature and mappings")
-        raise ValueError(f"Template must contain two sheets: nomenclature and mappings")
+        raise ExperimentError(f"Template must contain two sheets: nomenclature and mappings")
 
     nomenclature = pd.read_excel(path, sheet_name='nomenclature')
     mappings = pd.read_excel(path, sheet_name='mappings')
@@ -107,14 +106,12 @@ def _check_nomenclature_headings(nomenclature: pd.DataFrame) -> None:
 
     Raises
     -------
-    ValueError
+    ExperimentError
         If Nomenclature column names are incorrect
     """
     if not all([x in ['name', 'regex', 'permutations', 'case'] for x in nomenclature.columns]):
-        logger.error("Nomenclature sheet of excel template must contain the following column headers: "
-                     "'name','regex','case','permutations'")
-        raise ValueError("Nomenclature sheet of excel template must contain the following column headers: "
-                         "'name','regex','case','permutations'")
+        raise ExperimentError("Nomenclature sheet of excel template must contain the following column headers: "
+                              "'name','regex','case','permutations'")
 
 
 def _check_mappings_headings(mappings: pd.DataFrame):
@@ -131,13 +128,12 @@ def _check_mappings_headings(mappings: pd.DataFrame):
 
     Raises
     -------
-    ValueError
+    ExperimentError
         If Mappings column names are incorrect
     """
     err = "Mappings sheet of excel template must contain the following column headers: 'channel', 'marker'"
     if not all([x in ['channel', 'marker'] for x in mappings.columns]):
-        logger.error(err)
-        raise ValueError(err)
+        raise ExperimentError(err)
 
 
 def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
@@ -156,27 +152,32 @@ def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
 
     Raises
     ------
-    ValueError
+    ExperimentError
         If duplicate entries or missing entries in excel template
     """
-    mappings, nomenclature = _load_excel_to_dataframe(path)
-    _check_nomenclature_headings(nomenclature)
-    _check_mappings_headings(mappings)
-    # Check for duplicate entries
-    err = 'Duplicate entries in nomenclature, please remove duplicates before continuing'
-    assert sum(nomenclature['name'].duplicated()) == 0, err
-    # Check that all mappings have a corresponding entry in nomenclature
-    for x in ['channel', 'marker']:
-        for name in mappings[x]:
-            if pd.isnull(name):
-                continue
-            if name not in nomenclature.name.values:
-                logger.error(f'{name} missing from nomenclature, please review template')
-                raise ValueError(f'{name} missing from nomenclature, please review template')
-    return nomenclature, mappings
+    try:
+        mappings, nomenclature = _load_excel_to_dataframe(path)
+        _check_nomenclature_headings(nomenclature)
+        _check_mappings_headings(mappings)
+        # Check for duplicate entries
+        err = 'Duplicate entries in nomenclature, please remove duplicates before continuing'
+        assert sum(nomenclature['name'].duplicated()) == 0, err
+        # Check that all mappings have a corresponding entry in nomenclature
+        for x in ['channel', 'marker']:
+            for name in mappings[x]:
+                if pd.isnull(name):
+                    continue
+                if name not in nomenclature.name.values:
+                    logger.error(f'{name} missing from nomenclature, please review template')
+                    raise ValueError(f'{name} missing from nomenclature, please review template')
+        return nomenclature, mappings
+    except AssertionError as e:
+        raise ExperimentError(e)
+    except ValueError as e:
+        raise ExperimentError(e)
 
 
-def check_duplication(x: list) -> bool:
+def check_duplication(x: List[str]) -> bool:
     """
     Internal method. Given a list check for duplicates. Warning generated for duplicates.
 
@@ -247,7 +248,7 @@ class NormalisedName(mongoengine.EmbeddedDocument):
         return None
 
 
-def query_normalised_list(x: str or None,
+def query_normalised_list(x: Optional[str],
                           ref: List[NormalisedName]) -> str:
     """
     Query a channel/marker against a reference list of NormalisedName's

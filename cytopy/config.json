@@ -1,4 +1,23 @@
 {
   "matplotlib_transform_precision": 5,
-  "column_default": "markers"
+  "column_default": "markers",
+  "logging_config": {
+    "version": 1,
+    "formatters": {
+      "f": {
+        "format": "%(asctime)s - %(levelname)s - %(message)s"
+      }
+    },
+    "handlers": {
+        "default": {
+        "class": "logging.StreamHandler",
+        "formatter": "f",
+        "level": 20
+      }
+    } ,
+    "root": {
+      "handlers": ["default"],
+      "level": 20
+    }
+  }
 }
