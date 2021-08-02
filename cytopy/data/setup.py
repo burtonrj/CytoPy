@@ -24,8 +24,8 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from logging.handlers import RotatingFileHandler
 from types import SimpleNamespace
+from logging.config import dictConfig
 from typing import *
 import mongoengine
 import logging
@@ -33,76 +33,22 @@ import cytopy
 import json
 import os
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 
-
-def setup_logs(path: Optional[str] = None,
-               level: int = logging.INFO) -> None:
+class Config(SimpleNamespace):
     """
-    Setup logging
+    Configuration handler. Configurations are stored as a JSON file in the CytoPy installation
+    directory and can be accessed using this class. Once initialised, configurations take the form
+    of a standard dictionary. The first level of keys in the configuration can be accessed like
+    attributes using dot notation.
+
+    To modify configurations, call the 'save' method, which will overwrite configurations using the
+    current state.
 
     Parameters
     ----------
     path: str, optional
-        Where to store logs (defaults to home path)
-    level: int (default=logging.INFO)
-
-    Returns
-    -------
-    None
+        Use for testing purposes. Bypasses the default config file and will use the given JSON instead.
     """
-    path = path or "cytopy.log"
-    logging.basicConfig(level=level,
-                        format="%(asctime)s - %(levelname)s - %(message)s",
-                        handlers=[
-                            RotatingFileHandler(path, maxBytes=2e+6, backupCount=10),
-                            logging.StreamHandler()
-                        ])
-
-
-def global_init(database_name: str,
-                logging_path: Optional[str] = None,
-                logging_level: int = logging.INFO,
-                **kwargs) -> None:
-    """
-    Global initializer for mongogengine ORM and logging. Logging is managed using the loguru package.
-
-    See mongoengine.register_connection for additional keyword arguments and mongoengine
-    documentation for extensive details about registering connections. In brief, database connections are
-    registered globally and referred to using an alias. By default cytopy uses the alias 'core'.
-
-    The database is assumed to be hosted locally, but if a remote server is used the user should provide the host
-    address and port. If authentication is needed then a username and password should also be provided.
-
-    Parameters
-    -----------
-    database_name: str
-        name of database to establish connection with
-    logging_path: Optional[str]
-        defaults to home path
-    logging_level: int (default=logging.INFO)
-    kwargs:
-        Additional keyword arguments passed to 'register_connection' function of mongoengine.
-        See https://docs.mongoengine.org/guide/connecting.html
-
-    Returns
-    --------
-    None
-    """
-    setup_logs(logging_path, level=logging_level)
-    mongoengine.register_connection(alias="core", name=database_name, **kwargs)
-    logging.info(f"Environment setup. Logging to {logging_path or 'cytopy.log'}. "
-                 f"Connected to {database_name} database.")
-
-
-class Config(SimpleNamespace):
     def __init__(self,
                  path: Optional[str] = None):
         cytopy_path = os.path.dirname(cytopy.__file__)
@@ -125,7 +71,62 @@ class Config(SimpleNamespace):
     def __str__(self):
         return json.dumps(self.__dict__, indent=4)
 
+    def update_logger_level(self,
+                            handler_id: str,
+                            level: Union[str, int]):
+        levels = {
+            "CRITICAL": 50,
+            "ERROR": 40,
+            "WARNING": 30,
+            "INFO": 20,
+            "DEBUG": 10,
+            "NOTSET": 0
+        }
+        try:
+            level = level if isinstance(level, int) else levels[level.upper()]
+        except KeyError:
+            raise KeyError(f"{level} is not a valid level, must be one of {levels.keys()}")
+
+        try:
+            self.__getitem__("logging_config")["handlers"][handler_id] = level
+        except KeyError:
+            raise KeyError("Logging config not defined or invalid handler")
+
     def save(self,
              path: Optional[str] = None):
         with open(path, "w") as f:
             json.dump(self.options, f)
+
+
+def global_init(database_name: str,
+                config_path: Optional[str] = None,
+                **kwargs) -> None:
+    """
+    Global initializer for mongogengine ORM and logging. Logging is managed using the loguru package.
+
+    See mongoengine.register_connection for additional keyword arguments and mongoengine
+    documentation for extensive details about registering connections. In brief, database connections are
+    registered globally and referred to using an alias. By default cytopy uses the alias 'core'.
+
+    The database is assumed to be hosted locally, but if a remote server is used the user should provide the host
+    address and port. If authentication is needed then a username and password should also be provided.
+
+    Parameters
+    -----------
+    database_name: str
+        Name of database to establish connection with.
+    config_path: str, optional
+        Overwrite default configuration file. WARNING: must follow configuration template.
+    kwargs:
+        Additional keyword arguments passed to 'register_connection' function of mongoengine.
+        See https://docs.mongoengine.org/guide/connecting.html
+
+    Returns
+    --------
+    None
+    """
+    config = Config(path=config_path)
+    dictConfig(config.logging_config)
+    mongoengine.register_connection(alias="core", name=database_name, **kwargs)
+    logging.info(f"Connected to {database_name} database.")
+

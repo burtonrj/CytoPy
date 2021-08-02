@@ -8,6 +8,11 @@ class DataError(Exception):
         super().__init__(message)
 
 
+class ExperimentError(DataError):
+    def __init__(self, message: str):
+        super(self).__init__(message)
+
+
 class MissingExperimentError(DataError):
     def __init__(self, experiment_name: str):
         super(self).__init__(f"Invalid experiment, {experiment_name} does not exist!")
