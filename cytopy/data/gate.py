@@ -29,47 +29,51 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from cytopy.flow.transform import apply_transform
-from .geometry import (
-    ThresholdGeom,
-    PolygonGeom,
-    inside_polygon,
-    create_envelope,
-    create_polygon,
-    ellipse_to_polygon,
-    probabilistic_ellipse,
-    GeometryError,
-)
-from .population import Population, merge_multiple_gate_populations
-from ..flow.sampling import (
-    faithful_downsampling,
-    density_dependent_downsampling,
-    upsample_knn,
-    uniform_downsampling,
-)
-from ..flow.dim_reduction import DimensionReduction
-from ..flow.build_models import build_sklearn_model
-from sklearn.preprocessing import PowerTransformer
-from sklearn.linear_model import HuberRegressor
-from sklearn.cluster import *
-from sklearn.mixture import *
+import logging
+from collections import Counter
+from string import ascii_uppercase
+from typing import Dict
+from typing import Iterable
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
+from warnings import warn
+
+import mongoengine
+import numpy as np
+import pandas as pd
+from detecta import detect_peaks
 from hdbscan import HDBSCAN
-from smm import SMM
+from KDEpy import FFTKDE
 from scipy import stats
+from scipy.signal import savgol_filter
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
-from string import ascii_uppercase
-from collections import Counter
-from typing import List, Dict
-from warnings import warn
-from KDEpy import FFTKDE
-from detecta import detect_peaks
-from scipy.signal import savgol_filter
-from functools import reduce
-import pandas as pd
-import numpy as np
-import mongoengine
-import logging
+from sklearn.cluster import *
+from sklearn.linear_model import HuberRegressor
+from sklearn.mixture import *
+from sklearn.preprocessing import PowerTransformer
+from smm import SMM
+
+from ..flow.build_models import build_sklearn_model
+from ..flow.dim_reduction import DimensionReduction
+from ..flow.sampling import density_dependent_downsampling
+from ..flow.sampling import faithful_downsampling
+from ..flow.sampling import uniform_downsampling
+from ..flow.sampling import upsample_knn
+from .errors import GateError
+from .geometry import create_envelope
+from .geometry import create_polygon
+from .geometry import ellipse_to_polygon
+from .geometry import GeometryError
+from .geometry import inside_polygon
+from .geometry import PolygonGeom
+from .geometry import probabilistic_ellipse
+from .geometry import ThresholdGeom
+from .population import merge_multiple_gate_populations
+from .population import Population
+from cytopy.flow.transform import apply_transform
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -116,7 +120,7 @@ class ChildThreshold(Child):
     definition = mongoengine.StringField()
     geom = mongoengine.EmbeddedDocumentField(ThresholdGeom)
 
-    def match_definition(self, definition: str):
+    def match_definition(self, definition: str) -> bool:
         """
         Given a definition, return True or False as to whether it matches this ChildThreshold's
         definition. If definition contains multiples separated by a comma, or the ChildThreshold's
@@ -245,12 +249,10 @@ class Gate(mongoengine.Document):
             kwargs = values.pop("method_kwargs", {})
             assert method is not None, "No method given"
             err = f"Module {method} not supported. See docs for supported methods."
-            assert method in ["manual", "density", "quantile"] + list(
-                globals().keys()
-            ), err
+            assert method in ["manual", "density", "quantile"] + list(globals().keys()), err
         except AssertionError as e:
             logger.exception(e)
-            raise ValueError(f"Could not create Gate: {e}")
+            raise GateError(f"Could not create Gate: {e}")
 
         super().__init__(*args, **values, method_kwargs=kwargs)
         self.model = None
@@ -285,9 +287,7 @@ class Gate(mongoengine.Document):
         if self._yeo_johnson is not None:
             features = [i for i in [self.x, self.y] if i is not None]
             if len(features) == 1:
-                data[features] = self._yeo_johnson.fit_transform(
-                    data[features].values.reshape(-1, 1)
-                )
+                data[features] = self._yeo_johnson.fit_transform(data[features].values.reshape(-1, 1))
             else:
                 data[features] = self._yeo_johnson.fit_transform(data[features])
         return data
@@ -309,9 +309,7 @@ class Gate(mongoengine.Document):
         if self._yeo_johnson is not None:
             features = [i for i in [self.x, self.y] if i is not None]
             if len(features) == 1:
-                data[features] = self._yeo_johnson.inverse_transform(
-                    data[features].reshape(-1, 1)
-                )
+                data[features] = self._yeo_johnson.inverse_transform(data[features].reshape(-1, 1))
             else:
                 data[features] = self._yeo_johnson.inverse_transform(data[features])
         return data
@@ -330,9 +328,7 @@ class Gate(mongoengine.Document):
             Transformed dataframe
         """
         if self.transform_x is not None:
-            logger.debug(
-                f"Transforming x axis {self.x} with {self.transform_x} transform"
-            )
+            logger.debug(f"Transforming x axis {self.x} with {self.transform_x} transform")
             kwargs = self.transform_x_kwargs or {}
             data, self.x_transformer = apply_transform(
                 data=data,
@@ -342,9 +338,7 @@ class Gate(mongoengine.Document):
                 **kwargs,
             )
         if self.transform_y is not None and self.y is not None:
-            logger.debug(
-                f"Transforming x axis {self.y} with {self.transform_y} transform"
-            )
+            logger.debug(f"Transforming x axis {self.y} with {self.transform_y} transform")
             kwargs = self.transform_y_kwargs or {}
             data, self.y_transformer = apply_transform(
                 data=data,
@@ -355,7 +349,7 @@ class Gate(mongoengine.Document):
             )
         return data
 
-    def transform_info(self) -> (dict, dict):
+    def transform_info(self) -> (Dict, Dict):
         """
         Returns two dictionaries describing the transforms and transform settings applied to each variable
         this gate acts upon
@@ -368,15 +362,11 @@ class Gate(mongoengine.Document):
         """
         transforms = [self.transform_x, self.transform_y]
         transform_kwargs = [self.transform_x_kwargs, self.transform_y_kwargs]
-        transforms = {
-            k: v for k, v in zip([self.x, self.y], transforms) if k is not None
-        }
-        transform_kwargs = {
-            k: v for k, v in zip([self.x, self.y], transform_kwargs) if k is not None
-        }
+        transforms = {k: v for k, v in zip([self.x, self.y], transforms) if k is not None}
+        transform_kwargs = {k: v for k, v in zip([self.x, self.y], transform_kwargs) if k is not None}
         return transforms, transform_kwargs
 
-    def _downsample(self, data: pd.DataFrame) -> pd.DataFrame or None:
+    def _downsample(self, data: pd.DataFrame) -> Union[pd.DataFrame, None]:
         """
         Perform down-sampling prior to gating. Returns down-sampled dataframe or
         None if sampling method is undefined.
@@ -391,45 +381,30 @@ class Gate(mongoengine.Document):
 
         Raises
         ------
-        AssertionError
-            If sampling kwargs are missing
-
-        ValueError
-            Invalid downsampling method provided
+        GateError
+            Invalid downsampling method provided or sampling kwargs are missing
         """
         data = data.copy()
         logger.debug(f"Downsampling data using {self.sampling.get('method')} method")
 
         if self.sampling.get("method", None) == "uniform":
             n = self.sampling.get("n", None) or self.sampling.get("frac", None)
-            assert n is not None, "Must provide 'n' or 'frac' for uniform downsampling"
+            if n is None:
+                raise GateError("Must provide 'n' or 'frac' for uniform downsampling")
             return uniform_downsampling(data=data, sample_size=n)
 
         if self.sampling.get("method", None) == "density":
-            kwargs = {
-                k: v
-                for k, v in self.sampling.items()
-                if k not in ["method", "features"]
-            }
+            kwargs = {k: v for k, v in self.sampling.items() if k not in ["method", "features"]}
             features = [f for f in [self.x, self.y] if f is not None]
-            return density_dependent_downsampling(
-                data=data, features=features, **kwargs
-            )
+            return density_dependent_downsampling(data=data, features=features, **kwargs)
 
         if self.sampling.get("method", None) == "faithful":
             h = self.sampling.get("h", 0.01)
             return faithful_downsampling(data=data.values, h=h)
 
-        logger.error(
-            "Invalid downsample method, should be one of: 'uniform', 'density' or 'faithful'"
-        )
-        raise ValueError(
-            "Invalid downsample method, should be one of: 'uniform', 'density' or 'faithful'"
-        )
+        raise GateError("Invalid downsample method, should be one of: 'uniform', 'density' or 'faithful'")
 
-    def _upsample(
-        self, data: pd.DataFrame, sample: pd.DataFrame, populations: List[Population]
-    ) -> List[Population]:
+    def _upsample(self, data: pd.DataFrame, sample: pd.DataFrame, populations: List[Population]) -> List[Population]:
         """
         Perform up-sampling after gating using KNN. Returns list of Population objects
         with index updated to reflect the original data.
@@ -445,7 +420,12 @@ class Gate(mongoengine.Document):
 
         Returns
         -------
-        list
+        List[Population]
+
+        Raises
+        ------
+        GateError
+            Up-sampling error; not enough events
         """
         logger.debug("Upsampling data")
         sample = sample.copy()
@@ -471,17 +451,12 @@ class Gate(mongoengine.Document):
         for i, p in enumerate(populations):
             new_idx = data.index.values[np.where(new_labels == i)]
             if len(new_idx) == 0:
-                logger.error(
-                    f"Up-sampling failed, no events labelled for {p.population_name}; index of len 0"
-                )
-                raise ValueError(
-                    f"Up-sampling failed, no events labelled for {p.population_name}"
-                )
+                raise GateError(f"Up-sampling failed, no events labelled for {p.population_name}")
             p.index = new_idx
 
         return populations
 
-    def _dim_reduction(self, data: pd.DataFrame):
+    def _dim_reduction(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Experimental!
         Perform dimension reduction prior to gating. Returns dataframe
@@ -503,9 +478,7 @@ class Gate(mongoengine.Document):
             return data
         kwargs = {k: v for k, v in self.dim_reduction.items() if k != "method"}
         reducer = DimensionReduction(method=method, n_components=2, **kwargs)
-        data = reducer.fit_transform(
-            data=data, features=kwargs.get("features", data.columns.tolist())
-        )
+        data = reducer.fit_transform(data=data, features=kwargs.get("features", data.columns.tolist()))
         self.x = f"{method}1"
         self.y = f"{method}2"
         return data
@@ -525,7 +498,7 @@ class Gate(mongoengine.Document):
 
         Raises
         -------
-        ValueError
+        GateError
             If required columns missing from provided data
         """
         try:
@@ -533,8 +506,7 @@ class Gate(mongoengine.Document):
             if self.y:
                 assert self.y in data.columns, f"{self.y} missing from given dataframe"
         except AssertionError as e:
-            logger.exception(e)
-            raise ValueError(e)
+            raise GateError(e)
 
     def reset_gate(self) -> None:
         """
@@ -660,7 +632,7 @@ class ThresholdGate(Gate):
 
         Raises
         ------
-        ValueError
+        GateError
             If invalid definition
         """
         try:
@@ -675,8 +647,7 @@ class ThresholdGate(Gate):
                     "-",
                 ], "Invalid child definition, should be either '+' or '-'"
         except AssertionError as e:
-            logger.exception(e)
-            raise ValueError(e)
+            raise GateError(e)
 
         child.geom.x = self.x
         child.geom.y = self.y
@@ -702,14 +673,12 @@ class ThresholdGate(Gate):
         updated_children = []
         for name, count in child_counts.items():
             if count >= 2:
-                updated_children.append(
-                    merge_children([c for c in self.children if c.name == name])
-                )
+                updated_children.append(merge_children([c for c in self.children if c.name == name]))
             else:
                 updated_children.append([c for c in self.children if c.name == name][0])
         self.children = updated_children
 
-    def label_children(self, labels: dict) -> None:
+    def label_children(self, labels: Dict[str, str]) -> None:
         """
         Rename children using a dictionary of labels where the key correspond to the existing child name
         and the value is the new desired population name. If the same population name is given to multiple
@@ -745,22 +714,18 @@ class ThresholdGate(Gate):
         """
         labeled = list()
         for c in self.children:
-            matching_populations = [
-                p for p in new_populations if c.match_definition(p.definition)
-            ]
+            matching_populations = [p for p in new_populations if c.match_definition(p.definition)]
             if len(matching_populations) == 0:
                 continue
             elif len(matching_populations) > 1:
-                pop = merge_multiple_gate_populations(
-                    matching_populations, new_population_name=c.name
-                )
+                pop = merge_multiple_gate_populations(matching_populations, new_population_name=c.name)
             else:
                 pop = matching_populations[0]
                 pop.population_name = c.name
             labeled.append(pop)
         return labeled
 
-    def _quantile_gate(self, data: pd.DataFrame) -> list:
+    def _quantile_gate(self, data: pd.DataFrame) -> List[float]:
         """
         Fit gate to the given dataframe by simply drawing the threshold at the desired quantile.
 
@@ -775,34 +740,31 @@ class ThresholdGate(Gate):
 
         Raises
         ------
-        AssertionError
-            If 'q' argument not found in method kwargs and method is 'qunatile'
+        GateError
+            If 'q' argument not found in method kwargs and method is 'quantile'
         """
         q = self.method_kwargs.get("q", None)
-        assert (
-            q is not None
-        ), "Must provide a value for 'q' in method kwargs when using quantile gate"
+        if q is None:
+            raise GateError("Must provide a value for 'q' in method kwargs when using quantile gate")
         if self.y is None:
             return [data[self.x].quantile(q)]
         return [data[self.x].quantile(q), data[self.y].quantile(q)]
 
-    def _process_one_peak(
-        self, x: np.ndarray, x_grid: np.array, p: np.array, peak_idx: int
-    ):
+    def _process_one_peak(self, x: np.ndarray, x_grid: np.array, p: np.array, peak_idx: int) -> float:
         """
         Process the results of a single peak detected. Returns the threshold for
         the given dimension.
 
         Parameters
         ----------
-        d: str
-            Name of the dimension (feature) under investigation. Must be a column in data.
-        data: Pandas.DataFrame
-            Events dataframe
-        x_grid: numpy.ndarray
+        x: Numpy.Array
+            Probability density vector
+        x_grid: Numpy.Array
             x grid upon which probability vector is estimated by KDE
-        p: numpy.ndarray
+        p: Numpy.Array
             probability vector as estimated by KDE
+        peak_idx: int
+            Index of peak
 
         Returns
         -------
@@ -810,23 +772,22 @@ class ThresholdGate(Gate):
 
         Raises
         ------
-        AssertionError
+        GateError
             If 'q' argument not found in method kwargs and method is 'qunatile'
         """
         use_inflection_point = self.method_kwargs.get("use_inflection_point", True)
         if not use_inflection_point:
             q = self.method_kwargs.get("q", None)
-            assert q is not None, (
-                "Must provide a value for 'q' in method kwargs "
-                "for desired quantile if use_inflection_point is False"
-            )
+            if q is None:
+                raise GateError(
+                    "Must provide a value for 'q' in method kwargs for "
+                    "desired quantile if use_inflection_point is False"
+                )
             return np.quantile(x, q)
         inflection_point_kwargs = self.method_kwargs.get("inflection_point_kwargs", {})
-        return find_inflection_point(
-            x=x_grid, p=p, peak_idx=peak_idx, **inflection_point_kwargs
-        )
+        return find_inflection_point(x=x_grid, p=p, peak_idx=peak_idx, **inflection_point_kwargs)
 
-    def _fit(self, data: pd.DataFrame or dict) -> list:
+    def _fit(self, data: Union[pd.DataFrame, Dict]) -> List[Dict]:
         """
         Internal method to fit threshold density gating to a given dataframe. Returns the
         list of thresholds generated and the dataframe the threshold were generated from
@@ -855,7 +816,7 @@ class ThresholdGate(Gate):
                 thresholds.append(self._find_threshold(data[d].values))
         return thresholds
 
-    def _find_threshold(self, x: np.ndarray):
+    def _find_threshold(self, x: np.ndarray) -> float:
         """
         Given a single dimension of data find the threshold point according to the
         methodology defined for this gate and the number of peaks detected.
@@ -870,24 +831,21 @@ class ThresholdGate(Gate):
 
         Raises
         ------
-        AssertionError
+        GateError
             If no peaks are detected
         """
         peaks, x_grid, p = self._density_peak_finding(x)
-        assert len(peaks) > 0, "No peaks detected"
+        if len(peaks) > 0:
+            raise GateError("No peaks detected")
         if len(peaks) == 1:
             threshold = self._process_one_peak(x, x_grid=x_grid, p=p, peak_idx=peaks[0])
         elif len(peaks) == 2:
             threshold = find_local_minima(p=p, x=x_grid, peaks=peaks)
         else:
-            threshold = self._solve_threshold_for_multiple_peaks(
-                x=x, p=p, x_grid=x_grid
-            )
+            threshold = self._solve_threshold_for_multiple_peaks(x=x, p=p, x_grid=x_grid)
         return threshold
 
-    def _solve_threshold_for_multiple_peaks(
-        self, x: np.ndarray, p: np.ndarray, x_grid: np.ndarray
-    ):
+    def _solve_threshold_for_multiple_peaks(self, x: np.ndarray, p: np.ndarray, x_grid: np.ndarray) -> float:
         """
         Handle the detection of > 2 peaks by smoothing the estimated PDF and
         rerunning the peak finding algorithm
@@ -905,17 +863,11 @@ class ThresholdGate(Gate):
         -------
         float
         """
-        smoothed_peak_finding_kwargs = self.method_kwargs.get(
-            "smoothed_peak_finding_kwargs", {}
-        )
-        smoothed_peak_finding_kwargs[
-            "min_peak_threshold"
-        ] = smoothed_peak_finding_kwargs.get(
+        smoothed_peak_finding_kwargs = self.method_kwargs.get("smoothed_peak_finding_kwargs", {})
+        smoothed_peak_finding_kwargs["min_peak_threshold"] = smoothed_peak_finding_kwargs.get(
             "min_peak_threshold", self.method_kwargs.get("min_peak_threshold", 0.05)
         )
-        smoothed_peak_finding_kwargs[
-            "peak_boundary"
-        ] = smoothed_peak_finding_kwargs.get(
+        smoothed_peak_finding_kwargs["peak_boundary"] = smoothed_peak_finding_kwargs.get(
             "peak_boundary", self.method_kwargs.get("peak_boundary", 0.1)
         )
         p, peaks = smoothed_peak_finding(p=p, **smoothed_peak_finding_kwargs)
@@ -924,7 +876,7 @@ class ThresholdGate(Gate):
         else:
             return find_local_minima(p=p, x=x_grid, peaks=peaks)
 
-    def _density_peak_finding(self, x: np.ndarray):
+    def _density_peak_finding(self, x: np.ndarray) -> (np.ndarray, np.ndarray, np.ndarray):
         """
         Estimate the underlying PDF of a single dimension using a convolution based
         KDE (KDEpy.FFTKDE), then run a peak finding algorithm (detecta.detect_peaks)
@@ -953,7 +905,7 @@ class ThresholdGate(Gate):
         )
         return peaks, x_grid, p
 
-    def _manual(self) -> list:
+    def _manual(self) -> List[float]:
         """
         Wrapper called if manual gating method. Searches the method kwargs and returns static thresholds
 
@@ -968,9 +920,7 @@ class ThresholdGate(Gate):
         """
         x_threshold = self.method_kwargs.get("x_threshold", None)
         y_threshold = self.method_kwargs.get("y_threshold", None)
-        assert (
-            x_threshold is not None
-        ), "Manual threshold gating requires the keyword argument 'x_threshold'"
+        assert x_threshold is not None, "Manual threshold gating requires the keyword argument 'x_threshold'"
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             x_threshold = apply_transform(
@@ -980,9 +930,7 @@ class ThresholdGate(Gate):
                 **kwargs,
             ).x.values[0]
         if self.y:
-            assert (
-                y_threshold is not None
-            ), "2D manual threshold gating requires the keyword argument 'y_threshold'"
+            assert y_threshold is not None, "2D manual threshold gating requires the keyword argument 'y_threshold'"
             if self.transform_y:
                 kwargs = self.transform_y_kwargs or {}
                 y_threshold = apply_transform(
@@ -994,7 +942,12 @@ class ThresholdGate(Gate):
         thresholds = [i for i in [x_threshold, y_threshold] if i is not None]
         return [float(i) for i in thresholds]
 
-    def _ctrl_fit(self, primary_data: pd.DataFrame, ctrl_data: pd.DataFrame):
+    def _ctrl_fit(
+        self,
+        primary_data: pd.DataFrame,
+        ctrl_data: pd.DataFrame,
+        transform: bool = True,
+    ) -> List[float]:
         """
         Estimate the thresholds to apply to dome primary data using the given control data
 
@@ -1002,6 +955,7 @@ class ThresholdGate(Gate):
         ----------
         primary_data: Pandas.DataFrame
         ctrl_data: Pandas.DataFrame
+        transform: bool (default=True)
 
         Returns
         -------
@@ -1010,13 +964,12 @@ class ThresholdGate(Gate):
         """
         self._xy_in_dataframe(data=primary_data)
         self._xy_in_dataframe(data=ctrl_data)
-        ctrl_data = self.transform(data=ctrl_data)
+        if transform:
+            ctrl_data = self.transform(data=ctrl_data)
         ctrl_data = self._dim_reduction(data=ctrl_data)
         dims = [i for i in [self.x, self.y] if i is not None]
         if self.sampling.get("method", None) is not None:
-            primary_data, ctrl_data = self._downsample(
-                data=primary_data
-            ), self._downsample(data=ctrl_data)
+            primary_data, ctrl_data = self._downsample(data=primary_data), self._downsample(data=ctrl_data)
         thresholds = list()
         for d in dims:
             fmo_threshold = self._find_threshold(ctrl_data[d].values)
@@ -1025,9 +978,7 @@ class ThresholdGate(Gate):
                 thresholds.append(fmo_threshold)
             else:
                 if len(peaks) > 2:
-                    t = self._solve_threshold_for_multiple_peaks(
-                        x=primary_data[d].values, p=p, x_grid=x_grid
-                    )
+                    t = self._solve_threshold_for_multiple_peaks(x=primary_data[d].values, p=p, x_grid=x_grid)
                 else:
                     t = find_local_minima(p=p, x=x_grid, peaks=peaks)
                 if t > fmo_threshold:
@@ -1036,7 +987,7 @@ class ThresholdGate(Gate):
                     thresholds.append(fmo_threshold)
         return thresholds
 
-    def yeo_johnson_inverse(self, thresholds: list) -> (float, float) or (float, None):
+    def yeo_johnson_inverse(self, thresholds: List[float]) -> Union[Tuple[float, float], Tuple[float, None]]:
         """
         Inverse any applied Yeo-Johnson transformation of resulting thresholds
 
@@ -1058,7 +1009,12 @@ class ThresholdGate(Gate):
             return thresholds[0], None
         return self._yeo_johnson.inverse_transform([thresholds])[0][0], None
 
-    def fit(self, data: pd.DataFrame, ctrl_data: pd.DataFrame or None = None) -> None:
+    def fit(
+        self,
+        data: pd.DataFrame,
+        ctrl_data: Optional[pd.DataFrame] = None,
+        transform: bool = True,
+    ) -> None:
         """
         Fit the gate using a given dataframe. If children already exist will raise an AssertionError
         and notify user to call `fit_predict`.
@@ -1069,27 +1025,30 @@ class ThresholdGate(Gate):
             Population data to fit threshold
         ctrl_data: Pandas.DataFrame, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
-
+        transform: bool (default=True)
+            If False, assumes data has already been transformed according to gating specifications.
         Returns
         -------
         None
 
         Raises
         ------
-        AssertionError
+        GateError
             If gate Children have already been defined i.e. fit has been called previously
         """
         data = data.copy()
-        data = self.transform(data=data)
+        if transform:
+            data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         if self._yeo_johnson is not None:
             data = self.yeo_johnson_transform(data)
-        assert len(self.children) == 0, (
-            "Children already defined for this gate. Call 'fit_predict' to "
-            "fit to new data and match populations to children, or call "
-            "'predict' to apply static thresholds to new data. If you want to "
-            "reset the gate and call 'fit' again, first call 'reset_gate'"
-        )
+        if len(self.children) == 0:
+            raise GateError(
+                "Children already defined for this gate. Call 'fit_predict' to "
+                "fit to new data and match populations to children, or call "
+                "'predict' to apply static thresholds to new data. If you want to "
+                "reset the gate and call 'fit' again, first call 'reset_gate'"
+            )
         if ctrl_data is not None:
             thresholds = self._ctrl_fit(primary_data=data, ctrl_data=ctrl_data)
         else:
@@ -1108,16 +1067,17 @@ class ThresholdGate(Gate):
                 ChildThreshold(
                     name=definition,
                     definition=definition,
-                    geom=ThresholdGeom(
-                        x_threshold=x_threshold, y_threshold=y_threshold
-                    ),
+                    geom=ThresholdGeom(x_threshold=x_threshold, y_threshold=y_threshold),
                 )
             )
         return None
 
     def fit_predict(
-        self, data: pd.DataFrame, ctrl_data: pd.DataFrame or None = None
-    ) -> list:
+        self,
+        data: pd.DataFrame,
+        ctrl_data: Optional[pd.DataFrame] = None,
+        transform: bool = True,
+    ) -> List[float]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -1129,6 +1089,8 @@ class ThresholdGate(Gate):
             Population data to fit threshold to
         ctrl_data: Pandas.DataFrame, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
+        transform: bool (default=True)
+            If False, assumes data has already been transformed according to gating specifications.
 
         Returns
         -------
@@ -1140,11 +1102,10 @@ class ThresholdGate(Gate):
         AssertionError
             If fit has not been called prior to fit_predict
         """
-        assert (
-            len(self.children) > 0
-        ), "No children defined for gate, call 'fit' before calling 'fit_predict'"
+        assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
         data = data.copy()
-        data = self.transform(data=data)
+        if transform:
+            data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         if ctrl_data is not None:
             thresholds = self._ctrl_fit(primary_data=data, ctrl_data=ctrl_data)
@@ -1160,12 +1121,10 @@ class ThresholdGate(Gate):
             x_threshold=thresholds[0],
             y_threshold=y_threshold,
         )
-        pops = self._generate_populations(
-            data=results, x_threshold=thresholds[0], y_threshold=y_threshold
-        )
+        pops = self._generate_populations(data=results, x_threshold=thresholds[0], y_threshold=y_threshold)
         return self._match_to_children(new_populations=pops)
 
-    def predict(self, data: pd.DataFrame) -> list:
+    def predict(self, data: pd.DataFrame, transform: bool = True) -> List[float]:
         """
         Using existing children associated to this gate, the previously calculated thresholds of
         these children will be applied to the given data and then Population objects created and
@@ -1176,7 +1135,8 @@ class ThresholdGate(Gate):
         ----------
         data: Pandas.DataFrame
             Data to apply static thresholds too
-
+        transform: bool (default=True)
+            If False, assumes data has already been transformed according to gating specifications.
         Returns
         -------
         List
@@ -1189,7 +1149,8 @@ class ThresholdGate(Gate):
         """
         assert len(self.children) > 0, "Must call 'fit' prior to predict"
         self._xy_in_dataframe(data=data)
-        data = self.transform(data=data)
+        if transform:
+            data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         if self.y is not None:
             data = threshold_2d(
@@ -1200,18 +1161,14 @@ class ThresholdGate(Gate):
                 y_threshold=self.children[0].geom.y_threshold,
             )
         else:
-            data = threshold_1d(
-                data=data, x=self.x, x_threshold=self.children[0].geom.x_threshold
-            )
+            data = threshold_1d(data=data, x=self.x, x_threshold=self.children[0].geom.x_threshold)
         return self._generate_populations(
             data=data,
             x_threshold=self.children[0].geom.x_threshold,
             y_threshold=self.children[0].geom.y_threshold,
         )
 
-    def _generate_populations(
-        self, data: dict, x_threshold: float, y_threshold: float or None
-    ) -> list:
+    def _generate_populations(self, data: dict, x_threshold: float, y_threshold: Optional[float]) -> List[Population]:
         """
         Generate populations from a standard dictionary of dataframes that have had thresholds applied.
 
@@ -1330,9 +1287,7 @@ class PolygonGate(Gate):
         super().__init__(*args, **values)
         assert self.y is not None, "Polygon gate expects a y-axis variable"
 
-    def _generate_populations(
-        self, data: pd.DataFrame, polygons: List[ShapelyPoly]
-    ) -> List[Population]:
+    def _generate_populations(self, data: pd.DataFrame, polygons: List[ShapelyPoly]) -> List[Population]:
         """
         Given a dataframe and a list of Polygon shapes as generated from the '_fit' method, generate a
         list of Population objects.
@@ -1373,7 +1328,7 @@ class PolygonGate(Gate):
             )
         return pops
 
-    def label_children(self, labels: dict, drop: bool = True) -> None:
+    def label_children(self, labels: Dict[str, str], drop: bool = True) -> None:
         """
         Rename children using a dictionary of labels where the key correspond to the existing child name
         and the value is the new desired population name. If the same population name is given to multiple
@@ -1393,12 +1348,11 @@ class PolygonGate(Gate):
 
         Raises
         ------
-        AssertionError
+        GateError
             If duplicate labels are provided
         """
-        assert len(set(labels.values())) == len(
-            labels.values()
-        ), "Duplicate labels provided. Child merging not available for polygon gates"
+        if len(set(labels.values())) != len(labels.values()):
+            raise GateError("Duplicate labels provided. Child merging not available for polygon gates")
         if drop:
             self.children = [c for c in self.children if c.name in labels.keys()]
         for c in self.children:
@@ -1418,7 +1372,7 @@ class PolygonGate(Gate):
 
         Raises
         ------
-        TypeError
+        GateError
             x_values or y_values is not type list
         """
         child.geom.x = self.x
@@ -1428,9 +1382,9 @@ class PolygonGate(Gate):
         child.geom.transform_x_kwargs = self.transform_x_kwargs
         child.geom.transform_y_kwargs = self.transform_y_kwargs
         if not isinstance(child.geom.x_values, list):
-            raise TypeError("ChildPolygon x_values should be of type list")
+            raise GateError("ChildPolygon x_values should be of type list")
         if not isinstance(child.geom.y_values, list):
-            raise TypeError("ChildPolygon y_values should be of type list")
+            raise GateError("ChildPolygon y_values should be of type list")
         self.children.append(child)
 
     def _match_to_children(self, new_populations: List[Population]) -> List[Population]:
@@ -1451,10 +1405,7 @@ class PolygonGate(Gate):
         """
         matched_populations = list()
         for child in self.children:
-            hausdorff_distances = [
-                child.geom.shape.hausdorff_distance(pop.geom.shape)
-                for pop in new_populations
-            ]
+            hausdorff_distances = [child.geom.shape.hausdorff_distance(pop.geom.shape) for pop in new_populations]
             matching_population = new_populations[int(np.argmin(hausdorff_distances))]
             matching_population.population_name = child.name
             matched_populations.append(matching_population)
@@ -1471,15 +1422,12 @@ class PolygonGate(Gate):
 
         Raises
         ------
-        AssertionError
+        GateError
             x_values or y_values missing from method kwargs
         """
-        x_values, y_values = self.method_kwargs.get(
-            "x_values", None
-        ), self.method_kwargs.get("y_values", None)
-        assert x_values is not None and y_values is not None, (
-            "For manual polygon gate must provide x_values and " "y_values"
-        )
+        x_values, y_values = self.method_kwargs.get("x_values", None), self.method_kwargs.get("y_values", None)
+        if x_values is None and y_values is None:
+            raise GateError("For manual polygon gate must provide x_values and " "y_values")
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             x_values = apply_transform(
@@ -1519,11 +1467,7 @@ class PolygonGate(Gate):
         """
         if self.method == "manual":
             return [self._manual()]
-        params = {
-            k: v
-            for k, v in self.method_kwargs.items()
-            if k not in ["yeo_johnson", "envelope_alpha", "conf"]
-        }
+        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
 
@@ -1554,7 +1498,7 @@ class PolygonGate(Gate):
             raise GeometryError("Failed to generate Polygon geometries")
         return polygons
 
-    def fit(self, data: pd.DataFrame, ctrl_data: None = None) -> None:
+    def fit(self, data: pd.DataFrame, ctrl_data: None = None, transform: bool = True) -> None:
         """
         Fit the gate using a given dataframe. This will generate new children using the calculated
         polygons. If children already exist will raise an AssertionError and notify user to call
@@ -1566,6 +1510,8 @@ class PolygonGate(Gate):
             Population data to fit gate to
         ctrl_data: None
             Redundant parameter, necessary for Gate signature. Ignore.
+        transform: bool (default=True)
+            If False, assumes data has already been transformed according to gating specifications.
 
         Returns
         -------
@@ -1577,10 +1523,10 @@ class PolygonGate(Gate):
             If Children have already been defined i.e. fit has been called previously without calling
             'reset_gate'
         """
-        assert (
-            len(self.children) == 0
-        ), "Gate is already defined, call 'reset_gate' to clear children"
-        data = self.transform(data=data)
+        if len(self.children) != 0:
+            GateError("Gate is already defined, call 'reset_gate' to clear children")
+        if transform:
+            data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         polygons = self._fit(data=data)
         for name, poly in zip(ascii_uppercase, polygons):
@@ -1594,9 +1540,7 @@ class PolygonGate(Gate):
                 )
             )
 
-    def fit_predict(
-        self, data: pd.DataFrame, ctrl_data: None = None
-    ) -> List[Population]:
+    def fit_predict(self, data: pd.DataFrame, ctrl_data: None = None, transform: bool = True) -> List[Population]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -1608,6 +1552,8 @@ class PolygonGate(Gate):
             Population data to fit gate to
         ctrl_data: None
             Redundant parameter, necessary for Gate signature. Ignore.
+        transform: bool (default=True)
+            If False, assumes data has already been transformed according to gating specifications.
 
         Returns
         -------
@@ -1619,16 +1565,13 @@ class PolygonGate(Gate):
         AssertionError
             If fit has not been previously called
         """
-        assert (
-            len(self.children) > 0
-        ), "No children defined for gate, call 'fit' before calling 'fit_predict'"
-        data = self.transform(data=data)
+        assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
+        if transform:
+            data = self.transform(data=data)
         data = self._dim_reduction(data=data)
-        return self._match_to_children(
-            self._generate_populations(data=data.copy(), polygons=self._fit(data=data))
-        )
+        return self._match_to_children(self._generate_populations(data=data.copy(), polygons=self._fit(data=data)))
 
-    def predict(self, data: pd.DataFrame) -> List[Population]:
+    def predict(self, data: pd.DataFrame, transform: bool = True) -> List[Population]:
         """
         Using existing children associated to this gate, the previously calculated polygons of
         these children will be applied to the given data and then Population objects created and
@@ -1639,6 +1582,8 @@ class PolygonGate(Gate):
         ----------
         data: Pandas.DataFrame
             Data to apply static polygons to
+        transform: bool (default=True)
+            If False, assumes data has already been transformed according to gating specifications.
 
         Returns
         -------
@@ -1650,11 +1595,10 @@ class PolygonGate(Gate):
         AssertionError
             If fit has not been previously called
         """
-        data = self.transform(data=data)
+        if transform:
+            data = self.transform(data=data)
         data = self._dim_reduction(data=data)
-        polygons = [
-            create_polygon(c.geom.x_values, c.geom.y_values) for c in self.children
-        ]
+        polygons = [create_polygon(c.geom.x_values, c.geom.y_values) for c in self.children]
         populations = self._generate_populations(data=data, polygons=polygons)
         for p, name in zip(populations, [c.name for c in self.children]):
             p.population_name = name
@@ -1770,8 +1714,7 @@ class EllipseGate(PolygonGate):
         angle = self.method_kwargs.get("angle", None)
         if self.transform_x:
             assert self.transform_x == self.transform_y, (
-                "Manual elliptical gate requires that x and y axis are "
-                "transformed to the same scale"
+                "Manual elliptical gate requires that x and y axis are " "transformed to the same scale"
             )
             kwargs = self.transform_x_kwargs or {}
             centroid = apply_transform(
@@ -1793,16 +1736,13 @@ class EllipseGate(PolygonGate):
             )
         if not all([x is not None for x in [centroid, width, height, angle]]):
             raise ValueError(
-                "Manual elliptical gate requires the following keyword arguments; "
-                "width, height, angle and centroid"
+                "Manual elliptical gate requires the following keyword arguments; " "width, height, angle and centroid"
             )
         if not len(centroid) == 2 and not all(isinstance(x, float) for x in centroid):
             raise TypeError("Centroid should be a list of two float values")
         if not all(isinstance(x, float) for x in [width, height, angle]):
             raise TypeError("Width, height, and angle should be of type float")
-        return ellipse_to_polygon(
-            centroid=centroid, width=width, height=height, angle=angle
-        )
+        return ellipse_to_polygon(centroid=centroid, width=width, height=height, angle=angle)
 
     def _fit(self, data: pd.DataFrame) -> List[ShapelyPoly]:
         """
@@ -1818,30 +1758,20 @@ class EllipseGate(PolygonGate):
         list
             List of Shapely polygon's
         """
-        if (
-            self._yeo_johnson is not None
-            or self.method_kwargs.get("probabilistic_ellipse", False) is False
-        ):
+        if self._yeo_johnson is not None or self.method_kwargs.get("probabilistic_ellipse", False) is False:
             return super()._fit(data=data)
         params = {
             k: v
             for k, v in self.method_kwargs.items()
-            if k
-            not in ["yeo_johnson", "envelope_alpha", "conf", "probabilistic_ellipse"]
+            if k not in ["yeo_johnson", "envelope_alpha", "conf", "probabilistic_ellipse"]
         }
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         self.model.fit(data[[self.x, self.y]])
-        ellipses = [
-            probabilistic_ellipse(covar, conf=self.conf)
-            for covar in self.model.covariances_
-        ]
-        polygons = [
-            ellipse_to_polygon(centroid, *ellipse)
-            for centroid, ellipse in zip(self.model.means_, ellipses)
-        ]
+        ellipses = [probabilistic_ellipse(covar, conf=self.conf) for covar in self.model.covariances_]
+        polygons = [ellipse_to_polygon(centroid, *ellipse) for centroid, ellipse in zip(self.model.means_, ellipses)]
         return polygons
 
 
@@ -1909,11 +1839,7 @@ class HuberGate(PolygonGate):
         self.model.fit(x, y)
 
     def _fit(self, data: pd.DataFrame) -> List[ShapelyPoly]:
-        params = {
-            k: v
-            for k, v in self.method_kwargs.items()
-            if k not in ["yeo_johnson", "envelope_alpha", "conf"]
-        }
+        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
         self.model = HuberRegressor(**params)
 
         self._xy_in_dataframe(data=data)
@@ -1936,160 +1862,7 @@ class HuberGate(PolygonGate):
         ]
 
 
-class BooleanGate(PolygonGate):
-    """
-    The BooleanGate is a special class of Gate that allows for merging, subtraction, and intersection methods.
-    A BooleanGate should be defined with one of the following string values as its 'method' and a set of
-    population names as 'populations' in method_kwargs:
-    * AND - generates a new population containing only events present in every population of a given
-    set of populations
-    * OR - generates a new population that is a merger of all unique events from all populations in a given
-    set of populations
-    * NOT - generates a new population that contains all events in some target population that are not
-    present in some set of other populations (taken as the first member of 'populations')
-    BooleanGate inherits from the PolygonGate and generates a Population with Polygon geometry. This
-    allows the user to view the resulting 'gate' as a polygon structure. This means
-    """
-
-    populations = mongoengine.ListField(required=True)
-
-    def __init__(self, method: str, populations: list, *args, **kwargs):
-        if method not in ["AND", "OR", "NOT"]:
-            raise ValueError("method must be one of: 'OR', 'AND' or 'NOT'")
-        super().__init__(*args, method=method, populations=populations, **kwargs)
-
-    def _or(self, data: List[pd.DataFrame]) -> pd.DataFrame:
-        """
-        OR operation, generates index of events that is a merger of all unique events from all populations in a given
-        set of populations.
-        Parameters
-        ----------
-        data: list
-            List of Pandas DataFrames
-        Returns
-        -------
-        Pandas.DataFrame
-            New population dataframe
-        """
-        idx = np.unique(
-            np.concatenate([df.index.values for df in data], axis=0), axis=0
-        )
-        return pd.concat(data).drop_duplicates().loc[idx].copy()
-
-    def _and(self, data: List[pd.DataFrame]) -> pd.DataFrame:
-        """
-        AND operation, generates index of events that are present in every population of a given
-        set of populations
-        Parameters
-        ----------
-        data: list
-            List of Pandas DataFrames
-        Returns
-        -------
-        Pandas.DataFrame
-            New population dataframe
-        """
-        idx = reduce(np.intersect1d, [df.index.values for df in data])
-        return pd.concat(data).drop_duplicates().loc[idx].copy()
-
-    def _not(self, data: List[pd.DataFrame]) -> pd.DataFrame:
-        """
-        NOT operation, generates index of events that contains all events in some target population that are not
-        present in some set of other populations
-        Parameters
-        ----------
-        data: list
-            List of Pandas DataFrames
-        Returns
-        -------
-        Pandas.DataFrame
-            New population dataframe
-        """
-        target = data[0]
-        subtraction_index = np.unique(
-            np.concatenate([df.index.values for df in data[1:]], axis=0), axis=0
-        )
-        idx = np.setdiff1d(target.index.values, subtraction_index)
-        return pd.concat(data).drop_duplicates().loc[idx].copy()
-
-    def _fit(self, data: List[pd.DataFrame]) -> (ShapelyPoly, pd.DataFrame):
-        """
-        Perform boolean operation on given DataFrames of population data
-        Parameters
-        ----------
-        data: list
-            List of population dataframes
-        target: Pandas.DataFrame
-            Required for NOT method
-        Returns
-        -------
-        Polygon, Pandas.DataFrame
-        Raises
-        ------
-        AssertionError
-            If target not provided and method is NOT
-        """
-        if self.method == "NOT":
-            data = self._not(data=data)
-        elif self.method == "OR":
-            data = self._or(data=data)
-        else:
-            data = self._and(data=data)
-        poly = create_envelope(
-            x_values=data[self.x].values, y_values=data[self.y].values
-        )
-        return poly, data
-
-    def fit(self, data: List[pd.DataFrame], ctrl_data=None):
-        """
-        Perform boolean operation on given DataFrames of population data. Will generate
-        a population with dummy name 'A'. Call 'label_children' to assign a simple name.
-        Parameters
-        ----------
-        data: list
-            List of Pandas DataFrames, one for each population
-        Returns
-        -------
-        None
-        """
-        data = [self.transform(x) for x in data]
-        poly, _ = self._fit(data=data)
-        self.add_child(
-            ChildPolygon(
-                name="A",
-                geom=PolygonGeom(
-                    x_values=poly.exterior.xy[0].tolist(),
-                    y_values=poly.exterior.xy[1].tolist(),
-                ),
-            )
-        )
-
-    def fit_predict(self, data: List[pd.DataFrame], ctrl_data=None):
-        """
-        Perform boolean operation on given DataFrames of population data
-        Parameters
-        ----------
-        data: list
-            List of Pandas DataFrames
-        target: Pandas.DataFrame
-            Required for NOT method and used to subtract from
-        Returns
-        -------
-        List
-            [New population object]
-        Raises
-        ------
-        AssertionError
-            If target is not provided and method is NOT
-        """
-        data = list(map(self.transform, data))
-        poly, pop_data = self._fit(data=data)
-        pop = self._generate_populations(data=pop_data, polygons=[poly])[0]
-        pop.population_name = self.children[0].name
-        return [pop]
-
-
-def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
+def merge_children(children: List) -> Union[Child, ChildThreshold, ChildPolygon]:
     """
     Given a list of Child objects, merge and return single child
 
@@ -2109,14 +1882,10 @@ def merge_children(children: list) -> Child or ChildThreshold or ChildPolygon:
     assert (
         len(set([type(x) for x in children])) == 1
     ), f"Children must be of same type; not, {[type(x) for x in children]}"
-    assert len(
-        set([c.name for c in children])
-    ), "Children should all have the same name"
+    assert len(set([c.name for c in children])), "Children should all have the same name"
     if isinstance(children[0], ChildThreshold):
         definition = ",".join([c.definition for c in children])
-        return ChildThreshold(
-            name=children[0].name, definition=definition, geom=children[0].geom
-        )
+        return ChildThreshold(name=children[0].name, definition=definition, geom=children[0].geom)
     if isinstance(children[0], ChildPolygon):
         merged_poly = cascaded_union([c.geom.shape for c in children])
         new_signature = pd.DataFrame([c.signature for c in children]).mean().to_dict()
@@ -2140,8 +1909,8 @@ def apply_threshold(
     data: pd.DataFrame,
     x: str,
     x_threshold: float,
-    y: str or None = None,
-    y_threshold: float or None = None,
+    y: Optional[str] = None,
+    y_threshold: Optional[float] = None,
 ) -> Dict[str, pd.DataFrame]:
     """
     Simple wrapper for threshold_1d and threhsold_2d
@@ -2151,24 +1920,20 @@ def apply_threshold(
     data: Pandas.DataFrame
     x: str
     x_threshold: float
-    y: str (optional)
-    y_threshold: float (optional)
+    y: str, optional
+    y_threshold: float, optional
 
     Returns
     -------
     dict
     """
     if y is not None:
-        return threshold_2d(
-            data=data, x=x, y=y, x_threshold=x_threshold, y_threshold=y_threshold
-        )
+        return threshold_2d(data=data, x=x, y=y, x_threshold=x_threshold, y_threshold=y_threshold)
     else:
         return threshold_1d(data=data, x=x, x_threshold=x_threshold)
 
 
-def threshold_1d(
-    data: pd.DataFrame, x: str, x_threshold: float
-) -> Dict[str, pd.DataFrame]:
+def threshold_1d(data: pd.DataFrame, x: str, x_threshold: float) -> Dict[str, pd.DataFrame]:
     """
     Apply the given threshold (x_threshold) to the x-axis variable (x) and return the
     resulting dataframes corresponding to the positive and negative populations.
@@ -2222,9 +1987,7 @@ def threshold_2d(
     }
 
 
-def find_peaks(
-    p: np.array, min_peak_threshold: float, peak_boundary: float
-) -> np.array:
+def find_peaks(p: np.array, min_peak_threshold: float, peak_boundary: float) -> np.ndarray:
     """
     Perform peak finding using the detecta package (see detecta.detect_peaks for details).
 
@@ -2245,9 +2008,7 @@ def find_peaks(
     numpy.ndarray
         Index of peaks
     """
-    peaks = detect_peaks(
-        p, mph=p[np.argmax(p)] * min_peak_threshold, mpd=len(p) * peak_boundary
-    )
+    peaks = detect_peaks(p, mph=p[np.argmax(p)] * min_peak_threshold, mpd=len(p) * peak_boundary)
     return peaks
 
 
@@ -2258,7 +2019,7 @@ def smoothed_peak_finding(
     min_peak_threshold: float = 0.05,
     peak_boundary: float = 0.1,
     **kwargs,
-) -> (np.array, np.array):
+) -> (np.ndarray, np.ndarray):
     """
     Given the grid space and probability vector of some PDF calculated using KDE,
     first attempt to smooth the probability vector using a Savitzky-Golay filter
@@ -2304,17 +2065,17 @@ def smoothed_peak_finding(
     return smoothed, find_peaks(smoothed, min_peak_threshold, peak_boundary)
 
 
-def find_local_minima(p: np.array, x: np.array, peaks: np.array) -> float:
+def find_local_minima(p: np.array, x: np.ndarray, peaks: np.ndarray) -> float:
     """
     Find local minima between the two highest peaks in the density distribution provided
 
     Parameters
     -----------
-    p: numpy.ndarray
+    p: numpy array
         probability vector as generated from KDE
-    x: numpy.ndarray
+    x: numpy array
         Grid space for probability vector
-    peaks: numpy.ndarray
+    peaks: numpy array
         array of indices for identified peaks
 
     Returns
@@ -2341,10 +2102,10 @@ def find_inflection_point(
     p: np.array,
     peak_idx: int,
     incline: bool = False,
-    window_size: int or None = None,
+    window_size: Optional[int] = None,
     polyorder: int = 3,
     **kwargs,
-):
+) -> float:
     """
     Given some probability vector and grid space that represents a PDF as calculated by KDE,
     and assuming this vector has a single peak of highest density, calculate the inflection point
@@ -2361,7 +2122,7 @@ def find_inflection_point(
     incline: bool (default=False)
         If true, calculates the inflection point of the incline towards the peak
         as opposed to the decline away from the peak
-    window_size: int (optional)
+    window_size: int, optional
         Window length of filter (must be an odd number). If not given then it is calculated as an
         odd integer nearest to a 10th of the grid length
     polyorder: int (default=3)
@@ -2391,8 +2152,8 @@ def update_threshold(
     population: Population,
     parent_data: pd.DataFrame,
     x_threshold: float,
-    y_threshold: float or None = None,
-):
+    y_threshold: Optional[float] = None,
+) -> Population:
     """
     Given an existing population and some new threshold(s) (different to what is already
     associated to the Population), update the Population index and geom accordingly.
@@ -2402,7 +2163,7 @@ def update_threshold(
     population: Population
     parent_data: Pandas.DataFrame
     x_threshold: float
-    y_threshold: float (optional)
+    y_threshold: float, optional
         Required if 2D threshold geometry
 
     Returns
@@ -2411,17 +2172,18 @@ def update_threshold(
 
     Raises
     ------
-    AssertionError
+    ValueError
         If y_threshold is missing despite population y_threshold being defined
     """
     if population.geom.y_threshold is None:
-        new_data = threshold_1d(
-            data=parent_data, x=population.geom.x, x_threshold=x_threshold
-        ).get(population.definition)
+        new_data = threshold_1d(data=parent_data, x=population.geom.x, x_threshold=x_threshold).get(
+            population.definition
+        )
         population.index = new_data.index.values
         population.geom.x_threshold = x_threshold
     else:
-        assert y_threshold is not None, "2D threshold requires y_threshold"
+        if y_threshold is None:
+            raise ValueError("2D threshold requires y_threshold")
         new_data = threshold_2d(
             data=parent_data,
             x=population.geom.x,
@@ -2438,8 +2200,11 @@ def update_threshold(
 
 
 def update_polygon(
-    population: Population, parent_data: pd.DataFrame, x_values: list, y_values: list
-):
+    population: Population,
+    parent_data: pd.DataFrame,
+    x_values: Iterable[float],
+    y_values: Iterable[float],
+) -> Population:
     """
     Given an existing population and some new definition for it's polygon gate
     (different to what is already associated to the Population), update the Population
@@ -2457,9 +2222,7 @@ def update_polygon(
     Population
     """
     poly = create_polygon(x=x_values, y=y_values)
-    new_data = inside_polygon(
-        df=parent_data, x=population.geom.x, y=population.geom.y, poly=poly
-    )
+    new_data = inside_polygon(df=parent_data, x=population.geom.x, y=population.geom.y, poly=poly)
     population.geom.x_values = x_values
     population.geom.y_values = y_values
     population.index = new_data.index.values
