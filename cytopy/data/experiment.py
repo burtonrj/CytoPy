@@ -30,28 +30,33 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-from ..flow.sampling import sample_dataframe
-from ..feedback import progress_bar
-from .fcs import FileGroup
-from .subject import Subject
-from .read_write import FCSFile
-from .mapping import ChannelMap
-from .errors import *
-from typing import *
+import gc
+import logging
+import os
+import re
 from collections import Counter
 from datetime import datetime
 from functools import wraps
-from warnings import warn
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Union
+
 import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
 import mongoengine
-import logging
+import numpy as np
+import pandas as pd
 import xlrd
-import os
-import re
-import gc
+
+from ..feedback import progress_bar
+from ..flow.sampling import sample_dataframe
+from .errors import DuplicateSampleError
+from .errors import MissingSampleError
+from .fcs import FileGroup
+from .mapping import ChannelMap
+from .read_write import FCSFile
+from .subject import Subject
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -110,9 +115,7 @@ def _check_nomenclature_headings(nomenclature: pd.DataFrame) -> None:
     ValueError
         If Nomenclature column names are incorrect
     """
-    if not all(
-        [x in ["name", "regex", "permutations", "case"] for x in nomenclature.columns]
-    ):
+    if not all([x in ["name", "regex", "permutations", "case"] for x in nomenclature.columns]):
         raise ValueError(
             "Nomenclature sheet of excel template must contain the following column headers: "
             "'name','regex','case','permutations'"
@@ -173,12 +176,8 @@ def check_excel_template(path: str) -> (pd.DataFrame, pd.DataFrame) or None:
                 if pd.isnull(name):
                     continue
                 if name not in nomenclature.name.values:
-                    logger.error(
-                        f"{name} missing from nomenclature, please review template"
-                    )
-                    raise ValueError(
-                        f"{name} missing from nomenclature, please review template"
-                    )
+                    logger.error(f"{name} missing from nomenclature, please review template")
+                    raise ValueError(f"{name} missing from nomenclature, please review template")
         return nomenclature, mappings
     except AssertionError as e:
         raise ValueError(e)
@@ -200,9 +199,7 @@ def check_duplication(x: List[str]) -> bool:
         True if duplicates are found, else False
     """
     x = [i if i else None for i in x]
-    duplicates = [
-        item for item, count in Counter(x).items() if count > 1 and item is not None
-    ]
+    duplicates = [item for item, count in Counter(x).items() if count > 1 and item is not None]
     if duplicates:
         logger.warning(f"Duplicate channel/markers identified: {duplicates}")
         return True
@@ -303,9 +300,7 @@ def _is_empty(x: str):
     return x
 
 
-def check_pairing(
-    channel_marker: Dict[str, str], ref_mappings: List[ChannelMap]
-) -> bool:
+def check_pairing(channel_marker: Dict[str, str], ref_mappings: List[ChannelMap]) -> bool:
     """
     Given a channel and marker check that a valid pairing exists in the list
     of given mappings.
@@ -322,19 +317,13 @@ def check_pairing(
         True if pairing exists, else False
     """
     logging.debug(f"Checking {channel_marker} has valid pairing in reference mappings")
-    channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(
-        channel_marker.get("marker")
-    )
-    if not any(
-        [n.check_matched_pair(channel=channel, marker=marker) for n in ref_mappings]
-    ):
+    channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(channel_marker.get("marker"))
+    if not any([n.check_matched_pair(channel=channel, marker=marker) for n in ref_mappings]):
         return False
     return True
 
 
-def _standardise(
-    x: Optional[str], ref: List[NormalisedName], mappings: List[ChannelMap], alt: str
-) -> str:
+def _standardise(x: Optional[str], ref: List[NormalisedName], mappings: List[ChannelMap], alt: str) -> str:
     """
     Given a channel/marker, either return the corresponding standard name
     according to a list of standards (ref) or if the channel/marker is None,
@@ -390,13 +379,9 @@ def standardise_names(
         If channel and marker are missing
     """
     logging.debug(f"Normalising channel/marker pairing {channel_marker}")
-    channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(
-        channel_marker.get("marker")
-    )
+    channel, marker = _is_empty(channel_marker.get("channel")), _is_empty(channel_marker.get("marker"))
     if channel is None and marker is None:
-        ValueError(
-            "Cannot standardise column names because both channel and marker missing from mappings"
-        )
+        ValueError("Cannot standardise column names because both channel and marker missing from mappings")
     channel = _standardise(channel, ref_channels, ref_mappings, marker)
     marker = _standardise(marker, ref_markers, ref_mappings, channel)
     normalised = {"channel": channel, "marker": marker}
@@ -432,9 +417,7 @@ def duplicate_mappings(mappings: List[dict]) -> None:
         raise ValueError("Duplicate markers provided")
 
 
-def missing_channels(
-    mappings: List[dict], channels: List[NormalisedName], errors: str = "raise"
-) -> None:
+def missing_channels(mappings: List[dict], channels: List[NormalisedName], errors: str = "raise") -> None:
     """
     Check a list of channel/marker dictionaries for missing channels according to
     the reference channels given.
@@ -454,9 +437,7 @@ def missing_channels(
     KeyError
         If channel is missing
     """
-    logging.debug(
-        f"Checking {mappings} for missing channels according to reference channels"
-    )
+    logging.debug(f"Checking {mappings} for missing channels according to reference channels")
     existing_channels = [x.get("channel") for x in mappings]
     for x in channels:
         if x.standard not in existing_channels:
@@ -518,11 +499,7 @@ class Panel(mongoengine.EmbeddedDocument):
         for col_name, attr in zip(["channel", "marker"], [self.channels, self.markers]):
             for name in mappings[col_name]:
                 if not pd.isnull(name):
-                    d = (
-                        nomenclature[nomenclature["name"] == name]
-                        .fillna("")
-                        .to_dict(orient="list")
-                    )
+                    d = nomenclature[nomenclature["name"] == name].fillna("").to_dict(orient="list")
                     attr.append(
                         NormalisedName(
                             standard=d["name"][0],
@@ -532,10 +509,7 @@ class Panel(mongoengine.EmbeddedDocument):
                         )
                     )
         mappings = mappings.fillna("").to_dict(orient="list")
-        self.mappings = [
-            ChannelMap(channel=c, marker=m)
-            for c, m in zip(mappings["channel"], mappings["marker"])
-        ]
+        self.mappings = [ChannelMap(channel=c, marker=m) for c, m in zip(mappings["channel"], mappings["marker"])]
 
     def create_from_dict(self, x: dict):
         """
@@ -559,14 +533,14 @@ class Panel(mongoengine.EmbeddedDocument):
         # Check validity of input dictionary
         logger.info(f"Generating new Panel definition from dictionary template")
 
-        err = "Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers, & mappings"
+        err = (
+            "Invalid template dictionary; must be a nested dictionary with parent keys: channels, markers, & mappings"
+        )
         if not all([k in ["channels", "markers", "mappings"] for k in x.keys()]):
             raise ValueError(err)
 
         if not isinstance(x["mappings"], list):
-            raise ValueError(
-                "Invalid template dictionary; mappings must be a list of tuples"
-            )
+            raise ValueError("Invalid template dictionary; mappings must be a list of tuples")
 
         if not all([len(i) == 2 for i in x["mappings"]]):
             raise ValueError(
@@ -670,9 +644,7 @@ class Experiment(mongoengine.Document):
 
     experiment_id = mongoengine.StringField(required=True, unique=True)
     panel = mongoengine.EmbeddedDocumentField(Panel)
-    fcs_files = mongoengine.ListField(
-        mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4)
-    )
+    fcs_files = mongoengine.ListField(mongoengine.ReferenceField(FileGroup, reverse_delete_rule=4))
     data_directory = mongoengine.StringField(required=True)
     flags = mongoengine.StringField(required=False)
     notes = mongoengine.StringField(required=False)
@@ -749,12 +721,8 @@ class Experiment(mongoengine.Document):
         """
         for f in self.fcs_files:
             if sample_id == "all" or f.primary_id == sample_id:
-                logger.info(
-                    f"Deleting all populations from FileGroup {sample_id}; {f.id}"
-                )
-                f.populations = [
-                    p for p in f.populations if p.population_name == "root"
-                ]
+                logger.info(f"Deleting all populations from FileGroup {sample_id}; {f.id}")
+                f.populations = [p for p in f.populations if p.population_name == "root"]
                 f.save()
 
     def sample_exists(self, sample_id: str) -> bool:
@@ -795,14 +763,10 @@ class Experiment(mongoengine.Document):
         """
         logger.debug(f"Attempting to fetch FileGroup {sample_id}")
         if not self.sample_exists(sample_id):
-            raise MissingSampleError(
-                f"Invalid sample: {sample_id} not associated with this experiment"
-            )
+            raise MissingSampleError(f"Invalid sample: {sample_id} not associated with this experiment")
         return [f for f in self.fcs_files if f.primary_id == sample_id][0]
 
-    def filter_samples_by_subject(
-        self, query: Union[str, mongoengine.queryset.visitor.Q]
-    ) -> List:
+    def filter_samples_by_subject(self, query: Union[str, mongoengine.queryset.visitor.Q]) -> List:
         """
         Filter FileGroups associated to this experiment based on some subject meta-data
 
@@ -815,9 +779,7 @@ class Experiment(mongoengine.Document):
         -------
         List
         """
-        logger.debug(
-            f"Fetching list of FileGroups associated to Subject on query {query}"
-        )
+        logger.debug(f"Fetching list of FileGroups associated to Subject on query {query}")
         matches = list()
         for f in self.fcs_files:
             try:
@@ -827,9 +789,7 @@ class Experiment(mongoengine.Document):
                 logger.debug(f"No subject associated to {f.primary_id}; {f.id}")
                 continue
             except mongoengine.MultipleObjectsReturned:
-                logger.debug(
-                    f"Multiple matches to subject meta data for {f.primary_id}; {f.id}"
-                )
+                logger.debug(f"Multiple matches to subject meta data for {f.primary_id}; {f.id}")
                 matches.append(f.primary_id)
         return matches
 
@@ -872,9 +832,7 @@ class Experiment(mongoengine.Document):
 
     def _sample_exists(self, sample_id: str):
         if self.sample_exists(sample_id):
-            raise DuplicateSampleError(
-                f"A file group with id {sample_id} already exists"
-            )
+            raise DuplicateSampleError(f"A file group with id {sample_id} already exists")
 
     def _add_data(
         self,
@@ -989,14 +947,10 @@ class Experiment(mongoengine.Document):
             try:
                 filegrp.subject = Subject.objects(subject_id=subject_id).get()
             except mongoengine.errors.DoesNotExist:
-                logger.warning(
-                    f"Error: no such patient {subject_id}, continuing without association."
-                )
+                logger.warning(f"Error: no such patient {subject_id}, continuing without association.")
         filegrp.save()
 
-        logger.info(
-            f"Successfully created {sample_id} and associated to {self.experiment_id}"
-        )
+        logger.info(f"Successfully created {sample_id} and associated to {self.experiment_id}")
         self.fcs_files.append(filegrp)
         self.save()
         del filegrp
@@ -1073,8 +1027,7 @@ class Experiment(mongoengine.Document):
             logger.info("Applying compensation...")
             primary_data = compensate_data(primary_data.values, comp_matrix.values)
             controls = {
-                ctrl_id: compensate_data(ctrl_data, comp_matrix.values)
-                for ctrl_id, ctrl_data in controls.items()
+                ctrl_id: compensate_data(ctrl_data, comp_matrix.values) for ctrl_id, ctrl_data in controls.items()
             }
             compensated = True
         self._add_data(
@@ -1193,9 +1146,7 @@ class Experiment(mongoengine.Document):
             transform_kwargs=transform_kwargs,
         )
 
-    def _standardise_mappings(
-        self, mappings: List[Dict], missing_error: str
-    ) -> List[Dict]:
+    def _standardise_mappings(self, mappings: List[Dict], missing_error: str) -> List[Dict]:
         """
         Given some mappings (list of dictionaries with keys: channel, marker) compare the
         mappings to the Experiment Panel. Returns the standardised mappings.
@@ -1228,12 +1179,8 @@ class Experiment(mongoengine.Document):
         )
         for cm in mappings:
             if not check_pairing(ref_mappings=self.panel.mappings, channel_marker=cm):
-                raise ValueError(
-                    f"The channel/marker pairing {cm} does not correspond to any defined in panel"
-                )
-        missing_channels(
-            mappings=mappings, channels=self.panel.channels, errors=missing_error
-        )
+                raise ValueError(f"The channel/marker pairing {cm} does not correspond to any defined in panel")
+        missing_channels(mappings=mappings, channels=self.panel.channels, errors=missing_error)
         duplicate_mappings(mappings)
         return mappings
 
@@ -1256,9 +1203,7 @@ class Experiment(mongoengine.Document):
         ax.bar(ctrl_counts.keys(), ctrl_counts.values())
         return ax
 
-    def population_statistics(
-        self, populations: Union[List, None] = None
-    ) -> pd.DataFrame:
+    def population_statistics(self, populations: Union[List, None] = None) -> pd.DataFrame:
         """
         Generates a Pandas DataFrame of population statistics for all FileGroups
         of an Experiment, for the given populations or all available populations
@@ -1275,9 +1220,7 @@ class Experiment(mongoengine.Document):
         data = list()
         for f in self.fcs_files:
             for p in populations or f.list_populations():
-                df = pd.DataFrame(
-                    {k: [v] for k, v in f.population_stats(population=p).items()}
-                )
+                df = pd.DataFrame({k: [v] for k, v in f.population_stats(population=p).items()})
                 df["sample_id"] = f.primary_id
                 s = f.subject
                 if s is not None:
@@ -1305,14 +1248,10 @@ class Experiment(mongoengine.Document):
             for f in self.fcs_files:
                 pops = [p for p in targets if p in f.list_populations()]
                 try:
-                    f.merge_non_geom_populations(
-                        populations=pops, new_population_name=new_population_name
-                    )
+                    f.merge_non_geom_populations(populations=pops, new_population_name=new_population_name)
                     f.save()
                 except ValueError as e:
-                    logger.warning(
-                        f"Failed to merge populations for {f.primary_id}: {str(e)}"
-                    )
+                    logger.warning(f"Failed to merge populations for {f.primary_id}: {str(e)}")
 
     def delete(self, signal_kwargs=None, **write_concern):
         """
@@ -1324,7 +1263,7 @@ class Experiment(mongoengine.Document):
         """
         logger.info(f"Attempting to delete experiment {self.experiment_id}")
         for f in self.fcs_files:
-            logger.info(f"deleting associated FileGroup {f.primary_id}")
+            logger.debug(f"deleting associated FileGroup {f.primary_id}")
             f.delete()
         self.save()
         super().delete(signal_kwargs=signal_kwargs, **write_concern)
@@ -1380,6 +1319,20 @@ def single_cell_dataframe(
         Provide a list of populations and additional columns will be appended to resulting
         DataFrame containing the fraction of the requested population compared to each population
         in this list
+    sample_size: int or float, optional
+        If given, the DataFrame will either be downsampled after aquiring data from each FileGroup
+        or FileGroups are sampled individually - this behaviour is controlled by 'sampling_level'.
+        If sampling_level = "file", then the sample_size is the number of events to obtain from each
+        FileGroup. If sampling_level = "experiment", then the sampling size is the desired size of the
+        resulting concatenated DataFrame.
+    sampling_level: str, (default="file")
+        If "file" (default) then each FileGroup is sampled before concatenating into a single DataFrame.
+        If "Experiment", then data is obtained from each FileGroup first, and then the concatenated
+        data is sampled.
+    sampling_method: str (default="uniform")
+        The sampling method to use; see cytopy.flow.sampling
+    sampling_kwargs: Dict, optional
+        Additional keyword arguments passed to sampling method
 
     Returns
     -------
@@ -1414,9 +1367,6 @@ def single_cell_dataframe(
         kwargs.pop("frac_of")
         kwargs["ctrl"] = ctrl
 
-    if sample_size is not None and sampling_level == "file":
-        sample_size = int(sample_size / len(sample_ids))
-
     for _id in progress_bar(sample_ids, verbose=verbose):
         fg = experiment.get_sample(sample_id=_id)
         logger.debug(f"Loading FileGroup data from {_id}; {fg.id}")
@@ -1434,9 +1384,9 @@ def single_cell_dataframe(
             )
         data.append(pop_data)
 
-    data = pd.concat(
-        [df.reset_index().rename({"index": "original_index"}, axis=1) for df in data]
-    ).reset_index(drop=True)
+    data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1) for df in data]).reset_index(
+        drop=True
+    )
     data.index = list(data.index)
 
     if sample_size is not None and sampling_level == "experiment":
