@@ -14,6 +14,11 @@ class ExperimentError(DataError):
         super(self).__init__(message)
 
 
+class GateError(DataError):
+    def __init__(self, message: str):
+        super(self).__init__(message)
+
+
 class MissingExperimentError(DataError):
     def __init__(self, experiment_name: str):
         super(self).__init__(f"Invalid experiment, {experiment_name} does not exist!")
@@ -71,6 +76,4 @@ class MissingPopulationError(Exception):
 
 class InsufficientEventsError(Exception):
     def __init__(self, population_id: str, filegroup_id: str):
-        super(self).__init__(
-            f"Insufficient events in {population_id} does not exists for {filegroup_id}!"
-        )
+        super(self).__init__(f"Insufficient events in {population_id} does not exists for {filegroup_id}!")
