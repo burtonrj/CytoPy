@@ -29,12 +29,13 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from functools import partial
+from typing import *
+from warnings import warn
+
+import numpy as np
+import pandas as pd
 from flowutils import transforms
 from sklearn import preprocessing
-from warnings import warn
-from typing import *
-import pandas as pd
-import numpy as np
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -87,9 +88,7 @@ class Transformer:
     kwargs: dict
     """
 
-    def __init__(
-        self, transform_function: callable, inverse_function: callable, **kwargs
-    ):
+    def __init__(self, transform_function: callable, inverse_function: callable, **kwargs):
         self.transform = transform_function
         self.inverse = inverse_function
         self.kwargs = kwargs or {}
@@ -130,9 +129,7 @@ class Transformer:
                 index=original_index,
             )
         else:
-            raise TransformError(
-                "Invalid transform function, missing argument 'channel_indices' or 'channels'"
-            )
+            raise TransformError("Invalid transform function, missing argument 'channel_indices' or 'channels'")
         data[features] = data[features].astype(float)
         return data
 
@@ -323,13 +320,10 @@ class LogTransformer(Transformer):
                 inverse_function=lambda x: 2 ** x,
             )
         elif base == "natural":
-            super().__init__(
-                transform_function=partial(np.log, **kwargs), inverse_function=np.exp
-            )
+            super().__init__(transform_function=partial(np.log, **kwargs), inverse_function=np.exp)
         else:
             raise TransformError(
-                "Invalid LogTransformer method, expected one of:"
-                "'parametrized', 10, 2, or 'natural'"
+                "Invalid LogTransformer method, expected one of:" "'parametrized', 10, 2, or 'natural'"
             )
 
     def scale(self, data: pd.DataFrame, features: list):
@@ -496,9 +490,7 @@ class Scaler:
             Additional keyword arguments used when initialising Scikit-Learn object
         """
         if method not in SCALERS.keys():
-            raise TransformError(
-                f"Method not supported, must be one of: {list(SCALERS.keys())}"
-            )
+            raise TransformError(f"Method not supported, must be one of: {list(SCALERS.keys())}")
         kwargs = kwargs or {}
         if method == "yeo_johnson":
             kwargs["method"] = "yeo-johnson"
@@ -546,9 +538,7 @@ class Scaler:
             If the chosen Scikit-Learn method does not support inverse transform
         """
         if getattr(self._scaler, "inverse_transform", None) is None:
-            raise TransformError(
-                "Chosen scaler method does not support inverse transformation"
-            )
+            raise TransformError("Chosen scaler method does not support inverse transformation")
         else:
             data = data.copy()
             data[features] = self._scaler.inverse_transform(data[features].values)
@@ -580,8 +570,8 @@ TRANSFORMERS = {
 
 def apply_transform(
     data: pd.DataFrame,
-    features: list or dict,
-    method: str or None = "logicle",
+    features: List[str],
+    method: str = "logicle",
     return_transformer: bool = False,
     **kwargs,
 ):
@@ -622,9 +612,7 @@ def apply_transform(
             return data, None
         return data
     if method not in TRANSFORMERS.keys():
-        raise TransformError(
-            f"Invalid transform, must be one of: {list(TRANSFORMERS.keys())}"
-        )
+        raise TransformError(f"Invalid transform, must be one of: {list(TRANSFORMERS.keys())}")
     method = TRANSFORMERS.get(method)(**kwargs)
     if return_transformer:
         x = method.scale(data=data, features=features)
@@ -632,9 +620,7 @@ def apply_transform(
     return method.scale(data=data, features=features)
 
 
-def apply_transform_map(
-    data: pd.DataFrame, feature_method: dict, kwargs: dict or None = None
-):
+def apply_transform_map(data: pd.DataFrame, feature_method: dict, kwargs: dict or None = None):
     """
     Wrapper function to cytopy.flow.transform.apply_transform; takes a dictionary (feature_method) where
     each key is the name of a feature and the value the transform to be applied to that feature.

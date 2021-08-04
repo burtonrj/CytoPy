@@ -229,6 +229,7 @@ class Gate(mongoengine.Document):
     transform_y = mongoengine.StringField(required=False, default=None)
     transform_x_kwargs = mongoengine.DictField()
     transform_y_kwargs = mongoengine.DictField()
+    use_transform_caching = mongoengine.BooleanField(default=True)
     sampling = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
     ctrl_x = mongoengine.StringField()
