@@ -71,3 +71,14 @@ We are looking for open source contributors to help with the following projects:
 * Graphical user interface deployed with Electron JS to expose CytoPy to scientists without training in Python
 * Expansion of test coverage for version 2.0.0
 * CytoPySQL: a lightweight clone of CytoPy that swaps out mongoengine for PeeWee ORM, granting the use of SQLite for those that cannot host a MongoDB service on their local machine or on Mongo Atlas
+
+## Update 02/08/2021
+
+Version 3 is cooking! Including:
+* Ensemble clustering
+* Calibration for supervised classification
+* Caching of transformations
+* Logging and improved documentation
+* Now in black!
+
+Coming soon. For more info reach out at burtonrj@cardiff.ac.uk
