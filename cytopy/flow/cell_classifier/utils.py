@@ -1,10 +1,73 @@
-from sklearn.utils.class_weight import compute_class_weight
-from sklearn import metrics as skmetrics
-from typing import *
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
 import inspect
+from typing import Dict
+from typing import Iterable
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn import metrics as skmetrics
+from sklearn.base import ClassifierMixin
+from sklearn.model_selection import learning_curve
+from sklearn.utils.class_weight import compute_class_weight
+
+
+def plot_learning_curve(
+    model: ClassifierMixin,
+    x: pd.DataFrame,
+    y: np.ndarray,
+    ax: Optional[plt.Axes] = None,
+    x_label: str = "Training examples",
+    y_label: str = "Score",
+    train_sizes: Optional[np.array] = None,
+    verbose: int = 1,
+    **kwargs,
+):
+    train_sizes = train_sizes or np.linspace(0.1, 1.0, 10)
+    ax = ax or plt.subplots(figsize=(5, 5))[1]
+    train_sizes, train_scores, test_scores = learning_curve(
+        model,
+        x,
+        y,
+        verbose=verbose,
+        return_times=False,
+        train_sizes=train_sizes,
+        **kwargs,
+    )
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+    ax.grid()
+    ax.fill_between(
+        train_sizes,
+        train_scores_mean - train_scores_std,
+        train_scores_mean + train_scores_std,
+        alpha=0.1,
+        color="r",
+    )
+    ax.fill_between(
+        train_sizes,
+        test_scores_mean - test_scores_std,
+        test_scores_mean + test_scores_std,
+        alpha=0.1,
+        color="g",
+    )
+    ax.plot(train_sizes, train_scores_mean, "o-", color="r", label="Training score")
+    ax.plot(
+        train_sizes,
+        test_scores_mean,
+        "o-",
+        color="g",
+        label="Cross-validation score",
+    )
+    ax.legend(loc="best")
+    ax.set_xlabel(xlabel=x_label)
+    ax.set_ylabel(ylabel=y_label)
+    return ax
 
 
 def calc_metrics(
@@ -57,9 +120,7 @@ def calc_metrics(
     i = 1
     for m in metrics:
         if callable(m):
-            results[f"custom_metric_{i}"] = m(
-                y_true=y_true, y_pred=y_pred, y_score=y_score
-            )
+            results[f"custom_metric_{i}"] = m(y_true=y_true, y_pred=y_pred, y_score=y_score)
             i += 1
             continue
         if "f1" in m:
@@ -69,15 +130,11 @@ def calc_metrics(
             else:
                 avg = None
             f = getattr(skmetrics, "f1_score")
-            assert (
-                y_pred is not None
-            ), "For F1 score predictions must be provided;`y_pred` is None"
+            assert y_pred is not None, "For F1 score predictions must be provided;`y_pred` is None"
             results[m] = f(y_true=y_true, y_pred=y_pred, average=avg)
         elif m == "roc_auc_score":
             f = getattr(skmetrics, m)
-            results[m] = f(
-                y_true=y_true, y_score=y_score, multi_class="ovo", average="macro"
-            )
+            results[m] = f(y_true=y_true, y_score=y_score, multi_class="ovo", average="macro")
         else:
             f = getattr(skmetrics, m)
             if "y_score" in inspect.signature(f).parameters.keys():
@@ -90,9 +147,7 @@ def calc_metrics(
             elif "y_pred" in inspect.signature(f).parameters.keys():
                 results[m] = f(y_true=y_true, y_pred=y_pred)
             else:
-                raise ValueError(
-                    "Unexpected metric. Signature should contain either 'y_score' or 'y_pred'"
-                )
+                raise ValueError("Unexpected metric. Signature should contain either 'y_score' or 'y_pred'")
 
     return results
 
@@ -172,16 +227,12 @@ def assert_population_labels(ref, expected_labels: list):
     AssertionError
         Ref missing expected populations
     """
-    assert (
-        len(ref.populations) > 1
-    ), "Reference sample does not contain any gated populations"
+    assert len(ref.populations) > 1, "Reference sample does not contain any gated populations"
     for x in expected_labels:
         assert x in ref.tree.keys(), f"Ref FileGroup missing expected population {x}"
 
 
-def check_downstream_populations(
-    ref, root_population: str, population_labels: list
-) -> None:
+def check_downstream_populations(ref, root_population: str, population_labels: list) -> None:
     """
     Check that in the ordered list of population labels, all populations are downstream
     of the given 'root' population.
