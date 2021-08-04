@@ -845,8 +845,6 @@ class Experiment(mongoengine.Document):
         processing_datetime: Optional[str] = None,
         collection_datetime: Optional[str] = None,
         missing_error: str = "raise",
-        cache_transforms: Optional[List[str]] = None,
-        transform_kwargs: Optional[Dict] = None,
     ) -> None:
         """
         Create a new FileGroup and associate with this experiment. This is an internal method
@@ -872,12 +870,6 @@ class Experiment(mongoengine.Document):
         missing_error: str, (default="raise")
             How to handle missing channels (channels present in the experiment staining panel but
             absent from mappings). Should either be "raise" (raises an error) or "warn".
-        cache_transforms: List[str], optional
-            If provided, should be the names of valid transformation methods. Additional transformed data will be stored
-            with the FileGroup to avoid costly recalculation later.
-        transform_kwargs: Dict, optional
-            Transform arguments to accompany the transforms listed in cache_transforms - keys should match
-            the name of the transform
         processing_datetime: str, optional
         collection_datetime: str, optional
 
@@ -889,8 +881,6 @@ class Experiment(mongoengine.Document):
         processing_datetime = processing_datetime or datetime.now()
         collection_datetime = collection_datetime or datetime.now()
         controls = controls or {}
-        cache_transforms = cache_transforms or []
-        transform_kwargs = transform_kwargs or {}
 
         try:
             mappings = mappings or primary_data.channel_mappings
@@ -920,14 +910,6 @@ class Experiment(mongoengine.Document):
             data_directory=self.data_directory,
         )
 
-        for transform in cache_transforms:
-            logger.info(f"Caching transform {transform}")
-            filegrp.transform_and_cache(
-                source="primary",
-                transform=transform,
-                **transform_kwargs.get(transform, {}),
-            )
-
         for ctrl_id, ctrl_data in controls.items():
             logger.info(f"Adding control file {ctrl_id}...")
             if isinstance(primary_data, pd.DataFrame):
@@ -935,13 +917,6 @@ class Experiment(mongoengine.Document):
             else:
                 data = ctrl_data.event_data
             filegrp.add_ctrl_file(data=data, ctrl_id=ctrl_id)
-            for transform in cache_transforms:
-                logger.info(f"Caching transform {transform} for {ctrl_id}")
-                filegrp.transform_and_cache(
-                    source=ctrl_id,
-                    transform=transform,
-                    **transform_kwargs.get(transform, {}),
-                )
 
         if subject_id is not None:
             try:
@@ -968,8 +943,6 @@ class Experiment(mongoengine.Document):
         processing_datetime: Optional[str] = None,
         collection_datetime: Optional[str] = None,
         missing_error: str = "raise",
-        cache_transforms: Optional[List[str]] = None,
-        transform_kwargs: Optional[Dict] = None,
     ) -> None:
         """
         Add new single cell cytometry data to the experiment, under a new sample ID, using
@@ -1002,12 +975,6 @@ class Experiment(mongoengine.Document):
         missing_error: str, (default="raise")
             How to handle missing channels (channels present in the experiment staining panel but
             absent from mappings). Should either be "raise" (raises an error) or "warn".
-        cache_transforms: List[str], optional
-            If provided, should be the names of valid transformation methods. Additional transformed data will be stored
-            with the FileGroup to avoid costly recalculation later.
-        transform_kwargs: Dict, optional
-            Transform arguments to accompany the transforms listed in cache_transforms - keys should match
-            the name of the transform
 
         Returns
         -------
@@ -1040,8 +1007,6 @@ class Experiment(mongoengine.Document):
             processing_datetime=processing_datetime,
             collection_datetime=collection_datetime,
             missing_error=missing_error,
-            cache_transforms=cache_transforms,
-            transform_kwargs=transform_kwargs,
         )
 
     @panel_defined
@@ -1056,8 +1021,6 @@ class Experiment(mongoengine.Document):
         processing_datetime: Optional[str] = None,
         collection_datetime: Optional[str] = None,
         missing_error: str = "raise",
-        cache_transforms: Optional[List[str]] = None,
-        transform_kwargs: Optional[Dict] = None,
     ):
         """
         Add new single cell cytometry data to the experiment, under a new sample ID, using
@@ -1088,12 +1051,6 @@ class Experiment(mongoengine.Document):
         missing_error: str, (default="raise")
             How to handle missing channels (channels present in the experiment staining panel but
             absent from mappings). Should either be "raise" (raises an error) or "warn".
-        cache_transforms: List[str], optional
-            If provided, should be the names of valid transformation methods. Additional transformed data will be stored
-            with the FileGroup to avoid costly recalculation later.
-        transform_kwargs: Dict, optional
-            Transform arguments to accompany the transforms listed in cache_transforms - keys should match
-            the name of the transform
 
         Returns
         -------
@@ -1142,8 +1099,6 @@ class Experiment(mongoengine.Document):
             processing_datetime=processing_datetime,
             collection_datetime=collection_datetime,
             missing_error=missing_error,
-            cache_transforms=cache_transforms,
-            transform_kwargs=transform_kwargs,
         )
 
     def _standardise_mappings(self, mappings: List[Dict], missing_error: str) -> List[Dict]:

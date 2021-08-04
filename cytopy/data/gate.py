@@ -229,7 +229,6 @@ class Gate(mongoengine.Document):
     transform_y = mongoengine.StringField(required=False, default=None)
     transform_x_kwargs = mongoengine.DictField()
     transform_y_kwargs = mongoengine.DictField()
-    use_transform_caching = mongoengine.BooleanField(default=True)
     sampling = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
     ctrl_x = mongoengine.StringField()
@@ -947,7 +946,6 @@ class ThresholdGate(Gate):
         self,
         primary_data: pd.DataFrame,
         ctrl_data: pd.DataFrame,
-        transform: bool = True,
     ) -> List[float]:
         """
         Estimate the thresholds to apply to dome primary data using the given control data
@@ -956,7 +954,6 @@ class ThresholdGate(Gate):
         ----------
         primary_data: Pandas.DataFrame
         ctrl_data: Pandas.DataFrame
-        transform: bool (default=True)
 
         Returns
         -------
@@ -965,8 +962,7 @@ class ThresholdGate(Gate):
         """
         self._xy_in_dataframe(data=primary_data)
         self._xy_in_dataframe(data=ctrl_data)
-        if transform:
-            ctrl_data = self.transform(data=ctrl_data)
+        ctrl_data = self.transform(data=ctrl_data)
         ctrl_data = self._dim_reduction(data=ctrl_data)
         dims = [i for i in [self.x, self.y] if i is not None]
         if self.sampling.get("method", None) is not None:
@@ -1010,12 +1006,7 @@ class ThresholdGate(Gate):
             return thresholds[0], None
         return self._yeo_johnson.inverse_transform([thresholds])[0][0], None
 
-    def fit(
-        self,
-        data: pd.DataFrame,
-        ctrl_data: Optional[pd.DataFrame] = None,
-        transform: bool = True,
-    ) -> None:
+    def fit(self, data: pd.DataFrame, ctrl_data: Optional[pd.DataFrame] = None) -> None:
         """
         Fit the gate using a given dataframe. If children already exist will raise an AssertionError
         and notify user to call `fit_predict`.
@@ -1026,8 +1017,6 @@ class ThresholdGate(Gate):
             Population data to fit threshold
         ctrl_data: Pandas.DataFrame, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
-        transform: bool (default=True)
-            If False, assumes data has already been transformed according to gating specifications.
         Returns
         -------
         None
@@ -1038,8 +1027,7 @@ class ThresholdGate(Gate):
             If gate Children have already been defined i.e. fit has been called previously
         """
         data = data.copy()
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         if self._yeo_johnson is not None:
             data = self.yeo_johnson_transform(data)
@@ -1073,12 +1061,7 @@ class ThresholdGate(Gate):
             )
         return None
 
-    def fit_predict(
-        self,
-        data: pd.DataFrame,
-        ctrl_data: Optional[pd.DataFrame] = None,
-        transform: bool = True,
-    ) -> List[float]:
+    def fit_predict(self, data: pd.DataFrame, ctrl_data: Optional[pd.DataFrame] = None) -> List[float]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -1090,8 +1073,6 @@ class ThresholdGate(Gate):
             Population data to fit threshold to
         ctrl_data: Pandas.DataFrame, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
-        transform: bool (default=True)
-            If False, assumes data has already been transformed according to gating specifications.
 
         Returns
         -------
@@ -1105,8 +1086,7 @@ class ThresholdGate(Gate):
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
         data = data.copy()
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         if ctrl_data is not None:
             thresholds = self._ctrl_fit(primary_data=data, ctrl_data=ctrl_data)
@@ -1125,7 +1105,7 @@ class ThresholdGate(Gate):
         pops = self._generate_populations(data=results, x_threshold=thresholds[0], y_threshold=y_threshold)
         return self._match_to_children(new_populations=pops)
 
-    def predict(self, data: pd.DataFrame, transform: bool = True) -> List[float]:
+    def predict(self, data: pd.DataFrame) -> List[float]:
         """
         Using existing children associated to this gate, the previously calculated thresholds of
         these children will be applied to the given data and then Population objects created and
@@ -1136,8 +1116,6 @@ class ThresholdGate(Gate):
         ----------
         data: Pandas.DataFrame
             Data to apply static thresholds too
-        transform: bool (default=True)
-            If False, assumes data has already been transformed according to gating specifications.
         Returns
         -------
         List
@@ -1150,8 +1128,7 @@ class ThresholdGate(Gate):
         """
         assert len(self.children) > 0, "Must call 'fit' prior to predict"
         self._xy_in_dataframe(data=data)
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         if self.y is not None:
             data = threshold_2d(
@@ -1499,7 +1476,7 @@ class PolygonGate(Gate):
             raise GeometryError("Failed to generate Polygon geometries")
         return polygons
 
-    def fit(self, data: pd.DataFrame, ctrl_data: None = None, transform: bool = True) -> None:
+    def fit(self, data: pd.DataFrame, ctrl_data: None = None) -> None:
         """
         Fit the gate using a given dataframe. This will generate new children using the calculated
         polygons. If children already exist will raise an AssertionError and notify user to call
@@ -1526,8 +1503,7 @@ class PolygonGate(Gate):
         """
         if len(self.children) != 0:
             GateError("Gate is already defined, call 'reset_gate' to clear children")
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         polygons = self._fit(data=data)
         for name, poly in zip(ascii_uppercase, polygons):
@@ -1541,7 +1517,7 @@ class PolygonGate(Gate):
                 )
             )
 
-    def fit_predict(self, data: pd.DataFrame, ctrl_data: None = None, transform: bool = True) -> List[Population]:
+    def fit_predict(self, data: pd.DataFrame, ctrl_data: None = None) -> List[Population]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -1553,8 +1529,6 @@ class PolygonGate(Gate):
             Population data to fit gate to
         ctrl_data: None
             Redundant parameter, necessary for Gate signature. Ignore.
-        transform: bool (default=True)
-            If False, assumes data has already been transformed according to gating specifications.
 
         Returns
         -------
@@ -1567,12 +1541,11 @@ class PolygonGate(Gate):
             If fit has not been previously called
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         return self._match_to_children(self._generate_populations(data=data.copy(), polygons=self._fit(data=data)))
 
-    def predict(self, data: pd.DataFrame, transform: bool = True) -> List[Population]:
+    def predict(self, data: pd.DataFrame) -> List[Population]:
         """
         Using existing children associated to this gate, the previously calculated polygons of
         these children will be applied to the given data and then Population objects created and
@@ -1596,8 +1569,7 @@ class PolygonGate(Gate):
         AssertionError
             If fit has not been previously called
         """
-        if transform:
-            data = self.transform(data=data)
+        data = self.transform(data=data)
         data = self._dim_reduction(data=data)
         polygons = [create_polygon(c.geom.x_values, c.geom.y_values) for c in self.children]
         populations = self._generate_populations(data=data, polygons=polygons)
