@@ -371,13 +371,7 @@ class GatingStrategy(mongoengine.Document):
         ref = FileGroup.objects(id=self.normalisation.get(gate_name).get("reference")).get()
         kwargs = self.normalisation.get(gate_name).get("kwargs")
 
-        if gate.use_transform_caching:
-            transforms = {f: t for f, t in [(gate.x, gate.transform_x), (gate.y, gate.transform_y)] if f is not None}
-            data = self.filegroup.load_population_df(
-                population=gate.parent, transform=transforms, transform_cache=True
-            )
-        else:
-            data = self.filegroup.load_population_df(population=gate.parent, transform=None)
+        data = self.filegroup.load_population_df(population=gate.parent, transform=None)
         for d, t, tkwargs in zip(
             [gate.x, gate.y],
             [gate.transform_x, gate.transform_y],
@@ -385,12 +379,7 @@ class GatingStrategy(mongoengine.Document):
         ):
             if d is None:
                 continue
-            ref_df = ref.load_population_df(
-                population=gate.parent,
-                transform=t,
-                transform_kwargs=tkwargs,
-                transform_cache=gate.use_transform_caching,
-            )
+            ref_df = ref.load_population_df(population=gate.parent, transform=t, transform_kwargs=tkwargs)
             target_df = self.filegroup.load_population_df(population=gate.parent, transform=None)
             target_df, transformer = apply_transform(
                 data=target_df,
@@ -435,14 +424,9 @@ class GatingStrategy(mongoengine.Document):
         Pandas.DataFrame, Pandas.DataFrame or None
             Parent population, control population (if Gate is a control gate, otherwise None)
         """
-        if gate.use_transform_caching:
-            parent = self.filegroup.load_population_df(
-                population=gate.parent, transform=None, label_downstream_affiliations=False
-            )
-        else:
-            parent = self.filegroup.load_population_df(
-                population=gate.parent, transform=None, label_downstream_affiliations=False
-            )
+        parent = self.filegroup.load_population_df(
+            population=gate.parent, transform=None, label_downstream_affiliations=False
+        )
         if fda_norm:
             return self.normalise_data(gate_name=gate.gate_name), None
         if gate.ctrl_x is not None and ctrl:
@@ -458,7 +442,6 @@ class GatingStrategy(mongoengine.Document):
                     classifier=gate.ctrl_classifier,
                     classifier_params=ctrl_classifier_params,
                     verbose=verbose,
-                    transform_cache=gate.use_transform_caching,
                     **kwargs,
                 )
                 ctrls[gate.ctrl_x] = x[gate.ctrl_x].values
@@ -468,7 +451,6 @@ class GatingStrategy(mongoengine.Document):
                     population=gate.parent,
                     classifier=gate.ctrl_classifier,
                     classifier_params=ctrl_classifier_params,
-                    transform_cache=gate.use_transform_caching,
                     verbose=verbose,
                     **kwargs,
                 )
@@ -545,33 +527,24 @@ class GatingStrategy(mongoengine.Document):
 
         create_plot_kwargs = create_plot_kwargs or {}
         plot_gate_kwargs = plot_gate_kwargs or {}
-        if isinstance(gate, BooleanGate):
-            ctrl_parent_data = None
-            data, parent_data = self._load_gate_dataframes_boolean(gate=gate)
-        else:
-            data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm, verbose=verbose)
-            parent_data = data
+        parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm, verbose=verbose)
         original_method_kwargs = gate.method_kwargs.copy()
 
         if overwrite_method_kwargs is not None:
             gate.method_kwargs = overwrite_method_kwargs
         if gate.ctrl_x is not None:
             assert isinstance(gate, ThresholdGate), "Control gate only supported for ThresholdGate"
-            populations = gate.fit_predict(data=data, ctrl_data=ctrl_parent_data)
-        elif (
-            gate.gate_name in self.hyperparameter_search.keys()
-            and hyperparam_search
-            and not isinstance(gate, BooleanGate)
-        ):
+            populations = gate.fit_predict(data=parent_data, ctrl_data=ctrl_parent_data)
+        elif gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search:
             populations = hyperparameter_gate(
                 gate=gate,
                 grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
                 cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
-                parent=data,
+                parent=parent_data,
                 verbose=verbose,
             )
         else:
-            populations = gate.fit_predict(data=data)
+            populations = gate.fit_predict(data=parent_data)
         for p in populations:
             self.filegroup.add_population(population=p)
         if verbose:

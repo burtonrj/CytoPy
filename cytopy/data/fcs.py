@@ -243,70 +243,6 @@ class FileGroup(mongoengine.Document):
             CONFIG.save()
             return self.columns
 
-    def _transform_data(
-        self,
-        source: str,
-        transform: Union[str, Dict],
-        features_to_transform: Optional[List] = None,
-        **transform_kwargs,
-    ) -> pd.DataFrame:
-        """
-        Transform data and return as DataFrame
-
-        Parameters
-        ----------
-        source: str
-        transform: str or dict
-        features_to_transform: List[str], optional
-        transform_kwargs:
-            Additional keyword arguments passed to transform method(s)
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        if isinstance(transform, str):
-            features_to_transform = features_to_transform or self.columns
-            return apply_transform(
-                data=self._load_data(key=source),
-                features=features_to_transform,
-                method=transform,
-                return_transformer=False,
-                **transform_kwargs,
-            )
-        else:
-            return apply_transform_map(data=self._load_data(key=source), feature_method=transform, **transform_kwargs)
-
-    def transform_and_cache(self, source: str, transform: str, **transform_kwargs) -> pd.DataFrame:
-        """
-        Transform the given source and cache the result. Cached results are stored
-        by the transform method and previous cached results will be overwritten.
-
-        Parameters
-        ----------
-        source: str
-            Name of the data to transform: use 'primary' for primary staining or the name of a
-            control staining.
-        transform: str
-            Must be valid transform method; see cytopy.flow.transform
-        transform_kwargs:
-            Additional transform keyword arguments passed to transform method
-
-        Returns
-        -------
-        Pandas.DataFrame
-            Transformed data
-        """
-        logger.debug(f"Caching {transform} for {source}. Saved to {self.h5path} under {source}:{transform}")
-        transformed = self._transform_data(
-            source=source, transform=transform, features_to_transform=self.columns, **transform_kwargs
-        )
-
-        with h5py.File(self.h5path, "r+") as f:
-            overwrite_or_create(file=f, data=transformed, key=f"{source}:{transform}")
-
-        return transformed
-
     @data_loaded
     def _load_data(self, key: str = "primary") -> pd.DataFrame:
         """
@@ -325,23 +261,8 @@ class FileGroup(mongoengine.Document):
         KeyError
             Invalid key, does not exist in HDF5 file
         """
-        try:
-            with h5py.File(self.h5path, "r") as f:
-                return pd.DataFrame(f[key][:], dtype=np.float32, columns=self.columns)
-        except KeyError:
-            logging.error(
-                f"Invalid key given on access to {self.primary_id} ({self.id}) HDF5, expected " f"one of {f.keys()}"
-            )
-            raise
 
-    def data(
-        self,
-        source: str = "primary",
-        transform: Optional[Union[str, Dict[str, str]]] = None,
-        features_to_transform: Optional[List[str]] = None,
-        cache: bool = True,
-        **transform_kwargs,
-    ) -> pd.DataFrame:
+    def data(self, source: str = "primary") -> pd.DataFrame:
         """
         Load the FileGroup dataframe for the desired source file e.g. "primary" for primary
         staining or name of a control for control staining. Transformations are cached within the
@@ -351,16 +272,6 @@ class FileGroup(mongoengine.Document):
         ----------
         source: str
             Name of the file to load from e.g. either "primary" or the name of a control
-        cache: bool (default=True)
-            If True, will use cached transformation if available and will cache calculations if
-            no existing cache.
-        transform: str or dict, optional
-            Transform to be applied. If a string is provided, then should be the name of transform
-            method to be applied to all data. If a dictionary is provided, then keys should
-            correspond to column names and the values the transform method to be applied.
-        features_to_transform: list, optional
-            If transform is a string, then list of columns can be provided for transform to be
-            applied to. All other values will be returned as raw value.
 
         Returns
         -------
@@ -372,38 +283,14 @@ class FileGroup(mongoengine.Document):
             Invalid source
 
         """
-        data = list()
-        features = self.columns
-
-        if transform is None:
-            return self._load_data(key=source)
-
-        if not cache:
-            return self._transform_data(
-                source=source, transform=transform, features_to_transform=features_to_transform, **transform_kwargs
+        try:
+            with h5py.File(self.h5path, "r") as f:
+                return pd.DataFrame(f[source][:], dtype=np.float32, columns=self.columns)
+        except KeyError:
+            logging.error(
+                f"Invalid key given on access to {self.primary_id} ({self.id}) HDF5, expected " f"one of {f.keys()}"
             )
-
-        if isinstance(transform, dict):
-            transform_mapping = defaultdict(list)
-            for feature, method in transform.items():
-                transform_mapping[method].append(feature)
-            for method, transform_features in transform_mapping.items():
-                if f"{source}:{method}" not in self.keys():
-                    self.transform_and_cache(source=source, transform=method)
-                features = [f for f in features if f not in transform_features]
-                data.append(self._load_data(key=f"{source}:{method}")[features])
-        else:
-            if f"{source}:{transform}" not in self.keys():
-                self.transform_and_cache(source=source, transform=transform, **transform_kwargs)
-            df = self._load_data(key=f"{source}:{transform}")
-            if features_to_transform is None:
-                return df
-            else:
-                data.append(df[features_to_transform])
-                features = [f for f in features if f not in features_to_transform]
-        if len(features) > 0:
-            data.append(self._load_data(key=source)[features])
-        return pd.concat(data, axis=1)
+            raise
 
     def init_new_file(self, data: np.array) -> None:
         """
@@ -563,7 +450,6 @@ class FileGroup(mongoengine.Document):
         scoring: str = "balanced_accuracy",
         transform: str = "logicle",
         transform_kwargs: Optional[Dict] = None,
-        transform_cache: bool = True,
         evaluate_classifier: bool = True,
         kfolds: int = 5,
         n_permutations: int = 25,
@@ -600,9 +486,6 @@ class FileGroup(mongoengine.Document):
             Transformation to be applied to data prior to classification
         transform_kwargs: dict, optional
             Additional keyword arguments applied to Transformer
-        transform_cache: bool (default=True)
-            If True, will use cached transformation if available and will cache calculations if
-            no existing cache.
         evaluate_classifier: bool (default=True)
             If True, stratified cross validation with permutating testing is applied prior to
             predicting control population,  feeding back to stdout the performance of the classifier
@@ -644,7 +527,6 @@ class FileGroup(mongoengine.Document):
             target_population=population,
             ctrl=ctrl,
             transform=transform,
-            transform_cache=transform_cache,
             sample_size=sample_size,
             **transform_kwargs,
         )
@@ -753,7 +635,6 @@ class FileGroup(mongoengine.Document):
         transform: str or Optional[Dict] = "logicle",
         features_to_transform: list or None = None,
         transform_kwargs: Optional[Dict] = None,
-        transform_cache: bool = True,
         label_parent: bool = False,
         frac_of: Optional[List[str]] = None,
         label_downstream_affiliations=None,
@@ -771,9 +652,6 @@ class FileGroup(mongoengine.Document):
             Features (columns) to be transformed. If not provied, all columns transformed
         transform_kwargs: dict, optional
             Additional keyword arguments passed to Transformer
-        transform_cache: bool (default=True)
-            If True, will use cached transformation if available and will cache calculations if
-            no existing cache.
         label_parent: bool (default=False)
             If True, additional column appended with parent name for each population
         frac_of: list, optional
@@ -798,13 +676,14 @@ class FileGroup(mongoengine.Document):
 
         population = self.get_population(population_name=population)
         transform_kwargs = transform_kwargs or {}
-        data = self.data(
-            source="primary",
-            transform=transform,
-            features_to_transform=features_to_transform,
-            cache=transform_cache,
-            **transform_kwargs,
-        ).loc[population.index]
+        data = self.data(source="primary").loc[population.index]
+
+        if isinstance(transform, str):
+            features_to_transform = features_to_transform or self.columns
+            data = apply_transform(data=data, method=transform, features=features_to_transform, **transform_kwargs)
+        elif isinstance(transform, dict):
+            data = apply_transform_map(data=data, feature_method=transform, kwargs=transform_kwargs)
+
         if label_parent:
             data["parent_label"] = population.parent
 
@@ -1289,7 +1168,6 @@ def _load_data_for_ctrl_estimate(
     ctrl: str,
     transform: str,
     sample_size: int,
-    transform_cache: bool,
     **transform_kwargs,
 ) -> (pd.DataFrame, pd.DataFrame, Transformer):
     """
@@ -1316,11 +1194,11 @@ def _load_data_for_ctrl_estimate(
     -------
     Pandas.DataFrame, Pandas.DataFrame, Transformer
     """
-    training = filegroup.data(source="primary", transform=transform, cache=transform_cache, **transform_kwargs)
+    training = filegroup.data(source="primary", transform=transform, **transform_kwargs)
     population_idx = filegroup.get_population(target_population).index
     training["label"] = 0
     training.loc[population_idx, "label"] = 1
-    ctrl = filegroup.data(source=ctrl, transform=transform, cache=transform_cache, **transform_kwargs)
+    ctrl = filegroup.data(source=ctrl, transform=transform, **transform_kwargs)
     time_columns = training.columns[training.columns.str.contains("time", flags=re.IGNORECASE)].to_list()
     for t in time_columns:
         training.drop(t, axis=1, inplace=True)
