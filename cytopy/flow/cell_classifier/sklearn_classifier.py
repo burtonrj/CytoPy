@@ -24,18 +24,22 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-from ...data.experiment import Experiment
-from .cell_classifier import CellClassifier, check_data_init
-from . import utils
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, learning_curve
-from matplotlib.pyplot import Axes
+import pickle
 from inspect import signature
 from warnings import warn
+
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
-import pickle
+import pandas as pd
+from matplotlib.pyplot import Axes
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import learning_curve
+from sklearn.model_selection import RandomizedSearchCV
+
+from . import utils
+from ...data.experiment import Experiment
+from .cell_classifier import CellClassifier
+from .cell_classifier import check_data_init
 
 
 def _valid_multi_label(model):
@@ -199,54 +203,10 @@ class SklearnCellClassifier(CellClassifier):
                 sample_weight = np.array([self.class_weights.get(i) for i in y])
                 self.model.fit(x, y, sample_weight=sample_weight, **kwargs)
             else:
-                warn(
-                    "Class weights defined yet the specified model does not support this."
-                )
+                warn("Class weights defined yet the specified model does not support this.")
                 self.model.fit(x, y, **kwargs)
         else:
             self.model.fit(x, y, **kwargs)
-
-    @check_data_init
-    def hyperparameter_tuning(
-        self, param_grid: dict, method: str = "grid_search", **kwargs
-    ):
-        """
-        Perform hyperparameter tuning using either exhaustive grid search
-        or randomised grid search.
-
-        Parameters
-        ----------
-        param_grid: dict
-            Search space
-        method: str (default="grid_search")
-            Should either be "grid_search" or "random"
-        kwargs:
-            Keyword arguments passed to grid search method
-
-        Returns
-        -------
-        GridSearchCV or RandomizedSearchCV
-
-        Raises
-        ------
-        AssertionError
-            Invalid method
-        """
-        assert method in ["grid_search", "random"], (
-            "Method should either be 'grid_search' for "
-            "exhaustive search or 'random' for randomised "
-            "grid search"
-        )
-        if method == "grid_search":
-            search_cv = GridSearchCV(
-                estimator=self.model, param_grid=param_grid, **kwargs
-            )
-        else:
-            search_cv = RandomizedSearchCV(
-                estimator=self.model, param_distributions=param_grid, **kwargs
-            )
-        search_cv.fit(self.x, self.y)
-        return search_cv
 
     def plot_learning_curve(
         self,
@@ -390,9 +350,7 @@ class SklearnCellClassifier(CellClassifier):
         AssertionError
             Invalid x, y input
         """
-        assert (
-            not sum([x is not None, y is not None]) == 1
-        ), "Cannot provide x without y and vice-versa"
+        assert not sum([x is not None, y is not None]) == 1, "Cannot provide x without y and vice-versa"
         if x is None:
             x, y = self.x, self.y
         assert sum([i is None for i in [x, y]]) in [
