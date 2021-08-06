@@ -134,7 +134,7 @@ def calc_metrics(
             results[m] = f(y_true=y_true, y_pred=y_pred, average=avg)
         elif m == "roc_auc_score":
             f = getattr(skmetrics, m)
-            results[m] = f(y_true=y_true, y_score=y_score, multi_class="ovo", average="macro")
+            results[m] = f(y_true=y_true, y_score=y_score, multi_class="ovr", average="weighted")
         else:
             f = getattr(skmetrics, m)
             if "y_score" in inspect.signature(f).parameters.keys():

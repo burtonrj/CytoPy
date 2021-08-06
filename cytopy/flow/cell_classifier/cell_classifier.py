@@ -27,6 +27,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from functools import wraps
 from inspect import signature
 from typing import *
@@ -38,10 +39,10 @@ from imblearn.over_sampling import RandomOverSampler
 from sklearn.base import ClassifierMixin
 from sklearn.feature_selection import SelectFromModel
 from sklearn.model_selection import BaseCrossValidator
-from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import KFold
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection._search import BaseSearchCV
 from sklearn.neighbors import KNeighborsClassifier
 from tensorflow.keras.models import Sequential
 
@@ -282,13 +283,12 @@ class BaseClassifier:
             self.model.fit(x, y, **kwargs)
         return self
 
-    def _predict(self, x: pd.DataFrame, threshold: float = 0.5):
+    def _predict(self, x: pd.DataFrame):
         """
         Internal function for calling predict.
         Parameters
         ----------
         x: Pandas.DataFrame
-        threshold: float (default=0.5)
         Returns
         -------
         numpy.ndarray, numpy.ndarray or None
@@ -337,24 +337,16 @@ class BaseClassifier:
         AssertionError
             Invalid metric supplied
         """
-        metrics = metrics or DEFAULT_METRICS
-        train_test_split_kwargs = train_test_split_kwargs or {}
-        logger.info("Generating training and testing data")
-        x_train, x_test, y_train, y_test = train_test_split(
-            self.x, self.y, test_size=test_frac, **train_test_split_kwargs
+        return fit_train_test_split(
+            model=self.model,
+            x=self.x,
+            y=self.y,
+            test_frac=test_frac,
+            metrics=metrics,
+            return_predictions=return_predictions,
+            train_test_split_kwargs=train_test_split_kwargs,
+            **fit_kwargs,
         )
-        logger.info("Training model")
-        self._fit(x=x_train, y=y_train, **fit_kwargs)
-        results = dict()
-        y_hat = dict()
-        for key, (X, y) in zip(["train", "test"], [[x_train, y_train], [x_test, y_test]]):
-            logger.info(f"Evaluating {key}ing performance....")
-            y_pred, y_score = self._predict(X)
-            y_hat[key] = {"y_pred": y_pred, "y_score": y_score}
-            results[key] = utils.calc_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y)
-        if return_predictions:
-            return results, y_hat
-        return results, None
 
     @check_data_init
     def fit_cv(
@@ -391,26 +383,19 @@ class BaseClassifier:
         List, List
             Training results (list of dictionaries; keys=metrics), testing results (list of dictionaries; keys=metrics)
         """
-        metrics = metrics or DEFAULT_METRICS
-        split_kwargs = split_kwargs or {}
-        cross_validator = cross_validator or KFold(n_splits=10, random_state=42, shuffle=True)
-        training_results = list()
-        testing_results = list()
-        for train_idx, test_idx in progress_bar(
-            cross_validator.split(X=self.x, y=self.y, **split_kwargs),
-            total=cross_validator.n_splits,
+        return fit_cv(
+            model=self.model,
+            x=self.x,
+            y=self.y,
+            cross_validator=cross_validator,
+            metrics=metrics,
+            split_kwargs=split_kwargs,
             verbose=verbose,
-        ):
-            x_train, x_test = self.x.loc[train_idx], self.x.loc[test_idx]
-            y_train, y_test = self.y[train_idx], self.y[test_idx]
-            self._fit(x=x_train, y=y_train, **fit_kwargs)
-            y_pred, y_score = self._predict(x=x_train)
-            training_results.append(
-                utils.calc_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_train)
-            )
-            y_pred, y_score = self._predict(x_test)
-            testing_results.append(utils.calc_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_test))
-        return training_results, testing_results
+            **fit_kwargs,
+        )
+
+    def hyperparam_search(self):
+        pass
 
     @check_data_init
     def fit(self, **kwargs):
@@ -426,6 +411,110 @@ class BaseClassifier:
         """
         self._fit(x=self.x, y=self.y, **kwargs)
         return self
+
+    def plot_confusion_matrix(
+        self,
+        cmap: str or None = None,
+        figsize: tuple = (10, 5),
+        x: pd.DataFrame or None = None,
+        y: np.ndarray or None = None,
+        **kwargs,
+    ):
+        """
+        Wraps cytopy.flow.supervised.confusion_matrix_plots (see for more details).
+        Given some feature space and target labels, use the model to generate a confusion
+        matrix heatmap. If x and y are not provided, will use associated training data.
+
+        Parameters
+        ----------
+        cmap: str (optional)
+            Colour scheme
+        figsize: tuple (default=(10, 5))
+            Figure size
+        x: Pandas.DataFrame (optional)
+            Feature space. If not given, will use associated training data. To use a validation
+            dataset, use the 'load_validation' method to get relevant data.
+        y: numpy.ndarray (optional)
+            Target labels. If not given, will use associated training data. To use a validation
+            dataset, use the 'load_validation' method to get relevant data.
+        kwargs:
+            Additional keyword arguments passed to cytopy.flow.supervised.confusion_matrix_plots
+
+        Returns
+        -------
+        Matplotlib.Figure
+
+        Raises
+        ------
+        AssertionError
+            Invalid x, y input
+        """
+        assert not sum([x is not None, y is not None]) == 1, "Cannot provide x without y and vice-versa"
+        if x is None:
+            x, y = self.x, self.y
+        assert sum([i is None for i in [x, y]]) in [
+            0,
+            2,
+        ], "If you provide 'x' you must provide 'y' and vice versa."
+        return utils.confusion_matrix_plots(
+            classifier=self.model,
+            x=x,
+            y=y,
+            class_labels=["Unclassified"] + self.target_populations,
+            cmap=cmap,
+            figsize=figsize,
+            **kwargs,
+        )
+
+    def _add_unclassified_population(
+        self,
+        x: pd.DataFrame,
+        y_pred: np.ndarray,
+        root_population: str,
+        target: FileGroup,
+    ):
+        """
+        Add a population for events without a classification (not a member of any target population)
+        Parameters
+        ----------
+        x: Pandas.DataFrame
+        y_pred: numpy.ndarray
+        root_population: str
+        target: FileGroup
+        Returns
+        -------
+        None
+        """
+        idx = x.index.values[np.where(y_pred == 0)[0]]
+        target.add_population(
+            Population(
+                population_name=f"{self.population_prefix}_Unclassified",
+                source="classifier",
+                index=idx,
+                n=len(idx),
+                parent=root_population,
+                warnings=["supervised_classification"],
+            )
+        )
+
+    def _add_populations(self, target: FileGroup, x: pd.DataFrame, y_pred: np.ndarray, root_population: str):
+        if not self.multi_label:
+            self._add_unclassified_population(x=x, y_pred=y_pred, root_population=root_population, target=target)
+        for i, pop in enumerate(self.target_populations):
+            if self.multi_label:
+                idx = x.index.values[np.where(y_pred[:, i + 1] == 1)[0]]
+            else:
+                idx = x.index.values[np.where(y_pred == i + 1)[0]]
+            target.add_population(
+                Population(
+                    population_name=f"{self.population_prefix}_{pop}",
+                    source="classifier",
+                    index=idx,
+                    n=len(idx),
+                    parent=root_population,
+                    warnings=["supervised_classification"],
+                )
+            )
 
 
 class CellClassifier(BaseClassifier):
@@ -525,37 +614,6 @@ class CellClassifier(BaseClassifier):
             )
         return self
 
-    def _add_unclassified_population(
-        self,
-        x: pd.DataFrame,
-        y_pred: np.ndarray,
-        root_population: str,
-        target: FileGroup,
-    ):
-        """
-        Add a population for events without a classification (not a member of any target population)
-        Parameters
-        ----------
-        x: Pandas.DataFrame
-        y_pred: numpy.ndarray
-        root_population: str
-        target: FileGroup
-        Returns
-        -------
-        None
-        """
-        idx = x.index.values[np.where(y_pred == 0)[0]]
-        target.add_population(
-            Population(
-                population_name=f"{self.population_prefix}_Unclassified",
-                source="classifier",
-                index=idx,
-                n=len(idx),
-                parent=root_population,
-                warnings=["supervised_classification"],
-            )
-        )
-
     def predict(
         self,
         experiment: Experiment,
@@ -591,23 +649,7 @@ class CellClassifier(BaseClassifier):
         if self.scaler is not None:
             x = self.scaler(data=x, features=self.features)
         y_pred, y_score = self._predict(x=x, threshold=threshold)
-        if not self.multi_label:
-            self._add_unclassified_population(x=x, y_pred=y_pred, root_population=root_population, target=target)
-        for i, pop in enumerate(self.target_populations):
-            if self.multi_label:
-                idx = x.index.values[np.where(y_pred[:, i + 1] == 1)[0]]
-            else:
-                idx = x.index.values[np.where(y_pred == i + 1)[0]]
-            target.add_population(
-                Population(
-                    population_name=f"{self.population_prefix}_{pop}",
-                    source="classifier",
-                    index=idx,
-                    n=len(idx),
-                    parent=root_population,
-                    warnings=["supervised_classification"],
-                )
-            )
+        self._add_populations(target=target, x=x, y_pred=y_pred, root_population=root_population)
         if return_predictions:
             return target, {"y_pred": y_pred, "y_score": y_score}
         return target, None
@@ -814,6 +856,8 @@ class CalibratedCellClassifier(BaseClassifier):
         )
         self.targets = None
         self.target_predictions = None
+        self.transform = transform
+        self.transform_kwargs = transform_kwargs
         self.meta_learner = self._default_meta(model=meta_learner)
 
     def _default_meta(self, model: Optional[Union[ClassifierMixin, Sequential]] = None):
@@ -821,10 +865,6 @@ class CalibratedCellClassifier(BaseClassifier):
             return KNeighborsClassifier(n_neighbors=int(np.sqrt(self.sample_size)))
         else:
             return model
-
-    @check_predictions
-    def elbow(self):
-        pass
 
     def calibrate(self):
         self.calibrator.run(var_use="sample_id")
@@ -854,19 +894,141 @@ class CalibratedCellClassifier(BaseClassifier):
             )
 
     @check_calibrated
-    def predict(self, threshold: float = 0.5, verbose: bool = True):
+    def predict_meta_labels(self, threshold: float = 0.5, verbose: bool = True):
         for target_id, target_df in progress_bar(self.targets.groupby("sample_id"), verbose=verbose):
             y_pred, y_score = self._predict(x=target_df[self.features], threshold=threshold)
             self.target_predictions[target_id] = {"y_pred": y_pred, "y_score": y_score}
         return self
 
-    def meta_learner_fit_cv(self):
-        pass
+    def _load_target_data(self, target_id: str, features: Optional[List[str]] = None, return_all_data: bool = False):
+        try:
+            features = features or self.features
+            target = self.experiment.get_sample(sample_id=target_id)
+            x1 = target.load_population_df(
+                population=self.root_population, transform=self.transform, transform_kwargs=self.transform_kwargs
+            )[features]
+            idx = self.targets[self.targets.sample_id == target_id]["original_index"].values
+            assert len(idx) > 0
+            x2 = x1.loc[idx]
+            y = self.target_predictions[target_id]["y_pred"]
+            if return_all_data:
+                return x2, y, x1
+            return x2, y
+        except KeyError as e:
+            raise ClassifierError(f"Could not locate target predictions, has predict been called?; {e}.")
+        except AssertionError:
+            raise ClassifierError(f"Invalid target ID {target_id}, does not exist.")
+
+    def meta_learner_fit_cv(
+        self,
+        features: Optional[List[str]] = None,
+        target_id: Optional[Union[str, List[str]]] = None,
+        cross_validator: Optional[BaseCrossValidator] = None,
+        metrics: Optional[List[str]] = None,
+        split_kwargs: Optional[Dict] = None,
+        verbose: bool = True,
+        **fit_kwargs,
+    ):
+        target_id = target_id or self.targets["sample_id"].unique()
+        if isinstance(target_id, str):
+            target_id = [target_id]
+        training_results, testing_results = list(), list()
+        for _id in target_id:
+            logger.info(f"Fitting to {_id}")
+            x, y = self._load_target_data(target_id=_id, features=features)
+            train, test = fit_cv(
+                model=self.meta_learner,
+                x=x,
+                y=y,
+                cross_validator=cross_validator,
+                metrics=metrics,
+                split_kwargs=split_kwargs,
+                verbose=verbose,
+                **fit_kwargs,
+            )
+            train, test = pd.DataFrame(train), pd.DataFrame(test)
+            train["sample_id"] = _id
+            test["sample_id"] = _id
+            training_results.append(train)
+            testing_results.append(test)
+        return pd.concat(training_results).reset_index(drop=True), pd.concat(testing_results).reset_index(drop=True)
+
+    def meta_learner_fit_train_test_split(
+        self,
+        features: Optional[List[str]] = None,
+        target_id: Optional[Union[str, List[str]]] = None,
+        test_frac: float = 0.3,
+        metrics: Optional[List[str]] = None,
+        return_predictions: bool = True,
+        train_test_split_kwargs: Optional[Dict] = None,
+        **fit_kwargs,
+    ):
+        target_id = target_id or self.targets["sample_id"].unique()
+        if isinstance(target_id, str):
+            target_id = [target_id]
+        all_results, predictions = list(), dict()
+        for _id in target_id:
+            logger.info(f"Fitting to {_id}")
+            x, y = self._load_target_data(target_id=_id, features=features)
+            results, y_hat = fit_cv(
+                model=self.meta_learner,
+                x=x,
+                y=y,
+                test_frac=test_frac,
+                metrics=metrics,
+                return_predictions=return_predictions,
+                train_test_split_kwargs=train_test_split_kwargs,
+                **fit_kwargs,
+            )
+            results = pd.DataFrame(results)
+            results["sample_id"] = _id
+            all_results.append(results)
+            if return_predictions:
+                predictions[_id] = y_hat
+        return pd.concat(all_results).reset_index(drop=True), predictions
+
+    def meta_learner_hyperparam_tuning(
+        self,
+        param_grid: Dict,
+        features: Optional[List[str]] = None,
+        target_id: Optional[Union[str, List[str]]] = None,
+        hyper_param_optimizer: Optional[BaseSearchCV] = None,
+        cv: int = 5,
+        verbose: bool = True,
+        n_jobs: int = -1,
+        fit_kwargs: Optional[Dict] = None,
+        **kwargs,
+    ):
+        target_id = target_id or self.targets.sample_id.unique()
+        if isinstance(target_id, str):
+            target_id = [target_id]
+        logger.info("Fitting hyper-parameter optimizers")
+        optimizers = dict()
+        results = defaultdict(list)
+        for _id in progress_bar(target_id, verbose=verbose):
+            x, y = self._load_target_data(target_id=_id, features=features)
+            optimizers[_id] = hyperparam_search(
+                model=self.meta_learner,
+                x=x,
+                y=y,
+                param_grid=param_grid,
+                hyper_param_optimizer=hyper_param_optimizer,
+                cv=cv,
+                n_jobs=n_jobs,
+                fit_kwargs=fit_kwargs,
+                **kwargs,
+            )
+            results["sample_id"].append(_id)
+            results["best_score"].append(optimizers[_id].best_score_)
+            for param, best_value in optimizers[_id].best_params_.items():
+                results[param].append(best_value)
+        return pd.DataFrame(results), optimizers
 
     def plot_learning_curve(
         self,
         meta: bool = False,
         target_id: Optional[str] = None,
+        features: Optional[List[str]] = None,
         ax: Optional[plt.Axes] = None,
         x_label: str = "Training examples",
         y_label: str = "Score",
@@ -874,47 +1036,176 @@ class CalibratedCellClassifier(BaseClassifier):
         verbose: int = 1,
         **kwargs,
     ):
+        try:
+            if meta:
+                x, y = self._load_target_data(target_id=target_id, features=features)
+                return utils.plot_learning_curve(
+                    model=self.meta_learner,
+                    x=x,
+                    y=y,
+                    ax=ax,
+                    x_label=x_label,
+                    y_label=y_label,
+                    train_sizes=train_sizes,
+                    verbose=verbose,
+                    **kwargs,
+                )
+            else:
+                return utils.plot_learning_curve(
+                    model=self.model,
+                    x=self.x,
+                    y=self.y,
+                    ax=ax,
+                    x_label=x_label,
+                    y_label=y_label,
+                    train_sizes=train_sizes,
+                    verbose=verbose,
+                    **kwargs,
+                )
+        except KeyError as e:
+            raise ClassifierError(f"Could not locate target predictions, has predict been called?; {e}.")
 
-        return utils.plot_learning_curve(
-            model=self.model,
-            x=x,
-            y=y,
-            ax=ax,
-            x_label=x_label,
-            y_label=y_label,
-            train_sizes=train_sizes,
-            verbose=verbose,
-            **kwargs,
-        )
-
-    def _get_import_features(self):
+    def feature_importance(self):
         try:
             selector = SelectFromModel(estimator=self.model)
             selector.fit(self.x, self.y)
-            return np.array(self.features)[selector.get_support()]
+            important_features = np.array(self.features)[selector.get_support()]
+            return important_features, selector
         except ValueError:
-            return self.features
+            logger.info("Chosen model does not have coefficient weights or feature importance available.")
+            return self.features, None
 
-    def _map_predictions_to_target(self, y_pred: np.ndarray) -> (pd.DataFrame, np.ndarray, np.ndarray):
-        original_space = self._target_data.loc[self._target_sample["original_index"].values]
-        features = self.features if len(self.features) < 10 else self._get_import_features()
-        clf = GridSearchCV(
-            estimator=KNeighborsClassifier(),
-            param_grid={
-                "k": [
-                    int(original_space.shape[0] * 0.01),
-                    int(original_space.shape[0] * 0.05),
-                    int(original_space.shape[0] * 0.1),
-                ]
-            },
-        )
-        clf.fit(original_space[features], y_pred)
-        k = clf.best_params_["k"]
-        meta_learner = KNeighborsClassifier(k=k)
-        meta_learner.fit(original_space[features], y_pred)
-        return meta_learner.predict(self._target_sample[features]), meta_learner.predict_proba(
-            self._target_sample[features]
-        )
+    def meta_fit_predict(
+        self, target_id: str, features: Optional[List[str]] = None, params: Optional[Dict] = None, **fit_kwargs
+    ):
+        try:
+            if params is not None:
+                self.meta_learner.set_params(params=params)
+        except AttributeError:
+            logger.error(
+                "Chosen meta-learner does not have method 'set_params'; hyper-parameters will not be updated."
+            )
 
-    def predict(self) -> FileGroup:
-        pass
+        x2, y, x1 = self._load_target_data(target_id=target_id, return_all_data=True, features=features)
+        self.meta_learner.fit(x2, y, **fit_kwargs)
+        return predict(model=self.meta_learner, x=x1)
+
+    def predict(
+        self,
+        target_id: Optional[Union[str, List[str]]] = None,
+        features: Optional[List[str]] = None,
+        params: Optional[Union[Dict, List[Dict]]] = None,
+        verbose: bool = True,
+        return_filegroup_only: bool = True,
+        **fit_kwargs,
+    ):
+        target_id = target_id or self.targets.sample_id.unique()
+        results = {}
+
+        if isinstance(target_id, str):
+            target_id = [target_id]
+
+        if isinstance(target_id, list) and isinstance(params, list):
+            if len(target_id) != len(params):
+                raise ClassifierError("Number of target IDs does not match number of parameter dictionaries.")
+
+        for i, _id in progress_bar(enumerate(target_id), verbose=verbose):
+
+            if isinstance(params, list):
+                y_pred, y_score = self.meta_fit_predict(
+                    target_id=_id, feature=features, params=params[i], **fit_kwargs
+                )
+            else:
+                y_pred, y_score = self.meta_fit_predict(target_id=_id, feature=features, params=params, **fit_kwargs)
+            _, _, x = self._load_target_data(target_id=_id, return_all_data=True, features=features)
+            fg = self.experiment.get_sample(sample_id=_id)
+            self._add_populations(target=fg, x=x, y_pred=y_pred, root_population=self.root_population)
+            if return_filegroup_only:
+                results[_id] = fg
+            else:
+                results[_id] = {"filegroup": fg, "predictions": y_pred, "scores": y_score}
+        return results
+
+
+def predict(model: Union[ClassifierMixin, Sequential], x: pd.DataFrame):
+    predict_proba = getattr(model, "predict_proba", None)
+    if callable(predict_proba):
+        return model.predict(x), model.predict_proba(x)
+    return model.predict(x), None
+
+
+def fit_cv(
+    model: Union[ClassifierMixin, Sequential],
+    x: pd.DataFrame,
+    y: np.ndarray,
+    cross_validator: Optional[BaseCrossValidator] = None,
+    metrics: Optional[List[str]] = None,
+    split_kwargs: Optional[Dict] = None,
+    verbose: bool = True,
+    **fit_kwargs,
+):
+    metrics = metrics or DEFAULT_METRICS
+    split_kwargs = split_kwargs or {}
+    cross_validator = cross_validator or KFold(n_splits=10, random_state=42, shuffle=True)
+    training_results = list()
+    testing_results = list()
+    for train_idx, test_idx in progress_bar(
+        cross_validator.split(X=x, y=y, **split_kwargs),
+        total=cross_validator.n_splits,
+        verbose=verbose,
+    ):
+        x_train, x_test = x.loc[train_idx], x.loc[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+        model.fit(x=x_train, y=y_train, **fit_kwargs)
+        y_pred, y_score = predict(model=model, x=x_train)
+        training_results.append(utils.calc_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_train))
+        y_pred, y_score = predict(model=model, x=x_test)
+        testing_results.append(utils.calc_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_test))
+    return training_results, testing_results
+
+
+def fit_train_test_split(
+    model: Union[ClassifierMixin, Sequential],
+    x: pd.DataFrame,
+    y: np.ndarray,
+    test_frac: float = 0.3,
+    metrics: Optional[List[str]] = None,
+    return_predictions: bool = True,
+    train_test_split_kwargs: Optional[Dict] = None,
+    **fit_kwargs,
+):
+    metrics = metrics or DEFAULT_METRICS
+    train_test_split_kwargs = train_test_split_kwargs or {}
+    logger.info("Generating training and testing data")
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_frac, **train_test_split_kwargs)
+    logger.info("Training model")
+    model.fit(x=x_train, y=y_train, **fit_kwargs)
+    results = dict()
+    y_hat = dict()
+    for key, (X, y) in zip(["train", "test"], [[x_train, y_train], [x_test, y_test]]):
+        logger.info(f"Evaluating {key}ing performance....")
+        y_pred, y_score = predict(model=model, x=X)
+        y_hat[key] = {"y_pred": y_pred, "y_score": y_score}
+        results[key] = utils.calc_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y)
+    if return_predictions:
+        return results, y_hat
+    return results, None
+
+
+def hyperparam_search(
+    model: Union[ClassifierMixin, Sequential],
+    x: pd.DataFrame,
+    y: np.ndarray,
+    param_grid: Dict,
+    hyper_param_optimizer: Optional[BaseSearchCV] = None,
+    cv: int = 5,
+    verbose: int = 1,
+    n_jobs: int = -1,
+    fit_kwargs: Optional[Dict] = None,
+    **kwargs,
+):
+    fit_kwargs = fit_kwargs or {}
+    hyper_param_optimizer = hyper_param_optimizer or RandomizedSearchCV
+    hyper_param_optimizer = hyper_param_optimizer(model, param_grid, cv=cv, verbose=verbose, n_jobs=n_jobs, **kwargs)
+    hyper_param_optimizer.fit(x=x, y=y, **fit_kwargs)
+    return hyper_param_optimizer
