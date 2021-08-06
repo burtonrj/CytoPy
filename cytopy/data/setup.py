@@ -124,5 +124,6 @@ def global_init(database_name: str, config_path: Optional[str] = None, **kwargs)
     """
     config = Config(path=config_path)
     dictConfig(config.logging_config)
+    logger = logging.getLogger(__name__)
     mongoengine.register_connection(alias="core", name=database_name, **kwargs)
-    logging.info(f"Connected to {database_name} database.")
+    logger.info(f"Connected to {database_name} database.")

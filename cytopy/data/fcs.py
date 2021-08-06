@@ -72,7 +72,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
-logger = logging.getLogger("FileGroup")
+logger = logging.getLogger(__name__)
 CONFIG = Config()
 
 
@@ -287,7 +287,7 @@ class FileGroup(mongoengine.Document):
             with h5py.File(self.h5path, "r") as f:
                 return pd.DataFrame(f[source][:], dtype=np.float32, columns=self.columns)
         except KeyError:
-            logging.error(
+            logger.error(
                 f"Invalid key given on access to {self.primary_id} ({self.id}) HDF5, expected " f"one of {f.keys()}"
             )
             raise
@@ -325,7 +325,7 @@ class FileGroup(mongoengine.Document):
         ]
         self.tree = {"root": anytree.Node(name="root", parent=None)}
         self.save()
-        logging.info(f"{self.h5path} created successfully.")
+        logger.info(f"{self.h5path} created successfully.")
 
     def add_ctrl_file(self, ctrl_id: str, data: np.array) -> None:
         """
@@ -785,7 +785,7 @@ class FileGroup(mongoengine.Document):
                 downstream_effects = [self.list_downstream_populations(p) for p in populations]
                 downstream_effects = set([x for sl in downstream_effects for x in sl])
                 if len(downstream_effects) > 0:
-                    logging.warning(
+                    logger.warning(
                         "The following populations are downstream of one or more of the "
                         "populations listed for deletion and will therefore be deleted: "
                         f"{downstream_effects}"

@@ -83,7 +83,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
-logger = logging.getLogger("Gate")
+logger = logging.getLogger(__name__)
 
 
 class Child(mongoengine.EmbeddedDocument):

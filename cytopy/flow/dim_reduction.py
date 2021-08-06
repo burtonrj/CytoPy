@@ -30,13 +30,19 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from sklearn.manifold import TSNE, Isomap, MDS
-from sklearn.decomposition import PCA, KernelPCA
-from typing import List, Union, Type
-from umap import UMAP
-import pandas as pd
 import logging
+from typing import List
+from typing import Type
+from typing import Union
+
+import pandas as pd
 import phate
+from sklearn.decomposition import KernelPCA
+from sklearn.decomposition import PCA
+from sklearn.manifold import Isomap
+from sklearn.manifold import MDS
+from sklearn.manifold import TSNE
+from umap import UMAP
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -46,7 +52,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
-logger = logging.getLogger("DimensionReduction")
+logger = logging.getLogger(__name__)
 
 
 class DimensionReduction:
@@ -106,9 +112,7 @@ class DimensionReduction:
                 f"method: fit_transform"
             )
         except TypeError as e:
-            logger.error(
-                f"Type error when initiating dim reduction method {method}; invalid argument"
-            )
+            logger.error(f"Type error when initiating dim reduction method {method}; invalid argument")
             logger.exception(e)
             raise TypeError(
                 f"Type error when initiating dim reduction method {method}; invalid argument",
@@ -133,9 +137,7 @@ class DimensionReduction:
             If fit is not supported, will returns a Pandas DataFrame.
         """
         if not hasattr(self.method, "fit"):
-            logger.warning(
-                f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead."
-            )
+            logger.warning(f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead.")
             return self.fit_transform(data=data, features=features)
         self.method.fit(data[features])
 
@@ -178,9 +180,7 @@ class DimensionReduction:
         Pandas.DataFrame
         """
         if not hasattr(self.method, "transform"):
-            logger.warning(
-                f"Method {self._method_name} has no method 'transform', calling 'fit_transform' instead."
-            )
+            logger.warning(f"Method {self._method_name} has no method 'transform', calling 'fit_transform' instead.")
             return self.fit_transform(data=data, features=features)
 
         data = data.copy()

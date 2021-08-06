@@ -26,13 +26,14 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import logging
+
+import pandas as pd
+from minisom import MiniSom
+from sklearn.preprocessing import MinMaxScaler
 
 from ...feedback import progress_bar
 from .consensus import ConsensusCluster
-from sklearn.preprocessing import MinMaxScaler
-from minisom import MiniSom
-import pandas as pd
-import logging
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -48,7 +49,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
-logger = logging.getLogger("FlowSOM")
+logger = logging.getLogger(__name__)
 
 
 class FlowSOM:
@@ -150,8 +151,7 @@ class FlowSOM:
         elif weight_init == "pca":
             if not self.normalisation:
                 logger.warning(
-                    "It is strongly recommended to normalize the data before initializing "
-                    "the weights if using PCA."
+                    "It is strongly recommended to normalize the data before initializing " "the weights if using PCA."
                 )
             som.pca_weights_init(self.data)
         else:
@@ -199,9 +199,7 @@ class FlowSOM:
         None
         """
 
-        assert (
-            self.map is not None
-        ), "SOM must be trained prior to meta-clustering; call train before meta_cluster"
+        assert self.map is not None, "SOM must be trained prior to meta-clustering; call train before meta_cluster"
         # initialize cluster
         cluster_ = ConsensusCluster(
             cluster_class,
@@ -211,14 +209,10 @@ class FlowSOM:
             resample_proportion=resample_proportion,
             verbose=self.verbose,
         )
-        cluster_.fit(
-            self.flatten_weights
-        )  # fitting SOM weights into clustering algorithm
+        cluster_.fit(self.flatten_weights)  # fitting SOM weights into clustering algorithm
 
         self.meta_map = cluster_
-        self.meta_bestk = (
-            cluster_.bestK
-        )  # the best number of clusters in range(min_n, max_n)
+        self.meta_bestk = cluster_.bestK  # the best number of clusters in range(min_n, max_n)
 
         # get the prediction of each weight vector on meta clusters (on bestK)
         self.meta_flatten = cluster_.predict_data(self.flatten_weights)
@@ -245,9 +239,7 @@ class FlowSOM:
         logger.info("---------- Predicting Labels ----------")
         for i in progress_bar(range(len(self.data)), verbose=self.verbose):
             xx = self.data[i, :]  # fetch the sample data
-            winner = self.map.winner(
-                xx
-            )  # make prediction, prediction = the closest entry location in the SOM
+            winner = self.map.winner(xx)  # make prediction, prediction = the closest entry location in the SOM
             c = self.meta_class[winner]  # from the location info get cluster info
             labels.append(c)
         logger.info("---------------------------------------")

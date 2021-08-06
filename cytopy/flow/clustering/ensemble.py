@@ -1,20 +1,25 @@
-from ...data.experiment import Experiment, single_cell_dataframe
-from ...data.population import Population
-from ...feedback import progress_bar
-from ..sampling import sample_dataframe_uniform_groups
-from ..dim_reduction import DimensionReduction
-from ..plotting import single_cell_plot
-from ..transform import Scaler
-from .main import remove_null_features, ClusteringError
-from .ensemble_methods import CoMatrix, MixtureModel
-from .mutual_info import MutualInfo
-from .metrics import *
+import logging
 from collections import defaultdict
 from typing import *
-import seaborn as sns
-import pandas as pd
+
 import numpy as np
-import logging
+import pandas as pd
+import seaborn as sns
+
+from ...data.experiment import Experiment
+from ...data.experiment import single_cell_dataframe
+from ...data.population import Population
+from ...feedback import progress_bar
+from ..dim_reduction import DimensionReduction
+from ..plotting import single_cell_plot
+from ..sampling import sample_dataframe_uniform_groups
+from ..transform import Scaler
+from .ensemble_methods import CoMatrix
+from .ensemble_methods import MixtureModel
+from .main import ClusteringError
+from .main import remove_null_features
+from .metrics import *
+from .mutual_info import MutualInfo
 
 logger = logging.getLogger("clustering.ensemble")
 
@@ -58,9 +63,7 @@ class EnsembleClustering:
         random_state: int = 42,
         metrics: Optional[List[Union[str, Metric]]] = None,
     ):
-        logger.info(
-            f"Creating new EnsembleClustering object with connection to {experiment.experiment_id}"
-        )
+        logger.info(f"Creating new EnsembleClustering object with connection to {experiment.experiment_id}")
         np.random.seed(random_state)
         self.experiment = experiment
         self.verbose = verbose
@@ -87,7 +90,7 @@ class EnsembleClustering:
             sampling_kwargs=sampling_kwargs,
         )
         self.data["cluster_label"] = None
-        logging.info("Ready to cluster!")
+        logger.info("Ready to cluster!")
 
     def _populate_metrics(self, metrics: Optional[List[Union[str, Metric]]]):
         try:
@@ -97,9 +100,7 @@ class EnsembleClustering:
                 else:
                     assert isinstance(m, Metric)
         except KeyError:
-            logger.error(
-                f"Invalid metric, must be one of {self.default_metrics.keys()}"
-            )
+            logger.error(f"Invalid metric, must be one of {self.default_metrics.keys()}")
             raise
         except AssertionError:
             logger.error(
@@ -138,10 +139,7 @@ class EnsembleClustering:
             "scalar": scalar,
         }
         logger.info(f"Calculating performance metrics for {cluster_name}")
-        performance = [
-            self._cluster_metric(data["cluster_label"].values, metric)
-            for metric in self._performance
-        ]
+        performance = [self._cluster_metric(data["cluster_label"].values, metric) for metric in self._performance]
         self._performance[cluster_name] = {x[0]: x[1] for x in performance}
         logger.info("Clustering complete!")
 
@@ -155,17 +153,13 @@ class EnsembleClustering:
         return metric.name, metric(self.data, self.features, labels)
 
     def co_occurrence_matrix(self, index: Optional[str]):
-        return CoMatrix(
-            data=self.data, clusterings=self.clustering_permutations, index=index
-        )
+        return CoMatrix(data=self.data, clusterings=self.clustering_permutations, index=index)
 
     def mutual_info(self, method: str = "adjusted"):
         return MutualInfo(clusterings=self.clustering_permutations, method=method)
 
     def mixture_model(self):
-        return MixtureModel(
-            data=self.data, clustering_permuations=self.clustering_permutations
-        )
+        return MixtureModel(data=self.data, clustering_permuations=self.clustering_permutations)
 
     @valid_labels
     def single_cell_plot(
@@ -189,9 +183,7 @@ class EnsembleClustering:
                 if sample_size < self.data.shape[0]:
                     plot_data = self.data.sample(sample_size)
         dim_reduction_kwargs = dim_reduction_kwargs or {}
-        reducer = DimensionReduction(
-            method=method, n_components=2, **dim_reduction_kwargs
-        )
+        reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
         df = reducer.fit_transform(data=plot_data, features=self.features)
         return single_cell_plot(
             data=df,
@@ -203,9 +195,7 @@ class EnsembleClustering:
         )
 
     @valid_labels
-    def clustered_heatmap(
-        self, cluster_labels: List[int], features: Optional[List] = None, **kwargs
-    ):
+    def clustered_heatmap(self, cluster_labels: List[int], features: Optional[List] = None, **kwargs):
         plot_data = self.data.copy()
         plot_data["cluster_label"] = cluster_labels
         plot_data = self.data.groupby("cluster_label")[self.features].median()
@@ -218,9 +208,7 @@ class EnsembleClustering:
         kwargs["cmap"] = kwargs.get("cmap", "viridis")
         return sns.clustermap(plot_data[features], **kwargs)
 
-    def _create_parent_populations(
-        self, data: pd.DataFrame, parent_populations: Dict, verbose: bool = True
-    ):
+    def _create_parent_populations(self, data: pd.DataFrame, parent_populations: Dict, verbose: bool = True):
         logger.info("Creating parent populations from clustering results")
         parent_child_mappings = defaultdict(list)
         for child, parent in parent_populations.items():
@@ -233,14 +221,10 @@ class EnsembleClustering:
             for parent, children in parent_child_mappings.items():
                 cluster_data = sample_data[sample_data["cluster_label"].isin(children)]
                 if cluster_data.shape[0] == 0:
-                    logger.warning(
-                        f"No clusters found for {sample_id} to generate requested parent {parent}"
-                    )
+                    logger.warning(f"No clusters found for {sample_id} to generate requested parent {parent}")
                     continue
                 parent_population_name = (
-                    parent
-                    if self.population_prefix is None
-                    else f"{self.population_prefix}_{parent}"
+                    parent if self.population_prefix is None else f"{self.population_prefix}_{parent}"
                 )
                 pop = Population(
                     population_name=parent_population_name,
@@ -263,9 +247,7 @@ class EnsembleClustering:
         data = self.data.copy()
         data["cluster_label"] = cluster_labels
         if parent_populations is not None:
-            self._create_parent_populations(
-                data=data, parent_populations=parent_populations
-            )
+            self._create_parent_populations(data=data, parent_populations=parent_populations)
         parent_populations = parent_populations or {}
 
         for sample_id in progress_bar(data.sample_id.unique(), verbose=verbose):

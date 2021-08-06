@@ -67,7 +67,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
-logger = logging.getLogger("CellClassifier")
+logger = logging.getLogger(__name__)
 
 DEFAULT_METRICS = ["balanced_accuracy_score", "f1_weighted", "roc_auc_score"]
 

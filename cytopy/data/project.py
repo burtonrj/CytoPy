@@ -31,15 +31,16 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-from .experiment import Experiment
-from .subject import Subject
-from .errors import *
-import mongoengine
 import datetime
 import logging
-import shutil
 import os
+import shutil
+
+import mongoengine
+
+from .errors import *
+from .experiment import Experiment
+from .subject import Subject
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -49,7 +50,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
-logger = logging.getLogger("Project")
+logger = logging.getLogger(__name__)
 
 
 class Project(mongoengine.Document):
@@ -85,14 +86,10 @@ class Project(mongoengine.Document):
     """
 
     project_id = mongoengine.StringField(required=True, unique=True)
-    subjects = mongoengine.ListField(
-        mongoengine.ReferenceField(Subject, reverse_delete_rule=4)
-    )
+    subjects = mongoengine.ListField(mongoengine.ReferenceField(Subject, reverse_delete_rule=4))
     start_date = mongoengine.DateTimeField(default=datetime.datetime.now)
     owner = mongoengine.StringField(requred=True)
-    experiments = mongoengine.ListField(
-        mongoengine.ReferenceField(Experiment, reverse_delete_rule=4)
-    )
+    experiments = mongoengine.ListField(mongoengine.ReferenceField(Experiment, reverse_delete_rule=4))
     data_directory = mongoengine.StringField(required=True)
 
     meta = {"db_alias": "core", "collection": "projects"}
@@ -132,9 +129,7 @@ class Project(mongoengine.Document):
         """
         if not os.path.isdir(data_directory):
             logger.error(f"Could not find directory at path {data_directory}")
-            raise InvalidDataDirectory(
-                f"Could not find directory at path {data_directory}"
-            )
+            raise InvalidDataDirectory(f"Could not find directory at path {data_directory}")
         for e in self.experiments:
             for f in e.fcs_files:
                 f.data_directory = data_directory
@@ -170,13 +165,9 @@ class Project(mongoengine.Document):
             return [e for e in self.experiments if e.experiment_id == experiment_id][0]
         except IndexError:
             logger.error(f"Invalid experiment; {experiment_id} does not exist")
-            raise MissingExperimentError(
-                f"Invalid experiment; {experiment_id} does not exist"
-            )
+            raise MissingExperimentError(f"Invalid experiment; {experiment_id} does not exist")
 
-    def add_experiment(
-        self, experiment_id: str, panel_definition: str or dict
-    ) -> Experiment:
+    def add_experiment(self, experiment_id: str, panel_definition: str or dict) -> Experiment:
         """
         Add new experiment to project. Note you must provide either a path to an excel template for the panel
         definition (panel_definition) or the name of an existing panel (panel_name). If panel_definition is provided,
@@ -202,12 +193,8 @@ class Project(mongoengine.Document):
         """
         if experiment_id in [x.experiment_id for x in self.experiments]:
             logger.error(f"Experiment with id {experiment_id} already exists!")
-            raise DuplicateExperimentError(
-                f"Experiment with id {experiment_id} already exists!"
-            )
-        exp = Experiment(
-            experiment_id=experiment_id, data_directory=self.data_directory
-        )
+            raise DuplicateExperimentError(f"Experiment with id {experiment_id} already exists!")
+        exp = Experiment(experiment_id=experiment_id, data_directory=self.data_directory)
         exp.generate_panel(panel_definition=panel_definition)
         exp.save()
         self.experiments.append(exp)
@@ -285,9 +272,7 @@ class Project(mongoengine.Document):
         """
         if subject_id not in self.list_subjects():
             logger.error(f"Invalid subject ID {subject_id}, does not exist")
-            raise MissingSubjectError(
-                f"Invalid subject ID {subject_id}, does not exist"
-            )
+            raise MissingSubjectError(f"Invalid subject ID {subject_id}, does not exist")
         return Subject.objects(subject_id=subject_id).get()
 
     def delete_experiment(self, experiment_id: str):

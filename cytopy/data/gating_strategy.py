@@ -66,7 +66,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
-logger = logging.getLogger("GatingStrategy")
+logger = logging.getLogger(__name__)
 
 
 def gate_stats(gate: Gate, populations: list, parent_data: pd.DataFrame):

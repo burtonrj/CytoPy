@@ -28,15 +28,19 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-from .neighbours import calculate_optimal_neighbours, knn
-from sklearn.neighbors import BallTree, KDTree
-from multiprocessing import Pool, cpu_count
-from functools import partial
-from typing import *
-import pandas as pd
-import numpy as np
 import logging
+from functools import partial
+from multiprocessing import cpu_count
+from multiprocessing import Pool
+from typing import *
+
+import numpy as np
+import pandas as pd
+from sklearn.neighbors import BallTree
+from sklearn.neighbors import KDTree
+
+from .neighbours import calculate_optimal_neighbours
+from .neighbours import knn
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -47,7 +51,7 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
-logger = logging.getLogger("sampling")
+logger = logging.getLogger(__name__)
 
 
 class SamplingError(Exception):
@@ -123,9 +127,7 @@ def faithful_downsampling(data: np.array, h: float):
         if communities is None:
             communities = data[registering_idx]
         else:
-            communities = np.unique(
-                np.concatenate((communities, data[registering_idx]), 0), axis=0
-            )
+            communities = np.unique(np.concatenate((communities, data[registering_idx]), 0), axis=0)
     return communities
 
 
@@ -226,8 +228,7 @@ def density_dependent_downsampling(
     )
     if sum(prob) == 0:
         logger.warning(
-            "Error: density dependendent downsampling failed; weights sum to zero. "
-            "Defaulting to uniform sampling"
+            "Error: density dependendent downsampling failed; weights sum to zero. " "Defaulting to uniform sampling"
         )
         return uniform_downsampling(data=data, sample_size=sample_size)
     if isinstance(sample_size, int):
@@ -411,12 +412,8 @@ def upsample_knn(
     n = kwargs.get("n_neighbors", None)
     if n is None:
         logger.info("Calculating optimal n_neighbours by grid search CV...")
-        n, score = calculate_optimal_neighbours(
-            x=sample[features].values, y=labels, scoring=scoring, **kwargs
-        )
-        logger.info(
-            f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}..."
-        )
+        n, score = calculate_optimal_neighbours(x=sample[features].values, y=labels, scoring=scoring, **kwargs)
+        logger.info(f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}...")
     logger.info("Training...")
     train_acc, val_acc, model = knn(
         data=sample,
@@ -466,9 +463,7 @@ def sample_dataframe(
     if method == "uniform":
         return uniform_downsampling(data=data, sample_size=sample_size, **kwargs)
     elif method == "density":
-        return density_dependent_downsampling(
-            data=data, sample_size=sample_size, **kwargs
-        )
+        return density_dependent_downsampling(data=data, sample_size=sample_size, **kwargs)
     elif method == "faithful":
         return faithful_downsampling(data=data, **kwargs)
     else:
@@ -476,9 +471,7 @@ def sample_dataframe(
         raise SamplingError(f"Invalid method, must be one of {valid}")
 
 
-def sample_dataframe_uniform_groups(
-    data: pd.DataFrame, group_id: str, sample_size: int
-):
+def sample_dataframe_uniform_groups(data: pd.DataFrame, group_id: str, sample_size: int):
     sample_data = list()
     n = int(sample_size / data[group_id].nunique())
     for _, df in data.groupby(group_id):

@@ -14,12 +14,12 @@
         "default": {
         "class": "logging.StreamHandler",
         "formatter": "f",
-        "level": 20
+        "level": "INFO"
       }
     } ,
     "root": {
       "handlers": ["default"],
-      "level": 20
+      "level": "INFO"
     }
   }
 }

@@ -30,33 +30,33 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from ..data.experiment import Experiment, single_cell_dataframe
-from ..feedback import progress_bar, vprint
+import logging
+import math
+from typing import *
+from warnings import warn
+
+import harmonypy
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from KDEpy import FFTKDE
+from matplotlib import cm
+from scipy.cluster import hierarchy
+from sklearn.model_selection import GridSearchCV
+from sklearn.neighbors import KernelDensity
+
+from ..data.experiment import Experiment
+from ..data.experiment import single_cell_dataframe
+from ..feedback import progress_bar
+from ..feedback import vprint
 from ..flow import transform as transform_module
 from .dim_reduction import DimensionReduction
 from .transform import TRANSFORMERS
-from sklearn.model_selection import GridSearchCV
-from sklearn.neighbors import KernelDensity
-from scipy.cluster import hierarchy
-from KDEpy import FFTKDE
-from warnings import warn
-from typing import *
-import matplotlib.pyplot as plt
-from matplotlib import cm
-import seaborn as sns
-import pandas as pd
-import numpy as np
-import harmonypy
-import logging
-import math
 
 np.random.seed(42)
 
-COLOURS = (
-    list(cm.get_cmap("tab20").colors)
-    + list(cm.get_cmap("tab20b").colors)
-    + list(cm.get_cmap("tab20c").colors)
-)
+COLOURS = list(cm.get_cmap("tab20").colors) + list(cm.get_cmap("tab20b").colors) + list(cm.get_cmap("tab20c").colors)
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -66,7 +66,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
-logger = logging.getLogger("Variance")
+logger = logging.getLogger(__name__)
 
 
 def bw_optimisation(
@@ -109,9 +109,7 @@ def bw_optimisation(
     return grid.best_params_.get("bandwidth")
 
 
-def calculate_ref_sample(
-    data: pd.DataFrame, features: Union[List[str], None] = None, verbose: bool = True
-) -> str:
+def calculate_ref_sample(data: pd.DataFrame, features: Union[List[str], None] = None, verbose: bool = True) -> str:
     """
 
     This is performed as described in Li et al paper (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5860171/) on
@@ -138,13 +136,8 @@ def calculate_ref_sample(
     # Calculate covar for each
     data = data.dropna(axis=1, how="any")
     features = features or list(data.columns)
-    covar = {
-        k: np.cov(v[features].astype(np.float32), rowvar=False)
-        for k, v in data.groupby(by="sample_id")
-    }
-    feedback(
-        "Search for sample with smallest average euclidean distance to all other samples..."
-    )
+    covar = {k: np.cov(v[features].astype(np.float32), rowvar=False) for k, v in data.groupby(by="sample_id")}
+    feedback("Search for sample with smallest average euclidean distance to all other samples...")
     # Make comparisons
     sample_ids = list(covar.keys())
     n = len(sample_ids)
@@ -208,9 +201,7 @@ def marker_variance(
     if reference not in data.sample_id.unique():
         raise ValueError("Reference absent from given data")
 
-    comparison_samples = comparison_samples or [
-        x for x in data.sample_id.unique() if x != reference
-    ]
+    comparison_samples = comparison_samples or [x for x in data.sample_id.unique() if x != reference]
     fig = plt.figure(figsize=figsize)
     markers = markers or data.get(reference).columns.tolist()
     i = 0
@@ -219,11 +210,7 @@ def marker_variance(
     for marker in progress_bar(markers, verbose=verbose):
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
-        x, y = (
-            FFTKDE(kernel=kernel, bw=kde_bw)
-            .fit(data[data.sample_id == reference][marker].values)
-            .evaluate()
-        )
+        x, y = FFTKDE(kernel=kernel, bw=kde_bw).fit(data[data.sample_id == reference][marker].values).evaluate()
         ax.plot(x, y, color="b", **kwargs)
         ax.fill_between(x, 0, y, facecolor="b", alpha=0.2)
         ax.set_title(marker)
@@ -232,13 +219,9 @@ def marker_variance(
         for comparison_sample_id in comparison_samples:
             df = data[data.sample_id == comparison_sample_id]
             if marker not in df.columns:
-                warn(
-                    f"{marker} missing from {comparison_sample_id}, this marker will be ignored"
-                )
+                warn(f"{marker} missing from {comparison_sample_id}, this marker will be ignored")
             else:
-                x, y = (
-                    FFTKDE(kernel=kernel, bw=kde_bw).fit(df[marker].values).evaluate()
-                )
+                x, y = FFTKDE(kernel=kernel, bw=kde_bw).fit(df[marker].values).evaluate()
                 ax.plot(x, y, color="r", **kwargs)
                 if ax.get_legend() is not None:
                     ax.get_legend().remove()
@@ -297,9 +280,7 @@ def dim_reduction_grid(
     """
     assert reference in data.sample_id.unique(), "Reference absent from given data"
     data = data.dropna(axis=1, how="any")
-    comparison_samples = comparison_samples or [
-        x for x in data.sample_id.unique() if x != reference
-    ]
+    comparison_samples = comparison_samples or [x for x in data.sample_id.unique() if x != reference]
     dim_reduction_kwargs = dim_reduction_kwargs or {}
     fig = plt.figure(figsize=figsize)
     nrows = math.ceil(len(comparison_samples) / 3)
@@ -307,17 +288,13 @@ def dim_reduction_grid(
     if not all([f in reference_df.columns for f in features]):
         raise ValueError(f"Invalid features; valid are: {reference_df.columns}")
     reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
-    reference_df = reducer.fit_transform(
-        data=reference_df.reset_index(), features=features
-    )
+    reference_df = reducer.fit_transform(data=reference_df.reset_index(), features=features)
     i = 0
     fig.suptitle(f"{method}, Reference: {reference}", y=1.05)
     for sample_id in progress_bar(comparison_samples, verbose=verbose):
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
-        embeddings = reducer.transform(
-            data[data.sample_id == sample_id].reset_index(), features=features
-        )
+        embeddings = reducer.transform(data[data.sample_id == sample_id].reset_index(), features=features)
         x = f"{method}1"
         y = f"{method}2"
         ax.scatter(reference_df[x], reference_df[y], c="blue", s=4, alpha=0.2)
@@ -348,9 +325,7 @@ def dim_reduction_grid(
     return fig
 
 
-def generate_groups(
-    linkage_matrix: np.ndarray, sample_ids: Union[List[str], np.ndarray], n_groups: int
-):
+def generate_groups(linkage_matrix: np.ndarray, sample_ids: Union[List[str], np.ndarray], n_groups: int):
     """
     Given the output of SimilarityMatrix (that is the linkage matrix and ordered list of sample
     IDs) and a desired number of groups, return a Pandas DataFrame of sample IDs and assigned group ID, generated by
@@ -444,9 +419,7 @@ class Harmony:
     ):
         logger.info("Preparing Harmony for application to an Experiment")
         transform_kwargs = transform_kwargs or {}
-        self.transformer = (
-            None if transform is None else TRANSFORMERS[transform](**transform_kwargs)
-        )
+        self.transformer = None if transform is None else TRANSFORMERS[transform](**transform_kwargs)
         self.data = data
         self.data = self.data.dropna(axis=1, how="any")
         self.features = [x for x in features if x in self.data.columns]
@@ -475,9 +448,7 @@ class Harmony:
         """
         logger.info("Running harmony")
         data = self.data[self.features].astype(float)
-        self.harmony = harmonypy.run_harmony(
-            data_mat=data.values, meta_data=self.meta, vars_use=var_use, **kwargs
-        )
+        self.harmony = harmonypy.run_harmony(data_mat=data.values, meta_data=self.meta, vars_use=var_use, **kwargs)
         return
 
     def plot_kde(self, var: Union[str, List[str]]):
@@ -546,18 +517,14 @@ class Harmony:
         if meta_var not in self.meta.columns:
             logger.error(f"{meta_var} missing from meta attribute")
             raise ValueError(f"{meta_var} missing from meta attribute")
-        idx = np.random.randint(
-            self.data.shape[0], size=int(self.data.shape[0] * sample)
-        )
+        idx = np.random.randint(self.data.shape[0], size=int(self.data.shape[0] * sample))
         return harmonypy.lisi.compute_lisi(
             self.batch_corrected()[self.features].values[idx],
             metadata=self.meta.iloc[idx],
             label_colnames=[meta_var],
         )
 
-    def batch_lisi_distribution(
-        self, meta_var: str = "sample_id", sample: Union[float, None] = 0.1, **kwargs
-    ):
+    def batch_lisi_distribution(self, meta_var: str = "sample_id", sample: Union[float, None] = 0.1, **kwargs):
         """
         Plot the distribution of LISI using the given meta_var as label
 
@@ -574,9 +541,7 @@ class Harmony:
         -------
         Matplotlib.Axes
         """
-        idx = np.random.randint(
-            self.data.shape[0], size=int(self.data.shape[0] * sample)
-        )
+        idx = np.random.randint(self.data.shape[0], size=int(self.data.shape[0] * sample))
         before = harmonypy.lisi.compute_lisi(
             self.data[self.features].values[idx],
             metadata=self.meta.iloc[idx],
@@ -677,14 +642,8 @@ def create_experiment(project, features: List[str], experiment_name: str) -> Exp
     -------
     Experiment
     """
-    markers = [
-        {"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""} for x in features
-    ]
-    channels = [
-        {"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""} for x in features
-    ]
+    markers = [{"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""} for x in features]
+    channels = [{"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""} for x in features]
     mappings = [(x, x) for x in features]
     panel_definition = {"markers": markers, "channels": channels, "mappings": mappings}
-    return project.add_experiment(
-        experiment_id=experiment_name, panel_definition=panel_definition
-    )
+    return project.add_experiment(experiment_id=experiment_name, panel_definition=panel_definition)

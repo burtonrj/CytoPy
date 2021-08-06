@@ -66,7 +66,7 @@ __version__ = "2.0.0"
 __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
-logger = logging.getLogger("Experiment")
+logger = logging.getLogger(__name__)
 
 
 def _load_excel_to_dataframe(path: str) -> (pd.DataFrame, pd.DataFrame):
@@ -444,7 +444,7 @@ def missing_channels(mappings: List[dict], channels: List[NormalisedName], error
             if errors == "raise":
                 raise KeyError(f"Missing channel {x.standard}")
             elif errors == "warn":
-                logging.warning(f"Missing channel {x.standard}", stacklevel=2)
+                logger.warning(f"Missing channel {x.standard}", stacklevel=2)
 
 
 class Panel(mongoengine.EmbeddedDocument):

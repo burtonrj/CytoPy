@@ -26,11 +26,14 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from typing import List, Dict, Set
-import pandas as pd
-import mongoengine
-import logging
 import json
+import logging
+from typing import Dict
+from typing import List
+from typing import Set
+
+import mongoengine
+import pandas as pd
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -41,7 +44,7 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
-logger = logging.getLogger("subject")
+logger = logging.getLogger(__name__)
 
 
 class Subject(mongoengine.DynamicDocument):
@@ -69,9 +72,7 @@ class Subject(mongoengine.DynamicDocument):
 
     @fields.setter
     def fields(self, _):
-        raise ValueError(
-            "Fields is read only, access individual fields to edit values."
-        )
+        raise ValueError("Fields is read only, access individual fields to edit values.")
 
     def to_dict(self, *args, **kwargs) -> Dict:
         return json.loads(self.to_json(*args, **kwargs))
