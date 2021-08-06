@@ -1,5 +1,7 @@
 {
   "matplotlib_transform_precision": 5,
+  "logicle_transform_precision": 5,
+  "logicle_transform_storage": "default",
   "column_default": "markers",
   "logging_config": {
     "version": 1,

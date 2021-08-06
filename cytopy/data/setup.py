@@ -24,14 +24,16 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from types import SimpleNamespace
-from logging.config import dictConfig
-from typing import *
-import mongoengine
-import logging
-import cytopy
 import json
+import logging
 import os
+from logging.config import dictConfig
+from types import SimpleNamespace
+from typing import *
+
+import mongoengine
+
+import cytopy
 
 
 class Config(SimpleNamespace):
@@ -51,8 +53,8 @@ class Config(SimpleNamespace):
     """
 
     def __init__(self, path: Optional[str] = None):
-        cytopy_path = os.path.dirname(cytopy.__file__)
-        path = path or os.path.join(cytopy_path, "config.json")
+        self.install_path = os.path.dirname(cytopy.__file__)
+        path = path or os.path.join(self.install_path, "config.json")
         with open(path, "r") as f:
             super().__init__(**json.load(f))
 
@@ -83,9 +85,7 @@ class Config(SimpleNamespace):
         try:
             level = level if isinstance(level, int) else levels[level.upper()]
         except KeyError:
-            raise KeyError(
-                f"{level} is not a valid level, must be one of {levels.keys()}"
-            )
+            raise KeyError(f"{level} is not a valid level, must be one of {levels.keys()}")
 
         try:
             self.__getitem__("logging_config")["handlers"][handler_id] = level
@@ -97,9 +97,7 @@ class Config(SimpleNamespace):
             json.dump(self.options, f)
 
 
-def global_init(
-    database_name: str, config_path: Optional[str] = None, **kwargs
-) -> None:
+def global_init(database_name: str, config_path: Optional[str] = None, **kwargs) -> None:
     """
     Global initializer for mongogengine ORM and logging. Logging is managed using the loguru package.
 

@@ -28,6 +28,9 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import logging
+import os
+import pickle
 from functools import partial
 from typing import *
 from warnings import warn
@@ -37,18 +40,39 @@ import pandas as pd
 from flowutils import transforms
 from sklearn import preprocessing
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
+from ..data.setup import Config
+
+CONFIG = Config()
+CACHE = list()
+CACHE_KWARGS = list()
+logger = logging.getLogger(__name__)
 
 
 class TransformError(Exception):
-    pass
+    def __init__(self, message: str):
+        logger.error(message)
+        super().__init__(message)
+
+
+if len(CONFIG.logicle_transform_storage) > 0:
+    if CONFIG.logicle_transform_storage == "default":
+        saved_cache_path = os.path.join(CONFIG.install_path, "logicle_cache.pkl")
+    else:
+        saved_cache_path = os.path.join(CONFIG.logicle_transform_storage)
+    if os.path.isfile(saved_cache_path):
+        with open(saved_cache_path, "rb") as f:
+            saved_cache = pickle.load(f)
+            CACHE = saved_cache["cache"]
+            CACHE_KWARGS = saved_cache["kwargs"]
+
+
+def save_cache(path: str = "default"):
+    save_path = os.path.join(CONFIG.install_path, "logicle_cache.pkl") if path == "default" else path
+    with open(save_path, "wb") as file:
+        pickle.dump({"cache": CACHE, "kwargs": CACHE_KWARGS}, file)
+    if path != "default":
+        CONFIG.logicle_transform_storage = path
+        CONFIG.save()
 
 
 def _get_dataframe_column_index(data: pd.DataFrame, features: list):
@@ -212,6 +236,12 @@ class LogicleTransformer(Transformer):
             a=a,
             t=t,
         )
+
+    def scale(self, data: pd.DataFrame, features: List[str]):
+        return transform_with_cache(data=data[features], scaler=self, inverse=False)
+
+    def inverse_scale(self, data: pd.DataFrame, features: List[str]):
+        return transform_with_cache(data=data[features], scaler=self, inverse=True)
 
 
 class HyperlogTransformer(Transformer):
@@ -709,3 +739,66 @@ def safe_range(data: pd.DataFrame, x: str):
     valid_range = data[data[x] > 0][x].values
     assert len(valid_range) > 0, f"All values for {x} <= 0"
     return np.min(valid_range), np.max(valid_range)
+
+
+def cache_lookup(cache: Dict, data: pd.DataFrame, inverse: bool = False):
+    if inverse:
+        cache = {v: k for k, v in cache.items()}
+    data = data.applymap(lambda x: cache.get(x, np.nan))
+    return data, data.isnull()
+
+
+def flatten_and_label_space(cached: pd.DataFrame, missing_mask: pd.DataFrame):
+    col_length = list()
+    col_idx = list()
+    to_transform = list()
+
+    for col in cached.columns:
+        col_length.append(missing_mask[col].sum())
+        missing_values = cached[missing_mask[col]][col]
+        col_idx.append(missing_values.index.values)
+        to_transform.append(missing_values.values)
+    to_transform = pd.DataFrame(np.concatenate(to_transform, axis=0), columns=["x"])
+    return to_transform, col_length, col_idx
+
+
+def reconstruct(transformed: pd.DataFrame, cached: pd.DataFrame, col_length: List[int], col_idx: List[int]):
+    ix = 0
+    transformed = transformed["x"].values
+    columns = list(cached.columns)
+    for i in range(len(col_length)):
+        x = transformed[ix : col_length[i]]
+        ix = col_length[i]
+        cached.loc[col_idx[i]][columns[i]] = x
+
+
+def update_cache(original: np.ndarray, transformed: np.ndarray, cache_idx: int):
+    global CACHE
+    CACHE[cache_idx].update({o: t for o, t in np.c_[original, transformed]})
+
+
+def transform_with_cache(data: pd.DataFrame, scaler: LogicleTransformer, inverse: bool = False):
+    global CACHE
+    global CACHE_KWARGS
+
+    if scaler.kwargs not in CACHE_KWARGS:
+        CACHE.append({})
+        CACHE_KWARGS.append(scaler.kwargs)
+        cache_idx = len(CACHE)
+    else:
+        cache_idx = CACHE_KWARGS.index(scaler.kwargs)
+
+    cached, missing_mask = cache_lookup(cache=CACHE[cache_idx], data=data, inverse=inverse)
+    if not missing_mask.any(axis=0).any():
+        return cached
+    to_transform, col_length, col_idx = flatten_and_label_space(cached=cached, missing_mask=missing_mask)
+
+    if inverse:
+        inverse_transformed = scaler.inverse_scale(data=to_transform, features=["x"])
+        reconstruct(transformed=inverse_transformed, cached=cached, col_length=col_length, col_idx=col_idx)
+        return cached
+
+    transformed = scaler.scale(data=to_transform, features=["x"])
+    reconstruct(transformed=transformed, cached=cached, col_length=col_length, col_idx=col_idx)
+    update_cache(original=to_transform, transformed=transformed, cache_idx=cache_idx)
+    return cached
