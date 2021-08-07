@@ -1282,8 +1282,9 @@ def single_cell_dataframe(
         resulting concatenated DataFrame.
     sampling_level: str, (default="file")
         If "file" (default) then each FileGroup is sampled before concatenating into a single DataFrame.
-        If "Experiment", then data is obtained from each FileGroup first, and then the concatenated
+        If "experiment", then data is obtained from each FileGroup first, and then the concatenated
         data is sampled.
+        If "population" then will attempt to sample the desired number of events from each population.
     sampling_method: str (default="uniform")
         The sampling method to use; see cytopy.flow.sampling
     sampling_kwargs: Dict, optional
@@ -1306,8 +1307,13 @@ def single_cell_dataframe(
         label_parent=label_parent,
         frac_of=frac_of,
     )
+
+    if sample_size is not None and sampling_level == "file":
+        kwargs = {**kwargs, **{"sample_size": sample_size, "sampling_method": sampling_method, **sampling_kwargs}}
+
     if isinstance(populations, list) or regex is not None:
         method = "load_multiple_populations"
+        kwargs["sample_at_population_level"] = sampling_level == "population"
         kwargs["regex"] = regex
         kwargs["populations"] = populations
         kwargs.pop("population")
@@ -1330,13 +1336,6 @@ def single_cell_dataframe(
         pop_data["subject_id"] = None
         if fg.subject:
             pop_data["subject_id"] = fg.subject.subject_id
-        if sample_size is not None and sampling_level == "file":
-            pop_data = sample_dataframe(
-                data=pop_data,
-                sample_size=sample_size,
-                method=sampling_method,
-                **sampling_kwargs,
-            )
         data.append(pop_data)
 
     data = pd.concat([df.reset_index().rename({"index": "original_index"}, axis=1) for df in data]).reset_index(

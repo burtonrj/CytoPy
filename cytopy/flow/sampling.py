@@ -87,7 +87,7 @@ def uniform_downsampling(data: pd.DataFrame, sample_size: Union[int, float], **k
     if isinstance(sample_size, int):
         if sample_size >= data.shape[0]:
             logger.warning(
-                f"Number of observations larger than requested sample size {sample_size}, "
+                f"Number of observations larger than or equal requested sample size {sample_size}, "
                 f"returning complete data (n={data.shape[0]})"
             )
             return data

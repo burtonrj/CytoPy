@@ -35,6 +35,7 @@ from functools import wraps
 from typing import Callable
 from typing import Dict
 from typing import Generator
+from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Union
@@ -49,6 +50,7 @@ from sklearn.model_selection import permutation_test_score
 from sklearn.model_selection import StratifiedKFold
 
 from ..flow.build_models import build_sklearn_model
+from ..flow.sampling import sample_dataframe
 from ..flow.transform import apply_transform
 from ..flow.transform import apply_transform_map
 from ..flow.transform import Transformer
@@ -262,7 +264,14 @@ class FileGroup(mongoengine.Document):
             Invalid key, does not exist in HDF5 file
         """
 
-    def data(self, source: str = "primary") -> pd.DataFrame:
+    def data(
+        self,
+        source: str = "primary",
+        idx: Optional[Iterable[int]] = None,
+        sample_size: Optional[Union[int, float]] = None,
+        sampling_method: str = "uniform",
+        **sampling_kwargs,
+    ) -> pd.DataFrame:
         """
         Load the FileGroup dataframe for the desired source file e.g. "primary" for primary
         staining or name of a control for control staining. Transformations are cached within the
@@ -285,7 +294,14 @@ class FileGroup(mongoengine.Document):
         """
         try:
             with h5py.File(self.h5path, "r") as f:
-                return pd.DataFrame(f[source][:], dtype=np.float32, columns=self.columns)
+                data = pd.DataFrame(f[source][:], dtype=np.float32, columns=self.columns)
+                if idx is not None:
+                    data = data.loc[idx]
+                if sample_size is not None:
+                    return sample_dataframe(
+                        data=data, sample_size=sample_size, method=sampling_method, **sampling_kwargs
+                    )
+                return data
         except KeyError:
             logger.error(
                 f"Invalid key given on access to {self.primary_id} ({self.id}) HDF5, expected " f"one of {f.keys()}"
@@ -573,6 +589,10 @@ class FileGroup(mongoengine.Document):
         transform_kwargs: Optional[Dict] = None,
         label_parent: bool = False,
         frac_of: Optional[List[str]] = None,
+        sample_size: Optional[Union[int, float]] = None,
+        sampling_method: str = "uniform",
+        sample_at_population_level: bool = True,
+        **sampling_kwargs,
     ) -> pd.DataFrame:
         """
         Load a DataFrame of single cell data obtained from multiple populations. Population data
@@ -610,23 +630,30 @@ class FileGroup(mongoengine.Document):
         dataframe = list()
         if regex is None and populations is None:
             raise ValueError("Must provide list of populations or a regex pattern")
-
+        kwargs = dict(
+            transform=transform,
+            transform_kwargs=transform_kwargs,
+            features_to_transform=features_to_transform,
+            label_parent=label_parent,
+            frac_of=frac_of,
+        )
+        if sample_size is not None and sample_at_population_level:
+            kwargs["sample_size"] = sample_size
+            kwargs["sampling_method"] = sampling_method
+            kwargs["sampling_kwargs"] = sampling_kwargs
         if regex:
             populations = self.list_populations(regex=regex)
         for p in populations:
             try:
-                pop_data = self.load_population_df(
-                    population=p,
-                    transform=transform,
-                    transform_kwargs=transform_kwargs,
-                    features_to_transform=features_to_transform,
-                    label_parent=label_parent,
-                    frac_of=frac_of,
-                )
+                pop_data = self.load_population_df(population=p, **kwargs)
                 pop_data["population_label"] = p
                 dataframe.append(pop_data)
             except ValueError:
                 logger.warning(f"{self.primary_id} does not contain population {p}")
+        if sample_size is not None and not sample_at_population_level:
+            return sample_dataframe(
+                data=pd.concat(dataframe), sample_size=sample_size, method=sampling_method, **sampling_kwargs
+            )
         return pd.concat(dataframe)
 
     def load_population_df(
@@ -637,7 +664,10 @@ class FileGroup(mongoengine.Document):
         transform_kwargs: Optional[Dict] = None,
         label_parent: bool = False,
         frac_of: Optional[List[str]] = None,
+        sample_size: Optional[Union[int, float]] = None,
+        sampling_method: str = "uniform",
         label_downstream_affiliations=None,
+        **sampling_kwargs,
     ) -> pd.DataFrame:
         """
         Load the DataFrame for the events pertaining to a single population.
@@ -676,7 +706,13 @@ class FileGroup(mongoengine.Document):
 
         population = self.get_population(population_name=population)
         transform_kwargs = transform_kwargs or {}
-        data = self.data(source="primary").loc[population.index]
+        data = self.data(
+            source="primary",
+            idx=population.index,
+            sample_size=sample_size,
+            sampling_method=sampling_method,
+            **sampling_kwargs,
+        )
 
         if isinstance(transform, str):
             features_to_transform = features_to_transform or self.columns
