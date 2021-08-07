@@ -1,8 +1,10 @@
-from cytopy.data.project import Project
-from cytopy.data.errors import *
-from cytopy.tests import assets
-import pytest
 import os
+
+import pytest
+
+from cytopy.data.errors import *
+from cytopy.data.project import Project
+from cytopy.tests import assets
 
 
 @pytest.fixture()

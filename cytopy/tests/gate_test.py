@@ -1,13 +1,14 @@
-from cytopy.data import gate
-from cytopy.data.geometry import *
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pytest
+from KDEpy import FFTKDE
 from scipy.spatial.distance import euclidean
 from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs
-from KDEpy import FFTKDE
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-import pytest
+
+from cytopy.data import gate
+from cytopy.data.geometry import *
 
 np.random.seed(42)
 
@@ -244,9 +245,7 @@ def test_upsample():
     pops = list()
     for x in np.unique(sample_labels):
         idx = sample.index.values[np.where(sample_labels == x)[0]]
-        pops.append(
-            gate.Population(population_name=f"Pop_{x}", parent="root", index=idx[:498])
-        )
+        pops.append(gate.Population(population_name=f"Pop_{x}", parent="root", index=idx[:498]))
     pops = g._upsample(data=data, sample=sample, populations=pops)
     assert isinstance(pops, list)
     assert all([isinstance(p, gate.Population) for p in pops])
@@ -282,9 +281,7 @@ def test_dim_reduction():
 
 @pytest.mark.parametrize("d", ["++", "--", "+-", "+++", "+ -"])
 def test_threshold_add_child_invalid_1d(d):
-    threshold = gate.ThresholdGate(
-        gate_name="test", parent="test parent", method="manual", x="X"
-    )
+    threshold = gate.ThresholdGate(gate_name="test", parent="test parent", method="manual", x="X")
     child = gate.ChildThreshold(
         name="test child",
         definition=d,
@@ -297,9 +294,7 @@ def test_threshold_add_child_invalid_1d(d):
 
 @pytest.mark.parametrize("d", ["+", "-", "+--", "+++", "+ -"])
 def test_threshold_add_child_invalid_2d(d):
-    threshold = gate.ThresholdGate(
-        gate_name="test", parent="test parent", x="X", y="Y", method="manual"
-    )
+    threshold = gate.ThresholdGate(gate_name="test", parent="test parent", x="X", y="Y", method="manual")
     child = gate.ChildThreshold(
         name="test child",
         definition=d,
@@ -307,10 +302,7 @@ def test_threshold_add_child_invalid_2d(d):
     )
     with pytest.raises(AssertionError) as err:
         threshold.add_child(child)
-    assert (
-        str(err.value)
-        == "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
-    )
+    assert str(err.value) == "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
 
 
 def test_threshold_add_child():
@@ -336,20 +328,10 @@ def test_threshold_add_child():
 
 
 def test_threshold_match_children_1d():
-    threshold = gate.ThresholdGate(
-        gate_name="test", parent="test parent", x="X", method="density"
-    )
+    threshold = gate.ThresholdGate(gate_name="test", parent="test parent", x="X", method="density")
     data = np.random.normal(loc=1.0, scale=1.5, size=1000)
-    threshold.add_child(
-        gate.ChildThreshold(
-            name="positive", definition="+", geom=ThresholdGeom(x_threshold=0.5)
-        )
-    )
-    threshold.add_child(
-        gate.ChildThreshold(
-            name="negative", definition="-", geom=ThresholdGeom(x_threshold=0.5)
-        )
-    )
+    threshold.add_child(gate.ChildThreshold(name="positive", definition="+", geom=ThresholdGeom(x_threshold=0.5)))
+    threshold.add_child(gate.ChildThreshold(name="negative", definition="-", geom=ThresholdGeom(x_threshold=0.5)))
     pos = gate.Population(
         population_name="p1",
         parent="root",
@@ -372,22 +354,12 @@ def test_threshold_match_children_1d():
 
 
 def test_threshold_match_children_2d():
-    threshold = gate.ThresholdGate(
-        gate_name="test", parent="test parent", x="X", y="Y", method="density"
-    )
+    threshold = gate.ThresholdGate(gate_name="test", parent="test parent", x="X", y="Y", method="density")
     x = np.random.normal(loc=1.0, scale=1.5, size=1000)
     y = np.random.normal(loc=1.0, scale=1.5, size=1000)
     data = pd.DataFrame({"X": x, "Y": y})
-    threshold.add_child(
-        gate.ChildThreshold(
-            name="positive", definition="++,+-", geom=ThresholdGeom(x_threshold=0.5)
-        )
-    )
-    threshold.add_child(
-        gate.ChildThreshold(
-            name="negative", definition="--,-+", geom=ThresholdGeom(x_threshold=0.5)
-        )
-    )
+    threshold.add_child(gate.ChildThreshold(name="positive", definition="++,+-", geom=ThresholdGeom(x_threshold=0.5)))
+    threshold.add_child(gate.ChildThreshold(name="negative", definition="--,-+", geom=ThresholdGeom(x_threshold=0.5)))
     pos = gate.Population(
         population_name="p1",
         parent="root",
@@ -423,9 +395,7 @@ def test_threshold_2d():
     x = np.random.normal(loc=1.0, scale=1.5, size=1000)
     y = np.random.normal(loc=1.0, scale=1.5, size=1000)
     data = pd.DataFrame({"X": x, "Y": y})
-    results = gate.threshold_2d(
-        data=data, x="X", y="Y", x_threshold=0.5, y_threshold=0.5
-    )
+    results = gate.threshold_2d(data=data, x="X", y="Y", x_threshold=0.5, y_threshold=0.5)
     assert len(results.keys()) == 4
     assert all(isinstance(df, pd.DataFrame) for df in results.values())
     x_pos, y_pos = np.where(x >= 0.5)[0], np.where(y >= 0.5)[0]
@@ -462,17 +432,13 @@ def test_find_inflection_point():
     np.random.seed(42)
     n1 = np.random.normal(loc=2, scale=1, size=1000)
     x, y = FFTKDE(kernel="gaussian", bw="silverman").fit(n1).evaluate()
-    inflection_point = gate.find_inflection_point(
-        x=x, p=y, peak_idx=int(np.argmax(y)), incline=False
-    )
+    inflection_point = gate.find_inflection_point(x=x, p=y, peak_idx=int(np.argmax(y)), incline=False)
     plt.plot(x, y)
     plt.axvline(inflection_point, c="r")
     plt.title("Test inflection point; incline=False")
     plt.show()
     assert 3 < inflection_point < 4
-    inflection_point = gate.find_inflection_point(
-        x=x, p=y, peak_idx=int(np.argmax(y)), incline=True
-    )
+    inflection_point = gate.find_inflection_point(x=x, p=y, peak_idx=int(np.argmax(y)), incline=True)
     plt.plot(x, y)
     plt.axvline(inflection_point, c="r")
     plt.title("Test inflection point; incline=True")
@@ -497,9 +463,7 @@ def test_threshold_fit_1d(yeo_johnson):
     )
     threshold.fit(data=data)
     assert len(threshold.children) == 2
-    assert (
-        threshold.children[0].geom.x_threshold == threshold.children[1].geom.x_threshold
-    )
+    assert threshold.children[0].geom.x_threshold == threshold.children[1].geom.x_threshold
     assert round(threshold.children[0].geom.x_threshold) == 4
     assert all([i in [c.definition for c in threshold.children] for i in ["+", "-"]])
 
@@ -526,12 +490,7 @@ def test_threshold_fit_2d(yeo_johnson):
     assert len(threshold.children) == 4
     assert len(set([c.geom.x_threshold for c in threshold.children])) == 1
     assert len(set([c.geom.y_threshold for c in threshold.children])) == 1
-    assert all(
-        [
-            i in [c.definition for c in threshold.children]
-            for i in ["++", "--", "+-", "-+"]
-        ]
-    )
+    assert all([i in [c.definition for c in threshold.children] for i in ["++", "--", "+-", "-+"]])
     assert 2 < threshold.children[0].geom.x_threshold < 4
     assert 2 < threshold.children[0].geom.y_threshold < 4
 
@@ -571,9 +530,7 @@ def test_threshold_predict_1d(yeo_johnson):
     assert all(p.geom.transform_y == threshold.transform_y for p in pops)
     assert all(i in [p.definition for p in pops] for i in ["+", "-"])
     neg_idx = new_data[new_data.X < threshold.children[0].geom.x_threshold].index.values
-    pos_idx = new_data[
-        new_data.X >= threshold.children[0].geom.x_threshold
-    ].index.values
+    pos_idx = new_data[new_data.X >= threshold.children[0].geom.x_threshold].index.values
     pos_pop = [p for p in pops if p.definition == "+"][0]
     neg_pop = [p for p in pops if p.definition == "-"][0]
     assert np.array_equal(neg_pop.index, neg_idx)
@@ -599,9 +556,7 @@ def test_threshold_predict_2d(yeo_johnson):
         method_kwargs=method_kwargs,
     )
     threshold.fit(data=data)
-    new_data, _ = make_blobs(
-        n_samples=3000, n_features=2, centers=[(1.0, 1.0), (5.0, 0.2)], random_state=42
-    )
+    new_data, _ = make_blobs(n_samples=3000, n_features=2, centers=[(1.0, 1.0), (5.0, 0.2)], random_state=42)
     new_data = pd.DataFrame({"X": new_data[:, 0], "Y": new_data[:, 1]})
     pops = threshold.predict(new_data)
     assert len(pops) == 4
@@ -613,20 +568,16 @@ def test_threshold_predict_2d(yeo_johnson):
     assert all(p.geom.transform_y == threshold.transform_y for p in pops)
     assert all(i in [p.definition for p in pops] for i in ["++", "--", "-+", "+-"])
     neg_idx = new_data[
-        (new_data.X < threshold.children[0].geom.x_threshold)
-        & (new_data.Y < threshold.children[0].geom.y_threshold)
+        (new_data.X < threshold.children[0].geom.x_threshold) & (new_data.Y < threshold.children[0].geom.y_threshold)
     ].index.values
     pos_idx = new_data[
-        (new_data.X >= threshold.children[0].geom.x_threshold)
-        & (new_data.Y >= threshold.children[0].geom.y_threshold)
+        (new_data.X >= threshold.children[0].geom.x_threshold) & (new_data.Y >= threshold.children[0].geom.y_threshold)
     ].index.values
     negpos_idx = new_data[
-        (new_data.X < threshold.children[0].geom.x_threshold)
-        & (new_data.Y >= threshold.children[0].geom.y_threshold)
+        (new_data.X < threshold.children[0].geom.x_threshold) & (new_data.Y >= threshold.children[0].geom.y_threshold)
     ].index.values
     posneg_idx = new_data[
-        (new_data.X >= threshold.children[0].geom.x_threshold)
-        & (new_data.Y < threshold.children[0].geom.y_threshold)
+        (new_data.X >= threshold.children[0].geom.x_threshold) & (new_data.Y < threshold.children[0].geom.y_threshold)
     ].index.values
     pos_pop = [p for p in pops if p.definition == "++"][0]
     neg_pop = [p for p in pops if p.definition == "--"][0]
@@ -701,9 +652,7 @@ def test_threshold_fit_predict_2d(yeo_johnson):
         method_kwargs=method_kwargs,
     )
     threshold.fit(data)
-    threshold.label_children(
-        {"++": "Top left", "--": "Other", "-+": "Other", "+-": "Other"}
-    )
+    threshold.label_children({"++": "Top left", "--": "Other", "-+": "Other", "+-": "Other"})
     data, _ = make_blobs(
         n_samples=3000,
         n_features=2,
@@ -808,12 +757,8 @@ def test_polygon_match_to_children():
     data_dict = [
         {
             "data": data[np.where(labels == i)],
-            "signature": pd.DataFrame(data[np.where(labels == i)], columns=["X", "Y"])
-            .mean()
-            .to_dict(),
-            "poly": create_envelope(
-                data[np.where(labels == i)][:, 0], data[np.where(labels == i)][:, 1]
-            ),
+            "signature": pd.DataFrame(data[np.where(labels == i)], columns=["X", "Y"]).mean().to_dict(),
+            "poly": create_envelope(data[np.where(labels == i)][:, 0], data[np.where(labels == i)][:, 1]),
         }
         for i in range(5)
     ]
@@ -836,33 +781,19 @@ def test_polygon_match_to_children():
     pops = g._match_to_children(pops)
     assert len(pops) == 2
     assert {p.population_name for p in pops} == {"Child1", "Child2"}
-    assert (
-        1800 < len([p for p in pops if p.population_name == "Child1"][0].index) < 2200
-    )
-    assert (
-        2800 < len([p for p in pops if p.population_name == "Child2"][0].index) < 4200
-    )
+    assert 1800 < len([p for p in pops if p.population_name == "Child1"][0].index) < 2200
+    assert 2800 < len([p for p in pops if p.population_name == "Child2"][0].index) < 4200
 
 
 @pytest.mark.parametrize(
     "gate",
     [
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="MiniBatchKMeans", n_clusters=2
-        ),
-        create_polygon_gate(
-            klass=gate.EllipseGate, method="GaussianMixture", n_components=2
-        ),
+        create_polygon_gate(klass=gate.PolygonGate, method="MiniBatchKMeans", n_clusters=2),
+        create_polygon_gate(klass=gate.EllipseGate, method="GaussianMixture", n_components=2),
         create_polygon_gate(klass=gate.EllipseGate, method="SMM", n_components=2),
-        create_polygon_gate(
-            klass=gate.EllipseGate, method="BayesianGaussianMixture", n_components=2
-        ),
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="SpectralClustering", n_clusters=2
-        ),
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="AgglomerativeClustering", n_clusters=2
-        ),
+        create_polygon_gate(klass=gate.EllipseGate, method="BayesianGaussianMixture", n_components=2),
+        create_polygon_gate(klass=gate.PolygonGate, method="SpectralClustering", n_clusters=2),
+        create_polygon_gate(klass=gate.PolygonGate, method="AgglomerativeClustering", n_clusters=2),
         create_polygon_gate(klass=gate.PolygonGate, method="Birch", n_clusters=2),
         create_polygon_gate(
             klass=gate.PolygonGate,
@@ -876,9 +807,7 @@ def test_polygon_match_to_children():
             n_components=2,
             yeo_johnson=True,
         ),
-        create_polygon_gate(
-            klass=gate.EllipseGate, method="SMM", n_components=2, yeo_johnson=True
-        ),
+        create_polygon_gate(klass=gate.EllipseGate, method="SMM", n_components=2, yeo_johnson=True),
         create_polygon_gate(
             klass=gate.EllipseGate,
             method="BayesianGaussianMixture",
@@ -897,9 +826,7 @@ def test_polygon_match_to_children():
             n_clusters=2,
             yeo_johnson=True,
         ),
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="Birch", n_clusters=2, yeo_johnson=True
-        ),
+        create_polygon_gate(klass=gate.PolygonGate, method="Birch", n_clusters=2, yeo_johnson=True),
     ],
 )
 def test_polygon_fit(gate):
@@ -920,10 +847,7 @@ def test_polygon_fit(gate):
         ).centroid.xy
         for i in np.unique(labels)
     ]
-    child_centroids = [
-        create_envelope(c.geom.x_values, c.geom.y_values).centroid.xy
-        for c in gate.children
-    ]
+    child_centroids = [create_envelope(c.geom.x_values, c.geom.y_values).centroid.xy for c in gate.children]
     for c in child_centroids:
         distances = [abs(euclidean(c, centroid)) for centroid in centroids]
         assert sum([x <= 1.0 for x in distances]) == 1
@@ -932,22 +856,12 @@ def test_polygon_fit(gate):
 @pytest.mark.parametrize(
     "gate",
     [
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="MiniBatchKMeans", n_clusters=2
-        ),
-        create_polygon_gate(
-            klass=gate.EllipseGate, method="GaussianMixture", n_components=2
-        ),
+        create_polygon_gate(klass=gate.PolygonGate, method="MiniBatchKMeans", n_clusters=2),
+        create_polygon_gate(klass=gate.EllipseGate, method="GaussianMixture", n_components=2),
         create_polygon_gate(klass=gate.EllipseGate, method="SMM", n_components=2),
-        create_polygon_gate(
-            klass=gate.EllipseGate, method="BayesianGaussianMixture", n_components=2
-        ),
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="SpectralClustering", n_clusters=2
-        ),
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="AgglomerativeClustering", n_clusters=2
-        ),
+        create_polygon_gate(klass=gate.EllipseGate, method="BayesianGaussianMixture", n_components=2),
+        create_polygon_gate(klass=gate.PolygonGate, method="SpectralClustering", n_clusters=2),
+        create_polygon_gate(klass=gate.PolygonGate, method="AgglomerativeClustering", n_clusters=2),
         create_polygon_gate(klass=gate.PolygonGate, method="Birch", n_clusters=2),
         create_polygon_gate(
             klass=gate.PolygonGate,
@@ -961,9 +875,7 @@ def test_polygon_fit(gate):
             n_components=2,
             yeo_johnson=True,
         ),
-        create_polygon_gate(
-            klass=gate.EllipseGate, method="SMM", n_components=2, yeo_johnson=True
-        ),
+        create_polygon_gate(klass=gate.EllipseGate, method="SMM", n_components=2, yeo_johnson=True),
         create_polygon_gate(
             klass=gate.EllipseGate,
             method="BayesianGaussianMixture",
@@ -982,9 +894,7 @@ def test_polygon_fit(gate):
             n_clusters=2,
             yeo_johnson=True,
         ),
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="Birch", n_clusters=2, yeo_johnson=True
-        ),
+        create_polygon_gate(klass=gate.PolygonGate, method="Birch", n_clusters=2, yeo_johnson=True),
     ],
 )
 def test_polygon_predict(gate):
@@ -1017,22 +927,12 @@ def test_polygon_predict(gate):
 @pytest.mark.parametrize(
     "gate",
     [
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="MiniBatchKMeans", n_clusters=2
-        ),
-        create_polygon_gate(
-            klass=gate.EllipseGate, method="GaussianMixture", n_components=2
-        ),
+        create_polygon_gate(klass=gate.PolygonGate, method="MiniBatchKMeans", n_clusters=2),
+        create_polygon_gate(klass=gate.EllipseGate, method="GaussianMixture", n_components=2),
         create_polygon_gate(klass=gate.EllipseGate, method="SMM", n_components=2),
-        create_polygon_gate(
-            klass=gate.EllipseGate, method="BayesianGaussianMixture", n_components=2
-        ),
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="SpectralClustering", n_clusters=2
-        ),
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="AgglomerativeClustering", n_clusters=2
-        ),
+        create_polygon_gate(klass=gate.EllipseGate, method="BayesianGaussianMixture", n_components=2),
+        create_polygon_gate(klass=gate.PolygonGate, method="SpectralClustering", n_clusters=2),
+        create_polygon_gate(klass=gate.PolygonGate, method="AgglomerativeClustering", n_clusters=2),
         create_polygon_gate(klass=gate.PolygonGate, method="Birch", n_clusters=2),
         create_polygon_gate(
             klass=gate.PolygonGate,
@@ -1046,9 +946,7 @@ def test_polygon_predict(gate):
             n_components=2,
             yeo_johnson=True,
         ),
-        create_polygon_gate(
-            klass=gate.EllipseGate, method="SMM", n_components=2, yeo_johnson=True
-        ),
+        create_polygon_gate(klass=gate.EllipseGate, method="SMM", n_components=2, yeo_johnson=True),
         create_polygon_gate(
             klass=gate.EllipseGate,
             method="BayesianGaussianMixture",
@@ -1067,9 +965,7 @@ def test_polygon_predict(gate):
             n_clusters=2,
             yeo_johnson=True,
         ),
-        create_polygon_gate(
-            klass=gate.PolygonGate, method="Birch", n_clusters=2, yeo_johnson=True
-        ),
+        create_polygon_gate(klass=gate.PolygonGate, method="Birch", n_clusters=2, yeo_johnson=True),
     ],
 )
 def test_polygon_fit_predict(gate):

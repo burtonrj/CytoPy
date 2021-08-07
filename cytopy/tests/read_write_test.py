@@ -1,9 +1,11 @@
-from cytopy.tests import assets
-from cytopy.data import read_write
-from pathlib import Path
-import pytest
-import shutil
 import os
+import shutil
+from pathlib import Path
+
+import pytest
+
+from cytopy.data import read_write
+from cytopy.tests import assets
 
 
 @pytest.fixture()
@@ -25,20 +27,10 @@ def make_examples():
 
 def test_filter_fcs_files(make_examples):
     assert (
-        len(
-            read_write.filter_fcs_files(
-                f"{os.getcwd()}/test_filter", exclude_comps=True, exclude_dir="ignore"
-            )
-        )
-        == 5
+        len(read_write.filter_fcs_files(f"{os.getcwd()}/test_filter", exclude_comps=True, exclude_dir="ignore")) == 5
     )
     assert (
-        len(
-            read_write.filter_fcs_files(
-                f"{os.getcwd()}/test_filter", exclude_comps=False, exclude_dir="ignore"
-            )
-        )
-        == 10
+        len(read_write.filter_fcs_files(f"{os.getcwd()}/test_filter", exclude_comps=False, exclude_dir="ignore")) == 10
     )
 
 

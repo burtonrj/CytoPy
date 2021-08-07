@@ -1,18 +1,18 @@
-from sklearn.datasets import make_blobs
-from cytopy.data.experiment import *
-from cytopy.data.errors import *
-from cytopy.tests.conftest import create_example_populations
-from cytopy.tests import assets
+import os
+
+import h5py
 import pandas as pd
 import pytest
-import h5py
-import os
+from sklearn.datasets import make_blobs
+
+from cytopy.data.errors import *
+from cytopy.data.experiment import *
+from cytopy.tests import assets
+from cytopy.tests.conftest import create_example_populations
 
 
 def test_check_excel_template():
-    mappings, nomenclature = check_excel_template(
-        f"{assets.__path__._path[0]}/test_panel.xlsx"
-    )
+    mappings, nomenclature = check_excel_template(f"{assets.__path__._path[0]}/test_panel.xlsx")
     assert isinstance(mappings, pd.DataFrame)
     assert isinstance(nomenclature, pd.DataFrame)
 
@@ -21,10 +21,7 @@ def test_check_duplicates():
     x = ["Marker1", "Marker1", "Marker2", "Marker3"]
     with pytest.warns(UserWarning) as warn_:
         y = check_duplication(x)
-    assert (
-        str(warn_.list[0].message)
-        == "Duplicate channel/markers identified: ['Marker1']"
-    )
+    assert str(warn_.list[0].message) == "Duplicate channel/markers identified: ['Marker1']"
     assert y
 
 
@@ -40,9 +37,7 @@ def test_check_duplicates():
     ],
 )
 def test_query_normalised_name(query, expected, regex, permutations, case):
-    test_standard = NormalisedName(
-        standard="test", regex_str=regex, permutations=permutations, case_sensitive=case
-    )
+    test_standard = NormalisedName(standard="test", regex_str=regex, permutations=permutations, case_sensitive=case)
     result = test_standard.query(query)
     assert result == expected
 
@@ -86,9 +81,7 @@ def test_standardise_names(example, expected):
     ref_channels = [
         NormalisedName(standard="FITC", regex_str=r"\s*FITC\s*"),
         NormalisedName(standard="FSC-A", regex_str=r"\s*FSC[\-\s]+A\s*"),
-        NormalisedName(
-            standard="APC-Fire-750", regex_str=r"\s*APC[/\-\s]+Fire[\-\s]+750\s*"
-        ),
+        NormalisedName(standard="APC-Fire-750", regex_str=r"\s*APC[/\-\s]+Fire[\-\s]+750\s*"),
     ]
     ref_markers = [
         NormalisedName(standard="CD4", regex_str=r"\s*CD4\s*", permutations="CD4-FITC"),
@@ -263,14 +256,10 @@ def test_exp_remove_sample(example_populated_experiment):
 
 def test_add_new_sample_exists_error(example_populated_experiment):
     with pytest.raises(DuplicateSampleError) as err:
-        example_populated_experiment.add_dataframes(
-            sample_id="test sample", primary_data="dummy path", mappings=[]
-        )
+        example_populated_experiment.add_dataframes(sample_id="test sample", primary_data="dummy path", mappings=[])
     assert str(err.value) == "A file group with id test sample already exists"
     with pytest.raises(DuplicateSampleError) as err:
-        example_populated_experiment.add_fcs_files(
-            sample_id="test sample", primary="dummy path"
-        )
+        example_populated_experiment.add_fcs_files(sample_id="test sample", primary="dummy path")
     assert str(err.value) == "A file group with id test sample already exists"
 
 
@@ -279,12 +268,8 @@ def assert_h5_setup_correctly(filepath: str, exp: Experiment):
     with h5py.File(filepath, "r") as f:
         assert f["index/root/primary"][:].shape[0] == 30000
         assert f["test_ctrl"][:].shape[0] == 30000
-        assert set(
-            [x.decode("utf-8") for x in f["mappings/primary/channels"][:]]
-        ) == set(exp.panel.list_channels())
-        assert set(
-            [x.decode("utf-8") for x in f["mappings/primary/markers"][:]]
-        ) == set(exp.panel.list_markers())
+        assert set([x.decode("utf-8") for x in f["mappings/primary/channels"][:]]) == set(exp.panel.list_channels())
+        assert set([x.decode("utf-8") for x in f["mappings/primary/markers"][:]]) == set(exp.panel.list_markers())
 
 
 MAPPINGS = [
@@ -299,14 +284,8 @@ MAPPINGS = [
 
 
 def test_exp_add_dataframes(example_populated_experiment):
-    primary = pd.DataFrame(
-        make_blobs(n_samples=30000, n_features=14, centers=8, random_state=42)[0]
-    )
-    controls = {
-        "test_ctrl": pd.DataFrame(
-            make_blobs(n_samples=30000, n_features=14, centers=8, random_state=42)[0]
-        )
-    }
+    primary = pd.DataFrame(make_blobs(n_samples=30000, n_features=14, centers=8, random_state=42)[0])
+    controls = {"test_ctrl": pd.DataFrame(make_blobs(n_samples=30000, n_features=14, centers=8, random_state=42)[0])}
     exp = example_populated_experiment
     exp.add_dataframes(
         sample_id="test sample 2",
@@ -342,15 +321,9 @@ def test_exp_delete(example_populated_experiment):
 
 def test_exp_standardise_mappings(example_populated_experiment):
     exp = example_populated_experiment
-    standardised_mappings = exp._standardise_mappings(
-        mappings=MAPPINGS, missing_error="raise"
-    )
-    assert set([x["channel"] for x in standardised_mappings]) == set(
-        exp.panel.list_channels()
-    )
-    assert set([x["marker"] for x in standardised_mappings]) == set(
-        exp.panel.list_markers()
-    )
+    standardised_mappings = exp._standardise_mappings(mappings=MAPPINGS, missing_error="raise")
+    assert set([x["channel"] for x in standardised_mappings]) == set(exp.panel.list_channels())
+    assert set([x["marker"] for x in standardised_mappings]) == set(exp.panel.list_markers())
 
 
 def test_load_data(example_populated_experiment):
@@ -364,9 +337,7 @@ def test_load_data(example_populated_experiment):
     create_example_populations(exp.get_sample("test sample"))
     create_example_populations(exp.get_sample("test sample 2"))
     data = load_population_data_from_experiment(experiment=exp, population="pop1")
-    assert all(
-        [x in data.columns for x in ["sample_id", "subject_id", "original_index"]]
-    )
+    assert all([x in data.columns for x in ["sample_id", "subject_id", "original_index"]])
     assert data.shape[0] == 30084
     assert set(data["sample_id"].unique()) == {"test sample", "test sample 2"}
     test_sample_pop1 = exp.get_sample("test sample").get_population("pop1")
@@ -384,17 +355,13 @@ def test_load_data(example_populated_experiment):
     test_sample_pop = exp.get_sample("test sample").get_population("pop3")
     test_sample2_pop = exp.get_sample("test sample 2").get_population("pop3")
     assert np.array_equal(
-        data[(data.sample_id == "test sample") & (data.population_label == "pop3")][
-            "original_index"
-        ]
+        data[(data.sample_id == "test sample") & (data.population_label == "pop3")]["original_index"]
         .sort_values()
         .values,
         np.sort(test_sample_pop.index),
     )
     assert np.array_equal(
-        data[(data.sample_id == "test sample 2") & (data.population_label == "pop3")][
-            "original_index"
-        ]
+        data[(data.sample_id == "test sample 2") & (data.population_label == "pop3")]["original_index"]
         .sort_values()
         .values,
         np.sort(test_sample2_pop.index),
@@ -402,29 +369,17 @@ def test_load_data(example_populated_experiment):
     # The next population up is pop2, cells belonging to pop2 but not pop3 will be labelled
     # in the population_label column
     test_sample_pop = exp.get_sample("test sample").get_population("pop2")
-    idx = [
-        x
-        for x in test_sample_pop.index
-        if x not in exp.get_sample("test sample").get_population("pop3").index
-    ]
+    idx = [x for x in test_sample_pop.index if x not in exp.get_sample("test sample").get_population("pop3").index]
     assert np.array_equal(
-        data[(data.sample_id == "test sample") & (data.population_label == "pop2")][
-            "original_index"
-        ]
+        data[(data.sample_id == "test sample") & (data.population_label == "pop2")]["original_index"]
         .sort_values()
         .values,
         np.sort(idx),
     )
     test_sample2_pop = exp.get_sample("test sample 2").get_population("pop2")
-    idx = [
-        x
-        for x in test_sample2_pop.index
-        if x not in exp.get_sample("test sample 2").get_population("pop3").index
-    ]
+    idx = [x for x in test_sample2_pop.index if x not in exp.get_sample("test sample 2").get_population("pop3").index]
     assert np.array_equal(
-        data[(data.sample_id == "test sample 2") & (data.population_label == "pop2")][
-            "original_index"
-        ]
+        data[(data.sample_id == "test sample 2") & (data.population_label == "pop2")]["original_index"]
         .sort_values()
         .values,
         np.sort(idx),

@@ -1,12 +1,15 @@
-from ..flow.plotting import FlowPlot
-from ..flow import transform
-from matplotlib.colors import LogNorm, LinearSegmentedColormap
-from .conftest import create_linear_data, create_lognormal_data
 import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
+import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LogNorm
+
+from ..flow import transform
+from ..flow.plotting import FlowPlot
+from .conftest import create_linear_data
+from .conftest import create_lognormal_data
 
 sns.set(style="white", font_scale=1.2)
 sns.set_style("ticks", {"xtick.major.size": 8, "ytick.major.size": 8})
@@ -33,20 +36,12 @@ def test_create_lognormal_data():
     ylim = transform.safe_range(data, "y")
     xlim = pd.DataFrame({"Min": [xlim[0]], "Max": [xlim[1]]})
     ylim = pd.DataFrame({"Min": [ylim[0]], "Max": [ylim[1]]})
-    xlim, ylim = transformer.scale(xlim, ["Min", "Max"]), transformer.scale(
-        ylim, ["Min", "Max"]
-    )
-    xgrid = pd.DataFrame(
-        {"x": np.linspace(xlim["Min"].iloc[0], xlim["Max"].iloc[0], n)}
-    )
-    ygrid = pd.DataFrame(
-        {"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)}
-    )
+    xlim, ylim = transformer.scale(xlim, ["Min", "Max"]), transformer.scale(ylim, ["Min", "Max"])
+    xgrid = pd.DataFrame({"x": np.linspace(xlim["Min"].iloc[0], xlim["Max"].iloc[0], n)})
+    ygrid = pd.DataFrame({"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)})
     xbins = transformer.inverse_scale(xgrid, features=["x"]).x.values
     ybins = transformer.inverse_scale(ygrid, features=["y"]).y.values
-    ax.hist2d(
-        data.x.values, data.y.values, bins=[xbins, ybins], norm=LogNorm(), cmap="jet"
-    )
+    ax.hist2d(data.x.values, data.y.values, bins=[xbins, ybins], norm=LogNorm(), cmap="jet")
     ax.set_xscale("log", base=10)
     ax.set_yscale("log", base=10)
     ax.set_title("Log-normal data example")

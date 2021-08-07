@@ -1,9 +1,13 @@
-from cytopy.data.gating_strategy import GatingStrategy, DuplicatePopulationError
-from cytopy.data.gate import ThresholdGate, PolygonGate, EllipseGate
-from cytopy.data.project import Project
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
+
+from cytopy.data.gate import EllipseGate
+from cytopy.data.gate import PolygonGate
+from cytopy.data.gate import ThresholdGate
+from cytopy.data.gating_strategy import DuplicatePopulationError
+from cytopy.data.gating_strategy import GatingStrategy
+from cytopy.data.project import Project
 
 
 def create_gatingstrategy_and_load(example_populated_experiment):
@@ -70,9 +74,7 @@ def apply_some_gates(gs: GatingStrategy):
     # Apply threshold gate
     gate = create_threshold_gate()
     gs.preview_gate(gate=gate)
-    gate.label_children(
-        labels={"+-": "other", "--": "other", "++": "other", "-+": "pop1"}
-    )
+    gate.label_children(labels={"+-": "other", "--": "other", "++": "other", "-+": "pop1"})
     gs.apply_gate(gate)
     # Apply ellipse gate
     gate = create_ellipse_gate()
@@ -143,9 +145,7 @@ def test_apply_gate(example_populated_experiment, gate, populations):
             }
         )
     elif isinstance(gate, EllipseGate):
-        pops = sorted(
-            [(c.name, c.geom.x_values) for c in gate.children], key=lambda x: x[1]
-        )
+        pops = sorted([(c.name, c.geom.x_values) for c in gate.children], key=lambda x: x[1])
         gate.label_children({pops[0][0]: "Big pop", pops[1][0]: "Little pop"})
     else:
         gate.label_children({"A": "Big pop"})
@@ -155,11 +155,7 @@ def test_apply_gate(example_populated_experiment, gate, populations):
     not_root = [p for p in gs.filegroup.populations if p.population_name != "root"]
     root = gs.filegroup.get_population("root")
     assert all([len(p.index) < len(root.index) for p in not_root])
-    biggest_pop = [
-        p
-        for p in not_root
-        if p.population_name == "Top left" or p.population_name == "Big pop"
-    ][0]
+    biggest_pop = [p for p in not_root if p.population_name == "Top left" or p.population_name == "Big pop"][0]
     assert all([len(p.index) <= len(biggest_pop.index) for p in not_root])
 
 
@@ -187,12 +183,8 @@ def test_add_hyperparameter_grid_threshold(example_populated_experiment):
         }
     )
     gs.apply_gate(gate)
-    gs.add_hyperparameter_grid(
-        gate_name=gate.gate_name, params={"min_peak_threshold": [0.01, 0.1]}
-    )
-    assert gs.hyperparameter_search.get(gate.gate_name).get("grid").get(
-        "min_peak_threshold"
-    ) == [0.01, 0.1]
+    gs.add_hyperparameter_grid(gate_name=gate.gate_name, params={"min_peak_threshold": [0.01, 0.1]})
+    assert gs.hyperparameter_search.get(gate.gate_name).get("grid").get("min_peak_threshold") == [0.01, 0.1]
 
 
 def test_add_hyperparameter_grid_ellipse(example_populated_experiment):
@@ -203,17 +195,11 @@ def test_add_hyperparameter_grid_ellipse(example_populated_experiment):
             population=gate.parent, transform=None, label_downstream_affiliations=False
         )
     )
-    pops = sorted(
-        [(c.name, c.geom.x_values) for c in gate.children], key=lambda x: x[1]
-    )
+    pops = sorted([(c.name, c.geom.x_values) for c in gate.children], key=lambda x: x[1])
     gate.label_children({pops[0][0]: "Little pop", pops[1][0]: "Big pop"})
     gs.apply_gate(gate)
-    gs.add_hyperparameter_grid(
-        gate_name=gate.gate_name, params={"n_components": [2, 3, 4]}
-    )
-    assert gs.hyperparameter_search.get(gate.gate_name).get("grid").get(
-        "n_components"
-    ) == [2, 3, 4]
+    gs.add_hyperparameter_grid(gate_name=gate.gate_name, params={"n_components": [2, 3, 4]})
+    assert gs.hyperparameter_search.get(gate.gate_name).get("grid").get("n_components") == [2, 3, 4]
 
 
 def assert_expected_gated_pops(gs: GatingStrategy):
@@ -229,23 +215,12 @@ def assert_expected_gated_pops(gs: GatingStrategy):
     assert gs.filegroup.get_population("pop4").parent == "pop2"
     # Test population indexes
     root_n = len(gs.filegroup.get_population("root").index)
-    assert all(
-        [
-            len(gs.filegroup.get_population(x).index) < root_n
-            for x in ["pop1", "pop2", "pop3", "pop4"]
-        ]
-    )
-    assert len(gs.filegroup.get_population("pop1").index) > len(
-        gs.filegroup.get_population("pop2").index
-    )
+    assert all([len(gs.filegroup.get_population(x).index) < root_n for x in ["pop1", "pop2", "pop3", "pop4"]])
+    assert len(gs.filegroup.get_population("pop1").index) > len(gs.filegroup.get_population("pop2").index)
     assert gs.filegroup.get_population("pop1").n > gs.filegroup.get_population("pop2").n
-    assert len(gs.filegroup.get_population("pop2").index) > len(
-        gs.filegroup.get_population("pop3").index
-    )
+    assert len(gs.filegroup.get_population("pop2").index) > len(gs.filegroup.get_population("pop3").index)
     assert gs.filegroup.get_population("pop2").n > gs.filegroup.get_population("pop3").n
-    assert len(gs.filegroup.get_population("pop2").index) > len(
-        gs.filegroup.get_population("pop4").index
-    )
+    assert len(gs.filegroup.get_population("pop2").index) > len(gs.filegroup.get_population("pop4").index)
     assert gs.filegroup.get_population("pop2").n > gs.filegroup.get_population("pop4").n
 
 
@@ -268,8 +243,7 @@ def test_apply_all(example_populated_experiment):
     with pytest.raises(DuplicatePopulationError) as err:
         gs.apply_all()
     assert (
-        str(err.value)
-        == "One or more of the populations generated from this gating strategy are already "
+        str(err.value) == "One or more of the populations generated from this gating strategy are already "
         "presented in the population tree"
     )
 
@@ -302,9 +276,7 @@ def test_plot_gate_invalid(example_populated_experiment):
     gs = apply_some_gates(gs)
     with pytest.raises(ValueError) as err:
         gs.plot_gate(gate="test ellipse", y="FS Lin")
-    assert (
-        str(err.value) == "Can only override y-axis variable for Threshold geometries"
-    )
+    assert str(err.value) == "Can only override y-axis variable for Threshold geometries"
 
 
 def test_plot_backgate(example_populated_experiment):
@@ -350,10 +322,7 @@ def test_edit_threshold_gate(example_populated_experiment):
     before_pop3 = gs.filegroup.get_population("pop3").n
     before_pop4 = gs.filegroup.get_population("pop4").n
     gs.edit_gate("test threshold", x_threshold=0, y_threshold=0)
-    assert (
-        gs.filegroup.get_population("pop1").n
-        == gs.filegroup.data(source="primary").shape[0]
-    )
+    assert gs.filegroup.get_population("pop1").n == gs.filegroup.data(source="primary").shape[0]
     assert gs.filegroup.get_population("pop2").n > before_pop2
     assert gs.filegroup.get_population("pop3").n > before_pop3
     assert gs.filegroup.get_population("pop4").n > before_pop4
@@ -404,12 +373,7 @@ def test_delete(example_populated_experiment, remove_associations):
         n = [2, 1]
     for n_, gate in zip(n, [ThresholdGate, EllipseGate]):
         assert len(gate.objects()) == n_
-    fg = (
-        Project.objects(project_id="test")
-        .get()
-        .get_experiment("test experiment")
-        .get_sample("test sample")
-    )
+    fg = Project.objects(project_id="test").get().get_experiment("test experiment").get_sample("test sample")
     if remove_associations:
         assert len(fg.gating_strategy) == 0
         assert all([p not in fg.list_populations() for p in populations])

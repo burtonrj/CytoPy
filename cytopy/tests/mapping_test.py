@@ -1,5 +1,6 @@
-from cytopy.data.mapping import ChannelMap
 import pytest
+
+from cytopy.data.mapping import ChannelMap
 
 
 @pytest.fixture()

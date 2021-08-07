@@ -31,7 +31,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 import os
 import pickle
+import time
 from functools import partial
+from itertools import accumulate
 from typing import *
 from warnings import warn
 
@@ -744,61 +746,64 @@ def safe_range(data: pd.DataFrame, x: str):
 def cache_lookup(cache: Dict, data: pd.DataFrame, inverse: bool = False):
     if inverse:
         cache = {v: k for k, v in cache.items()}
-    data = data.applymap(lambda x: cache.get(x, np.nan))
+    data = data.applymap(lambda x: cache.get(x, None))
     return data, data.isnull()
 
 
-def flatten_and_label_space(cached: pd.DataFrame, missing_mask: pd.DataFrame):
-    col_length = list()
-    col_idx = list()
-    to_transform = list()
-
-    for col in cached.columns:
-        col_length.append(missing_mask[col].sum())
-        missing_values = cached[missing_mask[col]][col]
-        col_idx.append(missing_values.index.values)
-        to_transform.append(missing_values.values)
-    to_transform = pd.DataFrame(np.concatenate(to_transform, axis=0), columns=["x"])
-    return to_transform, col_length, col_idx
+def flatten_and_index(data: pd.DataFrame, missing_mask: pd.DataFrame):
+    to_transform = (
+        data[missing_mask]
+        .unstack()
+        .dropna()
+        .reset_index()
+        .rename({"level_0": "column", "level_1": "index", 0: "original"}, axis=1)
+    )
+    return to_transform
 
 
-def reconstruct(transformed: pd.DataFrame, cached: pd.DataFrame, col_length: List[int], col_idx: List[int]):
-    ix = 0
-    transformed = transformed["x"].values
-    columns = list(cached.columns)
-    for i in range(len(col_length)):
-        x = transformed[ix : col_length[i]]
-        ix = col_length[i]
-        cached.loc[col_idx[i]][columns[i]] = x
+def reconstruct(transformed: pd.DataFrame, cached: pd.DataFrame):
+    for c, insert in transformed.groupby("column"):
+        cached.loc[insert["index"].values, c] = insert["transformed"].values
 
 
 def update_cache(original: np.ndarray, transformed: np.ndarray, cache_idx: int):
     global CACHE
-    CACHE[cache_idx].update({o: t for o, t in np.c_[original, transformed]})
+    CACHE[cache_idx].update(dict(zip(original, transformed)))
+
+
+def logicle_wrapper(data: np.array, func: Callable, **kwargs):
+    return func(data=data, channel_indices=[0], **kwargs).reshape(-1)
 
 
 def transform_with_cache(data: pd.DataFrame, scaler: LogicleTransformer, inverse: bool = False):
     global CACHE
     global CACHE_KWARGS
+    if CONFIG.logicle_transform_precision != "None" and not inverse:
+        data = data.round(CONFIG.logicle_transform_precision)
 
     if scaler.kwargs not in CACHE_KWARGS:
         CACHE.append({})
         CACHE_KWARGS.append(scaler.kwargs)
-        cache_idx = len(CACHE)
+        cache_idx = len(CACHE) - 1
     else:
         cache_idx = CACHE_KWARGS.index(scaler.kwargs)
 
     cached, missing_mask = cache_lookup(cache=CACHE[cache_idx], data=data, inverse=inverse)
     if not missing_mask.any(axis=0).any():
         return cached
-    to_transform, col_length, col_idx = flatten_and_label_space(cached=cached, missing_mask=missing_mask)
-
+    to_transform = flatten_and_index(data=data, missing_mask=missing_mask)
     if inverse:
-        inverse_transformed = scaler.inverse_scale(data=to_transform, features=["x"])
-        reconstruct(transformed=inverse_transformed, cached=cached, col_length=col_length, col_idx=col_idx)
+        to_transform["transformed"] = logicle_wrapper(
+            to_transform[["original"]].values, func=scaler.inverse, **scaler.kwargs
+        )
+        reconstruct(transformed=to_transform, cached=cached)
         return cached
 
-    transformed = scaler.scale(data=to_transform, features=["x"])
-    reconstruct(transformed=transformed, cached=cached, col_length=col_length, col_idx=col_idx)
-    update_cache(original=to_transform, transformed=transformed, cache_idx=cache_idx)
+    to_transform["transformed"] = logicle_wrapper(
+        to_transform[["original"]].values, func=scaler.transform, **scaler.kwargs
+    )
+    reconstruct(transformed=to_transform, cached=cached)
+    update_cache(
+        original=to_transform["original"].values, transformed=to_transform["transformed"].values, cache_idx=cache_idx
+    )
     return cached

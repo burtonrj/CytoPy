@@ -1,18 +1,17 @@
-from cytopy.data.geometry import (
-    PopulationGeometry,
-    ThresholdGeom,
-    PolygonGeom,
-    create_polygon,
-    polygon_overlap,
-    create_envelope,
-    probabilistic_ellipse,
-    inside_ellipse,
-)
+import numpy as np
+import pytest
 from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs
 from sklearn.mixture import GaussianMixture
-import numpy as np
-import pytest
+
+from cytopy.data.geometry import create_envelope
+from cytopy.data.geometry import create_polygon
+from cytopy.data.geometry import inside_ellipse
+from cytopy.data.geometry import polygon_overlap
+from cytopy.data.geometry import PolygonGeom
+from cytopy.data.geometry import PopulationGeometry
+from cytopy.data.geometry import probabilistic_ellipse
+from cytopy.data.geometry import ThresholdGeom
 
 
 def test_create_geom():
@@ -81,9 +80,7 @@ def test_polygon_overlap(poly1, poly2, expected):
 
 
 def test_create_envelope():
-    test_data = make_blobs(
-        n_samples=1000, n_features=2, centers=1, center_box=(0, 5), random_state=42
-    )[0]
+    test_data = make_blobs(n_samples=1000, n_features=2, centers=1, center_box=(0, 5), random_state=42)[0]
     x, y = test_data[:, 0], test_data[:, 1]
     envelope = create_envelope(x, y)
     assert isinstance(envelope, Polygon)
@@ -99,16 +96,12 @@ def test_create_envelope():
 
 @pytest.mark.parametrize("conf", [0.95, 0.8, 0.5])
 def test_probablistic_ellipse(conf):
-    test_data = make_blobs(
-        n_samples=1000, n_features=2, centers=1, center_box=(1, 5), random_state=42
-    )[0]
+    test_data = make_blobs(n_samples=1000, n_features=2, centers=1, center_box=(1, 5), random_state=42)[0]
     model = GaussianMixture(random_state=42, n_components=1)
     model.fit(test_data)
     center = model.means_[0]
     width, height, angle = probabilistic_ellipse(model.covariances_[0], conf)
-    mask = inside_ellipse(
-        test_data, center=center, width=width, height=height, angle=angle
-    )
+    mask = inside_ellipse(test_data, center=center, width=width, height=height, angle=angle)
     assert test_data[mask].shape[0] / test_data.shape[0] == pytest.approx(conf, 0.1)
 
 
@@ -122,8 +115,6 @@ def test_probablistic_ellipse(conf):
 )
 def test_inside_ellipse(test_data, expected_mask):
     center, width, height, angle = (5, 5), 10, 5, 15
-    mask = inside_ellipse(
-        data=test_data, center=center, width=width, height=height, angle=angle
-    )
+    mask = inside_ellipse(data=test_data, center=center, width=width, height=height, angle=angle)
     assert isinstance(mask, list)
     assert np.array_equal(mask, expected_mask)

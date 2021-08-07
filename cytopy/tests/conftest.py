@@ -1,17 +1,23 @@
-from cytopy.tests import assets
+import inspect
+import os
+import shutil
+from logging.config import dictConfig
+
+import numpy as np
+import pandas as pd
+import pytest
+from mongoengine.connection import connect
+from mongoengine.connection import disconnect
+
+from ..data.experiment import FileGroup
 from ..data.population import Population
 from ..data.project import Project
-from ..data.experiment import FileGroup
-from mongoengine.connection import connect, disconnect
-import pandas as pd
-import numpy as np
-import inspect
-import pytest
-import shutil
-import sys
-import os
+from ..data.setup import Config
+from cytopy.tests import assets
 
 ASSET_PATH = inspect.getmodule(assets).__path__[0]
+config = Config()
+dictConfig(config.logging_config)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -71,12 +77,7 @@ def reload_filegroup(project_id: str, exp_id: str, sample_id: str):
     -------
     FileGroup
     """
-    fg = (
-        Project.objects(project_id=project_id)
-        .get()
-        .get_experiment(exp_id)
-        .get_sample(sample_id)
-    )
+    fg = Project.objects(project_id=project_id).get().get_experiment(exp_id).get_sample(sample_id)
     return fg
 
 
@@ -101,9 +102,7 @@ def create_example_populations(filegroup: FileGroup, n_populations: int = 3):
         parent_df = filegroup.load_population_df(population=parent, transform="logicle")
         x = parent_df["FS Lin"].median()
         idx = parent_df[parent_df["FS Lin"] >= x].index.values
-        p = Population(
-            population_name=pname, n=len(idx), parent=parent, index=idx, source="gate"
-        )
+        p = Population(population_name=pname, n=len(idx), parent=parent, index=idx, source="gate")
         filegroup.add_population(population=p)
     filegroup.save()
     return filegroup
@@ -111,10 +110,7 @@ def create_example_populations(filegroup: FileGroup, n_populations: int = 3):
 
 def create_logicle_like(u: list, s: list, size: list):
     assert len(u) == len(s), "s and u should be equal length"
-    lognormal = [
-        np.random.lognormal(mean=u[i], sigma=s[i], size=int(size[i]))
-        for i in range(len(u))
-    ]
+    lognormal = [np.random.lognormal(mean=u[i], sigma=s[i], size=int(size[i])) for i in range(len(u))]
     return np.concatenate(lognormal)
 
 

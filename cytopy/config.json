@@ -5,21 +5,27 @@
   "column_default": "markers",
   "logging_config": {
     "version": 1,
+    "disable_existing_loggers": false,
     "formatters": {
       "f": {
         "format": "%(asctime)s - %(levelname)s - %(message)s"
       }
     },
     "handlers": {
-        "default": {
+      "default": {
         "class": "logging.StreamHandler",
         "formatter": "f",
         "level": "INFO"
       }
-    } ,
-    "root": {
-      "handlers": ["default"],
-      "level": "INFO"
+    },
+    "loggers": {
+      "": {
+        "handlers": [
+          "default"
+        ],
+        "level": "INFO",
+        "propagate": false
+      }
     }
   }
 }

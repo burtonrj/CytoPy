@@ -1,8 +1,10 @@
-from cytopy.data import population
-from cytopy.data.geometry import ThresholdGeom, PolygonGeom
-from shapely.geometry import Polygon as Poly
 import numpy as np
 import pytest
+from shapely.geometry import Polygon as Poly
+
+from cytopy.data import population
+from cytopy.data.geometry import PolygonGeom
+from cytopy.data.geometry import ThresholdGeom
 
 
 def generate_polygons():
