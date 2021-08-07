@@ -835,7 +835,7 @@ class ThresholdGate(Gate):
             If no peaks are detected
         """
         peaks, x_grid, p = self._density_peak_finding(x)
-        if len(peaks) > 0:
+        if len(peaks) == 0:
             raise GateError("No peaks detected")
         if len(peaks) == 1:
             threshold = self._process_one_peak(x, x_grid=x_grid, p=p, peak_idx=peaks[0])
@@ -1031,7 +1031,7 @@ class ThresholdGate(Gate):
         data = self._dim_reduction(data=data)
         if self._yeo_johnson is not None:
             data = self.yeo_johnson_transform(data)
-        if len(self.children) == 0:
+        if len(self.children) != 0:
             raise GateError(
                 "Children already defined for this gate. Call 'fit_predict' to "
                 "fit to new data and match populations to children, or call "
@@ -1404,7 +1404,7 @@ class PolygonGate(Gate):
             x_values or y_values missing from method kwargs
         """
         x_values, y_values = self.method_kwargs.get("x_values", None), self.method_kwargs.get("y_values", None)
-        if x_values is None and y_values is None:
+        if x_values is None or y_values is None:
             raise GateError("For manual polygon gate must provide x_values and " "y_values")
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
