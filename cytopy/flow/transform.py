@@ -240,10 +240,14 @@ class LogicleTransformer(Transformer):
         )
 
     def scale(self, data: pd.DataFrame, features: List[str]):
-        return transform_with_cache(data=data[features], scaler=self, inverse=False)
+        data = data.copy()
+        data[features] = transform_with_cache(data=data[features], scaler=self, inverse=False)[features].values
+        return data
 
     def inverse_scale(self, data: pd.DataFrame, features: List[str]):
-        return transform_with_cache(data=data[features], scaler=self, inverse=True)
+        data = data.copy()
+        data[features] = transform_with_cache(data=data[features], scaler=self, inverse=True)[features].values
+        return data
 
 
 class HyperlogTransformer(Transformer):
