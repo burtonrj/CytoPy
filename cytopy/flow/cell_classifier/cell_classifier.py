@@ -173,15 +173,7 @@ class BaseClassifier:
         """
         x = self.x.copy()
         x["y"] = self.y
-        if method == "uniform":
-            x = sampling.uniform_downsampling(data=x, sample_size=sample_size, **kwargs)
-        elif method == "density":
-            x = sampling.density_dependent_downsampling(data=x, sample_size=sample_size, **kwargs)
-        elif method == "faithful":
-            x = sampling.faithful_downsampling(data=x, **kwargs)
-        else:
-            valid = ["uniform", "density", "faithful"]
-            raise ValueError(f"Invalid method, must be one of {valid}")
+        x = sampling.sample_dataframe(data=x, sample_size=sample_size, method=method, **kwargs)
         self.x, self.y = x[self.features], x["y"].values
         return self
 

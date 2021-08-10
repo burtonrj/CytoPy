@@ -90,7 +90,7 @@ def uniform_downsampling(data: pd.DataFrame, sample_size: Union[int, float], **k
     raise SamplingError("sample_size should be an int or float value")
 
 
-def faithful_downsampling(data: np.array, h: float):
+def faithful_downsampling(data: np.array, h: float = 0.1):
     """
     An implementation of faithful downsampling as described in:  Zare H, Shooshtari P, Gupta A, Brinkman R.
     Data reduction for spectral clustering to analyze high throughput flow cytometry data.
@@ -458,7 +458,7 @@ def sample_dataframe(
     elif method == "density":
         return density_dependent_downsampling(data=data, sample_size=sample_size, **kwargs)
     elif method == "faithful":
-        return faithful_downsampling(data=data, **kwargs)
+        return pd.DataFrame(faithful_downsampling(data=data.values, **kwargs), columns=data.columns)
     else:
         valid = ["uniform", "density", "faithful"]
         raise SamplingError(f"Invalid method, must be one of {valid}")
