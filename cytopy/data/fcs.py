@@ -208,7 +208,7 @@ class FileGroup(mongoengine.Document):
             self._load_cell_meta_labels()
             self._load_population_indexes()
         else:
-            logger.info(f"Creating new FileGroup {self.primary_id}")
+            logger.debug(f"Creating new FileGroup {self.primary_id}")
             if data is None:
                 raise ValueError("New instance of FileGroup requires that data be provided to the constructor")
             self.save()
@@ -341,7 +341,7 @@ class FileGroup(mongoengine.Document):
         ]
         self.tree = {"root": anytree.Node(name="root", parent=None)}
         self.save()
-        logger.info(f"{self.h5path} created successfully.")
+        logger.debug(f"{self.h5path} created successfully.")
 
     def add_ctrl_file(self, ctrl_id: str, data: np.array) -> None:
         """
@@ -1176,7 +1176,7 @@ def overwrite_or_create(file: h5py.File, data: np.ndarray, key: str) -> None:
     None
     """
     if key in file:
-        logger.info(f"Deleting {key}")
+        logger.debug(f"Deleting {key}")
         del file[key]
     file.create_dataset(key, data=data)
 

@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from functools import wraps
+from inspect import isclass
 from inspect import signature
 from typing import *
 
@@ -59,14 +60,7 @@ from ...flow.transform import Transformer
 from ...flow.transform import TRANSFORMERS
 from ...flow.variance import Harmony
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_METRICS = ["balanced_accuracy_score", "f1_weighted", "roc_auc_score"]
@@ -130,6 +124,12 @@ class BaseClassifier:
 
         if not hasattr(self.model, "fit") and not hasattr(self.model, "predict"):
             raise ClassifierError("At a minimum, the model must have method 'fit' and 'predict'")
+
+        if isclass(model):
+            raise ClassifierError(
+                "Given model is a class not an object. Model should be constructed before "
+                "passing to Classifier. Parameters can be changed using 'set_params'"
+            )
 
     def set_params(self, **kwargs):
         """

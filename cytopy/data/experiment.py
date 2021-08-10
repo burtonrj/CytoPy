@@ -892,7 +892,7 @@ class Experiment(mongoengine.Document):
             gc.collect()
             return
 
-        logger.info("Adding primary data...")
+        logger.debug("Adding primary data...")
 
         if isinstance(primary_data, pd.DataFrame):
             data = primary_data.values
@@ -911,7 +911,7 @@ class Experiment(mongoengine.Document):
         )
 
         for ctrl_id, ctrl_data in controls.items():
-            logger.info(f"Adding control file {ctrl_id}...")
+            logger.debug(f"Adding control file {ctrl_id}...")
             if isinstance(primary_data, pd.DataFrame):
                 data = ctrl_data.values
             else:
@@ -985,13 +985,14 @@ class Experiment(mongoengine.Document):
         DuplicateSampleError
             If a FileGroup with the sample ID already exists
         """
+        controls = controls or {}
         logger.info(
             f"Creating new FileGroup {sample_id} and adding to experiment {self.experiment_id} "
             f"using Pandas DataFrame(s)"
         )
         compensated = False
         if comp_matrix is not None:
-            logger.info("Applying compensation...")
+            logger.debug("Applying compensation...")
             primary_data = compensate_data(primary_data.values, comp_matrix.values)
             controls = {
                 ctrl_id: compensate_data(ctrl_data, comp_matrix.values) for ctrl_id, ctrl_data in controls.items()
@@ -1076,10 +1077,11 @@ class Experiment(mongoengine.Document):
         compensated = False
         if compensate:
             compensated = True
-            logger.info("Compensating primary file...")
+            logger.debug("Compensating primary file...")
             primary_data.compensate()
 
         control_data = {}
+        controls = controls or {}
         for ctrl_id, ctrl in controls.items():
             if isinstance(ctrl, str):
                 control_data[ctrl_id] = FCSFile(filepath=ctrl, comp_matrix=comp_matrix)

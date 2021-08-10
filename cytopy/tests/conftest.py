@@ -35,18 +35,21 @@ def setup():
     logger.info("Setting up testing server")
     # Setup local paths
     temp_data_path = os.path.join(ASSET_PATH, "data")
+    if os.path.isdir(temp_data_path):
+        shutil.rmtree(temp_data_path, ignore_errors=True)
     os.mkdir(temp_data_path)
 
     # Connect and create project
     logger.info("Creating mock database 'test' and Project 'test_project'")
     connect("test", host="mongomock://localhost", alias="core")
-    project = Project(project_id="test_project")
+    project = Project(project_id="test_project", data_directory=temp_data_path)
     project.save()
 
     # Add some fake subjects
+    logger.info("Creating mock subjects")
     for i in range(12):
         subject_id = f"subject_{str(i+1).zfill(3)}"
-        logger.info(f"Creating mock subject {subject_id}")
+        logger.debug(f"Creating mock subject {subject_id}")
         project.add_subject(
             subject_id=subject_id, age=random.randint(18, 99), gender=["male", "female"][random.randint(0, 1)]
         )
@@ -56,9 +59,10 @@ def setup():
     test_exp = project.add_experiment(
         experiment_id="test_exp", panel_definition=os.path.join(ASSET_PATH, "test_panel.xlsx")
     )
+    logger.info("Adding test FCS data")
     for i in range(12):
         file_id = str(i + 1).zfill(3)
-        logger.info(f"Adding test FCS data {file_id}")
+        logger.debug(f"Adding test FCS data {file_id}")
         path = os.path.join(ASSET_PATH, "gvhd_fcs", f"{file_id}.fcs")
         test_exp.add_fcs_files(sample_id=file_id, subject_id=f"subject_{file_id}", primary_data=path, compensate=False)
 
