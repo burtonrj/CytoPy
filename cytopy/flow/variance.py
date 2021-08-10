@@ -529,7 +529,7 @@ class Harmony:
         n: int = 10000,
         dim_reduction_method: str = "UMAP",
         dim_reduction_kwargs: Optional[Dict] = None,
-        figsize: Tuple[int] = (8, 8),
+        figsize: Tuple[int] = (12, 7),
         legend: bool = False,
         **plot_kwargs,
     ):

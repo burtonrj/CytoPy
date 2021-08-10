@@ -4,6 +4,8 @@ import os
 import random
 import shutil
 from logging.config import dictConfig
+from typing import List
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -48,7 +50,7 @@ def setup():
     # Add some fake subjects
     logger.info("Creating mock subjects")
     for i in range(12):
-        subject_id = f"subject_{str(i+1).zfill(3)}"
+        subject_id = f"subject_{str(i + 1).zfill(3)}"
         logger.debug(f"Creating mock subject {subject_id}")
         project.add_subject(
             subject_id=subject_id, age=random.randint(18, 99), gender=["male", "female"][random.randint(0, 1)]
@@ -75,17 +77,20 @@ def setup():
     disconnect(alias="core")
 
 
-@pytest.fixture
-def add_populations():
+def add_populations(filegroups: Optional[List[str]] = None):
     logger.info("Adding test populations")
     project = Project.objects(project_id="test_project").get()
     exp = project.get_experiment(experiment_id="test_exp")
-    for fg in exp.fcs_files:
+    filegroups = filegroups or exp.list_samples()
+    for _id in filegroups:
+        fg = exp.get_sample(sample_id=_id)
         logger.info(f"Adding populations to {fg.primary_id}")
         labels = pd.read_csv(os.path.join(ASSET_PATH, "gvhd_labels", f"{fg.primary_id}.csv"))
         for pop_i in labels.V1.unique():
             idx = labels[labels.V1 == pop_i].index.values
-            pop = Population(population_name=f"population_{pop_i}", n=len(idx), index=idx, parent="root")
+            pop = Population(
+                population_name=f"population_{pop_i}", n=len(idx), index=idx, parent="root", source="cluster"
+            )
             fg.add_population(population=pop)
         fg.save()
 

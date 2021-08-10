@@ -27,6 +27,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 import logging
+import os
 from collections import defaultdict
 from functools import wraps
 from inspect import isclass
@@ -350,8 +351,8 @@ class BaseClassifier:
         **fit_kwargs,
     ):
         """
-        Fit model with cross-validation. Note, this method can be used for standard cross validaiton
-        or hyper parameter search by providing a valid class suhc as Scikit-Learn's GridSearchCV for example.
+        Fit model with cross-validation.
+
         Parameters
         ----------
         cross_validator: BaseCrossValidator (default=KFold)
@@ -386,8 +387,29 @@ class BaseClassifier:
             **fit_kwargs,
         )
 
-    def hyperparam_search(self):
-        pass
+    @check_data_init
+    def hyperparam_search(
+        self,
+        param_grid: Dict,
+        hyper_param_optimizer: Optional[BaseSearchCV] = None,
+        cv: int = 5,
+        verbose: int = 1,
+        n_jobs: int = -1,
+        fit_kwargs: Optional[Dict] = None,
+        **kwargs,
+    ) -> BaseSearchCV:
+        return hyperparam_search(
+            model=self.model,
+            x=self.x,
+            y=self.y,
+            param_grid=param_grid,
+            hyper_param_optimizer=hyper_param_optimizer,
+            cv=cv,
+            verbose=verbose,
+            n_jobs=n_jobs,
+            fit_kwargs=fit_kwargs,
+            **kwargs,
+        )
 
     @check_data_init
     def fit(self, **kwargs):
@@ -404,6 +426,7 @@ class BaseClassifier:
         self._fit(x=self.x, y=self.y, **kwargs)
         return self
 
+    @check_data_init
     def plot_confusion_matrix(
         self,
         cmap: str or None = None,
@@ -444,10 +467,6 @@ class BaseClassifier:
         assert not sum([x is not None, y is not None]) == 1, "Cannot provide x without y and vice-versa"
         if x is None:
             x, y = self.x, self.y
-        assert sum([i is None for i in [x, y]]) in [
-            0,
-            2,
-        ], "If you provide 'x' you must provide 'y' and vice versa."
         return utils.confusion_matrix_plots(
             classifier=self.model,
             x=x,
@@ -573,6 +592,7 @@ class CellClassifier(BaseClassifier):
         root_population: str
         reference: str
             Name of the FileGroup to use as training data
+
         Returns
         -------
         self
@@ -611,7 +631,6 @@ class CellClassifier(BaseClassifier):
         experiment: Experiment,
         sample_id: str,
         root_population: str,
-        threshold: float = 0.5,
         return_predictions: bool = True,
     ) -> Union[FileGroup, Dict] or Union[FileGroup, None]:
         """
@@ -623,9 +642,6 @@ class CellClassifier(BaseClassifier):
         experiment: Experiment
         sample_id: str
         root_population: str
-        threshold: float (default=0.5)
-            Only relevant if multi_label is True. Labels will be assigned if probability is greater
-            than or eaual to this threshold.
         return_predictions: bool (default=True)
             Return predicted labels and scores
         Returns
@@ -640,7 +656,7 @@ class CellClassifier(BaseClassifier):
             x = self.transformer.scale(data=x, features=self.features)
         if self.scaler is not None:
             x = self.scaler(data=x, features=self.features)
-        y_pred, y_score = self._predict(x=x, threshold=threshold)
+        y_pred, y_score = self._predict(x=x)
         self._add_populations(target=target, x=x, y_pred=y_pred, root_population=root_population)
         if return_predictions:
             return target, {"y_pred": y_pred, "y_score": y_score}
@@ -652,6 +668,7 @@ class CellClassifier(BaseClassifier):
         target populations e.g. identified by some other method (must share the same name as
         the target populations!). This will generate data from the FileGroup that can be used
         to validate the model.
+
         Parameters
         ----------
         experiment: Experiment
@@ -802,7 +819,6 @@ class CalibratedCellClassifier(BaseClassifier):
         transform: Optional[Union[str, Dict]] = "logicle",
         transform_kwargs: Optional[Dict] = None,
         targets: Optional[List[str]] = None,
-        load_path: Optional[str] = None,
         **harmony_kwargs,
     ):
         transform_kwargs = transform_kwargs or {}
@@ -866,9 +882,6 @@ class CalibratedCellClassifier(BaseClassifier):
         self._setup_training_data(calibrated_training_data=calibrated_training_data)
         self.targets = calibrated_data[calibrated_data.sample_id != self.training_id]
         return self
-
-    def save_calibrated(self, path: str):
-        self.data.to_csv(path, index=False)
 
     def _setup_training_data(self, calibrated_training_data: pd.DataFrame):
         reference = self.experiment.get_sample(sample_id=self.training_id)
@@ -1152,7 +1165,7 @@ def fit_cv(
     ):
         x_train, x_test = x.loc[train_idx], x.loc[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
-        model.fit(x=x_train, y=y_train, **fit_kwargs)
+        model.fit(x_train, y_train, **fit_kwargs)
         y_pred, y_score = predict(model=model, x=x_train)
         training_results.append(utils.calc_metrics(metrics=metrics, y_pred=y_pred, y_score=y_score, y_true=y_train))
         y_pred, y_score = predict(model=model, x=x_test)
@@ -1175,7 +1188,7 @@ def fit_train_test_split(
     logger.info("Generating training and testing data")
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_frac, **train_test_split_kwargs)
     logger.info("Training model")
-    model.fit(x=x_train, y=y_train, **fit_kwargs)
+    model.fit(x_train, y_train, **fit_kwargs)
     results = dict()
     y_hat = dict()
     for key, (X, y) in zip(["train", "test"], [[x_train, y_train], [x_test, y_test]]):
@@ -1199,9 +1212,9 @@ def hyperparam_search(
     n_jobs: int = -1,
     fit_kwargs: Optional[Dict] = None,
     **kwargs,
-):
+) -> BaseSearchCV:
     fit_kwargs = fit_kwargs or {}
     hyper_param_optimizer = hyper_param_optimizer or RandomizedSearchCV
     hyper_param_optimizer = hyper_param_optimizer(model, param_grid, cv=cv, verbose=verbose, n_jobs=n_jobs, **kwargs)
-    hyper_param_optimizer.fit(x=x, y=y, **fit_kwargs)
+    hyper_param_optimizer.fit(x, y, **fit_kwargs)
     return hyper_param_optimizer
