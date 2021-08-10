@@ -34,26 +34,38 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import logging
 import math
-
-from . import hlog_transform, asinh_transform, logicle_transform
-from ...data.gate import Gate, ThresholdGate, PolygonGate, EllipseGate, Population
-from ...data.geometry import ThresholdGeom, PolygonGeom
-from ...flow import transform
-from typing import List, Generator, Dict, Tuple, Union
-from KDEpy import FFTKDE
+from itertools import cycle
+from typing import Dict
+from typing import Generator
+from typing import List
+from typing import Tuple
+from typing import Union
 from warnings import warn
-from scipy.spatial import ConvexHull
+
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from KDEpy import FFTKDE
+from matplotlib import patches
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import LogNorm
-import matplotlib.pyplot as plt
-from matplotlib import patches
-import matplotlib
-from itertools import cycle
-import seaborn as sns
-import pandas as pd
-import numpy as np
-import logging
+from scipy.spatial import ConvexHull
+
+from . import asinh_transform
+from . import hlog_transform
+from . import logicle_transform
+from ...data.gate import EllipseGate
+from ...data.gate import Gate
+from ...data.gate import PolygonGate
+from ...data.gate import Population
+from ...data.gate import ThresholdGate
+from ...data.geometry import PolygonGeom
+from ...data.geometry import ThresholdGeom
+from ...flow import transform
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -173,12 +185,8 @@ class FlowPlot:
         autoscale: bool = True,
         downsample: Union[float, None] = None,
     ):
-        assert (
-            transform_x in TRANSFORMS
-        ), f"Unsupported transform, must be one of: {TRANSFORMS}"
-        assert (
-            transform_y in TRANSFORMS
-        ), f"Unsupported transform, must be one of: {TRANSFORMS}"
+        assert transform_x in TRANSFORMS, f"Unsupported transform, must be one of: {TRANSFORMS}"
+        assert transform_y in TRANSFORMS, f"Unsupported transform, must be one of: {TRANSFORMS}"
         self.transform_x = transform_x
         self.transform_y = transform_y
         self.transform_x_kwargs = transform_x_kwargs or {}
@@ -192,20 +200,20 @@ class FlowPlot:
         self.title = title
         self.bw = bw
         self.bins = bins
-        self.fig, self._ax = None, ax
-        if self._ax is None:
-            self.fig, self._ax = plt.subplots(figsize=figsize)
+        self.fig, self.ax = None, ax
+        if self.ax is None:
+            self.fig, self.ax = plt.subplots(figsize=figsize)
         self.cmap = plt.get_cmap(cmap)
         plt.xticks(rotation=90)
         plt.tight_layout()
-        self._ax.xaxis.labelpad = 20
-        self._ax.yaxis.labelpad = 20
+        self.ax.xaxis.labelpad = 20
+        self.ax.yaxis.labelpad = 20
 
     def _transform_axis(self):
         if self.transform_x:
-            self._ax.set_xscale(self.transform_x, **self.transform_x_kwargs)
+            self.ax.set_xscale(self.transform_x, **self.transform_x_kwargs)
         if self.transform_y:
-            self._ax.set_yscale(self.transform_y, **self.transform_y_kwargs)
+            self.ax.set_yscale(self.transform_y, **self.transform_y_kwargs)
 
     def _hist1d(self, data: pd.DataFrame, x: str, **kwargs):
         """
@@ -237,19 +245,19 @@ class FlowPlot:
             bw=self.bw,
             **self.transform_x_kwargs,
         )
-        self._ax.plot(
+        self.ax.plot(
             data["x"].values,
             data["y"].values,
             linewidth=kwargs.get("linewidth", 2),
             color=kwargs.get("color", "black"),
         )
-        self._ax.fill_between(
+        self.ax.fill_between(
             data["x"].values,
             data["y"].values,
             color=kwargs.get("fill", "#8A8A8A"),
             alpha=kwargs.get("alpha", 0.5),
         )
-        self._ax.get_yaxis().set_visible(False)
+        self.ax.get_yaxis().set_visible(False)
 
     def _hist2d_axis_limits(self, data: pd.DataFrame, x: str, y: str):
         """
@@ -278,9 +286,7 @@ class FlowPlot:
         ylim = pd.DataFrame({"Min": [ylim[0]], "Max": [ylim[1]]})
         return xlim, ylim
 
-    def _transform_axis_limits(
-        self, limits: pd.DataFrame, axis: str, transform_method: str
-    ):
+    def _transform_axis_limits(self, limits: pd.DataFrame, axis: str, transform_method: str):
         """
         Transform axis limits to the same scale as data
 
@@ -327,34 +333,22 @@ class FlowPlot:
         n = self.bins or int(np.sqrt(data.shape[0]))
         xlim, ylim = self._hist2d_axis_limits(data=data, x=x, y=y)
         if self.transform_x:
-            xlim, xtransformer = self._transform_axis_limits(
-                limits=xlim, axis="x", transform_method=self.transform_x
-            )
-            xgrid = pd.DataFrame(
-                {"x": np.linspace(xlim["Min"].iloc[0], xlim["Max"].iloc[0], n)}
-            )
+            xlim, xtransformer = self._transform_axis_limits(limits=xlim, axis="x", transform_method=self.transform_x)
+            xgrid = pd.DataFrame({"x": np.linspace(xlim["Min"].iloc[0], xlim["Max"].iloc[0], n)})
             xbins = xtransformer.inverse_scale(xgrid, features=["x"]).x.values
         else:
-            xbins = pd.DataFrame(
-                {"x": np.linspace(xlim["Min"].iloc[0], xlim["Max"].iloc[0], n)}
-            ).x.values
+            xbins = pd.DataFrame({"x": np.linspace(xlim["Min"].iloc[0], xlim["Max"].iloc[0], n)}).x.values
         if self.transform_y:
-            ylim, ytransformer = self._transform_axis_limits(
-                limits=ylim, axis="y", transform_method=self.transform_y
-            )
-            ygrid = pd.DataFrame(
-                {"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)}
-            )
+            ylim, ytransformer = self._transform_axis_limits(limits=ylim, axis="y", transform_method=self.transform_y)
+            ygrid = pd.DataFrame({"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)})
             ybins = ytransformer.inverse_scale(ygrid, features=["y"]).y.values
         else:
-            ybins = pd.DataFrame(
-                {"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)}
-            ).y.values
+            ybins = pd.DataFrame({"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)}).y.values
 
         if self.downsample is not None:
             data = data.sample(frac=self.downsample)
 
-        self._ax.hist2d(
+        self.ax.hist2d(
             data[x].values,
             data[y].values,
             bins=[xbins, ybins],
@@ -381,15 +375,15 @@ class FlowPlot:
         None
         """
         if self.autoscale:
-            self._ax.autoscale(enable=True)
+            self.ax.autoscale(enable=True)
         else:
             x_min = self.lims.get("x")[0] or data[x].quantile(q=0.001)
             x_max = self.lims.get("x")[1] or data[x].quantile(q=0.999)
-            self._ax.set_xlim((x_min, x_max))
+            self.ax.set_xlim((x_min, x_max))
             if y is not None:
                 y_min = self.lims.get("y")[0] or data[y].quantile(q=0.001)
                 y_max = self.lims.get("y")[1] or data[y].quantile(q=0.999)
-                self._ax.set_ylim((y_min, y_max))
+                self.ax.set_ylim((y_min, y_max))
 
     def _set_aesthetics(self, x: str, y: str or None):
         """
@@ -407,15 +401,15 @@ class FlowPlot:
         None
         """
         if self.title:
-            self._ax.set_title(self.title)
+            self.ax.set_title(self.title)
         if self.labels.get("x"):
-            self._ax.set_xlabel(self.labels.get("x"))
+            self.ax.set_xlabel(self.labels.get("x"))
         else:
-            self._ax.set_xlabel(x)
+            self.ax.set_xlabel(x)
         if self.labels.get("y") and y is not None:
-            self._ax.set_ylabel(self.labels.get("y"))
+            self.ax.set_ylabel(self.labels.get("y"))
         elif y is not None:
-            self._ax.set_ylabel(y)
+            self.ax.set_ylabel(y)
 
     def plot(self, data: pd.DataFrame, x: str, y: str or None = None, **kwargs):
         """
@@ -445,7 +439,7 @@ class FlowPlot:
         self._set_axis_limits(data=data, x=x, y=y)
         self._set_aesthetics(x=x, y=y)
         self._transform_axis()
-        return self._ax
+        return self.ax
 
     def plot_gate_children(
         self,
@@ -490,10 +484,8 @@ class FlowPlot:
         """
         plot_kwargs = plot_kwargs or {}
         legend_kwargs = legend_kwargs or dict()
-        gate_colours = cycle(
-            ["#c92c2c", "#2df74e", "#e0d572", "#000000", "#64b9c4", "#9e3657"]
-        )
-        self._ax = self.plot(data=parent, x=gate.x, y=gate.y or y, **plot_kwargs)
+        gate_colours = cycle(["#c92c2c", "#2df74e", "#e0d572", "#000000", "#64b9c4", "#9e3657"])
+        self.ax = self.plot(data=parent, x=gate.x, y=gate.y or y, **plot_kwargs)
         # If threshold, add threshold lines to plot and return axes
         if isinstance(gate, ThresholdGate):
             return self._plot_threshold(
@@ -567,25 +559,17 @@ class FlowPlot:
         ValueError
             Attempt to override y-axis variable for a Population with Polygon geometry
         """
-        gate_colours = cycle(
-            ["#c92c2c", "#2df74e", "#e0d572", "#000000", "#64b9c4", "#9e3657"]
-        )
-        assert len(
-            set(str(type(x.geom) for x in children))
-        ), "Children geometries must all be of the same type"
+        gate_colours = cycle(["#c92c2c", "#2df74e", "#e0d572", "#000000", "#64b9c4", "#9e3657"])
+        assert len(set(str(type(x.geom) for x in children))), "Children geometries must all be of the same type"
         if y is not None:
             if not isinstance(children[0].geom, ThresholdGeom):
-                raise ValueError(
-                    "Can only override y-axis variable for Threshold geometries"
-                )
+                raise ValueError("Can only override y-axis variable for Threshold geometries")
         plot_kwargs = plot_kwargs or {}
         legend_kwargs = legend_kwargs or dict()
         # Plot the parent population
         self.transform_x = transform_x or children[0].geom.transform_x
         self.transform_y = transform_y or children[0].geom.transform_y
-        self._ax = self.plot(
-            data=parent, x=children[0].geom.x, y=children[0].geom.y or y, **plot_kwargs
-        )
+        self.ax = self.plot(data=parent, x=children[0].geom.x, y=children[0].geom.y or y, **plot_kwargs)
         # If threshold, add threshold lines to plot and return axes
         if isinstance(children[0].geom, ThresholdGeom):
             return self._plot_threshold(
@@ -602,9 +586,7 @@ class FlowPlot:
             legend_kwargs=legend_kwargs,
         )
 
-    def _plot_threshold(
-        self, definitions: Dict[str, str], geoms: List[ThresholdGeom], lw: float
-    ):
+    def _plot_threshold(self, definitions: Dict[str, str], geoms: List[ThresholdGeom], lw: float):
         """
         Plot Child populations from ThresholdGate
 
@@ -624,7 +606,7 @@ class FlowPlot:
         """
         x, y = geoms[0].transform_to_linear()
         self._add_threshold(x=x, y=y, labels=definitions, lw=lw)
-        return self._ax
+        return self.ax
 
     def _plot_polygon(
         self,
@@ -660,15 +642,11 @@ class FlowPlot:
         for i, g in enumerate(geoms):
             colour = next(colours)
             x, y = g.transform_to_linear()
-            self._add_polygon(
-                x_values=x, y_values=y, colour=colour, label=labels[i], lw=lw
-            )
+            self._add_polygon(x_values=x, y_values=y, colour=colour, label=labels[i], lw=lw)
         self._set_legend(**legend_kwargs)
-        return self._ax
+        return self.ax
 
-    def _add_polygon(
-        self, x_values: list, y_values: list, colour: str, label: str, lw: float
-    ):
+    def _add_polygon(self, x_values: list, y_values: list, colour: str, label: str, lw: float):
         """
         Add a polygon shape to the axes object
 
@@ -689,7 +667,7 @@ class FlowPlot:
         -------
         None
         """
-        self._ax.plot(x_values, y_values, "-k", c=colour, label=label, lw=lw)
+        self.ax.plot(x_values, y_values, "-k", c=colour, label=label, lw=lw)
 
     def _add_ellipse(
         self,
@@ -735,7 +713,7 @@ class FlowPlot:
             lw=lw,
             label=label,
         )
-        self._ax.add_patch(ellipse)
+        self.ax.add_patch(ellipse)
 
     def _2dthreshold_annotations(self, labels: dict or None = None):
         """
@@ -767,34 +745,24 @@ class FlowPlot:
                 elif "+-" == d:
                     legend_labels["D"] = label
                 else:
-                    raise KeyError(
-                        f"Definition {d} is invalid for a 2D threshold gate."
-                    )
+                    raise KeyError(f"Definition {d} is invalid for a 2D threshold gate.")
         self._threshold_annotation(0.05, 0.95, "A")
         self._threshold_annotation(0.95, 0.95, "B")
         self._threshold_annotation(0.05, 0.05, "C")
         self._threshold_annotation(0.95, 0.05, "D")
-        self._ax.text(
-            1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self._ax.transAxes
-        )
-        self._ax.text(
-            1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self._ax.transAxes
-        )
-        self._ax.text(
-            1.15, 0.75, f"C: {legend_labels.get('C')}", transform=self._ax.transAxes
-        )
-        self._ax.text(
-            1.15, 0.65, f"D: {legend_labels.get('D')}", transform=self._ax.transAxes
-        )
+        self.ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self.ax.transAxes)
+        self.ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self.ax.transAxes)
+        self.ax.text(1.15, 0.75, f"C: {legend_labels.get('C')}", transform=self.ax.transAxes)
+        self.ax.text(1.15, 0.65, f"D: {legend_labels.get('D')}", transform=self.ax.transAxes)
 
     def _threshold_annotation(self, x: float, y: float, text: str):
-        self._ax.text(
+        self.ax.text(
             x,
             y,
             text,
             ha="center",
             va="center",
-            transform=self._ax.transAxes,
+            transform=self.ax.transAxes,
             backgroundcolor="white",
             bbox=dict(facecolor="white", edgecolor="black", pad=5.0),
         )
@@ -819,21 +787,13 @@ class FlowPlot:
         try:
             legend_labels = {"A": labels["-"], "B": labels["+"]}
         except KeyError:
-            raise KeyError(
-                f"Definitions for 1D threshold gate must be either '-' or '+', not: {labels.keys()}"
-            )
+            raise KeyError(f"Definitions for 1D threshold gate must be either '-' or '+', not: {labels.keys()}")
         self._threshold_annotation(0.05, 0.95, "A")
         self._threshold_annotation(0.95, 0.95, "B")
-        self._ax.text(
-            1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self._ax.transAxes
-        )
-        self._ax.text(
-            1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self._ax.transAxes
-        )
+        self.ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self.ax.transAxes)
+        self.ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self.ax.transAxes)
 
-    def _add_threshold(
-        self, x: float, y: float or None, lw: float, labels: dict or None = None
-    ):
+    def _add_threshold(self, x: float, y: float or None, lw: float, labels: dict or None = None):
         """
         Add a 1D or 2D threshold (red horizontal axis line and optionally a red vertical axis line)
 
@@ -852,9 +812,9 @@ class FlowPlot:
         -------
         None
         """
-        self._ax.axvline(x, lw=lw, c="#c92c2c")
+        self.ax.axvline(x, lw=lw, c="#c92c2c")
         if y is not None:
-            self._ax.axhline(y, lw=lw, c="#c92c2c")
+            self.ax.axhline(y, lw=lw, c="#c92c2c")
             # Label regions for two axis
             self._2dthreshold_annotations(labels=labels)
         else:
@@ -924,7 +884,7 @@ class FlowPlot:
         plot_kwargs = plot_kwargs or {}
         overlay_kwargs = overlay_kwargs or {}
         legend_kwargs = legend_kwargs or {}
-        self._ax = self.plot(data=parent, x=x, y=y, **plot_kwargs)
+        self.ax = self.plot(data=parent, x=x, y=y, **plot_kwargs)
         self._set_axis_limits(data=parent, x=x, y=y)
 
         for c, (child_name, df) in zip(colours, children.items()):
@@ -966,7 +926,7 @@ class FlowPlot:
                 )
         self._set_legend(shape_n=len(children), **legend_kwargs)
         self._transform_axis()
-        return self._ax
+        return self.ax
 
     def _overlay(
         self,
@@ -1008,19 +968,17 @@ class FlowPlot:
             warn("1-dimensional plot, defaulting to KDE overlay")
             method = "kde"
         if method == "scatter":
-            self._ax.scatter(x=data[x], y=data[y], label=label, **kwargs)
+            self.ax.scatter(x=data[x], y=data[y], label=label, **kwargs)
         elif method == "polygon":
             d = data[[x, y]].values
             hull = ConvexHull(d)
             for simplex in hull.simplices:
-                self._ax.plot(d[simplex, 0], d[simplex, 1], "-", label=label, **kwargs)
+                self.ax.plot(d[simplex, 0], d[simplex, 1], "-", label=label, **kwargs)
         else:
             if y is None:
-                sns.kdeplot(data=data[x], ax=self._ax, label=label, **kwargs)
+                sns.kdeplot(data=data[x], ax=self.ax, label=label, **kwargs)
             else:
-                sns.kdeplot(
-                    data=data[x], data2=data[y], ax=self._ax, label=label, **kwargs
-                )
+                sns.kdeplot(data=data[x], data2=data[y], ax=self.ax, label=label, **kwargs)
 
     def overlay_plot(
         self,
@@ -1059,7 +1017,7 @@ class FlowPlot:
         """
         plot_kwargs = plot_kwargs or {}
         overlay_kwargs = overlay_kwargs or {}
-        self._ax = self.plot(data=data1, x=x, y=y, **plot_kwargs)
+        self.ax = self.plot(data=data1, x=x, y=y, **plot_kwargs)
         if method == "kde":
             self._overlay(
                 data=data2,
@@ -1070,7 +1028,7 @@ class FlowPlot:
                 shade=shade,
                 **overlay_kwargs,
             )
-            return self._ax
+            return self.ax
         self._overlay(
             data=data2,
             x=x,
@@ -1082,7 +1040,7 @@ class FlowPlot:
             **overlay_kwargs,
         )
         self._transform_axis()
-        return self._ax
+        return self.ax
 
     def _set_legend(self, **kwargs):
         """
@@ -1102,27 +1060,17 @@ class FlowPlot:
         ncol = kwargs.get("ncol", 3)
         fancy = kwargs.get("fancybox", True)
         shadow = kwargs.get("shadow", False)
-        self._ax.legend(
-            loc=loc, bbox_to_anchor=anchor, ncol=ncol, fancybox=fancy, shadow=shadow
-        )
+        self.ax.legend(loc=loc, bbox_to_anchor=anchor, ncol=ncol, fancybox=fancy, shadow=shadow)
 
 
-def backgating(
-    filegroup, populations: Dict, col_wrap: int = 3, figsize: Tuple[int, int] = (10, 10)
-):
+def backgating(filegroup, populations: Dict, col_wrap: int = 3, figsize: Tuple[int, int] = (10, 10)):
     try:
-        fig, axes = plt.subplots(
-            math.ceil(len(populations) / col_wrap), col_wrap, figsize=figsize
-        )
+        fig, axes = plt.subplots(math.ceil(len(populations) / col_wrap), col_wrap, figsize=figsize)
         for i, (population, properties) in enumerate(populations.items()):
             plot = FlowPlot(ax=axes[i], **properties.get("flow_plot_kwargs", {}))
-            parent = filegroup.load_population_df(
-                population=properties.get("parent", "root"), transform=None
-            )
+            parent = filegroup.load_population_df(population=properties.get("parent", "root"), transform=None)
             pop_df = filegroup.load_population_df(population=population, transform=None)
-            plot.overlay_plot(
-                data1=parent, data2=pop_df, **properties["overlay_kwargs"]
-            )
+            plot.overlay_plot(data1=parent, data2=pop_df, **properties["overlay_kwargs"])
         fig.tight_layout()
         return fig
     except KeyError as e:

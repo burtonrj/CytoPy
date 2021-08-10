@@ -524,6 +524,35 @@ class Harmony:
             label_colnames=[meta_var],
         )
 
+    def plot_overlay(
+        self,
+        n: int = 10000,
+        dim_reduction_method: str = "UMAP",
+        dim_reduction_kwargs: Optional[Dict] = None,
+        figsize: Tuple[int] = (8, 8),
+        legend: bool = False,
+        **plot_kwargs,
+    ):
+        plot_kwargs["hue"] = plot_kwargs.get("hue", "sample_id")
+        plot_kwargs["linewidth"] = plot_kwargs.get("linewidth", 0)
+        plot_kwargs["s"] = plot_kwargs.get("s", 1)
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        reducer = DimensionReduction(method=dim_reduction_method, **dim_reduction_kwargs)
+        logger.info("Performing dimension reduction on original data")
+        before = reducer.fit_transform(data=self.data.sample(n), features=self.features)
+        logger.info("Performing dimension reduction on batch corrected data")
+        after = reducer.transform(data=self.batch_corrected().loc[before.index], features=self.features)
+        logger.info("Plotting comparison")
+        fig, axes = plt.subplots(1, 2, figsize=figsize)
+        sns.scatterplot(data=before, x="UMAP1", y="UMAP2", ax=axes[0], **plot_kwargs)
+        sns.scatterplot(data=after, x="UMAP1", y="UMAP2", ax=axes[1], **plot_kwargs)
+        axes[0].set_title("Before")
+        axes[1].set_title("After")
+        if not legend:
+            for ax in axes:
+                ax.legend().remove()
+        return fig
+
     def batch_lisi_distribution(self, meta_var: str = "sample_id", sample: Union[float, None] = 0.1, **kwargs):
         """
         Plot the distribution of LISI using the given meta_var as label

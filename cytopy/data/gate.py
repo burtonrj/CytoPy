@@ -1758,7 +1758,7 @@ class HuberGate(PolygonGate):
 
     A linear fit is made, whilst accounting for outliers, and the 'gate' is taken as the
     confidence interval around this fit. The size of the gate is controlled by the 'conf'
-    parameter passed in 'method_kwargs' (the larger the value, the wider the gate, default=0.1).
+    parameter passed in 'method_kwargs' (the smaller the value, the wider the gate, default=0.1).
 
     DOES NOT SUPPORT CONTROL GATING.
 

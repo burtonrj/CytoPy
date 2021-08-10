@@ -75,10 +75,10 @@ def test_create_flowplot_object():
     assert plotter.title is None
     assert plotter.bw == "silverman"
     assert plotter.bins is None
-    assert isinstance(plotter._ax, plt.Axes)
+    assert isinstance(plotter.ax, plt.Axes)
     assert isinstance(plotter.cmap, LinearSegmentedColormap)
-    assert plotter._ax.xaxis.labelpad == 20
-    assert plotter._ax.yaxis.labelpad == 20
+    assert plotter.ax.xaxis.labelpad == 20
+    assert plotter.ax.yaxis.labelpad == 20
 
 
 TEST_CONDITIONS_1D = [

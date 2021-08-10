@@ -323,7 +323,7 @@ def singlelabel(
         root = root.loc[idx]
     root["label"] = 0
     for i, pop in enumerate(population_labels):
-        pop_idx = ref.get_population(population_name=pop).index
+        pop_idx = [x for x in ref.get_population(population_name=pop).index if x in root.index]
         root.loc[pop_idx, "label"] = i + 1
     y = root["label"].values
     root.drop("label", axis=1, inplace=True)

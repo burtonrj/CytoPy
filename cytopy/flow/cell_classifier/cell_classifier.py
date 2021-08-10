@@ -810,6 +810,7 @@ class CalibratedCellClassifier(BaseClassifier):
         transform: Optional[Union[str, Dict]] = "logicle",
         transform_kwargs: Optional[Dict] = None,
         targets: Optional[List[str]] = None,
+        load_path: Optional[str] = None,
         **harmony_kwargs,
     ):
         transform_kwargs = transform_kwargs or {}
@@ -873,6 +874,9 @@ class CalibratedCellClassifier(BaseClassifier):
         self._setup_training_data(calibrated_training_data=calibrated_training_data)
         self.targets = calibrated_data[calibrated_data.sample_id != self.training_id]
         return self
+
+    def save_calibrated(self, path: str):
+        self.data.to_csv(path, index=False)
 
     def _setup_training_data(self, calibrated_training_data: pd.DataFrame):
         reference = self.experiment.get_sample(sample_id=self.training_id)
