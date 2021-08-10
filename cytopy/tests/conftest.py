@@ -1,6 +1,7 @@
 import inspect
 import logging
 import os
+import random
 import shutil
 from logging.config import dictConfig
 
@@ -19,6 +20,7 @@ from cytopy.tests import assets
 ASSET_PATH = inspect.getmodule(assets).__path__[0]
 config = Config()
 dictConfig(config.logging_config)
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -30,38 +32,58 @@ def setup():
     -------
     None
     """
+    logger.info("Setting up testing server")
+    # Setup local paths
+    temp_data_path = os.path.join(ASSET_PATH, "data")
+    os.mkdir(temp_data_path)
 
-    os.mkdir(f"{ASSET_PATH}/test_data")
+    # Connect and create project
+    logger.info("Creating mock database 'test' and Project 'test_project'")
     connect("test", host="mongomock://localhost", alias="core")
+    project = Project(project_id="test_project")
+    project.save()
+
+    # Add some fake subjects
+    for i in range(12):
+        subject_id = f"subject_{str(i+1).zfill(3)}"
+        logger.info(f"Creating mock subject {subject_id}")
+        project.add_subject(
+            subject_id=subject_id, age=random.randint(18, 99), gender=["male", "female"][random.randint(0, 1)]
+        )
+
+    # Populate with GVHD flow data
+    logger.info("Creating mock experiment 'test_exp'")
+    test_exp = project.add_experiment(
+        experiment_id="test_exp", panel_definition=os.path.join(ASSET_PATH, "test_panel.xlsx")
+    )
+    for i in range(12):
+        file_id = str(i + 1).zfill(3)
+        logger.info(f"Adding test FCS data {file_id}")
+        path = os.path.join(ASSET_PATH, "gvhd_fcs", f"{file_id}.fcs")
+        test_exp.add_fcs_files(sample_id=file_id, subject_id=f"subject_{file_id}", primary_data=path, compensate=False)
+
+    # Yield to tests
     yield
-    shutil.rmtree(f"{ASSET_PATH}/test_data", ignore_errors=True)
+
+    # Destroy local temp data and disconnect
+    logger.info("Destroying test data and disconnecting")
+    shutil.rmtree(temp_data_path, ignore_errors=True)
     disconnect(alias="core")
 
 
 @pytest.fixture
-def example_populated_experiment():
-    """
-    Generate an example Experiment populated with a single FileGroup "test sample"
-
-    Yields
-    -------
-    Experiment
-    """
-    test_project = Project(project_id="test", data_directory=f"{os.getcwd()}/test_data")
-    exp = test_project.add_experiment(
-        experiment_id="test experiment",
-        panel_definition=f"{ASSET_PATH}/test_panel.xlsx",
-    )
-    exp.add_fcs_files(
-        sample_id="test sample",
-        primary=f"{ASSET_PATH}/test.fcs",
-        controls={"test_ctrl": f"{ASSET_PATH}/test.fcs"},
-        compensate=False,
-    )
-    yield exp
-    test_project.reload()
-    test_project.delete()
-    os.mkdir(f"{ASSET_PATH}/test_data")
+def add_populations():
+    logger.info("Adding test populations")
+    project = Project.objects(project_id="test_project").get()
+    exp = project.get_experiment(experiment_id="test_exp")
+    for fg in exp.fcs_files:
+        logger.info(f"Adding populations to {fg.primary_id}")
+        labels = pd.read_csv(os.path.join(ASSET_PATH, "gvhd_labels", f"{fg.primary_id}.csv"))
+        for pop_i in labels.V1.unique():
+            idx = labels[labels.V1 == pop_i].index.values
+            pop = Population(population_name=f"population_{pop_i}", n=len(idx), index=idx, parent="root")
+            fg.add_population(population=pop)
+        fg.save()
 
 
 def reload_filegroup(project_id: str, exp_id: str, sample_id: str):
