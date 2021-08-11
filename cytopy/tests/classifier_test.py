@@ -5,10 +5,9 @@ from typing import Union
 import numpy as np
 import pandas as pd
 import pytest
-from matplotlib.pyplot import Axes
-from matplotlib.pyplot import Figure
 from matplotlib.pyplot import show
 from sklearn.datasets import load_iris
+from sklearn.feature_selection import SelectFromModel
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.neighbors import KNeighborsClassifier
@@ -329,24 +328,21 @@ def test_calcellclassifier_hyperparam_search(calibrated_cell_classifier):
 
 
 def test_calcellclassifier_meta_learner_fit_cv(calibrated_cell_classifier):
-    calibrated_cell_classifier.calibrate()
-    calibrated_cell_classifier.fit()
+    calibrated_cell_classifier.calibrate().fit().predict_meta_labels()
     training_results, testing_results = calibrated_cell_classifier.meta_learner_fit_cv()
     assert isinstance(training_results, pd.DataFrame)
     assert isinstance(testing_results, pd.DataFrame)
 
 
 def test_calcellclassifier_meta_learner_fit_test_train_split(calibrated_cell_classifier):
-    calibrated_cell_classifier.calibrate()
-    calibrated_cell_classifier.fit()
+    calibrated_cell_classifier.calibrate().fit().predict_meta_labels()
     performance, predictions = calibrated_cell_classifier.meta_learner_fit_train_test_split()
     assert isinstance(performance, pd.DataFrame)
     assert isinstance(predictions, dict)
 
 
 def test_calcellclassifier_meta_learner_hyperparam_tuning(calibrated_cell_classifier):
-    calibrated_cell_classifier.calibrate()
-    calibrated_cell_classifier.fit()
+    calibrated_cell_classifier.calibrate().fit().predict_meta_labels()
     performance, optimizers = calibrated_cell_classifier.meta_learner_hyperparam_tuning(
         param_grid={"n_neighbors": [5, 10, 15, 20]}
     )
@@ -355,22 +351,57 @@ def test_calcellclassifier_meta_learner_hyperparam_tuning(calibrated_cell_classi
     assert all([isinstance(x, BaseSearchCV) for x in optimizers.values()])
 
 
-@pytest.mark.parametrize("meta", [True, False])
-def test_calcellclassifier_plot_learning_curve(calibrated_cell_classifier, meta: bool):
-    calibrated_cell_classifier.calibrate()
-    if meta:
-        calibrated_cell_classifier.fit()
-    else:
-        pass
+def test_calcellclassifier_predict_meta_labels(calibrated_cell_classifier):
+    calibrated_cell_classifier.calibrate().fit().predict_meta_labels()
+    for target_id in calibrated_cell_classifier.targets.sample_id.values:
+        assert isinstance(calibrated_cell_classifier.target_predictions[target_id], dict)
+        assert isinstance(calibrated_cell_classifier.target_predictions[target_id]["y_pred"], np.ndarray)
+        assert isinstance(calibrated_cell_classifier.target_predictions[target_id]["y_score"], np.ndarray)
+
+
+def test_calcellclassifier_load_target_data(calibrated_cell_classifier):
+    calibrated_cell_classifier.calibrate().fit().predict_meta_labels()
+    calibrated_x, y, original_x = calibrated_cell_classifier.load_target_data(target_id="002", return_all_data=True)
+    assert isinstance(calibrated_x, pd.DataFrame)
+    assert isinstance(original_x, pd.DataFrame)
+    assert isinstance(y, np.ndarray)
+    assert len(y) == 1000
+    assert calibrated_x.shape[0] == 1000
+    assert original_x.shape[0] > calibrated_x.shape[0]
 
 
 def test_calcellclassifier_feature_importance(calibrated_cell_classifier):
-    pass
+    calibrated_cell_classifier.model = LogisticRegression()
+    calibrated_cell_classifier.calibrate().fit()
+    important_features, selector = calibrated_cell_classifier.feature_importance()
+    assert isinstance(important_features, np.ndarray)
+    assert isinstance(selector, SelectFromModel)
+    assert len(calibrated_cell_classifier.features) > len(important_features)
 
 
 def test_calcellclassifier_meta_fit_predict(calibrated_cell_classifier):
-    pass
+    calibrated_cell_classifier.calibrate().fit().predict_meta_labels()
+    y, y_pred = calibrated_cell_classifier.meta_fit_predict("002")
+    assert isinstance(y, np.ndarray)
+    assert isinstance(y_pred, np.ndarray)
 
 
-def test_calcellclassifier_predict(calibrated_cell_classifier):
-    pass
+def test_calcellclassifier_meta_predict(calibrated_cell_classifier):
+    calibrated_cell_classifier.calibrate().fit().predict_meta_labels()
+    calibrated_cell_classifier.meta_fit("002")
+    y, y_pred = calibrated_cell_classifier.meta_predict("002")
+    assert isinstance(y, np.ndarray)
+    assert isinstance(y_pred, np.ndarray)
+
+
+def test_calcellclassifier_meta_fit_predict_populations(calibrated_cell_classifier):
+    calibrated_cell_classifier.calibrate().fit().predict_meta_labels()
+    results = calibrated_cell_classifier.meta_fit_predict_populations(return_filegroup_only=False)
+    assert isinstance(results, dict)
+    for target_id in calibrated_cell_classifier.targets.sample_id.values:
+        isinstance(results[target_id]["filegroup"], FileGroup)
+        isinstance(results[target_id]["y_pred"], np.ndarray)
+        isinstance(results[target_id]["y_score"], np.ndarray)
+        expected_pops = [f"{calibrated_cell_classifier.population_prefix}_population_{i}" for i in range(5)]
+        expected_pops.append(f"{calibrated_cell_classifier.population_prefix}_Unclassified")
+        assert all([x in results[target_id]["filegroup"].list_populations() for x in expected_pops])

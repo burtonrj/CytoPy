@@ -1,4 +1,5 @@
 import inspect
+import logging
 from typing import Iterable
 from typing import List
 from typing import Optional
@@ -10,6 +11,9 @@ from sklearn import metrics as skmetrics
 from sklearn.base import ClassifierMixin
 from sklearn.model_selection import learning_curve
 from sklearn.utils.class_weight import compute_class_weight
+
+
+logger = logging.getLogger(__name__)
 
 
 def plot_learning_curve(
@@ -116,35 +120,38 @@ def calc_metrics(
     results = dict()
     i = 1
     for m in metrics:
-        if callable(m):
-            results[f"custom_metric_{i}"] = m(y_true=y_true, y_pred=y_pred, y_score=y_score)
-            i += 1
-            continue
-        if "f1" in m:
-            avg = m.split("_")
-            if len(avg) == 2:
-                avg = m.split("_")[1]
+        try:
+            if callable(m):
+                results[f"custom_metric_{i}"] = m(y_true=y_true, y_pred=y_pred, y_score=y_score)
+                i += 1
+                continue
+            if "f1" in m:
+                avg = m.split("_")
+                if len(avg) == 2:
+                    avg = m.split("_")[1]
+                else:
+                    avg = None
+                f = getattr(skmetrics, "f1_score")
+                assert y_pred is not None, "For F1 score predictions must be provided;`y_pred` is None"
+                results[m] = f(y_true=y_true, y_pred=y_pred, average=avg)
+            elif m == "roc_auc_score":
+                f = getattr(skmetrics, m)
+                results[m] = f(y_true=y_true, y_score=y_score, multi_class="ovr", average="weighted")
             else:
-                avg = None
-            f = getattr(skmetrics, "f1_score")
-            assert y_pred is not None, "For F1 score predictions must be provided;`y_pred` is None"
-            results[m] = f(y_true=y_true, y_pred=y_pred, average=avg)
-        elif m == "roc_auc_score":
-            f = getattr(skmetrics, m)
-            results[m] = f(y_true=y_true, y_score=y_score, multi_class="ovr", average="weighted")
-        else:
-            f = getattr(skmetrics, m)
-            if "y_score" in inspect.signature(f).parameters.keys():
-                if y_score is None:
-                    raise AttributeError(
-                        f"Metric requested ({m}) requires probabilities of positive class but "
-                        f"y_score not provided; y_score is None."
-                    )
-                results[m] = f(y_true=y_true, y_score=y_score)
-            elif "y_pred" in inspect.signature(f).parameters.keys():
-                results[m] = f(y_true=y_true, y_pred=y_pred)
-            else:
-                raise ValueError("Unexpected metric. Signature should contain either 'y_score' or 'y_pred'")
+                f = getattr(skmetrics, m)
+                if "y_score" in inspect.signature(f).parameters.keys():
+                    if y_score is None:
+                        raise AttributeError(
+                            f"Metric requested ({m}) requires probabilities of positive class but "
+                            f"y_score not provided; y_score is None."
+                        )
+                    results[m] = f(y_true=y_true, y_score=y_score)
+                elif "y_pred" in inspect.signature(f).parameters.keys():
+                    results[m] = f(y_true=y_true, y_pred=y_pred)
+                else:
+                    raise ValueError("Unexpected metric. Signature should contain either 'y_score' or 'y_pred'")
+        except ValueError as e:
+            logger.error(f"Unable to compute {m}: {e}")
 
     return results
 

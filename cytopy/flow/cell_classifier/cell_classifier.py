@@ -76,24 +76,6 @@ def check_data_init(func):
     return wrapper
 
 
-def check_calibrated(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        assert args[0].targets is not None, "Calibrator not defined"
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-def check_predictions(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        assert args[0].target_predictions is not None, "Call 'predict' first"
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
 class ClassifierError(Exception):
     def __init__(self, message: str):
         logger.error(message)
@@ -800,6 +782,33 @@ class CellClassifier(BaseClassifier):
         )
 
 
+def check_calibrated(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        assert args[0].targets is not None, "Calibrator not defined"
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def check_target_predictions(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        assert args[0].target_predictions is not None, "Call 'predict_meta_labels' first"
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def check_valid_target(func):
+    @wraps(func)
+    def wrapper(*args, target_id: str, **kwargs):
+        assert target_id in args[0].targets.sample_id.values, "Invalid target_id"
+        return func(*args, target_id, **kwargs)
+
+    return wrapper
+
+
 class CalibratedCellClassifier(BaseClassifier):
     def __init__(
         self,
@@ -903,30 +912,48 @@ class CalibratedCellClassifier(BaseClassifier):
             )
 
     @check_calibrated
-    def predict_meta_labels(self, threshold: float = 0.5, verbose: bool = True):
+    def predict_meta_labels(self, verbose: bool = True):
+        self.target_predictions = {}
         for target_id, target_df in progress_bar(self.targets.groupby("sample_id"), verbose=verbose):
-            y_pred, y_score = self._predict(x=target_df[self.features], threshold=threshold)
+            y_pred, y_score = self._predict(x=target_df[self.features])
             self.target_predictions[target_id] = {"y_pred": y_pred, "y_score": y_score}
         return self
 
-    def _load_target_data(self, target_id: str, features: Optional[List[str]] = None, return_all_data: bool = False):
-        try:
-            features = features or self.features
-            target = self.experiment.get_sample(sample_id=target_id)
-            x1 = target.load_population_df(
-                population=self.root_population, transform=self.transform, transform_kwargs=self.transform_kwargs
-            )[features]
-            idx = self.targets[self.targets.sample_id == target_id]["original_index"].values
-            assert len(idx) > 0
-            x2 = x1.loc[idx]
-            y = self.target_predictions[target_id]["y_pred"]
-            if return_all_data:
-                return x2, y, x1
-            return x2, y
-        except KeyError as e:
-            raise ClassifierError(f"Could not locate target predictions, has predict been called?; {e}.")
-        except AssertionError:
-            raise ClassifierError(f"Invalid target ID {target_id}, does not exist.")
+    @check_calibrated
+    @check_target_predictions
+    @check_valid_target
+    def load_target_data(self, target_id: str, features: Optional[List[str]] = None, return_all_data: bool = False):
+        features = features or self.features
+        target = self.experiment.get_sample(sample_id=target_id)
+        original_x = target.load_population_df(
+            population=self.root_population, transform=self.transform, transform_kwargs=self.transform_kwargs
+        )[features]
+        idx = self.targets[self.targets.sample_id == target_id]["original_index"].values
+        assert len(idx) > 0
+        calibrated_x = original_x.loc[idx]
+        y = self.target_predictions[target_id]["y_pred"]
+        if return_all_data:
+            return calibrated_x, y, original_x
+        return calibrated_x, y
+
+    def meta_fit(self, target_id: str, features: Optional[List[str]] = None, **fit_kwargs):
+        calibrated_x, y, original_x = self.load_target_data(
+            target_id=target_id, return_all_data=True, features=features
+        )
+        self.meta_learner.fit(calibrated_x, y, **fit_kwargs)
+
+    def meta_fit_predict(self, target_id: str, features: Optional[List[str]] = None, **fit_kwargs):
+        calibrated_x, y, original_x = self.load_target_data(
+            target_id=target_id, return_all_data=True, features=features
+        )
+        self.meta_learner.fit(calibrated_x, y, **fit_kwargs)
+        return predict(model=self.meta_learner, x=original_x)
+
+    def meta_predict(self, target_id: str, features: Optional[List[str]] = None):
+        calibrated_x, y, original_x = self.load_target_data(
+            target_id=target_id, return_all_data=True, features=features
+        )
+        return predict(model=self.meta_learner, x=original_x)
 
     def meta_learner_fit_cv(
         self,
@@ -944,7 +971,7 @@ class CalibratedCellClassifier(BaseClassifier):
         training_results, testing_results = list(), list()
         for _id in target_id:
             logger.info(f"Fitting to {_id}")
-            x, y = self._load_target_data(target_id=_id, features=features)
+            x, y = self.load_target_data(target_id=_id, features=features)
             train, test = fit_cv(
                 model=self.meta_learner,
                 x=x,
@@ -978,8 +1005,8 @@ class CalibratedCellClassifier(BaseClassifier):
         all_results, predictions = list(), dict()
         for _id in target_id:
             logger.info(f"Fitting to {_id}")
-            x, y = self._load_target_data(target_id=_id, features=features)
-            results, y_hat = fit_cv(
+            x, y = self.load_target_data(target_id=_id, features=features)
+            results, y_hat = fit_train_test_split(
                 model=self.meta_learner,
                 x=x,
                 y=y,
@@ -1015,7 +1042,7 @@ class CalibratedCellClassifier(BaseClassifier):
         optimizers = dict()
         results = defaultdict(list)
         for _id in progress_bar(target_id, verbose=verbose):
-            x, y = self._load_target_data(target_id=_id, features=features)
+            x, y = self.load_target_data(target_id=_id, features=features)
             optimizers[_id] = hyperparam_search(
                 model=self.meta_learner,
                 x=x,
@@ -1047,7 +1074,7 @@ class CalibratedCellClassifier(BaseClassifier):
     ):
         try:
             if meta:
-                x, y = self._load_target_data(target_id=target_id, features=features)
+                x, y = self.load_target_data(target_id=target_id, features=features)
                 return utils.plot_learning_curve(
                     model=self.meta_learner,
                     x=x,
@@ -1082,24 +1109,17 @@ class CalibratedCellClassifier(BaseClassifier):
             return important_features, selector
         except ValueError:
             logger.info("Chosen model does not have coefficient weights or feature importance available.")
-            return self.features, None
+            return np.array(self.features), None
 
-    def meta_fit_predict(
-        self, target_id: str, features: Optional[List[str]] = None, params: Optional[Dict] = None, **fit_kwargs
-    ):
+    def set_meta_params(self, params: Dict):
         try:
-            if params is not None:
-                self.meta_learner.set_params(params=params)
+            self.meta_learner.set_params(params=params)
         except AttributeError:
             logger.error(
                 "Chosen meta-learner does not have method 'set_params'; hyper-parameters will not be updated."
             )
 
-        x2, y, x1 = self._load_target_data(target_id=target_id, return_all_data=True, features=features)
-        self.meta_learner.fit(x2, y, **fit_kwargs)
-        return predict(model=self.meta_learner, x=x1)
-
-    def predict(
+    def meta_fit_predict_populations(
         self,
         target_id: Optional[Union[str, List[str]]] = None,
         features: Optional[List[str]] = None,
@@ -1118,21 +1138,21 @@ class CalibratedCellClassifier(BaseClassifier):
             if len(target_id) != len(params):
                 raise ClassifierError("Number of target IDs does not match number of parameter dictionaries.")
 
+        if isinstance(params, dict):
+            self.set_meta_params(params=params)
+
         for i, _id in progress_bar(enumerate(target_id), verbose=verbose):
 
             if isinstance(params, list):
-                y_pred, y_score = self.meta_fit_predict(
-                    target_id=_id, feature=features, params=params[i], **fit_kwargs
-                )
-            else:
-                y_pred, y_score = self.meta_fit_predict(target_id=_id, feature=features, params=params, **fit_kwargs)
-            _, _, x = self._load_target_data(target_id=_id, return_all_data=True, features=features)
+                self.set_meta_params(params=params[i])
+            y_pred, y_score = self.meta_fit_predict(target_id=_id, features=features, **fit_kwargs)
+            _, _, x = self.load_target_data(target_id=_id, return_all_data=True, features=features)
             fg = self.experiment.get_sample(sample_id=_id)
             self._add_populations(target=fg, x=x, y_pred=y_pred, root_population=self.root_population)
             if return_filegroup_only:
                 results[_id] = fg
             else:
-                results[_id] = {"filegroup": fg, "predictions": y_pred, "scores": y_score}
+                results[_id] = {"filegroup": fg, "y_pred": y_pred, "y_score": y_score}
         return results
 
 
@@ -1159,11 +1179,11 @@ def fit_cv(
     training_results = list()
     testing_results = list()
     for train_idx, test_idx in progress_bar(
-        cross_validator.split(X=x, y=y, **split_kwargs),
+        cross_validator.split(X=x.values, y=y, **split_kwargs),
         total=cross_validator.n_splits,
         verbose=verbose,
     ):
-        x_train, x_test = x.loc[train_idx], x.loc[test_idx]
+        x_train, x_test = x.values[train_idx], x.values[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
         model.fit(x_train, y_train, **fit_kwargs)
         y_pred, y_score = predict(model=model, x=x_train)
