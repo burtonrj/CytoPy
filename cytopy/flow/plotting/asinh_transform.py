@@ -23,13 +23,15 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-from ..transform import AsinhTransformer
-from .hlog_transform import HlogMajorLocator, HlogMinorLocator
-from matplotlib.ticker import NullFormatter, LogFormatterMathtext
-from matplotlib import transforms as mtransforms
-from matplotlib import scale as mscale
 import pandas as pd
+from matplotlib import scale as mscale
+from matplotlib import transforms as mtransforms
+from matplotlib.ticker import LogFormatterMathtext
+from matplotlib.ticker import NullFormatter
+
+from .hlog_transform import HlogMajorLocator
+from .hlog_transform import HlogMinorLocator
+from cytopy.flow.transform import AsinhTransformer
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"

@@ -1,9 +1,6 @@
 import logging
 from collections import defaultdict
-from typing import *
 
-import numpy as np
-import pandas as pd
 import seaborn as sns
 
 from ...data.experiment import Experiment
@@ -13,13 +10,13 @@ from ...feedback import progress_bar
 from ..dim_reduction import DimensionReduction
 from ..plotting import single_cell_plot
 from ..sampling import sample_dataframe_uniform_groups
-from ..transform import Scaler
 from .ensemble_methods import CoMatrix
 from .ensemble_methods import MixtureModel
 from .main import ClusteringError
 from .main import remove_null_features
 from .metrics import *
 from .mutual_info import MutualInfo
+from cytopy.flow.transform import Scaler
 
 logger = logging.getLogger("clustering.ensemble")
 

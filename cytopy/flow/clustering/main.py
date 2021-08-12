@@ -58,7 +58,6 @@ import numpy as np
 import pandas as pd
 import phenograph
 import seaborn as sns
-from sklearn.cluster import *
 from sklearn.metrics import calinski_harabasz_score
 from sklearn.metrics import davies_bouldin_score
 from sklearn.metrics import silhouette_score
@@ -72,9 +71,9 @@ from ..dim_reduction import DimensionReduction
 from ..plotting import cluster_bubble_plot
 from ..plotting import single_cell_plot
 from ..sampling import sample_dataframe_uniform_groups
-from ..transform import Scaler
 from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
+from cytopy.flow.transform import Scaler
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"

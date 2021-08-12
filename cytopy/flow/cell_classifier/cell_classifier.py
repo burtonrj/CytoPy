@@ -27,7 +27,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 import logging
-import os
 from collections import defaultdict
 from functools import wraps
 from inspect import isclass
@@ -55,11 +54,11 @@ from ...data.experiment import single_cell_dataframe
 from ...data.population import Population
 from ...feedback import progress_bar
 from ...flow import sampling
-from ...flow.transform import apply_transform
-from ...flow.transform import Scaler
-from ...flow.transform import Transformer
-from ...flow.transform import TRANSFORMERS
 from ...flow.variance import Harmony
+from cytopy.flow.transform import apply_transform
+from cytopy.flow.transform import Scaler
+from cytopy.flow.transform import Transformer
+from cytopy.flow.transform import TRANSFORMERS
 
 
 logger = logging.getLogger(__name__)
@@ -977,6 +976,17 @@ class CalibratedCellClassifier(BaseClassifier):
             self.target_predictions[target_id] = {"y_pred": y_pred, "y_score": y_score}
         return self
 
+    @check_target_predictions
+    def meta_label_avg_probability(self):
+        pred_prob = defaultdict(list)
+        for target_id, results in self.target_predictions.items():
+            for y_pred, y_prob in results.items():
+                if y_prob is None:
+                    raise ClassifierError("Prediction probabilities are not available for the chosen model")
+                pred_prob[target_id].append(y_prob[y_pred])
+        pred_prob = {target_id: np.mean(prob) for target_id, prob in pred_prob.items()}
+        return pd.DataFrame(pred_prob, index=["Avg prob"]).T.sort_values("Avg prob")
+
     @check_calibrated
     @check_target_predictions
     @check_valid_target
@@ -1029,8 +1039,7 @@ class CalibratedCellClassifier(BaseClassifier):
         if isinstance(target_id, str):
             target_id = [target_id]
         training_results, testing_results = list(), list()
-        for _id in target_id:
-            logger.info(f"Fitting to {_id}")
+        for _id in progress_bar(target_id, verbose=verbose):
             x, y = self.load_target_data(target_id=_id, features=features)
             train, test = fit_cv(
                 model=self.meta_learner,
@@ -1039,7 +1048,7 @@ class CalibratedCellClassifier(BaseClassifier):
                 cross_validator=cross_validator,
                 metrics=metrics,
                 split_kwargs=split_kwargs,
-                verbose=verbose,
+                verbose=False,
                 **fit_kwargs,
             )
             train, test = pd.DataFrame(train), pd.DataFrame(test)

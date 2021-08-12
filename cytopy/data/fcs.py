@@ -30,7 +30,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 import os
 import re
-from collections import defaultdict
 from functools import wraps
 from typing import Callable
 from typing import Dict
@@ -51,9 +50,6 @@ from sklearn.model_selection import StratifiedKFold
 
 from ..flow.build_models import build_sklearn_model
 from ..flow.sampling import sample_dataframe
-from ..flow.transform import apply_transform
-from ..flow.transform import apply_transform_map
-from ..flow.transform import Transformer
 from ..flow.tree import construct_tree
 from .errors import DuplicatePopulationError
 from .errors import MissingControlError
@@ -65,6 +61,9 @@ from .population import PolygonGeom
 from .population import Population
 from .setup import Config
 from .subject import Subject
+from cytopy.flow.transform import apply_transform
+from cytopy.flow.transform import apply_transform_map
+from cytopy.flow.transform import Transformer
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"

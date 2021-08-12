@@ -28,13 +28,11 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-import gc
+import ctypes
 import logging
 import os
 import pickle
-import time
 from functools import partial
-from itertools import accumulate
 from typing import *
 from warnings import warn
 
@@ -43,8 +41,9 @@ import pandas as pd
 from flowutils import transforms
 from sklearn import preprocessing
 
-from ..data.setup import Config
-from ..feedback import progress_bar
+from cytopy.data.setup import Config
+from cytopy.feedback import progress_bar
+from cytopy.flow.transform import logicle_ext
 
 CONFIG = Config()
 CACHE = list()

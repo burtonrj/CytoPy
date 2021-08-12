@@ -18,10 +18,10 @@ from ..flow.cell_classifier.cell_classifier import BaseClassifier
 from ..flow.cell_classifier.cell_classifier import CalibratedCellClassifier
 from ..flow.cell_classifier.cell_classifier import CellClassifier
 from ..flow.cell_classifier.cell_classifier import ClassifierError
-from ..flow.transform import LogicleTransformer
-from ..flow.transform import Scaler
 from .conftest import add_populations
 from .conftest import ASSET_PATH
+from cytopy.flow.transform import LogicleTransformer
+from cytopy.flow.transform import Scaler
 
 logger = logging.getLogger(__name__)
 

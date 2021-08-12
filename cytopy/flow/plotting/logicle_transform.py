@@ -23,8 +23,6 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from typing import *
-
 import numpy as np
 import pandas as pd
 from matplotlib import scale as mscale
@@ -33,8 +31,7 @@ from matplotlib.ticker import Locator
 from matplotlib.ticker import LogFormatterMathtext
 from matplotlib.ticker import NullFormatter
 
-from ...data.setup import Config
-from ..transform import LogicleTransformer
+from cytopy.flow.transform import LogicleTransformer
 
 
 __author__ = "Ross Burton"

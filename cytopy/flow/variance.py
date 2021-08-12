@@ -47,12 +47,11 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
 
 from ..data.experiment import Experiment
-from ..data.experiment import single_cell_dataframe
 from ..feedback import progress_bar
 from ..feedback import vprint
 from ..flow import transform as transform_module
 from .dim_reduction import DimensionReduction
-from .transform import TRANSFORMERS
+from cytopy.flow.transform import TRANSFORMERS
 
 np.random.seed(42)
 

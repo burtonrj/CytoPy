@@ -33,7 +33,7 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
-from ..transform import HyperlogTransformer
+from cytopy.flow.transform import HyperlogTransformer
 from matplotlib.ticker import NullFormatter, LogFormatterMathtext
 from matplotlib.ticker import Locator
 from matplotlib import transforms as mtransforms
@@ -121,9 +121,7 @@ class HlogMajorLocator(Locator):
 
         if vmin < 0:
             min_decade = -1.0 * 10 ** np.floor(np.log10(-1.0 * vmin))
-            ticks = [
-                -1.0 * 10 ** x for x in np.arange(np.log10(-1.0 * min_decade), 1, -1)
-            ]
+            ticks = [-1.0 * 10 ** x for x in np.arange(np.log10(-1.0 * min_decade), 1, -1)]
             ticks.append(0.0)
             ticks.extend([10 ** x for x in np.arange(2, np.log10(max_decade), 1)])
         else:
@@ -188,10 +186,7 @@ class HlogMinorLocator(Locator):
             # whoops! missed an endpoint
             lt.extend([-10.0])
 
-            gt = [
-                np.arange(10 ** x, 10 ** (x + 1), 10 ** x)
-                for x in np.arange(1, np.log10(vmax))
-            ]
+            gt = [np.arange(10 ** x, 10 ** (x + 1), 10 ** x) for x in np.arange(1, np.log10(vmax))]
 
             # flatten
             gt = [item for sublist in gt for item in sublist]
@@ -200,10 +195,7 @@ class HlogMinorLocator(Locator):
             ticks.extend(gt)
         else:
             vmin = max((vmin, 1))
-            ticks = [
-                np.arange(10 ** x, 10 ** (x + 1), 10 ** x)
-                for x in np.arange(np.log10(vmin), np.log10(vmax))
-            ]
+            ticks = [np.arange(10 ** x, 10 ** (x + 1), 10 ** x) for x in np.arange(np.log10(vmin), np.log10(vmax))]
             ticks = [item for sublist in ticks for item in sublist]
 
         return self.raise_if_exceeds(np.asarray(ticks))

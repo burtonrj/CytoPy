@@ -27,7 +27,6 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-import logging
 import math
 import os
 from datetime import datetime
@@ -44,7 +43,6 @@ from ..feedback import progress_bar
 from ..feedback import vprint
 from ..flow.fda_norm import LandmarkReg
 from ..flow.gate_search import hyperparameter_gate
-from ..flow.transform import apply_transform
 from .errors import *
 from .experiment import Experiment
 from .fcs import FileGroup
@@ -57,6 +55,7 @@ from .gate import ThresholdGeom
 from .gate import update_polygon
 from .gate import update_threshold
 from cytopy.flow.plotting.flow_plot import FlowPlot
+from cytopy.flow.transform import apply_transform
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
