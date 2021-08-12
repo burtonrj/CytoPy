@@ -28,6 +28,7 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import gc
 import logging
 import os
 import pickle
@@ -43,6 +44,7 @@ from flowutils import transforms
 from sklearn import preprocessing
 
 from ..data.setup import Config
+from ..feedback import progress_bar
 
 CONFIG = Config()
 CACHE = list()
@@ -240,14 +242,18 @@ class LogicleTransformer(Transformer):
         )
 
     def scale(self, data: pd.DataFrame, features: List[str]):
-        data = data.copy()
-        data[features] = transform_with_cache(data=data[features], scaler=self, inverse=False)[features].values
-        return data
+        if CONFIG.logicle_cache:
+            data = data.copy()
+            data[features] = transform_with_cache(data=data[features], scaler=self, inverse=False)[features].values
+            return data
+        return super().scale(data=data, features=features)
 
     def inverse_scale(self, data: pd.DataFrame, features: List[str]):
-        data = data.copy()
-        data[features] = transform_with_cache(data=data[features], scaler=self, inverse=True)[features].values
-        return data
+        if CONFIG.logicle_cache:
+            data = data.copy()
+            data[features] = transform_with_cache(data=data[features], scaler=self, inverse=True)[features].values
+            return data
+        return super().inverse_scale(data=data, features=features)
 
 
 class HyperlogTransformer(Transformer):

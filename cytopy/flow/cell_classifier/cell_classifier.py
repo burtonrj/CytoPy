@@ -206,6 +206,7 @@ class BaseClassifier:
         """
         Scale training data. Many Scikit-Learn scalers supported, see cytopy.flow.transform.Scaler
         for details. Scaler object is saved to the scaler attribute.
+
         Parameters
         ----------
         method: str (default='standard')
@@ -929,9 +930,11 @@ class CalibratedCellClassifier(BaseClassifier):
             population=self.root_population, transform=self.transform, transform_kwargs=self.transform_kwargs
         )[features]
         idx = self.targets[self.targets.sample_id == target_id]["original_index"].values
-        assert len(idx) > 0
         calibrated_x = original_x.loc[idx]
         y = self.target_predictions[target_id]["y_pred"]
+        if self.scaler is not None:
+            calibrated_x = self.scaler(data=calibrated_x, features=features)
+            original_x = self.scaler(data=original_x, features=features)
         if return_all_data:
             return calibrated_x, y, original_x
         return calibrated_x, y

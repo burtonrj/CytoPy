@@ -46,46 +46,6 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
-CONFIG = Config()
-CACHE = {}
-CACHE_KWARGS = {}
-
-
-def cache_lookup(cache: Dict, data: pd.DataFrame, inverse: bool = False) -> (np.ndarray, np.ndarray):
-    if inverse:
-        cache = {v: k for k, v in cache.items()}
-    cached = np.array([cache.get(x, np.nan) for x in data["x"].values])
-    missing_idx = np.argwhere(np.isnan(cached)).reshape(-1)
-    return cached, missing_idx
-
-
-def update_cache(original: np.ndarray, transformed: np.ndarray):
-    global CACHE
-    CACHE.update({o: t for o, t in np.c_[original, transformed]})
-
-
-def transform_with_cache(data: np.ndarray, scaler: LogicleTransformer, inverse: bool = False):
-    global CACHE
-    global CACHE_KWARGS
-    original = pd.DataFrame(data, columns=["x"])
-    if scaler.kwargs != CACHE_KWARGS:
-        CACHE = {}
-        CACHE_KWARGS = scaler.kwargs
-    if CONFIG.matplotlib_transform_precision is not None:
-        original["x"] = original["x"].round(CONFIG.matplotlib_transform_precision)
-    cached, missing_idx = cache_lookup(cache=CACHE, data=original, inverse=inverse)
-    if len(missing_idx) == 0:
-        return cached.reshape(-1, 1)
-    if inverse:
-        inverse_transformed = scaler.inverse_scale(data=original.iloc[missing_idx], features=["x"])
-        cached[missing_idx] = inverse_transformed["x"].values
-        return cached.reshape(-1, 1)
-    else:
-        transformed = scaler.scale(data=original.iloc[missing_idx], features=["x"])
-        cached[missing_idx] = transformed["x"].values
-        update_cache(original.iloc[missing_idx]["x"].values, transformed["x"].values)
-        return cached.reshape(-1, 1)
-
 
 class LogicleScale(mscale.ScaleBase):
     name = "logicle"

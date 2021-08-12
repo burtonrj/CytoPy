@@ -292,8 +292,9 @@ def multilabel(
     if idx is not None:
         root = root.loc[idx]
     for pop in population_labels:
+        pop_idx = [x for x in ref.get_population(population_name=pop).index if x in root.index]
         root[pop] = 0
-        root.loc[ref.get_population(pop).index, pop] = 1
+        root.loc[pop_idx, pop] = 1
     return root[features], root[population_labels]
 
 
