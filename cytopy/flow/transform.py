@@ -28,10 +28,10 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-import ctypes
 import logging
 import os
 import pickle
+from functools import lru_cache
 from functools import partial
 from typing import *
 from warnings import warn
@@ -43,11 +43,8 @@ from sklearn import preprocessing
 
 from cytopy.data.setup import Config
 from cytopy.feedback import progress_bar
-from cytopy.flow.transform import logicle_ext
 
 CONFIG = Config()
-CACHE = list()
-CACHE_KWARGS = list()
 logger = logging.getLogger(__name__)
 
 
@@ -57,25 +54,16 @@ class TransformError(Exception):
         super().__init__(message)
 
 
-if len(CONFIG.logicle_transform_storage) > 0:
-    if CONFIG.logicle_transform_storage == "default":
-        saved_cache_path = os.path.join(CONFIG.install_path, "logicle_cache.pkl")
-    else:
-        saved_cache_path = os.path.join(CONFIG.logicle_transform_storage)
-    if os.path.isfile(saved_cache_path):
-        with open(saved_cache_path, "rb") as f:
-            saved_cache = pickle.load(f)
-            CACHE = saved_cache["cache"]
-            CACHE_KWARGS = saved_cache["kwargs"]
+@lru_cache(maxsize=CONFIG.logicle_cache_size)
+def logicle_wrapper(x: float):
+    if CONFIG.logicle_transform_precision != "None":
+        x = np.round(x, decimals=CONFIG.logicle_transform_precision)
+    return transforms.logicle(np.array([[x]]), channel_indices=[0])[0][0]
 
 
-def save_cache(path: str = "default"):
-    save_path = os.path.join(CONFIG.install_path, "logicle_cache.pkl") if path == "default" else path
-    with open(save_path, "wb") as file:
-        pickle.dump({"cache": CACHE, "kwargs": CACHE_KWARGS}, file)
-    if path != "default":
-        CONFIG.logicle_transform_storage = path
-        CONFIG.save()
+@lru_cache(maxsize=CONFIG.logicle_cache_size)
+def inverse_logicle_wrapper(x: float):
+    return transforms.logicle_inverse(np.array([[x]]), channel_indices=[0])[0][0]
 
 
 def _get_dataframe_column_index(data: pd.DataFrame, features: list):
@@ -243,14 +231,16 @@ class LogicleTransformer(Transformer):
     def scale(self, data: pd.DataFrame, features: List[str]):
         if CONFIG.logicle_cache:
             data = data.copy()
-            data[features] = transform_with_cache(data=data[features], scaler=self, inverse=False)[features].values
+            for f in features:
+                data[f] = data[f].apply(logicle_wrapper)
             return data
         return super().scale(data=data, features=features)
 
     def inverse_scale(self, data: pd.DataFrame, features: List[str]):
         if CONFIG.logicle_cache:
             data = data.copy()
-            data[features] = transform_with_cache(data=data[features], scaler=self, inverse=True)[features].values
+            for f in features:
+                data[f] = data[f].apply(inverse_logicle_wrapper)
             return data
         return super().inverse_scale(data=data, features=features)
 
@@ -750,69 +740,3 @@ def safe_range(data: pd.DataFrame, x: str):
     valid_range = data[data[x] > 0][x].values
     assert len(valid_range) > 0, f"All values for {x} <= 0"
     return np.min(valid_range), np.max(valid_range)
-
-
-def cache_lookup(cache: Dict, data: pd.DataFrame, inverse: bool = False):
-    if inverse:
-        cache = {v: k for k, v in cache.items()}
-    data = data.applymap(lambda x: cache.get(x, None))
-    return data, data.isnull()
-
-
-def flatten_and_index(data: pd.DataFrame, missing_mask: pd.DataFrame):
-    to_transform = (
-        data[missing_mask]
-        .unstack()
-        .dropna()
-        .reset_index()
-        .rename({"level_0": "column", "level_1": "index", 0: "original"}, axis=1)
-    )
-    return to_transform
-
-
-def reconstruct(transformed: pd.DataFrame, cached: pd.DataFrame):
-    for c, insert in transformed.groupby("column"):
-        cached.loc[insert["index"].values, c] = insert["transformed"].values
-
-
-def update_cache(original: np.ndarray, transformed: np.ndarray, cache_idx: int):
-    global CACHE
-    CACHE[cache_idx].update(dict(zip(original, transformed)))
-
-
-def logicle_wrapper(data: np.array, func: Callable, **kwargs):
-    return func(data=data, channel_indices=[0], **kwargs).reshape(-1)
-
-
-def transform_with_cache(data: pd.DataFrame, scaler: LogicleTransformer, inverse: bool = False):
-    global CACHE
-    global CACHE_KWARGS
-    if CONFIG.logicle_transform_precision != "None" and not inverse:
-        data = data.round(CONFIG.logicle_transform_precision)
-
-    if scaler.kwargs not in CACHE_KWARGS:
-        CACHE.append({})
-        CACHE_KWARGS.append(scaler.kwargs)
-        cache_idx = len(CACHE) - 1
-    else:
-        cache_idx = CACHE_KWARGS.index(scaler.kwargs)
-
-    cached, missing_mask = cache_lookup(cache=CACHE[cache_idx], data=data, inverse=inverse)
-    if not missing_mask.any(axis=0).any():
-        return cached
-    to_transform = flatten_and_index(data=data, missing_mask=missing_mask)
-    if inverse:
-        to_transform["transformed"] = logicle_wrapper(
-            to_transform[["original"]].values, func=scaler.inverse, **scaler.kwargs
-        )
-        reconstruct(transformed=to_transform, cached=cached)
-        return cached
-
-    to_transform["transformed"] = logicle_wrapper(
-        to_transform[["original"]].values, func=scaler.transform, **scaler.kwargs
-    )
-    reconstruct(transformed=to_transform, cached=cached)
-    update_cache(
-        original=to_transform["original"].values, transformed=to_transform["transformed"].values, cache_idx=cache_idx
-    )
-    return cached

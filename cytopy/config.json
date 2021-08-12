@@ -2,6 +2,7 @@
   "logicle_cache": true,
   "logicle_transform_precision": 5,
   "logicle_transform_storage": "default",
+  "logicle_cache_size": "None",
   "column_default": "markers",
   "logging_config": {
     "version": 1,
