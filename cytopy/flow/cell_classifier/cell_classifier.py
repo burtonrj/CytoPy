@@ -406,7 +406,7 @@ class BaseClassifier:
         -------
         self
         """
-        self._fit(x=self.x, y=self.y, **kwargs)
+        self._fit(x=self.x[self.features], y=self.y, **kwargs)
         return self
 
     @check_data_init
@@ -810,6 +810,60 @@ def check_valid_target(func):
     return wrapper
 
 
+def sample_experiment_data(
+    experiment: Experiment,
+    training_id: str,
+    root_population: str,
+    target_populations: List[str],
+    balance_populations: bool,
+    sample_size: int = 10000,
+    sampling_method: str = "uniform",
+    sampling_level: str = "file",
+    sampling_kwargs: Optional[Dict] = None,
+    transform: Optional[Union[str, Dict]] = "logicle",
+    transform_kwargs: Optional[Dict] = None,
+    targets: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    targets = targets or experiment.list_samples()
+    targets = [x for x in targets if x != training_id]
+    ref = experiment.get_sample(training_id)
+    data = single_cell_dataframe(
+        experiment=experiment,
+        populations=root_population,
+        sample_size=sample_size,
+        sampling_kwargs=sampling_kwargs,
+        sampling_level=sampling_level,
+        sampling_method=sampling_method,
+        transform=transform,
+        transform_kwargs=transform_kwargs,
+        sample_ids=targets,
+    )
+    if balance_populations:
+        pop_sample_size = int(sample_size / len(target_populations) + 1)
+        training_data = pd.concat(
+            [
+                ref.load_population_df(
+                    population=p,
+                    transform=transform,
+                    transform_kwargs=transform_kwargs,
+                    sample_size=pop_sample_size,
+                    sampling_method="uniform",
+                )
+                for p in target_populations + [root_population]
+            ]
+        )
+    else:
+        training_data = ref.load_population_df(
+            population=root_population, transform=transform, transform_kwargs=transform_kwargs
+        )
+    training_data = training_data.reset_index().rename({"index": "original_index"}, axis=1)
+    training_data["sample_id"] = training_id
+    training_data["subject_id"] = None
+    if ref.subject:
+        training_data["subject_id"] = ref.subject.subject_id
+    return pd.concat([data, training_data]).reset_index(drop=True)
+
+
 class CalibratedCellClassifier(BaseClassifier):
     def __init__(
         self,
@@ -822,6 +876,7 @@ class CalibratedCellClassifier(BaseClassifier):
         meta_learner: Optional[ClassifierMixin, Sequential] = None,
         multi_label: bool = False,
         population_prefix: str = "CalibratedCellClassifier_",
+        balance_populations: bool = True,
         sample_size: int = 10000,
         sampling_method: str = "uniform",
         sampling_level: str = "file",
@@ -851,20 +906,22 @@ class CalibratedCellClassifier(BaseClassifier):
             root_population=root_population,
             population_labels=target_populations,
         )
-        sample_ids = targets + [training_id] if targets is not None else None
         self.experiment = experiment
         self.root_population = root_population
         self.training_id = training_id
-        self.data = single_cell_dataframe(
+        self.data = sample_experiment_data(
             experiment=experiment,
-            populations=root_population,
+            training_id=training_id,
+            root_population=root_population,
+            target_populations=target_populations,
+            balance_populations=balance_populations,
             sample_size=sample_size,
-            sampling_kwargs=sampling_kwargs,
-            sampling_level=sampling_level,
             sampling_method=sampling_method,
+            sampling_level=sampling_level,
+            sampling_kwargs=sampling_kwargs,
             transform=transform,
             transform_kwargs=transform_kwargs,
-            sample_ids=sample_ids,
+            targets=targets,
         )
         self.calibrator = Harmony(
             data=self.data,
@@ -1159,7 +1216,9 @@ class CalibratedCellClassifier(BaseClassifier):
         return results
 
 
-def predict(model: Union[ClassifierMixin, Sequential], x: pd.DataFrame):
+def predict(model: Union[ClassifierMixin, Sequential], x: Union[pd.DataFrame, np.ndarray]):
+    if isinstance(x, pd.DataFrame):
+        x = x.values
     predict_proba = getattr(model, "predict_proba", None)
     if callable(predict_proba):
         return model.predict(x), model.predict_proba(x)
@@ -1168,8 +1227,8 @@ def predict(model: Union[ClassifierMixin, Sequential], x: pd.DataFrame):
 
 def fit_cv(
     model: Union[ClassifierMixin, Sequential],
-    x: pd.DataFrame,
-    y: np.ndarray,
+    x: Union[pd.DataFrame, np.ndarray],
+    y: Union[pd.DataFrame, np.ndarray],
     cross_validator: Optional[BaseCrossValidator] = None,
     metrics: Optional[List[str]] = None,
     split_kwargs: Optional[Dict] = None,
@@ -1181,12 +1240,18 @@ def fit_cv(
     cross_validator = cross_validator or KFold(n_splits=10, random_state=42, shuffle=True)
     training_results = list()
     testing_results = list()
+
+    if isinstance(x, pd.DataFrame):
+        x = x.values
+    if isinstance(y, pd.DataFrame):
+        y = y.values
+
     for train_idx, test_idx in progress_bar(
-        cross_validator.split(X=x.values, y=y, **split_kwargs),
+        cross_validator.split(X=x, y=y, **split_kwargs),
         total=cross_validator.n_splits,
         verbose=verbose,
     ):
-        x_train, x_test = x.values[train_idx], x.values[test_idx]
+        x_train, x_test = x[train_idx], x[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
         model.fit(x_train, y_train, **fit_kwargs)
         y_pred, y_score = predict(model=model, x=x_train)

@@ -417,7 +417,6 @@ class Harmony:
         scale: Optional[str] = "standard",
         scale_kwargs: Optional[Dict] = None,
     ):
-        logger.info("Preparing Harmony for application to an Experiment")
         transform_kwargs = transform_kwargs or {}
         self.transformer = None if transform is None else TRANSFORMERS[transform](**transform_kwargs)
         self.data = data
