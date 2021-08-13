@@ -944,29 +944,34 @@ class CalibratedCellClassifier(BaseClassifier):
     def calibrate(self):
         self.calibrator.run(var_use="sample_id")
         calibrated_data = self.calibrator.batch_corrected()
-        calibrated_training_data = calibrated_data[calibrated_data.sample_id == self.training_id]
+        calibrated_training_data = calibrated_data[calibrated_data.sample_id == self.training_id].copy()
         self._setup_training_data(calibrated_training_data=calibrated_training_data)
-        self.targets = calibrated_data[calibrated_data.sample_id != self.training_id]
+        self.targets = calibrated_data[calibrated_data.sample_id != self.training_id].copy()
         return self
 
     def _setup_training_data(self, calibrated_training_data: pd.DataFrame):
         reference = self.experiment.get_sample(sample_id=self.training_id)
+        calibrated_training_data.set_index("original_index", inplace=True)
         if self.multi_label:
-            self.x, self.y = utils.multilabel(
-                ref=reference,
-                root_population=self.root_population,
-                population_labels=self.target_populations,
-                features=self.features,
-                idx=calibrated_training_data["original_index"].values,
-            )
+            for pop in self.target_populations:
+                pop_idx = [
+                    x
+                    for x in reference.get_population(population_name=pop).index
+                    if x in calibrated_training_data.index.values
+                ]
+                calibrated_training_data[pop] = 0
+                calibrated_training_data.loc[pop_idx, pop] = 1
+            self.x, self.y = calibrated_training_data[self.features], calibrated_training_data[self.target_populations]
         else:
-            self.x, self.y = utils.singlelabel(
-                ref=reference,
-                root_population=self.root_population,
-                population_labels=self.target_populations,
-                features=self.features,
-                idx=calibrated_training_data["original_index"].values,
-            )
+            calibrated_training_data["label"] = 0
+            for i, pop in enumerate(self.target_populations):
+                pop_idx = [
+                    x
+                    for x in reference.get_population(population_name=pop).index
+                    if x in calibrated_training_data.index.values
+                ]
+                calibrated_training_data.loc[pop_idx, "label"] = i + 1
+            self.x, self.y = calibrated_training_data[self.features], calibrated_training_data["label"].values
 
     @check_calibrated
     def predict_meta_labels(self, verbose: bool = True):
@@ -976,11 +981,14 @@ class CalibratedCellClassifier(BaseClassifier):
             self.target_predictions[target_id] = {"y_pred": y_pred, "y_score": y_score}
         return self
 
+    def backgate_meta_labels(self, target_id: str):
+        pass
+
     @check_target_predictions
     def meta_label_avg_probability(self):
         pred_prob = defaultdict(list)
         for target_id, results in self.target_predictions.items():
-            for y_pred, y_prob in results.items():
+            for y_pred, y_prob in zip(results["y_pred"], results["y_score"]):
                 if y_prob is None:
                     raise ClassifierError("Prediction probabilities are not available for the chosen model")
                 pred_prob[target_id].append(y_prob[y_pred])
