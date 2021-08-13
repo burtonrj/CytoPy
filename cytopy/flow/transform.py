@@ -55,15 +55,15 @@ class TransformError(Exception):
 
 
 @lru_cache(maxsize=CONFIG.logicle_cache_size)
-def logicle_wrapper(x: float):
+def logicle_wrapper(x: float, **kwargs):
     if CONFIG.logicle_transform_precision != "None":
         x = np.round(x, decimals=CONFIG.logicle_transform_precision)
-    return transforms.logicle(np.array([[x]]), channel_indices=[0])[0][0]
+    return transforms.logicle(np.array([[x]]), channel_indices=[0], **kwargs)[0][0]
 
 
 @lru_cache(maxsize=CONFIG.logicle_cache_size)
-def inverse_logicle_wrapper(x: float):
-    return transforms.logicle_inverse(np.array([[x]]), channel_indices=[0])[0][0]
+def inverse_logicle_wrapper(x: float, **kwargs):
+    return transforms.logicle_inverse(np.array([[x]]), channel_indices=[0], **kwargs)[0][0]
 
 
 def _get_dataframe_column_index(data: pd.DataFrame, features: list):
@@ -232,7 +232,7 @@ class LogicleTransformer(Transformer):
         if CONFIG.logicle_cache:
             data = data.copy()
             for f in features:
-                data[f] = data[f].apply(logicle_wrapper)
+                data[f] = data[f].apply(logicle_wrapper, **self.kwargs)
             return data
         return super().scale(data=data, features=features)
 
@@ -240,7 +240,7 @@ class LogicleTransformer(Transformer):
         if CONFIG.logicle_cache:
             data = data.copy()
             for f in features:
-                data[f] = data[f].apply(inverse_logicle_wrapper)
+                data[f] = data[f].apply(inverse_logicle_wrapper, **self.kwargs)
             return data
         return super().inverse_scale(data=data, features=features)
 
