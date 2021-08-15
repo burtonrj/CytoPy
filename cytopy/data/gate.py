@@ -2195,6 +2195,10 @@ def update_polygon(
     -------
     Population
     """
+    if isinstance(x_values, np.ndarray):
+        x_values = x_values.tolist()
+    if isinstance(y_values, np.ndarray):
+        y_values = y_values.tolist()
     poly = create_polygon(x=x_values, y=y_values)
     new_data = inside_polygon(df=parent_data, x=population.geom.x, y=population.geom.y, poly=poly)
     population.geom.x_values = x_values

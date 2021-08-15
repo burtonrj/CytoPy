@@ -973,6 +973,7 @@ class GatingStrategy(mongoengine.Document):
                 )
             )
             self._edit_downstream_effects(population_name=child.name)
+        logger.info(f"Updated {gate_name}!")
 
     def edit_polygon_gate(self, gate_name: str, coords: Dict[str, Iterable[float]], transform: bool = True):
         gate = self.gate_children_present_in_filegroup(self.get_gate(gate=gate_name))
@@ -995,10 +996,11 @@ class GatingStrategy(mongoengine.Document):
                 xy = apply_transform_map(
                     pd.DataFrame(xy, columns=[gate.x, gate.y]), feature_method=transforms, kwargs=transform_kwargs
                 ).values
-                self.filegroup.update_population(
-                    update_polygon(population=pop, parent_data=parent, x_values=xy[:, 0], y_values=xy[:, 1])
-                )
+            self.filegroup.update_population(
+                update_polygon(population=pop, parent_data=parent, x_values=xy[:, 0], y_values=xy[:, 1])
+            )
             self._edit_downstream_effects(population_name=child.name)
+        logger.info(f"Updated {gate_name}!")
 
     def _edit_downstream_effects(self, population_name: str):
         """
@@ -1124,6 +1126,10 @@ def make_box_layout():
     return widgets.Layout(border="solid 1px black", margin="0px 10px 10px 0px", padding="5px 5px 5px 5px")
 
 
+def onselect(verts):
+    logger.info(verts)
+
+
 class InteractiveGateEditor(widgets.HBox):
     gate_colours = cycle(
         ["#c92c2c", "#2df74e", "#e0d572", "#000000", "#64b9c4", "#9e3657", "#d531f2", "#cf0077", "#5c37bd", "#52b58c"]
@@ -1137,10 +1143,10 @@ class InteractiveGateEditor(widgets.HBox):
         default_y_transform: Optional[str] = None,
         default_y_transform_kwargs: Optional[str] = None,
         figsize: Tuple[int, int] = (5, 5),
-        bins: Optional[int] = None,
         xlim: Optional[Tuple[int]] = None,
         ylim: Optional[Tuple[int]] = None,
         cmap: str = "jet",
+        bins: Optional[int] = None,
     ):
         super().__init__()
         if gating_strategy.filegroup is None:
@@ -1148,6 +1154,7 @@ class InteractiveGateEditor(widgets.HBox):
                 "Gating strategy must be populated, call load_data before using " "interactive gate editor."
             )
         # Organise data
+        self.selector = None
         self.default_y = default_y
         self.default_y_transform = default_y_transform
         self.default_y_transform_kwargs = default_y_transform_kwargs
@@ -1191,15 +1198,19 @@ class InteractiveGateEditor(widgets.HBox):
         self.fig.canvas.toolbar_position = "bottom"
 
         # Define widgets
-        self.child_select, self.x_text, self.y_text = None, None, None
+        self.child_select, self.update_button, self.x_text, self.y_text = None, None, None, None
         if isinstance(self.gate, PolygonGate):
-            self.child_select = widgets.Select(
+            self.child_select = widgets.Dropdown(
                 options=[child.name for child in self.gate.children],
                 value=self.gate.children[0].name,
                 description="Child population",
                 disabled=False,
             )
-            self.child_select.observe(self._poly_select, "value")
+            self.selector = PolygonSelector(self.ax, lambda x: None)
+            self.update_button = widgets.Button(
+                description="Update", disable=False, tooltop="Update population geometry", button_style="info"
+            )
+            self.update_button.on_click(self._poly_update)
         else:
             self.x_text = widgets.Text(value=self.gate_geometry["x_threshold"], description=f"{self.gate.x} threshold")
             self.x_text.observe(self._update_x_threshold, "value")
@@ -1208,10 +1219,6 @@ class InteractiveGateEditor(widgets.HBox):
                     value=self.gate_geometry["y_threshold"], description=f"{self.gate.y} threshold"
                 )
                 self.y_text.observe(self._update_y_threshold, "value")
-        update_button = widgets.Button(
-            description="Update", disabled=False, tooltip="Update plot", button_style="info"
-        )
-        update_button.on_click(self._update_click)
         apply_button = widgets.Button(
             description="Apply", disabled=False, tooltip="Apply changed to GatingStrategy", button_style="warning"
         )
@@ -1219,14 +1226,13 @@ class InteractiveGateEditor(widgets.HBox):
         controls = widgets.VBox(
             [
                 widg
-                for widg in [self.child_select, self.x_text, self.y_text, update_button, apply_button]
+                for widg in [self.child_select, self.x_text, self.y_text, self.update_button, apply_button]
                 if widg is not None
             ]
         )
         controls.layout = make_box_layout()
         _ = widgets.Box([output])
         output.layout = make_box_layout()
-        self._selector = None
 
         self.children = [controls, output]
 
@@ -1240,16 +1246,16 @@ class InteractiveGateEditor(widgets.HBox):
             self.artists = {
                 child.name: self.ax.plot(
                     self.gate_geometry[child.name][self.gate.x].values,
-                    self.gate_geometry[child.name][self.gate.x].values,
+                    self.gate_geometry[child.name][self.gate.y].values,
                     c=self.gate_geometry[child.name]["colour"].values[0],
                     lw=1.5,
-                )
+                )[0]
                 for child in self.gate.children
             }
 
     def _obtain_gate_geometry(self):
         if isinstance(self.gate, ThresholdGate):
-            pop = self.gs.filegroup.get_population(population_name=self.gate.children[0])
+            pop = self.gs.filegroup.get_population(population_name=self.gate.children[0].name)
             return {"x_threshold": pop.geom.x_threshold, "y_threshold": pop.geom.y_threshold}
         geom = {}
         for child in self.gate.children:
@@ -1260,26 +1266,28 @@ class InteractiveGateEditor(widgets.HBox):
             )
         return geom
 
-    def _poly_complete(self, verts: List[Tuple], population_name: str):
+    def _poly_update(self, _):
+        verts = self.selector.verts
+        verts.append(verts[0])
         verts = np.array(verts)
-        self.gate_geometry[population_name][self.gate.x] = verts[:, 0]
-        self.gate_geometry[population_name][self.gate.y] = verts[:, 1]
-        geom = self.gate_geometry[population_name]
-        self.artists[population_name].set_data(geom[[self.gate.x, self.gate.y]])
+        c = self.gate_geometry[self.child_select.value]["colour"].values[0]
+        self.gate_geometry[self.child_select.value] = pd.DataFrame(
+            {self.gate.x: verts[:, 0], self.gate.y: verts[:, 1], "colour": [c for _ in range(verts.shape[0])]}
+        )
+        geom = self.gate_geometry[self.child_select.value]
+        self.artists[self.child_select.value].set_data(
+            geom[[self.gate.x, self.gate.y]].values[:, 0], geom[[self.gate.x, self.gate.y]].values[:, 1]
+        )
         self.fig.canvas.draw()
-        self._selector.disconnect()
-
-    def _poly_select(self, change: Dict):
-        poly_complete = partial(self._poly_complete, population_name=change["new"])
-        self._selector = PolygonSelector(self.ax, poly_complete)
 
     def _update_threshold(self, value: Union[str, int, float], axis: str):
         try:
             self.gate_geometry[f"{axis}_threshold"] = float(value)
-            self.artists[axis].set_xdata(np.array([float(value), float(value)]))
+            set_data = getattr(self.artists[axis], f"set_{axis}data")
+            set_data(np.array([float(value), float(value)]))
             self.fig.canvas.draw()
         except ValueError:
-            getattr(self, f"{axis}_text").value = "INVALID VALUE"
+            logger.debug("Invalid value passed to text field")
 
     def _update_x_threshold(self, change: Dict):
         self._update_threshold(value=change["new"], axis="x")
@@ -1298,6 +1306,8 @@ class InteractiveGateEditor(widgets.HBox):
         else:
             self.gs.edit_polygon_gate(
                 gate_name=self.gate.gate_name,
-                coords={pop_name: df.values for pop_name, df in self.gate_geometry.items()},
+                coords={
+                    pop_name: df[[self.gate.x, self.gate.y]].values for pop_name, df in self.gate_geometry.items()
+                },
                 transform=False,
             )
