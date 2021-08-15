@@ -44,13 +44,18 @@ import mongoengine
 import numpy as np
 import pandas as pd
 from detecta import detect_peaks
+from hdbscan import HDBSCAN
 from KDEpy import FFTKDE
 from scipy import stats
 from scipy.signal import savgol_filter
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
+from sklearn.cluster import *
 from sklearn.linear_model import HuberRegressor
+from sklearn.mixture import BayesianGaussianMixture
+from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import PowerTransformer
+from smm import SMM
 
 from ..flow.build_models import build_sklearn_model
 from ..flow.dim_reduction import DimensionReduction

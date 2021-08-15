@@ -614,7 +614,10 @@ class GatingStrategy(mongoengine.Document):
             gate = gates_to_apply[i]
             if gate.parent in self.list_populations():
                 if self.filegroup.population_stats(gate.parent).get("n") <= 3:
-                    raise InsufficientEventsError(f"Insufficient events in parent population {gate.parent}")
+                    raise InsufficientEventsError(
+                        f"Insufficient events in parent population {gate.parent}",
+                        filegroup_id=self.filegroup.primary_id,
+                    )
                 feedback(f"------ Applying {gate.gate_name} ------")
                 self.apply_gate(
                     gate=gate,
