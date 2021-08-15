@@ -51,7 +51,6 @@ import pandas as pd
 import seaborn as sns
 from KDEpy import FFTKDE
 from matplotlib import patches
-from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import LogNorm
 from scipy.spatial import ConvexHull
 
