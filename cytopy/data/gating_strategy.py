@@ -1212,11 +1212,13 @@ class InteractiveGateEditor(widgets.HBox):
             )
             self.update_button.on_click(self._poly_update)
         else:
-            self.x_text = widgets.Text(value=self.gate_geometry["x_threshold"], description=f"{self.gate.x} threshold")
+            self.x_text = widgets.Text(
+                value=str(self.gate_geometry["x_threshold"]), description=f"{self.gate.x} threshold"
+            )
             self.x_text.observe(self._update_x_threshold, "value")
             if self.gate_geometry["y_threshold"] is not None:
                 self.y_text = widgets.Text(
-                    value=self.gate_geometry["y_threshold"], description=f"{self.gate.y} threshold"
+                    value=str(self.gate_geometry["y_threshold"]), description=f"{self.gate.y} threshold"
                 )
                 self.y_text.observe(self._update_y_threshold, "value")
         apply_button = widgets.Button(
