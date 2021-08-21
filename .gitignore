@@ -15,4 +15,5 @@ BatchEffectRemoval_Local
 *.tree
 *.weights
 *.ipynb
+hc_test.fcs
 test_interact
