@@ -1229,7 +1229,7 @@ class Experiment(mongoengine.Document):
 
 def single_cell_dataframe(
     experiment: Experiment,
-    populations: Optional[Union[str, List[str]]] = None,
+    populations: Optional[Union[str, List[str]]] = "root",
     regex: Optional[str] = None,
     transform: Union[str, Dict] = "logicle",
     transform_kwargs: Optional[Dict] = None,

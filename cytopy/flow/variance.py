@@ -418,7 +418,10 @@ class Harmony:
     ):
         transform_kwargs = transform_kwargs or {}
         self.transformer = None if transform is None else TRANSFORMERS[transform](**transform_kwargs)
-        self.data = data
+        if self.transformer is not None:
+            self.data = self.transformer.scale(data=data, features=features)
+        else:
+            self.data = data
         self.data = self.data.dropna(axis=1, how="any")
         self.features = [x for x in features if x in self.data.columns]
         self.meta = self.data[["sample_id"]].copy()
@@ -648,7 +651,6 @@ class Harmony:
                 sample_id=str(prefix) + str(sample_id),
                 primary_data=df[self.features],
                 mappings=[{"channel": x, "marker": x} for x in self.features],
-                verbose=False,
                 subject_id=subject_mappings.get(sample_id, None),
             )
 
