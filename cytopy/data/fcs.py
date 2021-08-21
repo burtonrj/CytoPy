@@ -82,6 +82,10 @@ logger = logging.getLogger(__name__)
 CONFIG = Config()
 
 
+def features(data: pl.DataFrame):
+    return [x for x in data.columns if x != "Index"]
+
+
 def load_compensation_matrix(fcs: flowio.FlowData) -> pl.DataFrame:
     """
     Extract a compensation matrix from an FCS file using FlowIO.
@@ -278,8 +282,11 @@ class FileGroup(mongoengine.Document):
                     n=data.shape[0],
                     parent="root",
                     source="root",
+                    prop_of_parent=1.0,
+                    prop_of_total=1.0,
                 )
             ]
+            self.populations[0].index = data.Index.to_list()
             self.tree = {"root": anytree.Node(name="root", parent=None)}
             self.save()
 
@@ -371,52 +378,6 @@ class FileGroup(mongoengine.Document):
             logger.error(e)
             raise
 
-    def add_ctrl_file(self, ctrl_id: str, data: np.array) -> None:
-        """
-        Add a new control file to this FileGroup.
-
-        Parameters
-        ----------
-        ctrl_id: str
-            Name of the control e.g ("CD45RA FMO" or "HLA-DR isotype control"
-        data: numpy.ndarray
-            Single cell events data obtained for this control
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        ValueError
-            If control already exists
-        """
-        ctrl_id = ctrl_id.replace(":", "_")
-        with h5py.File(self.h5path, "a") as f:
-            if ctrl_id in self.controls:
-                logger.error(f"{ctrl_id} already exists for {self.primary_id}; {self.id}")
-                raise ValueError(f"Entry for {ctrl_id} already exists")
-            f.create_dataset(name=ctrl_id, data=data)
-        self.controls.append(ctrl_id)
-        self.save()
-        logger.debug(f"Generated new control dataset in HDF5 file for {self.primary_id}")
-
-    def _load_population_indexes(self) -> None:
-        """
-        Load population level event index data from disk
-
-        Returns
-        -------
-        None
-        """
-        with h5py.File(self.h5path, "r") as f:
-            for p in self.populations:
-                logger.debug(f"Loading {p} population idx from {self.primary_id}; {self.h5path}")
-                primary_index = None
-                if primary_index is None:
-                    continue
-                p.index = primary_index
-
     def add_population(self, population: Population) -> None:
         """
         Add a new Population to this FileGroup.
@@ -445,6 +406,10 @@ class FileGroup(mongoengine.Document):
             raise ValueError("Population index is empty")
         if population.n is None:
             population.n = len(population.index)
+        if population.prop_of_parent is None:
+            population.prop_of_parent = population.n / self.get_population(population_name=population.parent).n
+        if population.prop_of_total is None:
+            population.prop_of_total = population.n / self.get_population(population_name="root").n
         self.populations.append(population)
         self.tree[population.population_name] = anytree.Node(
             name=population.population_name, parent=self.tree.get(population.parent)
@@ -542,7 +507,7 @@ class FileGroup(mongoengine.Document):
             f"Predicting {population} in control data in {self.primary_id} {ctrl} using {classifier} classifier"
         )
         transform_kwargs = transform_kwargs or {}
-        if ctrl not in self.controls:
+        if ctrl not in self.file_paths.keys():
             raise MissingControlError(f"No such control {ctrl} associated to this FileGroup")
         params = classifier_params or {}
         transform_kwargs = transform_kwargs or {}
@@ -558,9 +523,9 @@ class FileGroup(mongoengine.Document):
             sample_size=sample_size,
             **transform_kwargs,
         )
-        features = [x for x in training.columns if x != "label"]
+        features = [x for x in training.columns if x not in ["label", "Index"]]
         features = [x for x in features if x in ctrl.columns]
-        x, y = training[features], training["label"].values
+        x, y = training[features].to_numpy(), training["label"].to_numpy()
 
         if evaluate_classifier:
             logger.info("Evaluating classifier with permutation testing...")
@@ -584,13 +549,13 @@ class FileGroup(mongoengine.Document):
 
         logger.info("Predicting population for control data...")
         classifier.fit(x, y)
-        ctrl_labels = classifier.predict(ctrl[features])
+        ctrl_labels = classifier.predict(ctrl[features].to_numpy())
         training_prop_of_root = self.get_population(population).n / self.get_population("root").n
         ctrl_prop_of_root = np.sum(ctrl_labels) / ctrl.shape[0]
         logger.info(f"{population}: {round(training_prop_of_root, 3)}% of root in primary data")
         logger.info(f"Predicted in ctrl: {round(ctrl_prop_of_root, 3)}% of root in control data")
-        ctrl = ctrl.iloc[np.where(ctrl_labels == 1)[0]]
-        return ctrl
+        ctrl = ctrl[np.where(ctrl_labels == 1)[0]]
+        return ctrl[["Index"] + features]
 
     def load_multiple_populations(
         self,
@@ -605,7 +570,7 @@ class FileGroup(mongoengine.Document):
         sampling_method: str = "uniform",
         sample_at_population_level: bool = True,
         **sampling_kwargs,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """
         Load a DataFrame of single cell data obtained from multiple populations. Population data
         is merged and identifiable from the column 'population_label'
@@ -629,17 +594,25 @@ class FileGroup(mongoengine.Document):
             Provide a list of populations and additional columns will be appended to resulting
             DataFrame containing the fraction of the requested population compared to each population
             in this list
+        sample_size: Union[int, float], optional
+            If given an integer, will sample this number of events. If given a float, will downsample to given
+            fraction of total events.
+        sampling_method: str (default="uniform")
+        sample_at_population_level: bool (default=True)
+            Each population is downsampled independently, rather than downsampling the final DataFrame.
+        sampling_kwargs:
+            Additional keyword arguments passed to cytopy.flow.sampling.sample_dataframe
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
 
         Raises
         ------
         ValueError
             Must provide list of populations or a regex pattern
         """
-        dataframe = list()
+        dataframes = list()
         if regex is None and populations is None:
             raise ValueError("Must provide list of populations or a regex pattern")
         kwargs = dict(
@@ -658,15 +631,15 @@ class FileGroup(mongoengine.Document):
         for p in populations:
             try:
                 pop_data = self.load_population_df(population=p, **kwargs)
-                pop_data["population_label"] = p
-                dataframe.append(pop_data)
+                pop_data["population_label"] = [p for _ in range(pop_data.shape[0])]
+                dataframes.append(pop_data)
             except ValueError:
                 logger.warning(f"{self.primary_id} does not contain population {p}")
         if sample_size is not None and not sample_at_population_level:
             return sample_dataframe(
-                data=pd.concat(dataframe), sample_size=sample_size, method=sampling_method, **sampling_kwargs
+                data=pl.concat(dataframes), sample_size=sample_size, method=sampling_method, **sampling_kwargs
             )
-        return pd.concat(dataframe)
+        return pl.concat(dataframes)
 
     def load_population_df(
         self,
@@ -701,7 +674,13 @@ class FileGroup(mongoengine.Document):
             DataFrame containing the fraction of the requested population compared to each population
             in this list
         label_downstream_affiliations=None
-            Depreciated.
+            Depreciated in version >=3.0.
+        sample_size: Union[int, float], optional
+            If given an integer, will sample this number of events. If given a float, will downsample to given
+            fraction of total events.
+        sampling_method: str (default="uniform")
+        sampling_kwargs:
+            Additional keyword arguments passed to cytopy.flow.sampling.sample_dataframe
 
         Returns
         -------
@@ -727,13 +706,13 @@ class FileGroup(mongoengine.Document):
         )
 
         if isinstance(transform, str):
-            features_to_transform = features_to_transform or self.columns
+            features_to_transform = features_to_transform or features(data)
             data = apply_transform(data=data, method=transform, features=features_to_transform, **transform_kwargs)
         elif isinstance(transform, dict):
             data = apply_transform_map(data=data, feature_method=transform, kwargs=transform_kwargs)
 
         if label_parent:
-            data["parent_label"] = population.parent
+            data["parent_label"] = [population.parent for _ in range(data.shape[0])]
 
         if frac_of is not None:
             for comparison_pop in frac_of:
@@ -744,16 +723,6 @@ class FileGroup(mongoengine.Document):
                 data[f"frac of {comparison_pop.population_name}"] = population.n / comparison_pop.n
 
         return data
-
-    def _hdf5_exists(self) -> bool:
-        """
-        Tests if associated HDF5 file exists.
-
-        Returns
-        -------
-        bool
-        """
-        return os.path.isfile(self.h5path)
 
     def list_populations(self, regex: Optional[str] = None) -> List[str]:
         """
@@ -1028,13 +997,13 @@ class FileGroup(mongoengine.Document):
             )
 
         new_population_name = new_population_name or f"subtract_{left.population_name}_{right.population_name}"
-        new_idx = np.setdiff1d(left.index, right.index)
+        new_idx = np.setdiff1d(np.array(left.index), np.array(right.index))
         x, y = left.geom.x, left.geom.y
         transform_x, transform_y = left.geom.transform_x, left.geom.transform_y
         parent_data = self.load_population_df(population=left.parent, transform={x: transform_x, y: transform_y})
         envelope = create_envelope(
-            x_values=parent_data.loc[new_idx][x].values,
-            y_values=parent_data.loc[new_idx][y].values,
+            x_values=parent_data[parent_data.Index.is_in(new_idx), x].to_numpy(),
+            y_values=parent_data[parent_data.Index.is_in(new_idx), y].to_numpy(),
         )
         x_values, y_values = envelope.exterior.xy[0], envelope.exterior.xy[1]
         new_geom = PolygonGeom(
@@ -1042,40 +1011,18 @@ class FileGroup(mongoengine.Document):
             y=y,
             transform_x=transform_x,
             transform_y=transform_y,
-            x_values=x_values,
-            y_values=y_values,
+            x_values=x_values.tolist(),
+            y_values=y_values.tolist(),
         )
         new_population = Population(
             population_name=new_population_name,
             parent=left.parent,
             n=len(new_idx),
-            index=new_idx,
             geom=new_geom,
             warnings=left.warnings + right.warnings + ["SUBTRACTED POPULATION"],
         )
+        new_population.index = new_idx.tolist()
         self.add_population(population=new_population)
-
-    def _write_populations(self) -> None:
-        """
-        Write population data to disk.
-
-        Returns
-        -------
-        None
-        """
-        logger.debug(f"Writing populations in {self.primary_id}; {self.id} to disk")
-        root_n = self.get_population("root").n
-        with h5py.File(self.h5path, "r+") as f:
-            for meta, labels in self.cell_meta_labels.items():
-                logger.debug(f"Writing meta {meta}")
-                ascii_labels = np.array([x.encode("ascii", "ignore") for x in labels])
-                overwrite_or_create(file=f, data=ascii_labels, key=f"/cell_meta_labels/{meta}")
-            for p in self.populations:
-                logger.debug(f"Writing population {p}")
-                parent_n = self.get_population(p.parent).n
-                p._prop_of_parent = p.n / parent_n
-                p.prop_of_total = p.n / root_n
-                overwrite_or_create(file=f, data=p.index, key=f"/index/{p.population_name}/primary")
 
     def population_stats(self, population: str, warn_missing: bool = False) -> Dict:
         """
@@ -1138,68 +1085,13 @@ class FileGroup(mongoengine.Document):
 
     def write_to_fcs(self, path: str, source: str = "primary"):
         with open(path, "wb") as f:
+            channels, markers = zip(**self.channel_mappings)
             flowio.create_fcs(
                 event_data=self.data(source=source).values.flatten(),
                 file_handle=f,
-                channel_names=self.channels,
-                opt_channel_names=self.markers,
+                channel_names=channels,
+                opt_channel_names=markers,
             )
-
-    def save(self, *args, **kwargs) -> None:
-        """
-        Save FileGroup and associated populations
-
-        Returns
-        -------
-        None
-        """
-        logger.debug(f"Writing {self.primary_id}; {self.id} to disk")
-        # Calculate meta and save indexes to disk
-        if self.populations:
-            # Populate h5path for populations
-            self._write_populations()
-        super().save(*args, **kwargs)
-
-    def delete(self, delete_hdf5_file: bool = True, *args, **kwargs) -> None:
-        """
-        Delete FileGroup
-
-        Parameters
-        ----------
-        delete_hdf5_file: bool (default=True)
-
-        Returns
-        -------
-        None
-        """
-        logger.debug(f"Deleting {self.primary_id}; {self.id}")
-        super().delete(*args, **kwargs)
-        if delete_hdf5_file:
-            if os.path.isfile(self.h5path):
-                os.remove(self.h5path)
-            else:
-                logger.warning(f"Could not locate hdf5 file {self.h5path}")
-
-
-def overwrite_or_create(file: h5py.File, data: np.ndarray, key: str) -> None:
-    """
-    Check if node exists in hdf5 file. If it does exist, overwrite with the given
-    array otherwise create a new dataset.
-
-    Parameters
-    ----------
-    file: h5py File object
-    data: Numpy Array
-    key: str
-
-    Returns
-    -------
-    None
-    """
-    if key in file:
-        logger.debug(f"Deleting {key}")
-        del file[key]
-    file.create_dataset(key, data=data)
 
 
 def population_stats(filegroup: FileGroup) -> pd.DataFrame:
@@ -1226,7 +1118,7 @@ def _load_data_for_ctrl_estimate(
     transform: str,
     sample_size: int,
     **transform_kwargs,
-) -> (pd.DataFrame, pd.DataFrame, Transformer):
+) -> (pl.DataFrame, pl.DataFrame, Transformer):
     """
     Utility function for loading dataframes for estimating a control population. Given the FileGroup
     of interest, the target population, and the name of the control, the population from the primary
@@ -1249,21 +1141,27 @@ def _load_data_for_ctrl_estimate(
 
     Returns
     -------
-    Pandas.DataFrame, Pandas.DataFrame, Transformer
+    polars.DataFrame, polars.DataFrame, Transformer
     """
-    training = filegroup.data(source="primary", transform=transform, **transform_kwargs)
+    training = filegroup.data(source="primary")
     population_idx = filegroup.get_population(target_population).index
-    training["label"] = 0
-    training.loc[population_idx, "label"] = 1
-    ctrl = filegroup.data(source=ctrl, transform=transform, **transform_kwargs)
-    time_columns = training.columns[training.columns.str.contains("time", flags=re.IGNORECASE)].to_list()
+    training["label"] = [0 for _ in range(training.shape[0])]
+    training[training.Index.is_in(population_idx), "label"] = 1
+    ctrl = filegroup.data(source=ctrl)
+
+    features = [x for x in training.columns if x != "label"]
+    if transform:
+        training = apply_transform(data=training, features=features, method=transform, **transform_kwargs)
+        ctrl = apply_transform(data=ctrl, features=features, method=transform, **transform_kwargs)
+
+    time_columns = [col for col in training.columns if re.match("time", col, re.IGNORECASE)]
     for t in time_columns:
         training.drop(t, axis=1, inplace=True)
         ctrl.drop(t, axis=1, inplace=True)
-    features = [x for x in training.columns if x != "label"]
+
     sampler = RandomOverSampler(random_state=42)
     x_resampled, y_resampled = sampler.fit_resample(training[features].values, training["label"].values)
-    training = pd.DataFrame(x_resampled, columns=features)
+    training = pl.DataFrame(x_resampled, columns=features)
     training["label"] = y_resampled
     if training.shape[0] > sample_size:
         training = training.sample(n=sample_size)
