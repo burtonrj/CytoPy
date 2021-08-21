@@ -40,10 +40,12 @@ from typing import Optional
 from typing import Union
 
 import anytree
+import flowio
 import h5py
 import mongoengine
 import numpy as np
 import pandas as pd
+import polars as pl
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import permutation_test_score
 from sklearn.model_selection import StratifiedKFold
@@ -77,79 +79,35 @@ logger = logging.getLogger(__name__)
 CONFIG = Config()
 
 
-def data_loaded(func: Callable) -> Callable:
+def load_compensation_matrix(fcs: flowio.FlowData) -> pl.DataFrame:
     """
-    Decorator that asserts the h5 file corresponding to the FileGroup exists.
+    Extract a compensation matrix from an FCS file using FlowIO.
 
     Parameters
     ----------
-    func: callable
-        Function to wrap
+    fcs: flowio.FlowData
 
     Returns
     -------
-    callable
-        Wrapper function
-
-    Raises
-    ------
-    ValueError
-        HDF5 file does not exist
+    polars.DataFrame or None
+        Returns None if no compensation matrix is found; will log warning.
     """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            assert args[0].h5path is not None, "Data directory and therefore HDF5 path has not been defined."
-            assert os.path.isfile(args[0].h5path), f"Could not locate FileGroup HDF5 record {args[0].h5path}."
-            return func(*args, **kwargs)
-        except AssertionError as e:
-            logger.exception(e)
-            raise ValueError(str(e))
-
-    return wrapper
-
-
-def population_in_file(func: Callable) -> Callable:
-    """
-    Wrapper to test if requested population passed to the given function
-    exists in the given h5 file object
-
-    Parameters
-    ----------
-    func: callable
-        Function to wrap
-
-    Returns
-    -------
-    callable
-    """
-
-    @wraps(func)
-    def wrapper(population_name: str, h5file: h5py.File):
-        if population_name not in h5file["index"].keys():
-            return None
-        return func(population_name, h5file)
-
-    return wrapper
-
-
-@population_in_file
-def h5_read_population_primary_index(population_name: str, h5file: h5py.File) -> np.ndarray:
-    """
-    Given a population and an instance of a H5 file object, return the
-    index of corresponding events
-
-    Parameters
-    ----------
-    population_name: str
-    h5file: h5py.File
-
-    Returns
-    -------
-    numpy.ndarray
-    """
-    return h5file[f"/index/{population_name}/primary"][:]
+    spill_txt = None
+    if "spill" in fcs.text.keys():
+        spill_txt = fcs.text["spill"]
+    elif "spillover" in fcs.text.keys():
+        spill_txt = fcs.text["spillover"]
+    if spill_txt is None or len(spill_txt) < 1:
+        logger.warning("No compensation matrix found")
+        return None
+    matrix_list = spill_txt.split(",")
+    n = int(matrix_list[0])
+    header = matrix_list[1 : (n + 1)]
+    header = [i.strip().replace("\n", "") for i in header]
+    values = [i.strip().replace("\n", "") for i in matrix_list[n + 1 :]]
+    matrix = np.reshape(list(map(float, values)), (n, n))
+    matrix_df = pl.DataFrame(matrix, columns=header)
+    return matrix_df
 
 
 class FileGroup(mongoengine.Document):
@@ -183,8 +141,11 @@ class FileGroup(mongoengine.Document):
     """
 
     primary_id = mongoengine.StringField(required=True)
+    primary_path = mongoengine.StringField(required=True)
     controls = mongoengine.ListField()
-    compensated = mongoengine.BooleanField(default=False)
+    control_paths = mongoengine.ListField()
+    compensate = mongoengine.BooleanField(default=True)
+    compensation_matrix = mongoengine.StringField()
     collection_datetime = mongoengine.DateTimeField(required=False)
     processing_datetime = mongoengine.DateTimeField(required=False)
     populations = mongoengine.EmbeddedDocumentListField(Population)
@@ -192,7 +153,6 @@ class FileGroup(mongoengine.Document):
     valid = mongoengine.BooleanField(default=True)
     notes = mongoengine.StringField(required=False)
     subject = mongoengine.ReferenceField(Subject, reverse_delete_rule=mongoengine.NULLIFY)
-    data_directory = mongoengine.StringField()
     channels = mongoengine.ListField(required=True)
     markers = mongoengine.ListField(required=True)
     meta = {"db_alias": "core", "collection": "fcs_files"}
@@ -200,7 +160,6 @@ class FileGroup(mongoengine.Document):
     def __init__(self, *args, **kwargs):
         data = kwargs.pop("data", None)
         super().__init__(*args, **kwargs)
-        self.cell_meta_labels = {}
         if self.id:
             self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
             self.tree = construct_tree(populations=self.populations)
@@ -244,7 +203,6 @@ class FileGroup(mongoengine.Document):
             CONFIG.save()
             return self.columns
 
-    @data_loaded
     def _load_data(self, key: str = "primary") -> pd.DataFrame:
         """
         Internal method to load data from HDF5 file
@@ -372,22 +330,6 @@ class FileGroup(mongoengine.Document):
         self.save()
         logger.debug(f"Generated new control dataset in HDF5 file for {self.primary_id}")
 
-    @data_loaded
-    def _load_cell_meta_labels(self) -> None:
-        """
-        Load single cell meta labels from disk
-
-        Returns
-        -------
-        None
-        """
-        with h5py.File(self.h5path, "r") as f:
-            logger.debug(f"Loading cell meta labels from {self.primary_id}; {self.h5path}")
-            if "cell_meta_labels" in f.keys():
-                for meta in f["cell_meta_labels"].keys():
-                    self.cell_meta_labels[meta] = np.array(f[f"cell_meta_labels/{meta}"][:], dtype="U")
-
-    @data_loaded
     def _load_population_indexes(self) -> None:
         """
         Load population level event index data from disk
@@ -399,7 +341,7 @@ class FileGroup(mongoengine.Document):
         with h5py.File(self.h5path, "r") as f:
             for p in self.populations:
                 logger.debug(f"Loading {p} population idx from {self.primary_id}; {self.h5path}")
-                primary_index = h5_read_population_primary_index(population_name=p.population_name, h5file=f)
+                primary_index = None
                 if primary_index is None:
                     continue
                 p.index = primary_index
@@ -1122,6 +1064,15 @@ class FileGroup(mongoengine.Document):
             n=df.shape[0],
         )
         self.add_population(clean_pop)
+
+    def write_to_fcs(self, path: str, source: str = "primary"):
+        with open(path, "wb") as f:
+            flowio.create_fcs(
+                event_data=self.data(source=source).values.flatten(),
+                file_handle=f,
+                channel_names=self.channels,
+                opt_channel_names=self.markers,
+            )
 
     def save(self, *args, **kwargs) -> None:
         """

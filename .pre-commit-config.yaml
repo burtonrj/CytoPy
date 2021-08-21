@@ -15,7 +15,7 @@ repos:
     rev: v4.0.1
     hooks:
       - id: check-added-large-files
-        args: ["--maxkb=1024"]
+        args: ["--maxkb=10024"]
       - id: check-docstring-first
       - id: check-json
       - id: check-xml
@@ -25,5 +25,3 @@ repos:
       - id: name-tests-test
       - id: requirements-txt-fixer
       - id: end-of-file-fixer
-      - id: trailing-whitespace
-        args: ["--markdown-linebreak-ext=md"]

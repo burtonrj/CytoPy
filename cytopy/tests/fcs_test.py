@@ -1,15 +1,30 @@
 import os
 
-import h5py
-import numpy as np
-import pandas as pd
+import flowio
+import polars as pl
 import pytest
 
+from .conftest import ASSET_PATH
 from .conftest import create_example_populations
 from .conftest import reload_filegroup
 from cytopy.data.fcs import *
 from cytopy.data.population import Population
 from cytopy.data.project import Project
+
+
+def test_load_compensation_matrix():
+    fcs_example_path = os.path.join(ASSET_PATH, "hc_test.fcs")
+    fcs = flowio.FlowData(filename=fcs_example_path)
+    comp_matrix = load_compensation_matrix(fcs=fcs)
+    assert isinstance(comp_matrix, pl.DataFrame)
+    assert comp_matrix.shape == (12, 12)
+
+
+def test_load_compensation_matrix_none():
+    fcs_example_path = os.path.join(ASSET_PATH, "gvhd_fcs/001.fcs")
+    fcs = flowio.FlowData(filename=fcs_example_path)
+    comp_matrix = load_compensation_matrix(fcs=fcs)
+    assert comp_matrix is None
 
 
 def create_test_h5file(path: str, empty: bool = False):

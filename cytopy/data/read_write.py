@@ -29,15 +29,16 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-from multiprocessing import Pool, cpu_count
-from typing import *
-import flowio
-import dateutil.parser as date_parser
-import numpy as np
-import pandas as pd
 import json
 import os
+from multiprocessing import cpu_count
+from multiprocessing import Pool
+from typing import *
+
+import dateutil.parser as date_parser
+import flowio
+import numpy as np
+import pandas as pd
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -55,9 +56,7 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
-def filter_fcs_files(
-    fcs_dir: str, exclude_comps: bool = True, exclude_dir: str = "DUPLICATES"
-) -> list:
+def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True, exclude_dir: str = "DUPLICATES") -> list:
     """
     Given a directory, return file paths for all fcs files in directory and subdirectories contained within
 
@@ -80,11 +79,7 @@ def filter_fcs_files(
         if os.path.basename(root) == exclude_dir:
             continue
         if exclude_comps:
-            fcs = [
-                f
-                for f in files
-                if f.lower().endswith(".fcs") and f.lower().find("comp") == -1
-            ]
+            fcs = [f for f in files if f.lower().endswith(".fcs") and f.lower().find("comp") == -1]
         else:
             fcs = [f for f in files if f.lower().endswith(".fcs")]
         fcs = [os.path.join(root, f) for f in fcs]
@@ -119,9 +114,7 @@ def get_fcs_file_paths(
         standard dictionary of fcs files contained in target directory
     """
     file_tree = dict(primary=[], controls={})
-    fcs_files = filter_fcs_files(
-        fcs_dir, exclude_comps=ignore_comp, exclude_dir=exclude_dir
-    )
+    fcs_files = filter_fcs_files(fcs_dir, exclude_comps=ignore_comp, exclude_dir=exclude_dir)
     ctrl_files = [f for f in fcs_files if f.find(ctrl_id) != -1]
     primary = [f for f in fcs_files if f.find(ctrl_id) == -1]
     for c_name in control_names:
@@ -134,9 +127,7 @@ def get_fcs_file_paths(
         file_tree["controls"][c_name] = matched_controls
 
     if len(primary) > 1:
-        print(
-            "Warning! Multiple non-control (primary) files found in directory. Check before proceeding."
-        )
+        print("Warning! Multiple non-control (primary) files found in directory. Check before proceeding.")
     file_tree["primary"] = primary
     return file_tree
 
@@ -206,39 +197,6 @@ def explore_channel_mappings(fcs_dir: str, exclude_comps: bool = True) -> list:
     return [json.loads(x) for x in mappings]
 
 
-def _get_spill_matrix(matrix_string: str) -> pd.DataFrame:
-    """
-    Generate pandas dataframe for the fluorochrome spillover matrix used for compensation calc
-
-    Code is modified from: https://github.com/whitews/FlowUtils
-    Pedersen NW, Chandran PA, Qian Y, et al. Automated Analysis of Flow Cytometry
-    Data to Reduce Inter-Lab Variation in the Detection of Major Histocompatibility
-    Complex Multimer-Binding T Cells. Front Immunol. 2017;8:858.
-    Published 2017 Jul 26. doi:10.3389/fimmu.2017.00858
-
-    Parameters
-    -----------
-    matrix_string: str
-        string value extracted from the 'spill' parameter of the FCS file
-
-    Returns
-    --------
-    Pandas.DataFrame
-    """
-    matrix_list = matrix_string.split(",")
-    n = int(matrix_list[0])
-    header = matrix_list[1 : (n + 1)]
-    header = [i.strip().replace("\n", "") for i in header]
-    values = [i.strip().replace("\n", "") for i in matrix_list[n + 1 :]]
-    matrix = np.reshape(list(map(float, values)), (n, n))
-    matrix_df = pd.DataFrame(matrix)
-    matrix_df = matrix_df.rename(
-        index={k: v for k, v in zip(matrix_df.columns.to_list(), header)},
-        columns={k: v for k, v in zip(matrix_df.columns.to_list(), header)},
-    )
-    return matrix_df
-
-
 def _get_channel_mappings(fluoro_dict: dict) -> list:
     """
     Generates a list of dictionary objects that describe the fluorochrome mappings in this FCS file
@@ -280,9 +238,7 @@ class FCSFile:
         spillover matrix is already linked to the file)
     """
 
-    def __init__(
-        self, filepath: str, comp_matrix: Optional[Union[pd.DataFrame, str]] = None
-    ):
+    def __init__(self, filepath: str, comp_matrix: Optional[Union[pd.DataFrame, str]] = None):
         fcs = flowio.FlowData(filepath)
         self.filename = fcs.text.get("fil", "Unknown_filename")
         self.sys = fcs.text.get("sys", "Unknown_system")
@@ -295,20 +251,13 @@ class FCSFile:
         self.channel_mappings = _get_channel_mappings(fcs.channels)
         self.cst_pass = False
         self.data = fcs.events
-        self.event_data = np.reshape(
-            np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count)
-        )
+        self.event_data = np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count))
         if "threshold" in fcs.text.keys():
-            self.threshold = [
-                {"channel": c, "threshold": v}
-                for c, v in chunks(fcs.text["threshold"].split(","), 2)
-            ]
+            self.threshold = [{"channel": c, "threshold": v} for c, v in chunks(fcs.text["threshold"].split(","), 2)]
         else:
             self.threshold = "Unknown"
         try:
-            self.processing_date = date_parser.parse(
-                fcs.text["date"] + " " + fcs.text["etim"]
-            ).isoformat()
+            self.processing_date = date_parser.parse(fcs.text["date"] + " " + fcs.text["etim"]).isoformat()
         except KeyError:
             self.processing_date = "Unknown"
         if comp_matrix is not None:
@@ -348,12 +297,8 @@ class FCSFile:
         -------
         None
         """
-        assert (
-            self.spill is not None
-        ), f"Unable to locate spillover matrix, please provide a compensation matrix"
-        channel_idx = [
-            i for i, x in enumerate(self.channel_mappings) if x["marker"] != ""
-        ]
+        assert self.spill is not None, f"Unable to locate spillover matrix, please provide a compensation matrix"
+        channel_idx = [i for i, x in enumerate(self.channel_mappings) if x["marker"] != ""]
         if len(channel_idx) == 0:
             # No markers defined in file
             channel_idx = [
