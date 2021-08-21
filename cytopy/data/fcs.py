@@ -270,6 +270,18 @@ class FileGroup(mongoengine.Document):
         self.tree = {}
         if self.id:
             self.tree = construct_tree(populations=self.populations)
+        else:
+            data = self.data(source="primary")
+            self.populations = [
+                Population(
+                    population_name="root",
+                    n=data.shape[0],
+                    parent="root",
+                    source="root",
+                )
+            ]
+            self.tree = {"root": anytree.Node(name="root", parent=None)}
+            self.save()
 
     def _load_data(self, source: str) -> pl.DataFrame:
         if self.s3_bucket:
@@ -358,41 +370,6 @@ class FileGroup(mongoengine.Document):
         except TypeError as e:
             logger.error(e)
             raise
-
-    def init_new_file(self, data: np.array) -> None:
-        """
-        Under the assumption that this FileGroup has not been previously defined,
-        generate a HDF5 file and initialise the root Population
-
-        Parameters
-        ----------
-        data: numpy.ndarray
-
-        Returns
-        -------
-        None
-        """
-        logging.debug(f"Creating new HDF5 file for {self.primary_id}; {self.id} @ {self.h5path}")
-        if os.path.isfile(self.h5path):
-            logging.debug(f"{self.h5path} already exists, deleting.")
-            os.remove(self.h5path)
-        with h5py.File(self.h5path, "w") as f:
-            f.create_dataset(name="primary", data=data)
-            f.create_group("index")
-            f.create_group("index/root")
-            f.create_group("cell_meta_labels")
-        self.populations = [
-            Population(
-                population_name="root",
-                index=np.arange(0, data.shape[0]),
-                parent="root",
-                n=data.shape[0],
-                source="root",
-            )
-        ]
-        self.tree = {"root": anytree.Node(name="root", parent=None)}
-        self.save()
-        logger.debug(f"{self.h5path} created successfully.")
 
     def add_ctrl_file(self, ctrl_id: str, data: np.array) -> None:
         """

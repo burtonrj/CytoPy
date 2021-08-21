@@ -26,14 +26,20 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-from .geometry import PopulationGeometry, ThresholdGeom, PolygonGeom
+import pickle
 from functools import reduce
-from shapely.ops import unary_union
+from typing import Iterable
 from typing import List
+
+import mongoengine
 import numpy as np
 import pandas as pd
-import mongoengine
+from bson.binary import Binary
+from shapely.ops import unary_union
+
+from .geometry import PolygonGeom
+from .geometry import PopulationGeometry
+from .geometry import ThresholdGeom
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -89,25 +95,24 @@ class Population(mongoengine.EmbeddedDocument):
     warnings = mongoengine.ListField()
     geom = mongoengine.EmbeddedDocumentField(PopulationGeometry)
     definition = mongoengine.StringField()
-    source = mongoengine.StringField(
-        required=True, choices=["gate", "cluster", "root", "classifier"]
-    )
+    source = mongoengine.StringField(required=True, choices=["gate", "cluster", "root", "classifier"])
     signature = mongoengine.DictField()
-
-    def __init__(self, *args, **kwargs):
-        # If the Population existed previously, fetch the index
-        self._index = kwargs.pop("index", None)
-        super().__init__(*args, **kwargs)
+    _index = mongoengine.FileField(db_alias="core", collection_name="population_index")
 
     @property
-    def index(self):
-        return self._index
+    def index(self) -> Iterable[int]:
+        return pickle.loads(self._index.read())
 
     @index.setter
-    def index(self, idx: np.array):
-        assert isinstance(idx, np.ndarray), "idx should be type numpy.ndarray"
-        self.n = len(idx)
-        self._index = np.array(idx)
+    def index(self, idx: Iterable[int]):
+        if isinstance(idx, np.ndarray):
+            idx = idx.tolist()
+        if self._index:
+            self._index.replace(Binary(pickle.dumps(idx, protocol=2)))
+        else:
+            self._index.new_file()
+            self._index.write(Binary(pickle.dumps(idx, protocol=2)))
+            self._index.close()
 
 
 def _check_overlap(left: Population, right: Population, error: bool = True):
@@ -164,12 +169,8 @@ def _check_transforms_dimensions(left: Population, right: Population):
     assert (
         left.geom.transform_y == right.geom.transform_y
     ), "Y dimension transform differs between left and right populations"
-    assert (
-        left.geom.x == right.geom.x
-    ), "X dimension differs between left and right populations"
-    assert (
-        left.geom.y == right.geom.y
-    ), "Y dimension differs between left and right populations"
+    assert left.geom.x == right.geom.x, "X dimension differs between left and right populations"
+    assert left.geom.y == right.geom.y, "Y dimension differs between left and right populations"
 
 
 def merge_index(left: Population, right: Population) -> np.ndarray:
@@ -317,17 +318,11 @@ def merge_non_geom_populations(populations: list, new_population_name: str):
         "merge_many_populations currently only supports 'cluster' or 'classifier' source "
         "types. To merge populations from other sources, use merge_populations method"
     )
-    assert all(
-        [x.source == "cluster" or x.source == "classifier" for x in populations]
-    ), err
-    assert (
-        len(set([x.parent for x in populations])) == 1
-    ), "Populations for merging should share the same parent"
+    assert all([x.source == "cluster" or x.source == "classifier" for x in populations]), err
+    assert len(set([x.parent for x in populations])) == 1, "Populations for merging should share the same parent"
     assert len(populations) > 1, "Provide two or more populations for merging"
     new_idx = np.unique(np.concatenate([x.index for x in populations], axis=0), axis=0)
-    warnings = [i for sl in [x.warnings for x in populations] for i in sl] + [
-        "MERGED POPULATIONS"
-    ]
+    warnings = [i for sl in [x.warnings for x in populations] for i in sl] + ["MERGED POPULATIONS"]
     new_population = Population(
         population_name=new_population_name,
         n=len(new_idx),
@@ -340,9 +335,7 @@ def merge_non_geom_populations(populations: list, new_population_name: str):
     return new_population
 
 
-def merge_gate_populations(
-    left: Population, right: Population, new_population_name: str or None = None
-):
+def merge_gate_populations(left: Population, right: Population, new_population_name: str or None = None):
     """
     Merge two Population's. The indexes and signatures of these populations will be merged.
     The populations must have the same geometries.
@@ -363,9 +356,7 @@ def merge_gate_populations(
         Invalid populations provided
     """
     _check_transforms_dimensions(left, right)
-    new_population_name = (
-        new_population_name or f"merge_{left.population_name}_{right.population_name}"
-    )
+    new_population_name = new_population_name or f"merge_{left.population_name}_{right.population_name}"
     assert left.parent == right.parent, "Parent populations do not match"
     assert left.source == right.source, "Populations must be from the same source"
     assert isinstance(
@@ -376,9 +367,7 @@ def merge_gate_populations(
     return _merge_polygons(left, right, new_population_name)
 
 
-def merge_multiple_gate_populations(
-    populations: List[Population], new_population_name: str or None = None
-):
+def merge_multiple_gate_populations(populations: List[Population], new_population_name: str or None = None):
     """
     Merge multiple Population's. The indexes and signatures of these populations will be merged.
     The populations must have the same geometries.
