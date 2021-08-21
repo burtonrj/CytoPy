@@ -41,11 +41,14 @@ from typing import Union
 
 import anytree
 import flowio
+import fsspec
 import h5py
 import mongoengine
 import numpy as np
 import pandas as pd
 import polars as pl
+import pyarrow.parquet as pq
+import s3fs
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import permutation_test_score
 from sklearn.model_selection import StratifiedKFold
@@ -110,6 +113,113 @@ def load_compensation_matrix(fcs: flowio.FlowData) -> pl.DataFrame:
     return matrix_df
 
 
+def fcs_to_polars(fcs: flowio.FlowData) -> pl.DataFrame:
+    """
+    Return the events of a FlowData objects as a polars.DataFrame
+
+    Parameters
+    ----------
+    fcs: flowio.FlowData
+
+    Returns
+    -------
+    polars.DataFrame
+
+    Raises
+    ------
+    ValueError
+        Incorrect number of columns provided
+    """
+    columns = [x["PnN"] for _, x in fcs.channels.items()]
+    data = pl.DataFrame(np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count)), columns=columns)
+    data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
+    return data
+
+
+def read_from_disk(path: str) -> pl.DataFrame:
+    """
+    Read cytometry data from disk. Must be either fcs, csv, or parquet file
+
+    Parameters
+    ----------
+    path: str
+
+    Returns
+    -------
+    polars.DataFrame
+
+    Raises
+    ------
+    ValueError
+        Invalid file extension
+    """
+    if path.lower().endswith(".fcs"):
+        return fcs_to_polars(flowio.FlowData(filename=path))
+    elif path.lower().endswith(".csv"):
+        data = pl.read_csv(path=path)
+    elif path.lower().endswith(".parquet"):
+        data = pl.read_parquet(source=path)
+    else:
+        raise ValueError("Currently only support fcs, csv, or parquet file extensions")
+    data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
+    return data
+
+
+def read_from_remote(s3_bucket: str, path: str) -> pl.DataFrame:
+    """
+    Read cytometry data from S3. Target file must be csv or parquet file type.
+
+    Parameters
+    ----------
+    s3_bucket: str
+    path: str
+
+    Returns
+    -------
+    polars.DataFrame
+
+    Raises
+    ------
+    ValueError
+        Invalid file extension
+    """
+    fs = s3fs.S3FileSystem()
+    if path.lower().endswith(".csv"):
+        with fs.open(f"s3://{s3_bucket}/{path}") as f:
+            data = pl.read_csv(file=f)
+    elif path.lower().endswith(".parquet"):
+        data = pq.ParquetDataset(f"s3://{s3_bucket}/{path}", filesystem=fs)
+        data = pl.from_arrow(data.read())
+    else:
+        raise ValueError("Currently only support csv or parquet file extensions")
+    data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
+    return data
+
+
+def compensate(data: pl.DataFrame, spill_matrix: pl.DataFrame) -> pl.DataFrame:
+    """
+    Using the providing spillover matrix, compensate the given data by
+    solving the linear matrix equation.
+
+    Parameters
+    ----------
+    data: polars.DataFrame
+    spill_matrix: polars.DataFrame
+
+    Returns
+    -------
+    polars.DataFrame
+    """
+    compensated = np.linalg.solve(spill_matrix.to_numpy().T, data[:, spill_matrix.columns].to_numpy().T).T
+    data[:, spill_matrix.columns] = compensated
+    return data
+
+
+def valid_compensation_matrix_path(path: Union[str, None]):
+    if path is not None and not path.lower().endswith(".csv"):
+        raise mongoengine.errors.ValidationError("Compensation matrix should be a csv or parquet file")
+
+
 class FileGroup(mongoengine.Document):
     """
     Document representation of a file group; a selection of related fcs files (e.g. a sample and it's associated
@@ -141,85 +251,46 @@ class FileGroup(mongoengine.Document):
     """
 
     primary_id = mongoengine.StringField(required=True)
-    primary_path = mongoengine.StringField(required=True)
-    controls = mongoengine.ListField()
-    control_paths = mongoengine.ListField()
+    file_paths = mongoengine.DictField(required=True)
     compensate = mongoengine.BooleanField(default=True)
-    compensation_matrix = mongoengine.StringField()
+    compensation_matrix = mongoengine.StringField(required=False, validation=valid_compensation_matrix_path)
     collection_datetime = mongoengine.DateTimeField(required=False)
     processing_datetime = mongoengine.DateTimeField(required=False)
+    s3_bucket = mongoengine.StringField(required=False)
     populations = mongoengine.EmbeddedDocumentListField(Population)
     gating_strategy = mongoengine.ListField()
     valid = mongoengine.BooleanField(default=True)
     notes = mongoengine.StringField(required=False)
     subject = mongoengine.ReferenceField(Subject, reverse_delete_rule=mongoengine.NULLIFY)
-    channels = mongoengine.ListField(required=True)
-    markers = mongoengine.ListField(required=True)
+    channel_mappings = mongoengine.DictField(required=True)
     meta = {"db_alias": "core", "collection": "fcs_files"}
 
     def __init__(self, *args, **kwargs):
-        data = kwargs.pop("data", None)
         super().__init__(*args, **kwargs)
+        self.tree = {}
         if self.id:
-            self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
             self.tree = construct_tree(populations=self.populations)
-            self._load_cell_meta_labels()
-            self._load_population_indexes()
+
+    def _load_data(self, source: str) -> pl.DataFrame:
+        if self.s3_bucket:
+            return read_from_remote(s3_bucket=self.s3_bucket, path=self.file_paths[source])
         else:
-            logger.debug(f"Creating new FileGroup {self.primary_id}")
-            if data is None:
-                raise ValueError("New instance of FileGroup requires that data be provided to the constructor")
-            self.save()
-            self.h5path = os.path.join(self.data_directory, f"{self.id.__str__()}.hdf5")
-            self.init_new_file(data=data)
+            return read_from_disk(path=self.file_paths[source])
 
-    def keys(self):
-        with h5py.File(self.h5path, "r") as f:
-            return list(f.keys())
-
-    @property
-    def columns(self) -> List[str]:
-        """
-        List of data columns (features). Will use the column default (marker or channel)
-        as specified in the configuration file - where channel/marker is absent, will
-        use other e.g. marker is missing, will use channel.
-
-        Returns
-        -------
-        List[str]
-        """
-        try:
-            mappings = [{"channels": c, "markers": m} for c, m in zip(self.channels, self.markers)]
-            other = [x for x in ["markers", "channels"] if x != CONFIG.column_default][0]
-            return list(
-                map(
-                    lambda x: x[CONFIG.column_default] if x[CONFIG.column_default] else x[other],
-                    mappings,
+    def _compensate_data(self, data: pl.DataFrame, source: str) -> pl.DataFrame:
+        if self.compensation_matrix:
+            if self.s3_bucket:
+                spill_matrix = read_from_remote(s3_bucket=self.s3_bucket, path=self.compensation_matrix)
+            else:
+                spill_matrix = read_from_disk(path=self.compensation_matrix)
+        else:
+            if not self.file_paths[source].lower().endswith(".fcs"):
+                raise TypeError(
+                    "For file formats other than FCS a spillover matrix in the form "
+                    "of a CSV or Parquet file must be provided"
                 )
-            )
-        except KeyError:
-            logger.error("Preference must be either 'markers' or 'channels'. Defaulting to marker.")
-            CONFIG.column_default = "marker"
-            CONFIG.save()
-            return self.columns
-
-    def _load_data(self, key: str = "primary") -> pd.DataFrame:
-        """
-        Internal method to load data from HDF5 file
-
-        Parameters
-        ----------
-        key: str
-
-        Returns
-        -------
-        Pandas.DataFrame
-
-        Raises
-        ------
-        KeyError
-            Invalid key, does not exist in HDF5 file
-        """
+            spill_matrix = load_compensation_matrix(flowio.FlowData(filename=self.file_paths[source]))
+        return compensate(data=data, spill_matrix=spill_matrix)
 
     def data(
         self,
@@ -231,38 +302,61 @@ class FileGroup(mongoengine.Document):
     ) -> pd.DataFrame:
         """
         Load the FileGroup dataframe for the desired source file e.g. "primary" for primary
-        staining or name of a control for control staining. Transformations are cached within the
-        HDF5 file for rapid retrieval.
+        staining or name of a control for control staining.
 
         Parameters
         ----------
         source: str
             Name of the file to load from e.g. either "primary" or the name of a control
+        idx: Iterable[int], optional
+            Provide a list of indexes, will subset DataFrame on Index column. Used for subsetting for populations.
+        sample_size: Union[int, float], optional
+            If given an integer, will sample this number of events. If given a float, will downsample to given
+            fraction of total events.
+        sampling_method: str (default="uniform")
+        sampling_kwargs:
+            Additional keyword arguments passed to cytopy.flow.sampling.sample_dataframe
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
 
         Raises
         ------
         ValueError
             Invalid source
-
+        FileNotFoundError
+            Could not locate cytometry data on disk or in remote storage. If the files have been moved, the
+            database must be updated.
+        TypeError
+            Some file format other than FCS is being used but a path to a csv/parquet file for the spillover
+            matric has not been provided.
         """
         try:
-            with h5py.File(self.h5path, "r") as f:
-                data = pd.DataFrame(f[source][:], dtype=np.float32, columns=self.columns)
-                if idx is not None:
-                    data = data.loc[idx]
-                if sample_size is not None:
-                    return sample_dataframe(
-                        data=data, sample_size=sample_size, method=sampling_method, **sampling_kwargs
-                    )
-                return data
+            data = self._load_data(source=source)
+            if self.compensate:
+                data = self._compensate_data(data=data, source=source)
+            data = data.rename(mapping=self.channel_mappings)
+            if idx is not None:
+                if isinstance(idx, np.ndarray):
+                    idx = idx.tolist()
+                data = data[data.Index.is_in(idx)]
+            if sample_size is not None:
+                data = sample_dataframe(data=data, sample_size=sample_size, method=sampling_method, **sampling_kwargs)
+            return data
         except KeyError:
+            logger.error(f"Invalid source {source} for {self.primary_id}, expected one of {self.file_paths.keys()}")
+            raise
+        except FileNotFoundError:
             logger.error(
-                f"Invalid key given on access to {self.primary_id} ({self.id}) HDF5, expected " f"one of {f.keys()}"
+                f"Could not locate file for {source} at {self.file_paths[source]}. Has the file moved? If so "
+                f"make sure to update the database."
             )
+        except ValueError as e:
+            logger.error(e)
+            raise
+        except TypeError as e:
+            logger.error(e)
             raise
 
     def init_new_file(self, data: np.array) -> None:

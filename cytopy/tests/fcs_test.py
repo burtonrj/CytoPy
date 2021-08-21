@@ -12,10 +12,14 @@ from cytopy.data.population import Population
 from cytopy.data.project import Project
 
 
-def test_load_compensation_matrix():
+@pytest.fixture
+def hc_fcs():
     fcs_example_path = os.path.join(ASSET_PATH, "hc_test.fcs")
-    fcs = flowio.FlowData(filename=fcs_example_path)
-    comp_matrix = load_compensation_matrix(fcs=fcs)
+    return flowio.FlowData(filename=fcs_example_path)
+
+
+def test_load_compensation_matrix(hc_fcs):
+    comp_matrix = load_compensation_matrix(fcs=hc_fcs)
     assert isinstance(comp_matrix, pl.DataFrame)
     assert comp_matrix.shape == (12, 12)
 
@@ -25,6 +29,18 @@ def test_load_compensation_matrix_none():
     fcs = flowio.FlowData(filename=fcs_example_path)
     comp_matrix = load_compensation_matrix(fcs=fcs)
     assert comp_matrix is None
+
+
+def test_fcs_to_polars(hc_fcs):
+    data = fcs_to_polars(hc_fcs)
+    assert isinstance(data, pl.DataFrame)
+
+
+def test_compensate(hc_fcs):
+    data = fcs_to_polars(hc_fcs)
+    spill_matrix = load_compensation_matrix(hc_fcs)
+    compensated = compensate(data=data, spill_matrix=spill_matrix)
+    assert isinstance(compensated, pl.DataFrame)
 
 
 def create_test_h5file(path: str, empty: bool = False):
@@ -142,8 +158,8 @@ def test_add_ctrl_file_already_exists_error(example_populated_experiment):
         fg.add_ctrl_file(
             ctrl_id="test_ctrl",
             data=data,
-            channels=[f"channel{i+1}" for i in range(6)],
-            markers=[f"marker{i+1}" for i in range(6)],
+            channels=[f"channel{i + 1}" for i in range(6)],
+            markers=[f"marker{i + 1}" for i in range(6)],
         )
     assert str(err.value) == "Entry for test_ctrl already exists"
 
