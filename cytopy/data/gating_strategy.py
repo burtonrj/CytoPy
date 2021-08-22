@@ -30,7 +30,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import math
 import os
 from datetime import datetime
-from functools import partial
 from itertools import cycle
 from typing import *
 from warnings import warn
@@ -39,7 +38,7 @@ import ipywidgets as widgets
 import matplotlib.pyplot as plt
 import mongoengine
 import numpy as np
-import pandas as pd
+import polars as pl
 from matplotlib import gridspec
 from matplotlib.colors import LogNorm
 from matplotlib.widgets import PolygonSelector
@@ -59,23 +58,14 @@ from .gate import ThresholdGate
 from .gate import ThresholdGeom
 from .gate import update_polygon
 from .gate import update_threshold
-from .population import Population
 from cytopy.flow.plotting.flow_plot import FlowPlot
 from cytopy.flow.transform import apply_transform
 from cytopy.flow.transform import apply_transform_map
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 logger = logging.getLogger(__name__)
 
 
-def gate_stats(gate: Gate, populations: list, parent_data: pd.DataFrame):
+def gate_stats(gate: Gate, populations: list, parent_data: pl.DataFrame):
     """
     Print the statistics of populations generated from a Gate
 
@@ -84,7 +74,7 @@ def gate_stats(gate: Gate, populations: list, parent_data: pd.DataFrame):
     gate: Gate
     populations: list
         List of populations generated from fit_predict method of a Gate
-    parent_data: Pandas.DataFrame
+    parent_data: polars.DataFrame
         Parent data that the gate is applied to
 
     Returns
@@ -354,7 +344,7 @@ class GatingStrategy(mongoengine.Document):
             "kwargs": kwargs,
         }
 
-    def normalise_data(self, gate_name: str):
+    def normalise_data(self, gate_name: str) -> pl.DataFrame:
         """
         Given the name of an existing Gate, perform normalisation of the parent
         population using the details specified in the normalisation attribute. If
@@ -367,7 +357,7 @@ class GatingStrategy(mongoengine.Document):
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
         """
         if gate_name not in self.normalisation.keys():
             return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)[0]
@@ -410,7 +400,7 @@ class GatingStrategy(mongoengine.Document):
         fda_norm: bool = False,
         verbose: bool = True,
         ctrl: bool = True,
-    ):
+    ) -> (pl.DataFrame, pl.DataFrame) or None:
         """
         Load the parent population dataframe ready for a Gate to be applied.
 
@@ -427,7 +417,7 @@ class GatingStrategy(mongoengine.Document):
 
         Returns
         -------
-        Pandas.DataFrame, Pandas.DataFrame or None
+        polars.DataFrame, polars.DataFrame or None
             Parent population, control population (if Gate is a control gate, otherwise None)
         """
         parent = self.filegroup.load_population_df(
@@ -450,7 +440,7 @@ class GatingStrategy(mongoengine.Document):
                     verbose=verbose,
                     **kwargs,
                 )
-                ctrls[gate.ctrl_x] = x[gate.ctrl_x].values
+                ctrls[gate.ctrl_x] = x[gate.ctrl_x].to_numpy()
             if gate.ctrl_y is not None:
                 y = self.filegroup.load_ctrl_population_df(
                     ctrl=gate.ctrl_y,
@@ -460,11 +450,11 @@ class GatingStrategy(mongoengine.Document):
                     verbose=verbose,
                     **kwargs,
                 )
-                ctrls[gate.ctrl_y] = y[gate.ctrl_y].values
+                ctrls[gate.ctrl_y] = y[gate.ctrl_y].to_numpy()
                 if len(ctrls[gate.ctrl_x]) != len(ctrls[gate.ctrl_y]):
                     min_ = min([x.shape[0] for x in ctrls.values()])
                     ctrls = {k: np.random.choice(v, min_) for k, v in ctrls.items()}
-            ctrls = pd.DataFrame(ctrls)
+            ctrls = pl.DataFrame(ctrls)
             return parent, ctrls
         return parent, None
 
@@ -948,7 +938,7 @@ class GatingStrategy(mongoengine.Document):
             xt = x_threshold
             if transform:
                 xt = apply_transform(
-                    pd.DataFrame({"x": [xt]}),
+                    pl.DataFrame({"x": [xt]}),
                     features=["x"],
                     method=transforms.get(gate.x),
                     **transform_kwargs.get(gate.x, {}),
@@ -959,7 +949,7 @@ class GatingStrategy(mongoengine.Document):
                     raise GateError("For 2D threshold geometry, please provide y_threshold")
                 if transform:
                     yt = apply_transform(
-                        pd.DataFrame({"y": [y_threshold]}),
+                        pl.DataFrame({"y": [y_threshold]}),
                         features=["y"],
                         method=transforms.get(gate.y),
                         **transform_kwargs.get(gate.y),
@@ -994,7 +984,7 @@ class GatingStrategy(mongoengine.Document):
                 raise GateError("coords should be of shape (2, n) where n id the desired number of coordinates")
             if transform:
                 xy = apply_transform_map(
-                    pd.DataFrame(xy, columns=[gate.x, gate.y]), feature_method=transforms, kwargs=transform_kwargs
+                    pl.DataFrame(xy, columns=[gate.x, gate.y]), feature_method=transforms, kwargs=transform_kwargs
                 ).values
             self.filegroup.update_population(
                 update_polygon(population=pop, parent_data=parent, x_values=xy[:, 0], y_values=xy[:, 1])
@@ -1331,7 +1321,7 @@ class InteractiveGateEditor(widgets.HBox):
         for child in self.gate.children:
             pop = self.gs.filegroup.get_population(population_name=child.name)
             c = [next(gate_colours) for _ in range(len(pop.geom.x_values))]
-            geom[pop.population_name] = pd.DataFrame(
+            geom[pop.population_name] = pl.DataFrame(
                 {self.gate.x: pop.geom.x_values, self.gate.y: pop.geom.y_values, "colour": c}
             )
         return geom
@@ -1341,7 +1331,7 @@ class InteractiveGateEditor(widgets.HBox):
         verts.append(verts[0])
         verts = np.array(verts)
         c = self.gate_geometry[self.child_select.value]["colour"].values[0]
-        self.gate_geometry[self.child_select.value] = pd.DataFrame(
+        self.gate_geometry[self.child_select.value] = pl.DataFrame(
             {self.gate.x: verts[:, 0], self.gate.y: verts[:, 1], "colour": [c for _ in range(verts.shape[0])]}
         )
         geom = self.gate_geometry[self.child_select.value]
