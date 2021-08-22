@@ -27,26 +27,23 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from ..flow import transform
-import numpy as np
-import pandas as pd
-from multiprocessing import Pool, cpu_count
-from warnings import warn
 from functools import partial
-from matplotlib.patches import Ellipse
-from scipy import linalg, stats
-from shapely.geometry import Polygon, Point
-import mongoengine
-import alphashape
+from multiprocessing import cpu_count
+from multiprocessing import Pool
+from typing import List
+from typing import Tuple
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
+import alphashape
+import mongoengine
+import numpy as np
+import polars as pl
+from matplotlib.patches import Ellipse
+from scipy import linalg
+from scipy import stats
+from shapely.geometry import Point
+from shapely.geometry import Polygon
+
+from ..flow import transform
 
 
 class GeometryError(Exception):
@@ -113,15 +110,11 @@ class ThresholdGeom(PopulationGeometry):
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_x)(**kwargs)
-            x = transformer.inverse_scale(
-                pd.DataFrame({"x": [self.x_threshold]}), features=["x"]
-            )["x"].values[0]
+            x = transformer.inverse_scale(pl.DataFrame({"x": [self.x_threshold]}), features=["x"])["x"].values[0]
         if self.transform_y:
             kwargs = self.transform_y_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
-            y = transformer.inverse_scale(
-                pd.DataFrame({"y": [self.y_threshold]}), features=["y"]
-            )["y"].values[0]
+            y = transformer.inverse_scale(pl.DataFrame({"y": [self.y_threshold]}), features=["y"])["y"].values[0]
         return x, y
 
 
@@ -144,9 +137,7 @@ class PolygonGeom(PopulationGeometry):
 
     @property
     def shape(self):
-        assert (
-            self.x_values is not None and self.y_values is not None
-        ), "x and y values not defined for this Polygon"
+        assert self.x_values is not None and self.y_values is not None, "x and y values not defined for this Polygon"
         return create_polygon(self.x_values, self.y_values)
 
     def transform_to_linear(self):
@@ -163,30 +154,25 @@ class PolygonGeom(PopulationGeometry):
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_x)(**kwargs)
-            x_values = transformer.inverse_scale(
-                pd.DataFrame({"x": self.x_values}), features=["x"]
-            )["x"].values
+            x_values = transformer.inverse_scale(pl.DataFrame({"x": self.x_values}), features=["x"])["x"].values
         if self.transform_y:
             kwargs = self.transform_y_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
-            y_values = transformer.inverse_scale(
-                pd.DataFrame({"y": self.y_values}), features=["y"]
-            )["y"].values
+            y_values = transformer.inverse_scale(pl.DataFrame({"y": self.y_values}), features=["y"])["y"].values
         return x_values, y_values
 
 
-def point_in_poly(coords: np.array, poly: Polygon):
-    point = Point(coords)
-    return poly.contains(point)
+def point_in_poly(coords: Tuple[float], poly: Polygon) -> pl.Series:
+    return poly.contains(Point(coords))
 
 
-def inside_polygon(df: pd.DataFrame, x: str, y: str, poly: Polygon, njobs: int = -1):
+def inside_polygon(df: pl.DataFrame, x: str, y: str, poly: Polygon) -> pl.DataFrame:
     """
     Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
 
     Parameters
     ----------
-    df: Pandas.DataFrame
+    df: polars.DataFrame
         Data to query
     x: str
         name of x-axis plane
@@ -194,21 +180,15 @@ def inside_polygon(df: pd.DataFrame, x: str, y: str, poly: Polygon, njobs: int =
         name of y-axis plane
     poly: shapely.geometry.Polygon
         Polygon object to search
-    njobs: int
-        Number of jobs to run in parallel, by default uses all available cores
 
     Returns
     --------
-    Pandas.DataFrame
+    polars.DataFrame
         Masked DataFrame containing only those rows that fall within the Polygon
     """
-    if njobs < 0:
-        njobs = cpu_count()
-    xy = df[[x, y]].values
-    f = partial(point_in_poly, poly=poly)
-    with Pool(njobs) as pool:
-        mask = list(pool.map(f, xy))
-    return df.iloc[mask]
+    point_inside_polygon = partial(point_in_poly, poly=poly)
+    mask = df[[x, y]].apply(point_inside_polygon, return_dtype=pl.Boolean)
+    return df[mask, :]
 
 
 def polygon_overlap(poly1: Polygon, poly2: Polygon, threshold: float = 0.0):
@@ -234,7 +214,7 @@ def polygon_overlap(poly1: Polygon, poly2: Polygon, threshold: float = 0.0):
     return 0.0
 
 
-def create_polygon(x: list, y: list):
+def create_polygon(x: List[float], y: List[float]) -> Polygon:
     """
     Given a list of x coordinated and a list of y coordinates, generate a shapely Polygon
 
@@ -256,7 +236,7 @@ def inside_ellipse(
     width: int or float,
     height: int or float,
     angle: int or float,
-) -> object:
+) -> np.ndarray:
     """
     Return mask of two dimensional matrix specifying if a data point (row) falls
     within an ellipse
@@ -276,7 +256,7 @@ def inside_ellipse(
 
     Returns
     --------
-    numpy.ndarray
+    Numpy.Array
         numpy array of indices for values inside specified ellipse
     """
     cos_angle = np.cos(np.radians(180.0 - angle))
@@ -305,14 +285,14 @@ def inside_ellipse(
     return in_ellipse
 
 
-def probabilistic_ellipse(covariances: np.array, conf: float):
+def probabilistic_ellipse(covariances: np.ndarray, conf: float):
     """
     Given the covariance matrix of a mixture component, calculate a elliptical shape that
     represents a probabilistic confidence interval.
 
     Parameters
     ----------
-    covariances: np.array
+    covariances: Numpy.Array
         Covariance matrix
     conf: float
         The confidence interval (e.g. 0.95 would give the region of 95% confidence)
@@ -330,17 +310,15 @@ def probabilistic_ellipse(covariances: np.array, conf: float):
     return eigen_val[0], eigen_val[1], (180.0 + angle)
 
 
-def create_envelope(
-    x_values: np.array, y_values: np.array, alpha: float or None = 0.0
-) -> Polygon:
+def create_envelope(x_values: np.array, y_values: np.array, alpha: float or None = 0.0) -> Polygon:
     """
     Given the x and y coordinates of a cloud of data points generate an envelope (alpha shape)
     that encapsulates these data points.
 
     Parameters
     ----------
-    x_values: numpy.ndarray
-    y_values: numpy.ndarray
+    x_values: Numpy.Array
+    y_values: Numpy.Array
     alpha: float or None (default = 0.0)
         By default alpha is 0, generating a convex hull (can be thought of as if wrapping an elastic band
         around the data points). Increase alpha to create a concave envelope. Warning, as alpha increases,
@@ -373,7 +351,7 @@ def ellipse_to_polygon(
     height: float,
     angle: float,
     ellipse: Ellipse or None = None,
-):
+) -> Polygon:
     """
     Convert an ellipse to a shapely Polygon object.
 
