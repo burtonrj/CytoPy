@@ -421,7 +421,7 @@ class Gate(mongoengine.Document):
             Up-sampling error; not enough events
         """
         logger.debug("Upsampling data")
-        sample = sample.__copy__()
+        sample = sample.clone()()
         sample["label"] = [None for _ in range(sample.shape[0])]
 
         for i, p in enumerate(populations):
@@ -1532,7 +1532,7 @@ class PolygonGate(Gate):
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
         data = self.transform(data=data)
         data = self._dim_reduction(data=data)
-        return self._match_to_children(self._generate_populations(data=data.__copy__(), polygons=self._fit(data=data)))
+        return self._match_to_children(self._generate_populations(data=data.clone()(), polygons=self._fit(data=data)))
 
     def predict(self, data: pl.DataFrame) -> List[Population]:
         """

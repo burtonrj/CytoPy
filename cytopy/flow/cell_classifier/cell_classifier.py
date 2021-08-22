@@ -153,7 +153,7 @@ class BaseClassifier:
         ValueError
             If invalid method requested
         """
-        x = self.x.__copy__()
+        x = self.x.clone()()
         x["y"] = self.y
         x = sampling.sample_dataframe(data=x, sample_size=sample_size, method=method, **kwargs)
         self.x, self.y = x[self.features], x["y"].to_numpy()
@@ -478,7 +478,7 @@ class BaseClassifier:
         -------
         None
         """
-        idx = x.index[np.where(y_pred == 0)[0], "Index"].to_list()
+        idx = x[np.where(y_pred == 0)[0], "Index"].to_list()
         pop = Population(
             population_name=f"{self.population_prefix}_Unclassified",
             source="classifier",
@@ -942,9 +942,9 @@ class CalibratedCellClassifier(BaseClassifier):
     def calibrate(self):
         self.calibrator.run(var_use="sample_id")
         calibrated_data = self.calibrator.batch_corrected()
-        calibrated_training_data = calibrated_data[calibrated_data.sample_id == self.training_id].__copy__()
+        calibrated_training_data = calibrated_data[calibrated_data.sample_id == self.training_id].clone()()
         self._setup_training_data(calibrated_training_data=calibrated_training_data)
-        self.targets = calibrated_data[calibrated_data.sample_id != self.training_id].__copy__()
+        self.targets = calibrated_data[calibrated_data.sample_id != self.training_id].clone()()
         return self
 
     def _setup_training_data(self, calibrated_training_data: pl.DataFrame):
