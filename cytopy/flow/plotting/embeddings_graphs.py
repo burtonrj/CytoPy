@@ -24,17 +24,20 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-from ..dim_reduction import DimensionReduction
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from scipy.spatial.distance import pdist, squareform
 from itertools import cycle
+
+import matplotlib.colors as cm
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
-import matplotlib.colors as cm
-import seaborn as sns
 import networkx as nx
-import pandas as pd
+import polars as pl
+import seaborn as sns
+from scipy.spatial.distance import pdist
+from scipy.spatial.distance import squareform
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
+
+from ..dim_reduction import DimensionReduction
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -252,13 +255,9 @@ def single_cell_plot(
             )
         else:
             if scale == "zscore":
-                data[label] = StandardScaler().fit_transform(
-                    data[label].values.reshape(-1, 1)
-                )
+                data[label] = StandardScaler().fit_transform(data[label].values.reshape(-1, 1))
             elif scale == "minmax":
-                data[label] = MinMaxScaler().fit_transform(
-                    data[label].values.reshape(-1, 1)
-                )
+                data[label] = MinMaxScaler().fit_transform(data[label].values.reshape(-1, 1))
             ax = cont_scatterplot(
                 data=data,
                 x=x,
@@ -295,18 +294,14 @@ def _assert_unique_label(x):
     return x[0]
 
 
-def _cluster_centroids(
-    data: pd.DataFrame, features: list, sample_label: str, cluster_label: str
-):
+def _cluster_centroids(data: pd.DataFrame, features: list, sample_label: str, cluster_label: str):
     return data.groupby([sample_label, cluster_label])[features].median().reset_index()
 
 
 def _sample_n(data: pd.DataFrame, sample_label: str):
     sample_size = data[sample_label].value_counts()
     sample_size.name = "sample_n"
-    return (
-        pd.DataFrame(sample_size).reset_index().rename({"index": sample_label}, axis=1)
-    )
+    return pd.DataFrame(sample_size).reset_index().rename({"index": sample_label}, axis=1)
 
 
 def _cluster_n(data: pd.DataFrame, cluster_label: str, sample_label: str):
@@ -393,9 +388,7 @@ def _generate_cluster_centroids(
     centroids = centroids.merge(
         _cluster_size(
             _sample_n(data=data, sample_label=sample_label),
-            _cluster_n(
-                data=data, sample_label=sample_label, cluster_label=cluster_label
-            ),
+            _cluster_n(data=data, sample_label=sample_label, cluster_label=cluster_label),
         )
     )
     if colour_label is not None:
@@ -487,9 +480,7 @@ def cluster_bubble_plot(
         if discrete:
             centroids[colour_label] = centroids[colour_label].astype(str)
         elif zscore:
-            centroids[colour_label] = StandardScaler().fit_transform(
-                centroids[colour_label].values.reshape(-1, 1)
-            )
+            centroids[colour_label] = StandardScaler().fit_transform(centroids[colour_label].values.reshape(-1, 1))
         if n_components == 2:
             ax = fig.add_subplot(111)
             ax = sns.scatterplot(

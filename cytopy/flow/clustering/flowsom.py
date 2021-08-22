@@ -28,7 +28,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
 
-import pandas as pd
+import polars as pl
 from minisom import MiniSom
 from sklearn.preprocessing import MinMaxScaler
 

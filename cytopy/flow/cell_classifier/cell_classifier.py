@@ -35,7 +35,7 @@ from typing import *
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+import polars as pl
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.base import ClassifierMixin
 from sklearn.feature_selection import SelectFromModel
@@ -87,8 +87,8 @@ class BaseClassifier:
         model: Union[ClassifierMixin, Sequential],
         target_populations: List[str],
         population_prefix: str,
-        x: Optional[pd.DataFrame],
-        y: Optional[Union[pd.Series, np.ndarray]],
+        x: Optional[pl.DataFrame],
+        y: Optional[Union[pl.Series, np.ndarray]],
         features: List[str],
         transformer: Optional[Transformer] = None,
         multi_label: bool = False,
@@ -153,10 +153,10 @@ class BaseClassifier:
         ValueError
             If invalid method requested
         """
-        x = self.x.copy()
+        x = self.x.__copy__()
         x["y"] = self.y
         x = sampling.sample_dataframe(data=x, sample_size=sample_size, method=method, **kwargs)
-        self.x, self.y = x[self.features], x["y"].values
+        self.x, self.y = x[self.features], x["y"].to_numpy()
         return self
 
     @check_data_init
@@ -197,7 +197,7 @@ class BaseClassifier:
         self
         """
         kwargs["random_state"] = kwargs.get("random_state", 42)
-        self.x, self.y = RandomOverSampler(**kwargs).fit_resample(self.x, self.y)
+        self.x, self.y = RandomOverSampler(**kwargs).fit_resample(self.x.to_numpy(), self.y)
         return self
 
     @check_data_init
@@ -240,12 +240,12 @@ class BaseClassifier:
         return self
 
     @check_data_init
-    def _fit(self, x: pd.DataFrame, y: np.ndarray, **kwargs):
+    def _fit(self, x: pl.DataFrame, y: np.ndarray, **kwargs):
         """
         Internal function for calling fit. Handles class weights.
         Parameters
         ----------
-        x: Pandas.DataFrame
+        x: polars.DataFrame
         y: numpy.ndarray
         kwargs
         Returns
@@ -253,17 +253,17 @@ class BaseClassifier:
         self
         """
         if self.class_weights is not None:
-            self.model.fit(x, y, sample_weight=self.class_weights, **kwargs)
+            self.model.fit(x.to_numpy(), y, sample_weight=self.class_weights, **kwargs)
         else:
-            self.model.fit(x, y, **kwargs)
+            self.model.fit(x.to_numpy(), y, **kwargs)
         return self
 
-    def _predict(self, x: pd.DataFrame):
+    def _predict(self, x: pl.DataFrame):
         """
         Internal function for calling predict.
         Parameters
         ----------
-        x: Pandas.DataFrame
+        x: polars.DataFrame
         Returns
         -------
         numpy.ndarray, numpy.ndarray or None
@@ -271,8 +271,8 @@ class BaseClassifier:
         """
         predict_proba = getattr(self.model, "predict_proba", None)
         if callable(predict_proba):
-            return self.model.predict(x), self.model.predict_proba(x)
-        return self.model.predict(x), None
+            return self.model.predict(x.to_numpy()), self.model.predict_proba(x.to_numpy())
+        return self.model.predict(x.to_numpy()), None
 
     @check_data_init
     def fit_train_test_split(
@@ -413,7 +413,7 @@ class BaseClassifier:
         self,
         cmap: str or None = None,
         figsize: tuple = (10, 5),
-        x: pd.DataFrame or None = None,
+        x: pl.DataFrame or None = None,
         y: np.ndarray or None = None,
         **kwargs,
     ):
@@ -428,7 +428,7 @@ class BaseClassifier:
             Colour scheme
         figsize: tuple (default=(10, 5))
             Figure size
-        x: Pandas.DataFrame (optional)
+        x: polars.DataFrame (optional)
             Feature space. If not given, will use associated training data. To use a validation
             dataset, use the 'load_validation' method to get relevant data.
         y: numpy.ndarray (optional)
@@ -461,7 +461,7 @@ class BaseClassifier:
 
     def _add_unclassified_population(
         self,
-        x: pd.DataFrame,
+        x: pl.DataFrame,
         y_pred: np.ndarray,
         root_population: str,
         target: FileGroup,
@@ -470,7 +470,7 @@ class BaseClassifier:
         Add a population for events without a classification (not a member of any target population)
         Parameters
         ----------
-        x: Pandas.DataFrame
+        x: polars.DataFrame
         y_pred: numpy.ndarray
         root_population: str
         target: FileGroup
@@ -478,36 +478,34 @@ class BaseClassifier:
         -------
         None
         """
-        idx = x.index.values[np.where(y_pred == 0)[0]]
-        target.add_population(
-            Population(
-                population_name=f"{self.population_prefix}_Unclassified",
-                source="classifier",
-                index=idx,
-                n=len(idx),
-                parent=root_population,
-                warnings=["supervised_classification"],
-            )
+        idx = x.index[np.where(y_pred == 0)[0], "Index"].to_list()
+        pop = Population(
+            population_name=f"{self.population_prefix}_Unclassified",
+            source="classifier",
+            n=len(idx),
+            parent=root_population,
+            warnings=["supervised_classification"],
         )
+        pop.index = idx
+        target.add_population(pop)
 
-    def _add_populations(self, target: FileGroup, x: pd.DataFrame, y_pred: np.ndarray, root_population: str):
+    def _add_populations(self, target: FileGroup, x: pl.DataFrame, y_pred: np.ndarray, root_population: str):
         if not self.multi_label:
             self._add_unclassified_population(x=x, y_pred=y_pred, root_population=root_population, target=target)
         for i, pop in enumerate(self.target_populations):
             if self.multi_label:
-                idx = x.index.values[np.where(y_pred[:, i + 1] == 1)[0]]
+                idx = x[np.where(y_pred[:, i + 1] == 1)[0], "Index"].to_list()
             else:
-                idx = x.index.values[np.where(y_pred == i + 1)[0]]
-            target.add_population(
-                Population(
-                    population_name=f"{self.population_prefix}_{pop}",
-                    source="classifier",
-                    index=idx,
-                    n=len(idx),
-                    parent=root_population,
-                    warnings=["supervised_classification"],
-                )
+                idx = x[np.where(y_pred == i + 1)[0], "Index"].to_list()
+            p = Population(
+                population_name=f"{self.population_prefix}_{pop}",
+                source="classifier",
+                n=len(idx),
+                parent=root_population,
+                warnings=["supervised_classification"],
             )
+            p.index = idx
+            target.add_population(p)
 
 
 class CellClassifier(BaseClassifier):
@@ -538,7 +536,7 @@ class CellClassifier(BaseClassifier):
         Transformer object
     class_weights: dict
         Sample class weights; key is sample index, value is weight. Set by calling compute_class_weights.
-    x: Pandas.DataFrame
+    x: polars.DataFrame
         Training feature space
     y: numpy.ndarray
         Target labels
@@ -660,7 +658,7 @@ class CellClassifier(BaseClassifier):
             Name of the root population from which the target populations descend
         Returns
         -------
-        Pandas.DataFrame, numpy.ndarray
+        polars.DataFrame, numpy.ndarray
             Feature space, labels
         Raises
         ------
@@ -822,7 +820,7 @@ def sample_experiment_data(
     transform: Optional[Union[str, Dict]] = "logicle",
     transform_kwargs: Optional[Dict] = None,
     targets: Optional[List[str]] = None,
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     targets = targets or experiment.list_samples()
     targets = [x for x in targets if x != training_id]
     ref = experiment.get_sample(training_id)
@@ -839,7 +837,7 @@ def sample_experiment_data(
     )
     if balance_populations:
         pop_sample_size = int(sample_size / len(target_populations) + 1)
-        training_data = pd.concat(
+        training_data = pl.concat(
             [
                 ref.load_population_df(
                     population=p,
@@ -860,7 +858,7 @@ def sample_experiment_data(
     training_data["subject_id"] = None
     if ref.subject:
         training_data["subject_id"] = ref.subject.subject_id
-    return pd.concat([data, training_data]).reset_index(drop=True)
+    return pl.concat([data, training_data])
 
 
 class CalibratedCellClassifier(BaseClassifier):
@@ -944,34 +942,36 @@ class CalibratedCellClassifier(BaseClassifier):
     def calibrate(self):
         self.calibrator.run(var_use="sample_id")
         calibrated_data = self.calibrator.batch_corrected()
-        calibrated_training_data = calibrated_data[calibrated_data.sample_id == self.training_id].copy()
+        calibrated_training_data = calibrated_data[calibrated_data.sample_id == self.training_id].__copy__()
         self._setup_training_data(calibrated_training_data=calibrated_training_data)
-        self.targets = calibrated_data[calibrated_data.sample_id != self.training_id].copy()
+        self.targets = calibrated_data[calibrated_data.sample_id != self.training_id].__copy__()
         return self
 
-    def _setup_training_data(self, calibrated_training_data: pd.DataFrame):
+    def _setup_training_data(self, calibrated_training_data: pl.DataFrame):
         reference = self.experiment.get_sample(sample_id=self.training_id)
-        calibrated_training_data.set_index("original_index", inplace=True)
         if self.multi_label:
             for pop in self.target_populations:
                 pop_idx = [
                     x
                     for x in reference.get_population(population_name=pop).index
-                    if x in calibrated_training_data.index.values
+                    if x in calibrated_training_data["Index"]
                 ]
-                calibrated_training_data[pop] = 0
-                calibrated_training_data.loc[pop_idx, pop] = 1
-            self.x, self.y = calibrated_training_data[self.features], calibrated_training_data[self.target_populations]
+                calibrated_training_data[pop] = [0 for _ in range(calibrated_training_data.shape[0])]
+                calibrated_training_data[pop_idx, pop] = 1
+            self.x, self.y = (
+                calibrated_training_data[self.features],
+                calibrated_training_data[self.target_populations].to_numpy(),
+            )
         else:
-            calibrated_training_data["label"] = 0
+            calibrated_training_data["label"] = [0 for _ in range(calibrated_training_data.shape[0])]
             for i, pop in enumerate(self.target_populations):
                 pop_idx = [
                     x
                     for x in reference.get_population(population_name=pop).index
                     if x in calibrated_training_data.index.values
                 ]
-                calibrated_training_data.loc[pop_idx, "label"] = i + 1
-            self.x, self.y = calibrated_training_data[self.features], calibrated_training_data["label"].values
+                calibrated_training_data[pop_idx, "label"] = i + 1
+            self.x, self.y = calibrated_training_data[self.features], calibrated_training_data["label"].to_numpy()
 
     @check_calibrated
     def predict_meta_labels(self, verbose: bool = True):
@@ -981,9 +981,6 @@ class CalibratedCellClassifier(BaseClassifier):
             self.target_predictions[target_id] = {"y_pred": y_pred, "y_score": y_score}
         return self
 
-    def backgate_meta_labels(self, target_id: str):
-        pass
-
     @check_target_predictions
     def meta_label_avg_probability(self):
         pred_prob = defaultdict(list)
@@ -992,8 +989,8 @@ class CalibratedCellClassifier(BaseClassifier):
                 if y_prob is None:
                     raise ClassifierError("Prediction probabilities are not available for the chosen model")
                 pred_prob[target_id].append(y_prob[y_pred])
-        pred_prob = {target_id: np.mean(prob) for target_id, prob in pred_prob.items()}
-        return pd.DataFrame(pred_prob, index=["Avg prob"]).T.sort_values("Avg prob")
+        pred_prob = pl.DataFrame(pred_prob)
+        return pl.DataFrame({"target_id": pred_prob.columns, "Avg prob": pred_prob.mean().rows()[0]}).sort("Avg prob")
 
     @check_calibrated
     @check_target_predictions
@@ -1004,8 +1001,8 @@ class CalibratedCellClassifier(BaseClassifier):
         original_x = target.load_population_df(
             population=self.root_population, transform=self.transform, transform_kwargs=self.transform_kwargs
         )[features]
-        idx = self.targets[self.targets.sample_id == target_id]["original_index"].values
-        calibrated_x = original_x.loc[idx]
+        idx = self.targets[self.targets.sample_id == target_id, "Index"]
+        calibrated_x = original_x[original_x.Index.is_in(idx), :]
         y = self.target_predictions[target_id]["y_pred"]
         if self.scaler is not None:
             calibrated_x = self.scaler(data=calibrated_x, features=features)
@@ -1018,13 +1015,13 @@ class CalibratedCellClassifier(BaseClassifier):
         calibrated_x, y, original_x = self.load_target_data(
             target_id=target_id, return_all_data=True, features=features
         )
-        self.meta_learner.fit(calibrated_x, y, **fit_kwargs)
+        self.meta_learner.fit(calibrated_x.to_numpy(), y, **fit_kwargs)
 
     def meta_fit_predict(self, target_id: str, features: Optional[List[str]] = None, **fit_kwargs):
         calibrated_x, y, original_x = self.load_target_data(
             target_id=target_id, return_all_data=True, features=features
         )
-        self.meta_learner.fit(calibrated_x, y, **fit_kwargs)
+        self.meta_learner.fit(calibrated_x.to_numpy(), y, **fit_kwargs)
         return predict(model=self.meta_learner, x=original_x)
 
     def meta_predict(self, target_id: str, features: Optional[List[str]] = None):
@@ -1059,12 +1056,12 @@ class CalibratedCellClassifier(BaseClassifier):
                 verbose=False,
                 **fit_kwargs,
             )
-            train, test = pd.DataFrame(train), pd.DataFrame(test)
-            train["sample_id"] = _id
-            test["sample_id"] = _id
+            train, test = pl.DataFrame(train), pl.DataFrame(test)
+            train["sample_id"] = [_id for _ in range(train.shape[0])]
+            test["sample_id"] = [_id for _ in range(test.shape[0])]
             training_results.append(train)
             testing_results.append(test)
-        return pd.concat(training_results).reset_index(drop=True), pd.concat(testing_results).reset_index(drop=True)
+        return pl.concat(training_results), pl.concat(testing_results)
 
     def meta_learner_fit_train_test_split(
         self,
@@ -1093,12 +1090,12 @@ class CalibratedCellClassifier(BaseClassifier):
                 train_test_split_kwargs=train_test_split_kwargs,
                 **fit_kwargs,
             )
-            results = pd.DataFrame(results)
-            results["sample_id"] = _id
+            results = pl.DataFrame(results)
+            results["sample_id"] = [_id for _ in range(results.shape[0])]
             all_results.append(results)
             if return_predictions:
                 predictions[_id] = y_hat
-        return pd.concat(all_results).reset_index(drop=True), predictions
+        return pl.concat(all_results), predictions
 
     def meta_learner_hyperparam_tuning(
         self,
@@ -1135,7 +1132,7 @@ class CalibratedCellClassifier(BaseClassifier):
             results["best_score"].append(optimizers[_id].best_score_)
             for param, best_value in optimizers[_id].best_params_.items():
                 results[param].append(best_value)
-        return pd.DataFrame(results), optimizers
+        return pl.DataFrame(results), optimizers
 
     def plot_learning_curve(
         self,
@@ -1181,7 +1178,7 @@ class CalibratedCellClassifier(BaseClassifier):
     def feature_importance(self):
         try:
             selector = SelectFromModel(estimator=self.model)
-            selector.fit(self.x, self.y)
+            selector.fit(self.x.to_numpy(), self.y)
             important_features = np.array(self.features)[selector.get_support()]
             return important_features, selector
         except ValueError:
@@ -1233,9 +1230,9 @@ class CalibratedCellClassifier(BaseClassifier):
         return results
 
 
-def predict(model: Union[ClassifierMixin, Sequential], x: Union[pd.DataFrame, np.ndarray]):
-    if isinstance(x, pd.DataFrame):
-        x = x.values
+def predict(model: Union[ClassifierMixin, Sequential], x: Union[pl.DataFrame, np.ndarray]):
+    if isinstance(x, pl.DataFrame):
+        x = x.to_numpy()
     predict_proba = getattr(model, "predict_proba", None)
     if callable(predict_proba):
         return model.predict(x), model.predict_proba(x)
@@ -1244,8 +1241,8 @@ def predict(model: Union[ClassifierMixin, Sequential], x: Union[pd.DataFrame, np
 
 def fit_cv(
     model: Union[ClassifierMixin, Sequential],
-    x: Union[pd.DataFrame, np.ndarray],
-    y: Union[pd.DataFrame, np.ndarray],
+    x: Union[pl.DataFrame, np.ndarray],
+    y: Union[pl.DataFrame, np.ndarray],
     cross_validator: Optional[BaseCrossValidator] = None,
     metrics: Optional[List[str]] = None,
     split_kwargs: Optional[Dict] = None,
@@ -1258,15 +1255,13 @@ def fit_cv(
     training_results = list()
     testing_results = list()
 
-    if isinstance(x, pd.DataFrame):
-        x = x.values
-    if isinstance(y, pd.DataFrame):
-        y = y.values
+    if isinstance(x, pl.DataFrame):
+        x = x.to_numpy()
+    if isinstance(y, pl.DataFrame):
+        y = y.to_numpy()
 
     for train_idx, test_idx in progress_bar(
-        cross_validator.split(X=x, y=y, **split_kwargs),
-        total=cross_validator.n_splits,
-        verbose=verbose,
+        cross_validator.split(X=x, y=y, **split_kwargs), total=cross_validator.n_splits, verbose=verbose
     ):
         x_train, x_test = x[train_idx], x[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
@@ -1280,7 +1275,7 @@ def fit_cv(
 
 def fit_train_test_split(
     model: Union[ClassifierMixin, Sequential],
-    x: pd.DataFrame,
+    x: pl.DataFrame,
     y: np.ndarray,
     test_frac: float = 0.3,
     metrics: Optional[List[str]] = None,
@@ -1288,6 +1283,10 @@ def fit_train_test_split(
     train_test_split_kwargs: Optional[Dict] = None,
     **fit_kwargs,
 ):
+    if isinstance(x, pl.DataFrame):
+        x = x.to_numpy()
+    if isinstance(y, pl.DataFrame):
+        y = y.to_numpy()
     metrics = metrics or DEFAULT_METRICS
     train_test_split_kwargs = train_test_split_kwargs or {}
     logger.info("Generating training and testing data")
@@ -1308,7 +1307,7 @@ def fit_train_test_split(
 
 def hyperparam_search(
     model: Union[ClassifierMixin, Sequential],
-    x: pd.DataFrame,
+    x: pl.DataFrame,
     y: np.ndarray,
     param_grid: Dict,
     hyper_param_optimizer: Optional[BaseSearchCV] = None,
@@ -1318,6 +1317,10 @@ def hyperparam_search(
     fit_kwargs: Optional[Dict] = None,
     **kwargs,
 ) -> BaseSearchCV:
+    if isinstance(x, pl.DataFrame):
+        x = x.to_numpy()
+    if isinstance(y, pl.DataFrame):
+        y = y.to_numpy()
     fit_kwargs = fit_kwargs or {}
     hyper_param_optimizer = hyper_param_optimizer or RandomizedSearchCV
     hyper_param_optimizer = hyper_param_optimizer(model, param_grid, cv=cv, verbose=verbose, n_jobs=n_jobs, **kwargs)

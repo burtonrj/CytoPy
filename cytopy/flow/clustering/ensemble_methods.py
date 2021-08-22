@@ -1,13 +1,15 @@
-from ...feedback import progress_bar
-import scipy.cluster.hierarchy as hierarchical_cluster
-from scipy.spatial import distance as ssd
 from collections import defaultdict
-import matplotlib.pyplot as plt
-import seaborn as sns
-import networkx as nx
 from typing import *
-import pandas as pd
+
+import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
+import polars as pl
+import scipy.cluster.hierarchy as hierarchical_cluster
+import seaborn as sns
+from scipy.spatial import distance as ssd
+
+from ...feedback import progress_bar
 
 
 def get_adjacent_cliques(clique: frozenset, membership_dict: Dict):
@@ -78,11 +80,7 @@ class CoMatrix:
         for labels in [x["labels"] for x in self.clusterings.values()]:
             co_matrix += gather_single_partition(labels)
         co_matrix_f = co_matrix / self.n_ensembles
-        header = (
-            self.data.index.values
-            if self.index is None
-            else self.data[self.index].values
-        )
+        header = self.data.index.values if self.index is None else self.data[self.index].values
         co_matrix_df = pd.DataFrame(index=header, data=co_matrix_f, columns=header)
         return co_matrix_df
 
@@ -115,14 +113,10 @@ class CoMatrix:
     def _linkage(self, linkage: str = "average", **kwargs):
         kwargs["metric"] = kwargs.get("metric", "euclidean")
         kwargs["optimal_ordering"] = kwargs.get("optimal_ordering", True)
-        lnk = hierarchical_cluster.linkage(
-            ssd.squareform(1 - self.co_matrix), method=linkage, **kwargs
-        )
+        lnk = hierarchical_cluster.linkage(ssd.squareform(1 - self.co_matrix), method=linkage, **kwargs)
         return lnk
 
-    def cluster_co_occurrence(
-        self, threshold: Union[str, float] = "avg", linkage: str = "average", **kwargs
-    ):
+    def cluster_co_occurrence(self, threshold: Union[str, float] = "avg", linkage: str = "average", **kwargs):
         """
         Generates a final clustering solution for an ensemble. Cut the clustering at
         the given threshold and returns the labels from the resulting cut. Scipy Hierarchical clustering
@@ -166,9 +160,7 @@ class CoMatrix:
                     if labels[i] and labels[j]:
                         cluster_num = min(labels[i], labels[j])
                         cluster_to_change = max(labels[i], labels[j])
-                        idx = [
-                            ii for ii, c in enumerate(labels) if c == cluster_to_change
-                        ]
+                        idx = [ii for ii, c in enumerate(labels) if c == cluster_to_change]
                         labels[idx] = cluster_num
                     elif not labels[i] and not labels[j]:
                         # a new cluster
@@ -316,15 +308,10 @@ class MixtureModel:
             for m in range(self.alpha.shape[0]):
                 ix = 0
                 for k in self.kj[j]:
-                    num = sum(
-                        vec_simga(self.y.iloc[:, j], k) * np.array(self.expz[:, m])
-                    )
+                    num = sum(vec_simga(self.y.iloc[:, j], k) * np.array(self.expz[:, m]))
                     den = 0
                     for kx in self.kj[j]:
-                        den += sum(
-                            vec_simga(self.y.iloc[:, j], kx)
-                            * np.asarray(self.expz[:, m])
-                        )
+                        den += sum(vec_simga(self.y.iloc[:, j], kx) * np.asarray(self.expz[:, m]))
                     self.v[j][m][ix] = float(num) / float(den)
                     ix += 1
 

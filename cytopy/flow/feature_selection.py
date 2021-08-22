@@ -35,8 +35,8 @@ from warnings import warn
 import graphviz
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import pingouin
+import polars as pl
 import seaborn as sns
 import shap
 from imblearn.over_sampling import RandomOverSampler
@@ -134,7 +134,7 @@ class FeatureSpace:
     * Meta labels associated to Subjects linked to samples can be used to populate additional columns in
     your resulting DataFrame
 
-    Once the desired data is obtained, calling 'construct_dataframe' results in a Pandas DataFrame of
+    Once the desired data is obtained, calling 'construct_dataframe' results in a polars DataFrame of
     the entire 'feature space'
 
     Parameters
@@ -189,7 +189,7 @@ class FeatureSpace:
         """
         For each sample compute the ratio of pop1 to pop2. If pop2 is not defined, will compute
         the ratio between pop1 and all other populations. Saved as dictionary to 'ratios' attribute.
-        Call 'construct_dataframe' to output as Pandas.DataFrame.
+        Call 'construct_dataframe' to output as polars.DataFrame.
 
         Parameters
         ----------
@@ -244,7 +244,7 @@ class FeatureSpace:
         * "gmean": geometric mean
 
         Statistics are calculated on a per sample, per population basis.
-        Saved as dictionary to 'channel_desc' attribute. Call 'construct_dataframe' to output as Pandas.DataFrame.
+        Saved as dictionary to 'channel_desc' attribute. Call 'construct_dataframe' to output as polars.DataFrame.
 
         Parameters
         ----------
@@ -340,7 +340,7 @@ class FeatureSpace:
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
         """
         data = defaultdict(list)
         for sample_id, populations in self.population_statistics.items():
@@ -363,11 +363,11 @@ class FeatureSpace:
             if self.meta_labels:
                 for m, v in self.meta_labels.get(sample_id).items():
                     data[m].append(v)
-        return pd.DataFrame(data)
+        return pl.DataFrame(data)
 
 
 def clustered_heatmap(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     features: list,
     index: str,
     row_colours: str or None = None,
@@ -381,7 +381,7 @@ def clustered_heatmap(
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         Target data. Must contain columns for features, index and row_colours (if given)
     features: list
         List of primary features to make up the columns of the heatmap
@@ -420,7 +420,7 @@ def clustered_heatmap(
 
 
 def box_swarm_plot(
-    plot_df: pd.DataFrame,
+    plot_df: pl.DataFrame,
     x: str,
     y: str,
     hue: str or None = None,
@@ -436,7 +436,7 @@ def box_swarm_plot(
 
     Parameters
     ----------
-    plot_df: Pandas.DataFrame
+    plot_df: polars.DataFrame
         Data to plot
     x: str
         Name of the column to use as x-axis variable
@@ -493,7 +493,7 @@ class InferenceTesting:
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         Tabular data containing all dependent and independent variables
     scale: str, optional
         Scale data upon initiating object using one of the scaling methods provided
@@ -505,13 +505,13 @@ class InferenceTesting:
 
     Attributes
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
     scaler: CytoPy.flow.transform.Scaler
     """
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: pl.DataFrame,
         scale: str or None = None,
         scale_vars: list or None = None,
         scale_kwargs: dict or None = None,
@@ -561,7 +561,7 @@ class InferenceTesting:
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
             Contains two columns, one is the variable name the other is a boolean value as to
             whether it is normally distributed
         """
@@ -571,7 +571,7 @@ class InferenceTesting:
             results["Normal"].append(
                 pingouin.normality(self.data[i].values, method=method, alpha=alpha).iloc[0]["normal"]
             )
-        return pd.DataFrame(results)
+        return pl.DataFrame(results)
 
     def anova(
         self,
@@ -600,7 +600,7 @@ class InferenceTesting:
 
         Returns
         -------
-        Pandas.DataFrame, Pandas.DataFrame or None
+        polars.DataFrame, polars.DataFrame or None
             DataFrame of ANOVA results and DataFrame of post-hoc test results if post_hoc is True
 
         Raises
@@ -660,7 +660,7 @@ class InferenceTesting:
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
             DataFrame of T-test results
 
         Raises
@@ -704,7 +704,7 @@ class InferenceTesting:
                 )
             tstats["Variable"] = i
             results.append(tstats)
-        results = pd.concat(results)
+        results = pl.concat(results)
         if len(dep_var) > 1:
             results["p-val"] = pingouin.multicomp(results["p-val"].values, alpha=multicomp_alpha, method=multicomp)
         return results
@@ -744,7 +744,7 @@ class InferenceTesting:
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
         """
         results = list()
         if self.data[between].nunique() > 2:
@@ -774,14 +774,14 @@ class InferenceTesting:
                     np_stats = pingouin.mwu(x[i].values, y[i].values, **kwargs)
                     np_stats["Variable"] = i
                     results.append(np_stats)
-        results = pd.concat(results)
+        results = pl.concat(results)
         if len(dep_var) > 1:
             results["p-val"] = pingouin.multicomp(results["p-val"].values, alpha=multicomp_alpha, method=multicomp)[1]
         return results
 
 
 def plot_multicollinearity(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     features: list,
     method: str = "spearman",
     ax: plt.Axes or None = None,
@@ -794,7 +794,7 @@ def plot_multicollinearity(
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         DataFrame of variables to test; must contain the variables as columns in 'features'
     features: list
         List of columns to use for correlations
@@ -851,7 +851,7 @@ class PCA:
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         Tabular data to investigate, must contain variables given in 'features'. Additional columns
         can be included to colour data points in plots (see 'plot' method)
     features: list
@@ -866,7 +866,7 @@ class PCA:
 
     Attributes
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
     features: list
     scaler: Scaler
     pca: sklearn.decomposition.PCA
@@ -876,7 +876,7 @@ class PCA:
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: pl.DataFrame,
         features: list,
         scale: str or None = "standard",
         scale_kwargs: dict or None = None,
@@ -928,7 +928,7 @@ class PCA:
             If function called prior to calling 'fit'
         """
         assert self.embeddings is not None, "Call fit first"
-        var = pd.DataFrame(
+        var = pl.DataFrame(
             {
                 "Variance Explained": self.pca.explained_variance_ratio_,
                 "PC": [f"PC{i + 1}" for i in range(len(self.pca.explained_variance_ratio_))],
@@ -951,12 +951,12 @@ class PCA:
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
             Columns: Feature (listing the variable names) and EV Magnitude (the coefficient of each
             feature within this component)
         """
         assert self.embeddings is not None, "Call fit first"
-        return pd.DataFrame(
+        return pl.DataFrame(
             {
                 "Feature": self.features,
                 "EV Magnitude": abs(self.pca.components_)[component],
@@ -1041,7 +1041,7 @@ class PCA:
         if not 2 <= len(components) <= 3:
             raise ValueError("Components should be of length 2 or 3")
         assert self.embeddings is not None, "Call fit first"
-        plot_df = pd.DataFrame({f"PC{i + 1}": self.embeddings[:, i] for i in components})
+        plot_df = pl.DataFrame({f"PC{i + 1}": self.embeddings[:, i] for i in components})
         plot_df[label] = self.data[label]
         fig = plt.figure(figsize=figsize)
         z = None
@@ -1154,7 +1154,7 @@ class L1Selection:
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         Feature space for classification/regression; must contain columns for features and target.
     target: str
         Endpoint for regression/classification; must be a column in 'data'
@@ -1192,18 +1192,18 @@ class L1Selection:
     model: Scikit-Learn classifier/regressor
     scaler: CytoPy.flow.transform.Scaler
     features: list
-    x: Pandas.DataFrame
+    x: polars.DataFrame
         Feature space
     y: numpy.ndarry
         Target
-    scores: Pandas.DataFrame
+    scores: polars.DataFrame
         Feature coefficients under a given value for the regularisation penalty; populated
         upon calling 'fit'
     """
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: pl.DataFrame,
         target: str,
         features: list,
         model: str,
@@ -1271,7 +1271,7 @@ class L1Selection:
                 coefs.append(list(self.model.coef_[0]))
             else:
                 coefs.append(list(self.model.coef_))
-        self.scores = pd.DataFrame(np.array(coefs), columns=self.features)
+        self.scores = pl.DataFrame(np.array(coefs), columns=self.features)
         self.scores[self._reg_param] = search_space
         return self
 
@@ -1364,7 +1364,7 @@ class DecisionTree:
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         Feature space for classification/regression; must contain columns for features and target.
     target: str
         Endpoint for regression/classification; must be a column in 'data'
@@ -1384,7 +1384,7 @@ class DecisionTree:
 
     Attributes
     ----------
-    x: Pandas.DataFrame
+    x: polars.DataFrame
         Feature space
     y: numpy.ndarray
         Target array
@@ -1394,7 +1394,7 @@ class DecisionTree:
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: pl.DataFrame,
         target: str,
         features: list,
         tree_type: str = "classification",
@@ -1454,7 +1454,7 @@ class DecisionTree:
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
             Training and testing results
         """
         performance_metrics = performance_metrics or ["accuracy_score"]
@@ -1475,7 +1475,7 @@ class DecisionTree:
             y_score=y_score_train,
         )
         train_score["Dataset"] = "Training"
-        train_score = pd.DataFrame(train_score, index=[0])
+        train_score = pl.DataFrame(train_score, index=[0])
         test_score = classifier_utils.calc_metrics(
             metrics=performance_metrics,
             y_true=y_test,
@@ -1483,8 +1483,8 @@ class DecisionTree:
             y_score=y_score_test,
         )
         test_score["Dataset"] = "Testing"
-        test_score = pd.DataFrame(test_score, index=[1])
-        return pd.concat([train_score, test_score])
+        test_score = pl.DataFrame(test_score, index=[1])
+        return pl.concat([train_score, test_score])
 
     def prune(
         self,
@@ -1536,7 +1536,7 @@ class DecisionTree:
             )
             performance["Max depth"] = d
             depth_performance.append(performance)
-        depth_performance = pd.concat(depth_performance)
+        depth_performance = pl.concat(depth_performance)
         return sns.lineplot(
             data=depth_performance,
             x="Max depth",
@@ -1654,7 +1654,7 @@ class FeatureImportance:
     ----------
     classifier: Scikit-Learn classifier
         Must contain the attribute 'feature_importances_'
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         Feature space for classification/regression; must contain columns for features and target.
     target: str
         Endpoint for regression/classification; must be a column in 'data'
@@ -1674,7 +1674,7 @@ class FeatureImportance:
     ----------
     classifier: Scikit-Learn classifier
     features: list
-    x: Pandas.DataFrame
+    x: polars.DataFrame
         Feature space
     y: numpy.ndarray
         Target array
@@ -1687,7 +1687,7 @@ class FeatureImportance:
     def __init__(
         self,
         classifier,
-        data: pd.DataFrame,
+        data: pl.DataFrame,
         features: list,
         target: str,
         validation_frac: float = 0.5,
@@ -1721,20 +1721,20 @@ class FeatureImportance:
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
         """
         performance_metrics = performance_metrics or ["accuracy_score"]
         y_pred_train = self.classifier.predict(self.x_train, self.y_train, **kwargs)
         y_pred_test = self.classifier.predict(self.x_test, self.y_test, **kwargs)
-        train_score = pd.DataFrame(
+        train_score = pl.DataFrame(
             classifier_utils.calc_metrics(metrics=performance_metrics, y_true=self.y_train, y_pred=y_pred_train)
         )
         train_score["Dataset"] = "Training"
-        test_score = pd.DataFrame(
+        test_score = pl.DataFrame(
             classifier_utils.calc_metrics(metrics=performance_metrics, y_true=self.y_test, y_pred=y_pred_test)
         )
         test_score["Dataset"] = "Testing"
-        return pd.concat([train_score, test_score])
+        return pl.concat([train_score, test_score])
 
     def importance(self, ax: plt.Axes or None = None, **kwargs):
         """
@@ -1795,7 +1795,7 @@ class FeatureImportance:
             result = permutation_importance(self.classifier, self.x_test, self.y_test, **permutation_kwargs)
         else:
             result = permutation_importance(self.classifier, self.x_train, self.y_train, **permutation_kwargs)
-        result = pd.DataFrame(result.importances, columns=self.features)
+        result = pl.DataFrame(result.importances, columns=self.features)
         result = result.melt(var_name="Feature", value_name="Permutation importance")
         perm_sorted_idx = result.importances_mean.argsort()
         boxplot_kwargs = boxplot_kwargs or {}
@@ -1821,7 +1821,7 @@ class SHAP:
     def __init__(
         self,
         model,
-        data: pd.DataFrame,
+        data: pl.DataFrame,
         features: list,
         target: str,
         explainer: str = "tree",

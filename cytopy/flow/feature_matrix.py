@@ -6,13 +6,15 @@
 2. Feature selection should be linear in the form of: filter → wrapper (feature importance) → embedded selection (Lasso) → partial dependence and feature interaction.
 3. Dimension reduction should be focused on feature contribution in embedding
 """
-import pandas as pd
-
-from ..feedback import progress_bar
-from ..data.project import Project
-from ..data.experiment import Experiment, FileGroup
-from typing import *
 import re
+from typing import *
+
+import polars as pl
+
+from ..data.experiment import Experiment
+from ..data.experiment import FileGroup
+from ..data.project import Project
+from ..feedback import progress_bar
 
 
 def list_all_populations(experiment: Experiment):
@@ -28,21 +30,19 @@ def get_population_as_perc_of(files: List[FileGroup], population: str, stat: str
         pop_n = fg.population_stats(population=population)["n"]
         data["sample_id"].append(fg.primary_id)
         data[stat].append(pop_n / parent_n * 100)
-    return pd.DataFrame(data)
+    return pl.DataFrame(data)
 
 
 class FeatureSpace:
     def __init__(self, project: Project, verbose: bool = True):
         self.project = project
         self.verbose = verbose
-        self._data = pd.DataFrame()
+        self._data = pl.DataFrame()
 
     def add_population_statistics(self, experiment: str, population: str, stat: str):
         exp = self.project.get_experiment(experiment_id=experiment)
         if "% of " in stat:
-            data = get_population_as_perc_of(
-                files=exp.fcs_files, population=population, stat=stat
-            )
+            data = get_population_as_perc_of(files=exp.fcs_files, population=population, stat=stat)
             data["experiment"] = exp.experiment_id
 
     def add_population_ratios(self):

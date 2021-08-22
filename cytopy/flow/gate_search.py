@@ -31,31 +31,22 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-
-from ..data.gate import (
-    PolygonGate,
-    ThresholdGate,
-    EllipseGate,
-    ChildPolygon,
-    ChildThreshold,
-)
-from ..feedback import vprint, progress_bar
-from sklearn.model_selection import ParameterGrid
-from scipy.spatial.distance import euclidean, cityblock
 from functools import partial
 from warnings import warn
-import pandas as pd
-import numpy as np
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
+import numpy as np
+import polars as pl
+from scipy.spatial.distance import cityblock
+from scipy.spatial.distance import euclidean
+from sklearn.model_selection import ParameterGrid
+
+from ..data.gate import ChildPolygon
+from ..data.gate import ChildThreshold
+from ..data.gate import EllipseGate
+from ..data.gate import PolygonGate
+from ..data.gate import ThresholdGate
+from ..feedback import progress_bar
+from ..feedback import vprint
 
 
 def signature_to_vector(signature: dict, filter_: list):
@@ -78,9 +69,7 @@ def common_features(target_signature: dict, pop_signature: dict):
     return list(set(target_signature.keys()).intersection(pop_signature.keys()))
 
 
-def closest_signature_to_target(
-    method: str, search_space: list, target: ChildPolygon or ChildThreshold
-):
+def closest_signature_to_target(method: str, search_space: list, target: ChildPolygon or ChildThreshold):
     """
     Returns population (in search_space) who's signature is closest to some given target population signature
 
@@ -103,8 +92,7 @@ def closest_signature_to_target(
         Target does not contain a signature
     """
     assert hasattr(target, "signature"), (
-        "Invalid child populations for manhattan or euclidean dist; "
-        "requires 'signature' attribute"
+        "Invalid child populations for manhattan or euclidean dist; " "requires 'signature' attribute"
     )
     f = {"euclidean": euclidean, "manhattan": cityblock}.get(method, cityblock)
     idx = np.argmin(
@@ -114,9 +102,7 @@ def closest_signature_to_target(
                     target.signature,
                     filter_=common_features(target.signature, p.signature),
                 ),
-                signature_to_vector(
-                    p.signature, filter_=common_features(target.signature, p.signature)
-                ),
+                signature_to_vector(p.signature, filter_=common_features(target.signature, p.signature)),
             )
             for p in search_space
         ]
@@ -166,17 +152,13 @@ def cost_func(target: ChildPolygon or ChildThreshold, populations: list, method:
     ValueError
         Invalid method
     """
-    search_space = [
-        [x for x in pops if x.population_name == target.name] for pops in populations
-    ]
+    search_space = [[x for x in pops if x.population_name == target.name] for pops in populations]
     search_space = [x for sl in search_space for x in sl]
     if len(search_space) == 0:
         warn(f"No populations generated for target population {target.name}")
         return None
     if method in ["euclidean", "manhattan"]:
-        return closest_signature_to_target(
-            method=method, search_space=search_space, target=target
-        )
+        return closest_signature_to_target(method=method, search_space=search_space, target=target)
     if method == "threshold_dist":
         if target.geom.y_threshold:
             idx = np.argmin(
@@ -187,25 +169,18 @@ def cost_func(target: ChildPolygon or ChildThreshold, populations: list, method:
                 ]
             )
             return search_space[int(idx)]
-        idx = np.argmin(
-            [abs(target.geom.x_threshold - p.geom.x_threshold) for p in search_space]
-        )
+        idx = np.argmin([abs(target.geom.x_threshold - p.geom.x_threshold) for p in search_space])
         return search_space[int(idx)]
     if method == "hausdorff":
-        idx = np.argmin(
-            [target.geom.shape.hausdorff_distance(p.geom.shape) for p in search_space]
-        )
+        idx = np.argmin([target.geom.shape.hausdorff_distance(p.geom.shape) for p in search_space])
         return search_space[int(idx)]
-    raise ValueError(
-        "Unrecognised cost metric; should be either euclidean, manhattan, threshold_dict "
-        "or hausdorff"
-    )
+    raise ValueError("Unrecognised cost metric; should be either euclidean, manhattan, threshold_dict " "or hausdorff")
 
 
 def fit_gate(
     updated_params: dict,
     gate: PolygonGate or ThresholdGate or EllipseGate,
-    data: pd.DataFrame,
+    data: pl.DataFrame,
 ) -> list:
     """
     Update the Gate method parameters and fit to the given data, predicting matching
@@ -229,9 +204,7 @@ def fit_gate(
     return gate.fit_predict(data=data)
 
 
-def optimal_populations(
-    population_grid: list, gate: PolygonGate or ThresholdGate or EllipseGate, cost: str
-) -> list:
+def optimal_populations(population_grid: list, gate: PolygonGate or ThresholdGate or EllipseGate, cost: str) -> list:
     """
     Given a grid Population results where each row represents the Populations generated
     under one set of hyperparameter conditions, find the optimal Population (i.e. the one
@@ -261,7 +234,7 @@ def hyperparameter_gate(
     gate: ThresholdGate or PolygonGate or EllipseGate,
     grid: dict,
     cost: str,
-    parent: pd.DataFrame,
+    parent: pl.DataFrame,
     verbose: bool = True,
 ) -> list:
     """

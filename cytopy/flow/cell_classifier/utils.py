@@ -6,7 +6,7 @@ from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+import polars as pl
 from sklearn import metrics as skmetrics
 from sklearn.base import ClassifierMixin
 from sklearn.model_selection import learning_curve
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def plot_learning_curve(
     model: ClassifierMixin,
-    x: pd.DataFrame,
+    x: pl.DataFrame,
     y: np.ndarray,
     ax: Optional[plt.Axes] = None,
     x_label: str = "Training examples",
@@ -31,7 +31,7 @@ def plot_learning_curve(
     ax = ax or plt.subplots(figsize=(5, 5))[1]
     train_sizes, train_scores, test_scores = learning_curve(
         model,
-        x,
+        x.to_numpy(),
         y,
         verbose=verbose,
         return_times=False,
@@ -158,7 +158,7 @@ def calc_metrics(
 
 def confusion_matrix_plots(
     classifier,
-    x: pd.DataFrame,
+    x: pl.DataFrame,
     y: np.ndarray,
     class_labels: list,
     cmap: str or None = None,
@@ -197,7 +197,7 @@ def confusion_matrix_plots(
     for i, (title, norm) in enumerate(zip(titles, [None, "true"])):
         skmetrics.plot_confusion_matrix(
             classifier,
-            x,
+            x.to_numpy(),
             y,
             display_labels=class_labels,
             cmap=cmap,
@@ -270,7 +270,7 @@ def multilabel(
     population_labels: list,
     features: list,
     idx: Optional[Iterable[int]] = None,
-) -> (pd.DataFrame, pd.DataFrame):
+) -> (pl.DataFrame, pl.DataFrame):
     """
     Load the root population DataFrame from the reference FileGroup (assumed to be the first
     population in 'population_labels'). Then iterate over the remaining population creating a
@@ -290,11 +290,11 @@ def multilabel(
     """
     root = ref.load_population_df(population=root_population, transform=None)
     if idx is not None:
-        root = root.loc[idx]
+        root = root[root.Index.is_in(idx), :]
     for pop in population_labels:
         pop_idx = [x for x in ref.get_population(population_name=pop).index if x in root.index]
-        root[pop] = 0
-        root.loc[pop_idx, pop] = 1
+        root[pop] = [0 for _ in range(root.shape[0])]
+        root[pop_idx, pop] = 1
     return root[features], root[population_labels]
 
 
@@ -304,7 +304,7 @@ def singlelabel(
     population_labels: list,
     features: list,
     idx: Optional[Iterable[int]] = None,
-) -> (pd.DataFrame, np.ndarray):
+) -> (pl.DataFrame, np.ndarray):
     """
     Load the root population DataFrame from the reference FileGroup (assumed to be the first
     population in 'population_labels'). Then iterate over the remaining population creating a
@@ -325,13 +325,13 @@ def singlelabel(
     """
     root = ref.load_population_df(population=root_population, transform=None)
     if idx is not None:
-        root = root.loc[idx]
+        root = root[root.Index.is_in(idx), :]
     root["label"] = 0
     for i, pop in enumerate(population_labels):
         pop_idx = [x for x in ref.get_population(population_name=pop).index if x in root.index]
-        root.loc[pop_idx, "label"] = i + 1
-    y = root["label"].values
-    root.drop("label", axis=1, inplace=True)
+        root[pop_idx, "label"] = i + 1
+    y = root["label"].to_numpy()
+    root = root.drop("label")
     return root[features], y
 
 

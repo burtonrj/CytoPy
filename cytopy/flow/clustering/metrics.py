@@ -1,9 +1,10 @@
-from sklearn import metrics as sklearn_metrics
-from scipy.spatial import distance
-from typing import *
-import pandas as pd
-import numpy as np
 import math
+from typing import *
+
+import numpy as np
+import polars as pl
+from scipy.spatial import distance
+from sklearn import metrics as sklearn_metrics
 
 
 class Metric:
@@ -38,9 +39,7 @@ class BallHall(Metric):
             cluster_center = np.mean(cluster_member, 0)
             # iterate through all the members
             for member in cluster_member:
-                sum_distance = sum_distance + math.pow(
-                    distance.euclidean(member, cluster_center), 2
-                )
+                sum_distance = sum_distance + math.pow(distance.euclidean(member, cluster_center), 2)
             sum_total = sum_total + sum_distance / len(indices)
         # compute the validation
         return sum_total / n
@@ -91,9 +90,7 @@ class SilhouetteCoef(Metric):
         )
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
-        return sklearn_metrics.silhouette_score(
-            data[features].values, labels=labels, **self.kwargs
-        )
+        return sklearn_metrics.silhouette_score(data[features].values, labels=labels, **self.kwargs)
 
 
 class DaviesBouldinIndex(Metric):
@@ -107,9 +104,7 @@ class DaviesBouldinIndex(Metric):
         )
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
-        return sklearn_metrics.davies_bouldin_score(
-            data[features].values, labels=labels
-        )
+        return sklearn_metrics.davies_bouldin_score(data[features].values, labels=labels)
 
 
 class GPlusIndex(Metric):
@@ -151,6 +146,4 @@ class CalinskiHarabaszScore(Metric):
         )
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
-        return sklearn_metrics.calinski_harabasz_score(
-            data[features].values, labels=labels
-        )
+        return sklearn_metrics.calinski_harabasz_score(data[features].values, labels=labels)

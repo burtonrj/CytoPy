@@ -29,20 +29,16 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
-import os
-import pickle
-from functools import lru_cache
 from functools import partial
 from typing import *
 from warnings import warn
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from flowutils import transforms
 from sklearn import preprocessing
 
 from cytopy.data.setup import Config
-from cytopy.feedback import progress_bar
 
 CONFIG = Config()
 logger = logging.getLogger(__name__)
@@ -54,16 +50,12 @@ class TransformError(Exception):
         super().__init__(message)
 
 
-@lru_cache(maxsize=CONFIG.logicle_cache_size)
-def logicle_wrapper(x: float, **kwargs):
-    if CONFIG.logicle_transform_precision != "None":
-        x = np.round(x, decimals=CONFIG.logicle_transform_precision)
-    return transforms.logicle(np.array([[x]]), channel_indices=[0], **kwargs)[0][0]
+def logicle_transform_series(series: pl.Series, **kwargs):
+    return pl.Series(transforms._logicle(series.to_numpy(), **kwargs))
 
 
-@lru_cache(maxsize=CONFIG.logicle_cache_size)
-def inverse_logicle_wrapper(x: float, **kwargs):
-    return transforms.logicle_inverse(np.array([[x]]), channel_indices=[0], **kwargs)[0][0]
+def inverse_logicle_transform_series(series: pl.Series, **kwargs):
+    return pl.Series(transforms._logicle_inverse(series.to_numpy(), **kwargs))
 
 
 def _get_dataframe_column_index(data: pd.DataFrame, features: list):

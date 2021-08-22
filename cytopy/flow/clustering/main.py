@@ -55,8 +55,8 @@ from collections import defaultdict
 from typing import *
 
 import numpy as np
-import pandas as pd
 import phenograph
+import polars as pl
 import seaborn as sns
 from sklearn.metrics import calinski_harabasz_score
 from sklearn.metrics import davies_bouldin_score

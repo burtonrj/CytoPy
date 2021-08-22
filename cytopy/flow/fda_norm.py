@@ -33,28 +33,15 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-
-from skfda.preprocessing.registration import (
-    landmark_registration_warping,
-    landmark_shift_deltas,
-)
-from skfda.representation.grid import FDataGrid
-from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+import numpy as np
+import polars as pl
 from detecta import detect_peaks
 from KDEpy import FFTKDE
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
+from skfda.preprocessing.registration import landmark_registration_warping
+from skfda.preprocessing.registration import landmark_shift_deltas
+from skfda.representation.grid import FDataGrid
+from sklearn.cluster import KMeans
 
 
 def peaks(y: np.ndarray, x: np.ndarray, **kwargs):
@@ -132,9 +119,7 @@ def cluster_landmarks(p: np.ndarray, plabels: np.ndarray):
     return km_labels, centroids
 
 
-def zero_entropy_clusters(
-    km_labels: np.ndarray, plabels: np.ndarray, centroids: np.ndarray
-):
+def zero_entropy_clusters(km_labels: np.ndarray, plabels: np.ndarray, centroids: np.ndarray):
     """
     Determine which clusters (if any) have zero entropy (only contains
     peaks from a single sample; either target or reference)
@@ -194,9 +179,7 @@ def unique_clusters_filter_nearest_centroid(
     updated_plabels = list()
     for i, centroid in enumerate(centroids):
         cluster_plabels = plabels[np.where(km_labels == i)]
-        assert (
-            len(np.unique(cluster_plabels)) == 1
-        ), "Zero entropy cluster is not unique"
+        assert len(np.unique(cluster_plabels)) == 1, "Zero entropy cluster is not unique"
         updated_peaks.append(p[np.where(km_labels == i)])
         updated_plabels.append(np.unique(cluster_plabels)[0])
     return updated_peaks, updated_plabels
@@ -227,9 +210,7 @@ def match_landmarks(p: np.ndarray, plabels: np.ndarray):
         # If all clusters have zero entropy
         # Keep peaks closest to centroid, update peaks and peak labels, and
         # perform recursive call
-        match_landmarks(
-            *unique_clusters_filter_nearest_centroid(p, plabels, km_labels, centroids)
-        )
+        match_landmarks(*unique_clusters_filter_nearest_centroid(p, plabels, km_labels, centroids))
 
     else:
         # Ignoring clusters with zero entropy, filter clusters to contain
@@ -248,7 +229,7 @@ def match_landmarks(p: np.ndarray, plabels: np.ndarray):
         return matching_peaks
 
 
-def estimate_pdfs(target: pd.DataFrame, ref: pd.DataFrame, var: str):
+def estimate_pdfs(target: pl.DataFrame, ref: pl.DataFrame, var: str):
     """
     Given some target and reference DataFrame, estimate PDF for each using convolution based
     kernel density estimation (see KDEpy). 'var' is the variable of interest and should be a
@@ -256,8 +237,8 @@ def estimate_pdfs(target: pd.DataFrame, ref: pd.DataFrame, var: str):
 
     Parameters
     ----------
-    target: Pandas.DataFrame
-    ref: Pandas.DataFrame
+    target: polars.DataFrame
+    ref: polars.DataFrame
     var: str
 
     Returns
@@ -268,8 +249,8 @@ def estimate_pdfs(target: pd.DataFrame, ref: pd.DataFrame, var: str):
     min_ = np.min([target[var].min(), ref[var].min()])
     max_ = np.max([target[var].max(), ref[var].max()])
     x = np.linspace(min_ - 0.1, max_ + 0.1, 100000)
-    y1 = FFTKDE(kernel="gaussian", bw="silverman").fit(target[var].values).evaluate(x)
-    y2 = FFTKDE(kernel="gaussian", bw="silverman").fit(ref[var].values).evaluate(x)
+    y1 = FFTKDE(kernel="gaussian", bw="silverman").fit(target[var].to_numpy()).evaluate(x)
+    y2 = FFTKDE(kernel="gaussian", bw="silverman").fit(ref[var].to_numpy()).evaluate(x)
     return y1, y2, x
 
 
@@ -302,9 +283,9 @@ class LandmarkReg:
 
     Parameters
     ----------
-    target: Pandas.DataFrame
+    target: polars.DataFrame
         Target data to be transformed; must contain column corresponding to 'var'
-    ref: Pandas.DataFrame
+    ref: polars.DataFrame
         Reference data for computing alignment; must contain column corresponding to 'var'
     var: str
         Name of the target variable to align
@@ -329,20 +310,13 @@ class LandmarkReg:
         Corresponding shifts to align the landmarks of the PDFs described in original_functions
     """
 
-    def __init__(
-        self,
-        target: pd.DataFrame,
-        ref: pd.DataFrame,
-        var: str,
-        mpt: float = 0.001,
-        **kwargs
-    ):
+    def __init__(self, target: pl.DataFrame, ref: pl.DataFrame, var: str, mpt: float = 0.001, **kwargs):
         y1, y2, x = estimate_pdfs(target, ref, var)
         landmarks = [peaks(y, x, mph=mpt * y.max(), **kwargs) for y in [y1, y2]]
         plabels = np.concatenate(
             [
-                [0 for i in range(len(landmarks[0]))],
-                [1 for i in range(len(landmarks[1]))],
+                [0 for _ in range(len(landmarks[0]))],
+                [1 for _ in range(len(landmarks[1]))],
             ]
         )
         landmarks = np.array([x for sl in landmarks for x in sl])
@@ -366,9 +340,7 @@ class LandmarkReg:
             location=np.mean(self.landmarks, axis=0),
         )
         self.adjusted_functions = self.original_functions.compose(self.warping_function)
-        self.landmark_shift_deltas = landmark_shift_deltas(
-            self.original_functions, self.landmarks
-        )
+        self.landmark_shift_deltas = landmark_shift_deltas(self.original_functions, self.landmarks)
         return self
 
     def plot_warping(self, ax: list or None = None):

@@ -35,8 +35,8 @@ from typing import List
 from typing import Type
 from typing import Union
 
-import pandas as pd
 import phate
+import polars as pl
 from sklearn.decomposition import KernelPCA
 from sklearn.decomposition import PCA
 from sklearn.manifold import Isomap
@@ -44,14 +44,6 @@ from sklearn.manifold import MDS
 from sklearn.manifold import TSNE
 from umap import UMAP
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 logger = logging.getLogger(__name__)
 
 
@@ -69,8 +61,8 @@ class DimensionReduction:
 
     You can provide your own custom method by providing a class to the 'method' parameter, so long as that
     class has a 'fit_transform' function defined, with optionally 'fit' and 'transform' also defined. These methods
-    should accept a Pandas DataFrame and a list of columns (features). The 'transform' and 'fit_transform' functions
-    must return a Pandas DataFrame with embeddings as new columns.
+    should accept a polars DataFrame and a list of columns (features). The 'transform' and 'fit_transform' functions
+    must return a polars DataFrame with embeddings as new columns.
 
     Parameters
     -----------
@@ -121,70 +113,68 @@ class DimensionReduction:
         self.embeddings = None
         self._method_name = type(self.method).__name__
 
-    def fit(self, data: pd.DataFrame, features: List[str]) -> Union[None, pd.DataFrame]:
+    def fit(self, data: pl.DataFrame, features: List[str]) -> Union[None, pl.DataFrame]:
         """
         Fit the underlying method. Will call 'fit_transform' if fit is not supported.
 
         Parameters
         ----------
-        data: Pandas.DataFrame
+        data: polars.DataFrame
         features: List[str]
             List of features (columns) to use
 
         Returns
         -------
-        None or Pandas.DataFrame
-            If fit is not supported, will returns a Pandas DataFrame.
+        None or polars.DataFrame
+            If fit is not supported, will returns a polars DataFrame.
         """
         if not hasattr(self.method, "fit"):
             logger.warning(f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead.")
             return self.fit_transform(data=data, features=features)
-        self.method.fit(data[features])
+        self.method.fit(data[features].to_numpy())
 
-    def fit_transform(self, data: pd.DataFrame, features: List[str]) -> pd.DataFrame:
+    def fit_transform(self, data: pl.DataFrame, features: List[str]) -> pl.DataFrame:
         """
         Fit the underlying method and generate transformed embeddings. Transformed embeddings are
-        stored as new columns in the Pandas DataFrame. DataFrame is copied and not mutated.
+        stored as new columns in the polars DataFrame. DataFrame is copied and not mutated.
 
         Parameters
         ----------
-        data: Pandas.DataFrame
+        data: polars.DataFrame
         features: List[str]
             List of features (columns) to use
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
         """
-        data = data.copy()
-        self.embeddings = self.method.fit_transform(data[features])
+        self.embeddings = self.method.fit_transform(data[features].to_numpy())
         for i, e in enumerate(self.embeddings.T):
             data[f"{self._method_name}{i + 1}"] = e
         return data
 
-    def transform(self, data: pd.DataFrame, features: List[str]) -> pd.DataFrame:
+    def transform(self, data: pl.DataFrame, features: List[str]) -> pl.DataFrame:
         """
         Generate embeddings for the given DataFrame using the current fitted method. Transformed embeddings are
-        stored as new columns in the Pandas DataFrame. DataFrame is copied and not mutated.
+        stored as new columns in the polars DataFrame. DataFrame is copied and not mutated.
 
         Will call 'fit_transform' if fit is not supported.
 
         Parameters
         ----------
-        data: Pandas.DataFrame
+        data: polars.DataFrame
         features: List[str]
             List of features (columns) to use
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
         """
         if not hasattr(self.method, "transform"):
             logger.warning(f"Method {self._method_name} has no method 'transform', calling 'fit_transform' instead.")
             return self.fit_transform(data=data, features=features)
 
-        data = data.copy()
-        embeddings = self.method.transform(data[features])
+        embeddings = self.method.transform(data[features].to_numpy())
         for i, e in enumerate(embeddings.T):
             data[f"{self._method_name}{i + 1}"] = e
         return data

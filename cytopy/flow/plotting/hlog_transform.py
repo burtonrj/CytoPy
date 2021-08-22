@@ -38,7 +38,7 @@ from matplotlib.ticker import NullFormatter, LogFormatterMathtext
 from matplotlib.ticker import Locator
 from matplotlib import transforms as mtransforms
 from matplotlib import scale as mscale
-import pandas as pd
+import polars as pl
 import numpy as np
 
 

@@ -1,13 +1,16 @@
-from sklearn.metrics import adjusted_mutual_info_score, normalized_mutual_info_score
+from typing import *
+
+import matplotlib.pyplot as plt
+import numpy as np
+import polars as pl
+import scipy.cluster.hierarchy as hierarchical_cluster
+import seaborn as sns
 from scipy.spatial import distance as ssd
+from sklearn.metrics import adjusted_mutual_info_score
+from sklearn.metrics import normalized_mutual_info_score
+
 from ...feedback import progress_bar
 from .main import ClusteringError
-from typing import *
-import scipy.cluster.hierarchy as hierarchical_cluster
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-import numpy as np
 
 
 def mutual_info(a: List[int], b: List[int], method: str):
@@ -18,23 +21,15 @@ def mutual_info(a: List[int], b: List[int], method: str):
     try:
         return methods[method](a, b)
     except KeyError:
-        ClusteringError(
-            "Mutual information method must be either 'adjusted' or 'normalized'"
-        )
+        ClusteringError("Mutual information method must be either 'adjusted' or 'normalized'")
 
 
 class MutualInfo:
     def __init__(self, clusterings: Dict, method: str):
         if method not in ["adjusted", "normalized"]:
-            raise ClusteringError(
-                "Mutual information method must be either 'adjusted' or 'normalized'"
-            )
-        self.labels = {
-            cluster_name: data["labels"] for cluster_name, data in clusterings.items()
-        }
-        self.data = pd.DataFrame(
-            columns=list(self.labels.keys()), index=list(self.labels.keys())
-        )
+            raise ClusteringError("Mutual information method must be either 'adjusted' or 'normalized'")
+        self.labels = {cluster_name: data["labels"] for cluster_name, data in clusterings.items()}
+        self.data = pd.DataFrame(columns=list(self.labels.keys()), index=list(self.labels.keys()))
         names = list(self.labels.keys())
         for n1 in progress_bar(names):
             for n2 in names:
@@ -52,9 +47,7 @@ class MutualInfo:
         kwargs["optimal_ordering"] = kwargs.get("optimal_ordering", True)
         return hierarchical_cluster.linkage(dist_vec, method=method, **kwargs)
 
-    def cluster_mutual_info(
-        self, threshold: Union[str, float] = "avg", linkage: str = "average", **kwargs
-    ):
+    def cluster_mutual_info(self, threshold: Union[str, float] = "avg", linkage: str = "average", **kwargs):
         if threshold == "avg":
             threshold = self.avg_dist
         lnk = self._linkage(linkage=linkage, **kwargs)
@@ -82,7 +75,5 @@ class MutualInfo:
         fig, ax = plt.subplots(figsize=figsize)
         linkage_kwargs = linkage_kwargs or {}
         lnk = self._linkage(linkage=linkage, **linkage_kwargs)
-        hierarchical_cluster.dendrogram(
-            lnk, orientation="top", color_threshold=threshold, ax=ax, **kwargs
-        )
+        hierarchical_cluster.dendrogram(lnk, orientation="top", color_threshold=threshold, ax=ax, **kwargs)
         return fig

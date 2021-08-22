@@ -3,7 +3,7 @@
 """
 For manageable analysis sampling is unavoidable. This module contains all
 the functionality for downsampling and subsequent upsampling in cytopy.
-cytopy supports uniform sampling that wraps the Pandas DataFrame sample
+cytopy supports uniform sampling that wraps the polars DataFrame sample
 method. In addition we provide support for density dependent downsampling
 (adapted from SPADE; https://www.nature.com/articles/nbt.1991) and faithful
 downsampling (adapted from SamSPECTRAL; https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-11-403).
@@ -35,7 +35,7 @@ from multiprocessing import Pool
 from typing import *
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from sklearn.neighbors import BallTree
 from sklearn.neighbors import KDTree
 
@@ -53,24 +53,24 @@ class SamplingError(Exception):
         super().__init__(message)
 
 
-def uniform_downsampling(data: pd.DataFrame, sample_size: Union[int, float], **kwargs):
+def uniform_downsampling(data: pl.DataFrame, sample_size: Union[int, float], **kwargs):
     """
-    Uniform downsampling. Wraps the Pandas DataFrame sample method
+    Uniform downsampling. Wraps the polars DataFrame sample method
     with some additional error handling for when the requested sample
     size is invalid.
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
     sample_size: int or float
         Size of sample required. If a float is given will return a sample
         of this proportion.
     kwargs:
-        Additional keyword arguments passed to Pandas.DataFrame.sample
+        Additional keyword arguments passed to polars.DataFrame.sample
 
     Returns
     -------
-    Pandas.DataFrame
+    polars.DataFrame
 
     Raises
     ------
@@ -105,7 +105,7 @@ def faithful_downsampling(data: np.array, h: float = 0.1):
 
     Returns
     --------
-    numpy.ndarray
+    Numpy.Array
         Down-sampled array
     """
     communities = None
@@ -155,7 +155,7 @@ def prob_downsample(local_d: int, target_d: int, outlier_d: int):
 
 
 def density_dependent_downsampling(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     features: Optional[List[str]] = None,
     sample_size: Union[int, float] = 0.1,
     alpha: int = 5,
@@ -175,7 +175,7 @@ def density_dependent_downsampling(
 
     Parameters
     -----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         Data to sample
     features: list (defaults to all columns)
         Name of columns to be used as features in down-sampling algorithm
@@ -201,18 +201,17 @@ def density_dependent_downsampling(
         Number of jobs to run in unison when calculating weights (defaults to all available cores)
     Returns
     -------
-    Pandas.DataFrame
-        Down-sampled pandas dataframe
+    polars.DataFrame
+        Down-sampled polars dataframe
     """
     if isinstance(sample_size, int) and sample_size >= data.shape[0]:
         logger.warning("Requested sample size >= size of dataframe")
         return data
-    df = data.copy()
-    features = features or df.columns.tolist()
-    tree_sample = uniform_downsampling(data=df, sample_size=tree_sample)
+    features = features or data.columns
+    tree_sample = uniform_downsampling(data=data, sample_size=tree_sample)
     prob = density_probability_assignment(
         sample=tree_sample[features],
-        data=df[features],
+        data=data[features],
         distance_metric=distance_metric,
         alpha=alpha,
         outlier_dens=outlier_dens,
@@ -225,13 +224,13 @@ def density_dependent_downsampling(
         )
         return uniform_downsampling(data=data, sample_size=sample_size)
     if isinstance(sample_size, int):
-        return df.sample(n=sample_size, weights=prob)
-    return df.sample(frac=sample_size, weights=prob)
+        return pl.DataFrame(data.to_polars().sample(n=sample_size, weights=prob))
+    return pl.DataFrame(data.to_polars().sample(frac=sample_size, weights=prob))
 
 
 def density_probability_assignment(
-    sample: pd.DataFrame,
-    data: pd.DataFrame,
+    sample: pl.DataFrame,
+    data: pl.DataFrame,
     distance_metric: str = "manhattan",
     alpha: int = 5,
     outlier_dens: int = 1,
@@ -250,9 +249,9 @@ def density_probability_assignment(
 
     Parameters
     ----------
-    sample: Pandas.DataFrame
+    sample: polars.DataFrame
         Downsampled data to use for generating nearest neighbours tree graph
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         Original dataframe
     distance_metric: str (default="manhattan")
         Metric used for neighbour assignment
@@ -278,11 +277,11 @@ def density_probability_assignment(
     """
     if njobs < 0:
         njobs = cpu_count()
-    tree = KDTree(sample, metric=distance_metric, leaf_size=100)
-    dist, _ = tree.query(data, k=2)
+    tree = KDTree(sample.to_numpy(), metric=distance_metric, leaf_size=100)
+    dist, _ = tree.query(data.to_numpy(), k=2)
     dist = np.median([x[1] for x in dist])
     dist_threshold = dist * alpha
-    ld = tree.query_radius(data, r=dist_threshold, count_only=True)
+    ld = tree.query_radius(data.to_numpy(), r=dist_threshold, count_only=True)
     od = np.percentile(ld, q=outlier_dens)
     td = np.percentile(ld, q=target_dens)
     prob_f = partial(prob_downsample, target_d=td, outlier_d=od)
@@ -292,7 +291,7 @@ def density_probability_assignment(
 
 
 def upsample_density(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     features: list or None = None,
     upsample_factor: int = 2,
     sample_size: int or None = None,
@@ -314,7 +313,7 @@ def upsample_density(
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         Data to sample
     features: list (defaults to all columns)
         Name of columns to be used as features in down-sampling algorithm
@@ -345,7 +344,7 @@ def upsample_density(
     -------
 
     """
-    features = features or data.columns.tolist()
+    features = features or data.columns
     tree_sample = uniform_downsampling(data=data, sample_size=tree_sample)
     prob = density_probability_assignment(
         sample=tree_sample[features],
@@ -359,15 +358,15 @@ def upsample_density(
     low_dens_idx = np.where(prob > 1.0)
     low_dens_regions = data.iloc[low_dens_idx]
     upsampled_data = [low_dens_regions for _ in range(upsample_factor)]
-    data = pd.concat([data] + upsampled_data)
+    data = pl.concat([data] + upsampled_data)
     if sample_size is None:
         return data
     return uniform_downsampling(data=data, sample_size=sample_size)
 
 
 def upsample_knn(
-    sample: pd.DataFrame,
-    original_data: pd.DataFrame,
+    sample: pl.DataFrame,
+    original_data: pl.DataFrame,
     labels: list,
     features: list,
     scoring: str = "balanced_accuracy",
@@ -383,9 +382,9 @@ def upsample_knn(
 
     Parameters
     ----------
-    sample: Pandas.DataFrame
+    sample: polars.DataFrame
         Sampled dataframe that has been classified/gated/etc
-    original_data: Pandas.DataFrame
+    original_data: polars.DataFrame
         Original dataframe prior to sampling (unlabeled)
     labels: list
         List of labels (should correspond to the label for each row)
@@ -405,7 +404,7 @@ def upsample_knn(
     n = kwargs.get("n_neighbors", None)
     if n is None:
         logger.info("Calculating optimal n_neighbours by grid search CV...")
-        n, score = calculate_optimal_neighbours(x=sample[features].values, y=labels, scoring=scoring, **kwargs)
+        n, score = calculate_optimal_neighbours(x=sample[features], y=labels, scoring=scoring, **kwargs)
         logger.info(f"Continuing with n={n}; chosen with balanced accuracy of {round(score, 3)}...")
     logger.info("Training...")
     train_acc, val_acc, model = knn(
@@ -427,17 +426,17 @@ def upsample_knn(
 
 
 def sample_dataframe(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     sample_size: Union[int, float] = 0.1,
     method: str = "uniform",
     **kwargs,
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     """
     Convenient wrapper function for common sampling methods.
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
     sample_size: float or int (default=0.1)
     method: str
         One of 'uniform', 'density' or 'faithful'
@@ -446,7 +445,7 @@ def sample_dataframe(
 
     Returns
     -------
-    Pandas.DataFrame
+    polars.DataFrame
 
     Raises
     ------
@@ -458,13 +457,13 @@ def sample_dataframe(
     elif method == "density":
         return density_dependent_downsampling(data=data, sample_size=sample_size, **kwargs)
     elif method == "faithful":
-        return pd.DataFrame(faithful_downsampling(data=data.values, **kwargs), columns=data.columns)
+        return pl.DataFrame(faithful_downsampling(data=data.values, **kwargs), columns=data.columns)
     else:
         valid = ["uniform", "density", "faithful"]
         raise SamplingError(f"Invalid method, must be one of {valid}")
 
 
-def sample_dataframe_uniform_groups(data: pd.DataFrame, group_id: str, sample_size: int):
+def sample_dataframe_uniform_groups(data: pl.DataFrame, group_id: str, sample_size: int):
     sample_data = list()
     n = int(sample_size / data[group_id].nunique())
     for _, df in data.groupby(group_id):
@@ -472,4 +471,4 @@ def sample_dataframe_uniform_groups(data: pd.DataFrame, group_id: str, sample_si
             sample_data.append(df)
         else:
             sample_data.append(df.sample(n))
-    return pd.concat(sample_data)
+    return pl.concat(sample_data)

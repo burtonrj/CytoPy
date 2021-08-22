@@ -47,7 +47,7 @@ from warnings import warn
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+import polars as pl
 import seaborn as sns
 from KDEpy import FFTKDE
 from matplotlib import patches

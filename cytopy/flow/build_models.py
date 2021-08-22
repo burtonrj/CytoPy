@@ -33,12 +33,12 @@ def build_sklearn_model(klass: str, **params) -> Type:
 
 
 def build_keras_model(
-    layers: list,
-    layer_params: list,
+    layers: List,
+    layer_params: List,
     optimizer: str,
     loss: str,
-    metrics: list,
-    input_shape: tuple,
+    metrics: List,
+    input_shape: Tuple,
     **kwargs,
 ):
     """
