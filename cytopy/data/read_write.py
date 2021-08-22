@@ -30,30 +30,18 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import json
+import logging
 import os
 from multiprocessing import cpu_count
 from multiprocessing import Pool
-from typing import *
 
-import dateutil.parser as date_parser
 import flowio
 import numpy as np
-import pandas as pd
+import polars as pl
+import pyarrow.parquet as pq
+import s3fs
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = [
-    "Ross Burton",
-    "Scott White",
-    "Simone Cuff",
-    "Andreas Artemiou",
-    "Matthias Eberl",
-]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
+logger = logging.getLogger(__name__)
 
 
 def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True, exclude_dir: str = "DUPLICATES") -> list:
@@ -132,26 +120,6 @@ def get_fcs_file_paths(
     return file_tree
 
 
-def chunks(df_list: list, n: int) -> pd.DataFrame:
-    """
-    Yield successive n-sized chunks from l.
-    ref: https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks
-
-    Parameters
-    -----------
-    df_list: list
-        list of DataFrames to generated 'chunks' from
-    n: int
-        number of chunks to generate
-    Returns
-    --------
-    generator
-        Yields successive n-sized DataFrames
-    """
-    for i in range(0, len(df_list), n):
-        yield df_list[i : i + n]
-
-
 def fcs_mappings(path: str) -> list or None:
     """
     Fetch channel mappings from fcs file.
@@ -167,11 +135,11 @@ def fcs_mappings(path: str) -> list or None:
         List of channel mappings. Will return None if file fails to load.
     """
     try:
-        fo = FCSFile(path)
+        fo = flowio.FlowData(path)
     except ValueError as e:
-        print(f"Failed to load file {path}; {e}")
+        logger.error(f"Failed to load file {path}; {e}")
         return None
-    return fo.channel_mappings
+    return fo.channels
 
 
 def explore_channel_mappings(fcs_dir: str, exclude_comps: bool = True) -> list:
@@ -225,87 +193,119 @@ def _get_channel_mappings(fluoro_dict: dict) -> list:
     return mappings
 
 
-class FCSFile:
-    """
-    Utilising FlowIO to generate an object for representing an FCS file
+def match_file_ext(path: str, ext: str):
+    return os.path.splitext(path)[1].lower() == ext
 
-    Attributes
+
+def load_compensation_matrix(fcs: flowio.FlowData) -> pl.DataFrame:
+    """
+    Extract a compensation matrix from an FCS file using FlowIO.
+
+    Parameters
     ----------
-    filepath: str
-        location of fcs file to parse
-    comp_matrix: str
-        csv file containing compensation matrix (optional, not required if a
-        spillover matrix is already linked to the file)
+    fcs: flowio.FlowData
+
+    Returns
+    -------
+    polars.DataFrame or None
+        Returns None if no compensation matrix is found; will log warning.
     """
+    spill_txt = None
+    if "spill" in fcs.text.keys():
+        spill_txt = fcs.text["spill"]
+    elif "spillover" in fcs.text.keys():
+        spill_txt = fcs.text["spillover"]
+    if spill_txt is None or len(spill_txt) < 1:
+        logger.warning("No compensation matrix found")
+        return None
+    matrix_list = spill_txt.split(",")
+    n = int(matrix_list[0])
+    header = matrix_list[1 : (n + 1)]
+    header = [i.strip().replace("\n", "") for i in header]
+    values = [i.strip().replace("\n", "") for i in matrix_list[n + 1 :]]
+    matrix = np.reshape(list(map(float, values)), (n, n))
+    matrix_df = pl.DataFrame(matrix, columns=header)
+    return matrix_df
 
-    def __init__(self, filepath: str, comp_matrix: Optional[Union[pd.DataFrame, str]] = None):
-        fcs = flowio.FlowData(filepath)
-        self.filename = fcs.text.get("fil", "Unknown_filename")
-        self.sys = fcs.text.get("sys", "Unknown_system")
-        self.total_events = int(fcs.text.get("tot", 0))
-        self.tube_name = fcs.text.get("tube name", "Unknown")
-        self.exp_name = fcs.text.get("experiment name", "Unknown")
-        self.cytometer = fcs.text.get("cyt", "Unknown")
-        self.creator = fcs.text.get("creator", "Unknown")
-        self.operator = fcs.text.get("export user name", "Unknown")
-        self.channel_mappings = _get_channel_mappings(fcs.channels)
-        self.cst_pass = False
-        self.data = fcs.events
-        self.event_data = np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count))
-        if "threshold" in fcs.text.keys():
-            self.threshold = [{"channel": c, "threshold": v} for c, v in chunks(fcs.text["threshold"].split(","), 2)]
-        else:
-            self.threshold = "Unknown"
-        try:
-            self.processing_date = date_parser.parse(fcs.text["date"] + " " + fcs.text["etim"]).isoformat()
-        except KeyError:
-            self.processing_date = "Unknown"
-        if comp_matrix is not None:
-            if isinstance(comp_matrix, str):
-                self.spill = pd.read_csv(comp_matrix)
-            else:
-                self.spill = comp_matrix
-            self.spill_txt = None
-        else:
-            if "spill" in fcs.text.keys():
-                self.spill_txt = fcs.text["spill"]
 
-            elif "spillover" in fcs.text.keys():
-                self.spill_txt = fcs.text["spillover"]
-            else:
-                self.spill_txt = None
-            if self.spill_txt is not None:
-                if (len(self.spill_txt)) < 1:
-                    print(
-                        """Warning: no spillover matrix found, please provide
-                    path to relevant csv file with 'comp_matrix' argument if compensation is necessary"""
-                    )
-                    self.spill = None
-                else:
-                    self.spill = _get_spill_matrix(self.spill_txt)
-            else:
-                self.spill = None
-        if "cst_setup_status" in fcs.text:
-            if fcs.text["cst setup status"] == "SUCCESS":
-                self.cst_pass = True
+def fcs_to_polars(fcs: flowio.FlowData) -> pl.DataFrame:
+    """
+    Return the events of a FlowData objects as a polars.DataFrame
 
-    def compensate(self):
-        """
-        Apply compensation to event data
+    Parameters
+    ----------
+    fcs: flowio.FlowData
 
-        Returns
-        -------
-        None
-        """
-        assert self.spill is not None, f"Unable to locate spillover matrix, please provide a compensation matrix"
-        channel_idx = [i for i, x in enumerate(self.channel_mappings) if x["marker"] != ""]
-        if len(channel_idx) == 0:
-            # No markers defined in file
-            channel_idx = [
-                i
-                for i, x in enumerate(self.channel_mappings)
-                if all([z not in x["channel"].lower() for z in ["fsc", "ssc", "time"]])
-            ]
-        comp_data = self.event_data[:, channel_idx]
-        comp_data = np.linalg.solve(self.spill.values.T, comp_data.T).T
-        self.event_data[:, channel_idx] = comp_data
+    Returns
+    -------
+    polars.DataFrame
+
+    Raises
+    ------
+    ValueError
+        Incorrect number of columns provided
+    """
+    columns = [x["PnN"] for _, x in fcs.channels.items()]
+    data = pl.DataFrame(np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count)), columns=columns)
+    data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
+    return data
+
+
+def read_from_disk(path: str, **kwargs) -> pl.DataFrame:
+    """
+    Read cytometry data from disk. Must be either fcs, csv, or parquet file
+
+    Parameters
+    ----------
+    path: str
+
+    Returns
+    -------
+    polars.DataFrame
+
+    Raises
+    ------
+    ValueError
+        Invalid file extension
+    """
+    if match_file_ext(path=path, ext=".fcs"):
+        return fcs_to_polars(flowio.FlowData(filename=path))
+    elif match_file_ext(path=path, ext=".csv"):
+        data = pl.read_csv(path=path, **kwargs)
+    elif match_file_ext(path=path, ext=".parquet"):
+        data = pl.read_parquet(source=path, **kwargs)
+    else:
+        raise ValueError("Currently only support fcs, csv, or parquet file extensions")
+    data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
+    return data
+
+
+def read_from_remote(s3_bucket: str, path: str, **kwargs) -> pl.DataFrame:
+    """
+    Read cytometry data from S3. Target file must be csv or parquet file type.
+
+    Parameters
+    ----------
+    s3_bucket: str
+    path: str
+
+    Returns
+    -------
+    polars.DataFrame
+
+    Raises
+    ------
+    ValueError
+        Invalid file extension
+    """
+    fs = s3fs.S3FileSystem()
+    if match_file_ext(path=path, ext=".csv"):
+        with fs.open(f"s3://{s3_bucket}/{path}") as f:
+            data = pl.read_csv(file=f, **kwargs)
+    elif match_file_ext(path=path, ext=".parquet"):
+        data = pq.ParquetDataset(f"s3://{s3_bucket}/{path}", filesystem=fs)
+        data = pl.from_arrow(data.read(**kwargs))
+    else:
+        raise ValueError("Currently only support csv or parquet file extensions")
+    data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
+    return data

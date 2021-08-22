@@ -30,8 +30,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 import os
 import re
-from functools import wraps
-from typing import Callable
 from typing import Dict
 from typing import Generator
 from typing import Iterable
@@ -40,21 +38,21 @@ from typing import Optional
 from typing import Union
 
 import anytree
+import boto3
 import flowio
-import fsspec
-import h5py
 import mongoengine
 import numpy as np
-import pandas as pd
 import polars as pl
-import pyarrow.parquet as pq
-import s3fs
+from botocore.errorfactory import ClientError
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import permutation_test_score
 from sklearn.model_selection import StratifiedKFold
 
 from ..flow.build_models import build_sklearn_model
 from ..flow.sampling import sample_dataframe
+from ..flow.transform import apply_transform
+from ..flow.transform import apply_transform_map
+from ..flow.transform import Transformer
 from ..flow.tree import construct_tree
 from .errors import DuplicatePopulationError
 from .errors import MissingControlError
@@ -64,140 +62,18 @@ from .population import merge_gate_populations
 from .population import merge_non_geom_populations
 from .population import PolygonGeom
 from .population import Population
+from .read_write import load_compensation_matrix
+from .read_write import read_from_disk
+from .read_write import read_from_remote
 from .setup import Config
 from .subject import Subject
-from cytopy.flow.transform import apply_transform
-from cytopy.flow.transform import apply_transform_map
-from cytopy.flow.transform import Transformer
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 logger = logging.getLogger(__name__)
 CONFIG = Config()
 
 
-def features(data: pl.DataFrame):
+def feature_columns(data: pl.DataFrame):
     return [x for x in data.columns if x != "Index"]
-
-
-def load_compensation_matrix(fcs: flowio.FlowData) -> pl.DataFrame:
-    """
-    Extract a compensation matrix from an FCS file using FlowIO.
-
-    Parameters
-    ----------
-    fcs: flowio.FlowData
-
-    Returns
-    -------
-    polars.DataFrame or None
-        Returns None if no compensation matrix is found; will log warning.
-    """
-    spill_txt = None
-    if "spill" in fcs.text.keys():
-        spill_txt = fcs.text["spill"]
-    elif "spillover" in fcs.text.keys():
-        spill_txt = fcs.text["spillover"]
-    if spill_txt is None or len(spill_txt) < 1:
-        logger.warning("No compensation matrix found")
-        return None
-    matrix_list = spill_txt.split(",")
-    n = int(matrix_list[0])
-    header = matrix_list[1 : (n + 1)]
-    header = [i.strip().replace("\n", "") for i in header]
-    values = [i.strip().replace("\n", "") for i in matrix_list[n + 1 :]]
-    matrix = np.reshape(list(map(float, values)), (n, n))
-    matrix_df = pl.DataFrame(matrix, columns=header)
-    return matrix_df
-
-
-def fcs_to_polars(fcs: flowio.FlowData) -> pl.DataFrame:
-    """
-    Return the events of a FlowData objects as a polars.DataFrame
-
-    Parameters
-    ----------
-    fcs: flowio.FlowData
-
-    Returns
-    -------
-    polars.DataFrame
-
-    Raises
-    ------
-    ValueError
-        Incorrect number of columns provided
-    """
-    columns = [x["PnN"] for _, x in fcs.channels.items()]
-    data = pl.DataFrame(np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count)), columns=columns)
-    data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
-    return data
-
-
-def read_from_disk(path: str) -> pl.DataFrame:
-    """
-    Read cytometry data from disk. Must be either fcs, csv, or parquet file
-
-    Parameters
-    ----------
-    path: str
-
-    Returns
-    -------
-    polars.DataFrame
-
-    Raises
-    ------
-    ValueError
-        Invalid file extension
-    """
-    if path.lower().endswith(".fcs"):
-        return fcs_to_polars(flowio.FlowData(filename=path))
-    elif path.lower().endswith(".csv"):
-        data = pl.read_csv(path=path)
-    elif path.lower().endswith(".parquet"):
-        data = pl.read_parquet(source=path)
-    else:
-        raise ValueError("Currently only support fcs, csv, or parquet file extensions")
-    data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
-    return data
-
-
-def read_from_remote(s3_bucket: str, path: str) -> pl.DataFrame:
-    """
-    Read cytometry data from S3. Target file must be csv or parquet file type.
-
-    Parameters
-    ----------
-    s3_bucket: str
-    path: str
-
-    Returns
-    -------
-    polars.DataFrame
-
-    Raises
-    ------
-    ValueError
-        Invalid file extension
-    """
-    fs = s3fs.S3FileSystem()
-    if path.lower().endswith(".csv"):
-        with fs.open(f"s3://{s3_bucket}/{path}") as f:
-            data = pl.read_csv(file=f)
-    elif path.lower().endswith(".parquet"):
-        data = pq.ParquetDataset(f"s3://{s3_bucket}/{path}", filesystem=fs)
-        data = pl.from_arrow(data.read())
-    else:
-        raise ValueError("Currently only support csv or parquet file extensions")
-    data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
-    return data
 
 
 def compensate(data: pl.DataFrame, spill_matrix: pl.DataFrame) -> pl.DataFrame:
@@ -290,6 +166,39 @@ class FileGroup(mongoengine.Document):
             self.tree = {"root": anytree.Node(name="root", parent=None)}
             self.save()
 
+    def clean(self):
+        if self.s3_bucket:
+            s3 = boto3.resource("s3")
+            for path in self.file_paths.values():
+                try:
+                    s3.head_object(self.s3_bucket, path)
+                except ClientError as e:
+                    logger.error(f"Could not locate {path} in bucket {self.s3_bucket}; {e}")
+                    raise
+            if self.compensate and self.compensation_matrix:
+                try:
+                    s3.head_object(self.s3_bucket, self.compensation_matrix)
+                except ClientError as e:
+                    logger.error(
+                        f"Could not locate compensation matrix at {self.compensation_matrix} "
+                        f"in bucket {self.s3_bucket}; {e}"
+                    )
+                    raise
+        else:
+            for path in self.file_paths.values():
+                if not os.path.isfile(path):
+                    err = f"Could not locate {path}. Has the file moved? If so make sure to update the database."
+                    logger.error(err)
+                    raise ValueError(err)
+            if self.compensate and self.compensation_matrix:
+                if not os.path.isfile(self.compensation_matrix):
+                    err = (
+                        f"Could not locate compensation matrix at {self.compensation_matrix}."
+                        f"Has the file moved? If so make sure to update the database."
+                    )
+                    logger.error(err)
+                    raise ValueError(err)
+
     def _load_data(self, source: str) -> pl.DataFrame:
         if self.s3_bucket:
             return read_from_remote(s3_bucket=self.s3_bucket, path=self.file_paths[source])
@@ -318,7 +227,7 @@ class FileGroup(mongoengine.Document):
         sample_size: Optional[Union[int, float]] = None,
         sampling_method: str = "uniform",
         **sampling_kwargs,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """
         Load the FileGroup dataframe for the desired source file e.g. "primary" for primary
         staining or name of a control for control staining.
@@ -447,7 +356,7 @@ class FileGroup(mongoengine.Document):
         kfolds: int = 5,
         n_permutations: int = 25,
         sample_size: int = 10000,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """
         Load a population from an associated control. The assumption here is that control files
         have been collected at the same time as primary staining and differ by the absence or
@@ -492,7 +401,7 @@ class FileGroup(mongoengine.Document):
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
             Population data from control, as predicted using the primary staining
 
         Raises
@@ -653,7 +562,7 @@ class FileGroup(mongoengine.Document):
         sampling_method: str = "uniform",
         label_downstream_affiliations=None,
         **sampling_kwargs,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """
         Load the DataFrame for the events pertaining to a single population.
 
@@ -706,7 +615,7 @@ class FileGroup(mongoengine.Document):
         )
 
         if isinstance(transform, str):
-            features_to_transform = features_to_transform or features(data)
+            features_to_transform = features_to_transform or feature_columns(data)
             data = apply_transform(data=data, method=transform, features=features_to_transform, **transform_kwargs)
         elif isinstance(transform, dict):
             data = apply_transform_map(data=data, feature_method=transform, kwargs=transform_kwargs)
@@ -1094,7 +1003,7 @@ class FileGroup(mongoengine.Document):
             )
 
 
-def population_stats(filegroup: FileGroup) -> pd.DataFrame:
+def population_stats(filegroup: FileGroup) -> pl.DataFrame:
     """
     Given a FileGroup generate a DataFrame detailing the number of events, proportion
     of parent population, and proportion of total (root population) for each
@@ -1106,9 +1015,9 @@ def population_stats(filegroup: FileGroup) -> pd.DataFrame:
 
     Returns
     -------
-    Pandas.DataFrame
+    polars.DataFrame
     """
-    return pd.DataFrame([filegroup.population_stats(p) for p in list(filegroup.list_populations())])
+    return pl.DataFrame([filegroup.population_stats(p) for p in list(filegroup.list_populations())])
 
 
 def _load_data_for_ctrl_estimate(
