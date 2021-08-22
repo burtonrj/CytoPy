@@ -42,14 +42,6 @@ from .errors import *
 from .experiment import Experiment
 from .subject import Subject
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 logger = logging.getLogger(__name__)
 
 
@@ -90,58 +82,8 @@ class Project(mongoengine.Document):
     start_date = mongoengine.DateTimeField(default=datetime.datetime.now)
     owner = mongoengine.StringField(requred=True)
     experiments = mongoengine.ListField(mongoengine.ReferenceField(Experiment, reverse_delete_rule=4))
-    data_directory = mongoengine.StringField(required=True)
 
     meta = {"db_alias": "core", "collection": "projects"}
-
-    def __init__(self, *args, **values):
-        super().__init__(*args, **values)
-        if not os.path.isdir(self.data_directory):
-            if self.id:
-                logger.warning(
-                    f"Could not locate data directory at path {self.data_directory}",
-                    stacklevel=2,
-                )
-                raise FileNotFoundError(f"{self.data_directory} does not exist")
-            else:
-                os.mkdir(self.data_directory)
-
-    def update_data_directory(self, data_directory: str, move: bool = True):
-        """
-        Update the data directory for this Project. It is recommended that you let cytopy migrate the
-        existing directory by letting 'move' equal True.
-
-        Parameters
-        ----------
-        data_directory: str
-            Local path to HDF5 data
-        move: bool (default=True)
-            If True, will attempt to move the existing data_directory
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        InvalidDataDirectory
-            If provided path does not exist
-        """
-        if not os.path.isdir(data_directory):
-            logger.error(f"Could not find directory at path {data_directory}")
-            raise InvalidDataDirectory(f"Could not find directory at path {data_directory}")
-        for e in self.experiments:
-            for f in e.fcs_files:
-                f.data_directory = data_directory
-                f.save()
-            e.data_directory = data_directory
-            e.save()
-        if move:
-            for f in os.listdir(self.data_directory):
-                shutil.move(os.path.join(self.data_directory, f), data_directory)
-            shutil.rmtree(self.data_directory)
-        self.data_directory = data_directory
-        self.save()
 
     def get_experiment(self, experiment_id: str) -> Experiment:
         """
@@ -192,10 +134,8 @@ class Project(mongoengine.Document):
             If given experiment ID already exists
         """
         if experiment_id in [x.experiment_id for x in self.experiments]:
-            logger.error(f"Experiment with id {experiment_id} already exists!")
             raise DuplicateExperimentError(f"Experiment with id {experiment_id} already exists!")
-        exp = Experiment(experiment_id=experiment_id, data_directory=self.data_directory)
-        exp.generate_panel(panel_definition=panel_definition)
+        exp = Experiment(experiment_id=experiment_id)
         exp.save()
         self.experiments.append(exp)
         self.save()
@@ -288,7 +228,6 @@ class Project(mongoengine.Document):
         None
         """
         if experiment_id not in self.list_experiments():
-            logger.error(f"No such experiment {experiment_id}")
             raise MissingExperimentError(f"No such experiment {experiment_id}")
         exp = self.get_experiment(experiment_id)
         exp.delete()
@@ -312,13 +251,10 @@ class Project(mongoengine.Document):
         """
         logger.info(f"Deleting project {self.project_id}")
         logger.info("Deleting associated subjects...")
-        for p in self.subjects:
-            p.delete()
+        for s in self.subjects:
+            s.delete()
         logger.info("Deleting associated experiments...")
         for e in self.experiments:
             e.delete()
         super().delete(*args, **kwargs)
-        if delete_h5_data:
-            logger.info(f"Deleting data directory {self.data_directory}...")
-            shutil.rmtree(self.data_directory)
         logger.info("Project deleted.")
