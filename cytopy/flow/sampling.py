@@ -224,8 +224,8 @@ def density_dependent_downsampling(
         )
         return uniform_downsampling(data=data, sample_size=sample_size)
     if isinstance(sample_size, int):
-        return pl.DataFrame(data.to_polars().sample(n=sample_size, weights=prob))
-    return pl.DataFrame(data.to_polars().sample(frac=sample_size, weights=prob))
+        return pl.DataFrame(data.to_pandas().sample(n=sample_size, weights=prob))
+    return pl.DataFrame(data.to_pandas().sample(frac=sample_size, weights=prob))
 
 
 def density_probability_assignment(

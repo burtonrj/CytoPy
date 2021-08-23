@@ -290,7 +290,7 @@ def multilabel(
     """
     root = ref.load_population_df(population=root_population, transform=None)
     if idx is not None:
-        root = root[root.Index.is_in(idx), :]
+        root = root.filter(pl.col("Index").is_in(idx))
     for pop in population_labels:
         pop_idx = [x for x in ref.get_population(population_name=pop).index if x in root.index]
         root[pop] = [0 for _ in range(root.shape[0])]

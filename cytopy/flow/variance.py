@@ -32,12 +32,15 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
 import math
+import os
 from typing import *
 from warnings import warn
 
+import flowio
 import harmonypy
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import polars as pl
 import seaborn as sns
 from KDEpy import FFTKDE
@@ -57,19 +60,11 @@ np.random.seed(42)
 
 COLOURS = list(cm.get_cmap("tab20").colors) + list(cm.get_cmap("tab20b").colors) + list(cm.get_cmap("tab20c").colors)
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 logger = logging.getLogger(__name__)
 
 
 def bw_optimisation(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     features: List[str],
     kernel: str = "gaussian",
     bandwidth: Tuple[float] = (0.01, 0.1, 10),
@@ -104,11 +99,11 @@ def bw_optimisation(
         n_jobs=-1,
         verbose=verbose,
     )
-    grid.fit(data[features])
+    grid.fit(data[features].to_numpy())
     return grid.best_params_.get("bandwidth")
 
 
-def calculate_ref_sample(data: pd.DataFrame, features: Union[List[str], None] = None, verbose: bool = True) -> str:
+def calculate_ref_sample(data: pl.DataFrame, features: Union[List[str], None] = None, verbose: bool = True) -> str:
     """
 
     This is performed as described in Li et al paper (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5860171/) on
@@ -133,9 +128,9 @@ def calculate_ref_sample(data: pd.DataFrame, features: Union[List[str], None] = 
     feedback = vprint(verbose)
     feedback("Calculate covariance matrix for each sample...")
     # Calculate covar for each
-    data = data.dropna(axis=1, how="any")
-    features = features or list(data.columns)
-    covar = {k: np.cov(v[features].astype(np.float32), rowvar=False) for k, v in data.groupby(by="sample_id")}
+    data = data.drop_nulls()
+    features = features or data.columns
+    covar = {k: np.cov(v[features].to_numpy(), rowvar=False) for k, v in data.groupby(by="sample_id")}
     feedback("Search for sample with smallest average euclidean distance to all other samples...")
     # Make comparisons
     sample_ids = list(covar.keys())
@@ -153,7 +148,7 @@ def calculate_ref_sample(data: pd.DataFrame, features: Union[List[str], None] = 
 
 
 def marker_variance(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     reference: str,
     comparison_samples: Union[List[str], None] = None,
     markers: Union[List[str], None] = None,
@@ -171,7 +166,7 @@ def marker_variance(
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         DataFrame as generated from load_and_sample
     reference: str
         Reference sample to plot in the background
@@ -202,14 +197,14 @@ def marker_variance(
 
     comparison_samples = comparison_samples or [x for x in data.sample_id.unique() if x != reference]
     fig = plt.figure(figsize=figsize)
-    markers = markers or data.get(reference).columns.tolist()
+    markers = markers or data.get(reference).columns
     i = 0
     nrows = math.ceil(len(markers) / 3)
     fig.suptitle(f"Per-channel KDE, Reference: {reference}", y=1.02)
     for marker in progress_bar(markers, verbose=verbose):
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
-        x, y = FFTKDE(kernel=kernel, bw=kde_bw).fit(data[data.sample_id == reference][marker].values).evaluate()
+        x, y = FFTKDE(kernel=kernel, bw=kde_bw).fit(data[data.sample_id == reference][marker].to_numpy()).evaluate()
         ax.plot(x, y, color="b", **kwargs)
         ax.fill_between(x, 0, y, facecolor="b", alpha=0.2)
         ax.set_title(marker)
@@ -220,7 +215,7 @@ def marker_variance(
             if marker not in df.columns:
                 warn(f"{marker} missing from {comparison_sample_id}, this marker will be ignored")
             else:
-                x, y = FFTKDE(kernel=kernel, bw=kde_bw).fit(df[marker].values).evaluate()
+                x, y = FFTKDE(kernel=kernel, bw=kde_bw).fit(df[marker].to_numpy()).evaluate()
                 ax.plot(x, y, color="r", **kwargs)
                 if ax.get_legend() is not None:
                     ax.get_legend().remove()
@@ -230,7 +225,7 @@ def marker_variance(
 
 
 def dim_reduction_grid(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     reference: str,
     features: List[str],
     comparison_samples: Union[List[str], None] = None,
@@ -246,7 +241,7 @@ def dim_reduction_grid(
 
     Parameters
     ------------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         DataFrame as generated from load_and_sample
     reference: str
         Reference sample to plot in the background
@@ -278,22 +273,22 @@ def dim_reduction_grid(
         Invalid features provided
     """
     assert reference in data.sample_id.unique(), "Reference absent from given data"
-    data = data.dropna(axis=1, how="any")
+    data = data.drop_nulls()
     comparison_samples = comparison_samples or [x for x in data.sample_id.unique() if x != reference]
     dim_reduction_kwargs = dim_reduction_kwargs or {}
     fig = plt.figure(figsize=figsize)
     nrows = math.ceil(len(comparison_samples) / 3)
-    reference_df = data[data.sample_id == reference].copy()
+    reference_df = data[data.sample_id == reference]
     if not all([f in reference_df.columns for f in features]):
         raise ValueError(f"Invalid features; valid are: {reference_df.columns}")
     reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
-    reference_df = reducer.fit_transform(data=reference_df.reset_index(), features=features)
+    reference_df = reducer.fit_transform(data=reference_df, features=features)
     i = 0
     fig.suptitle(f"{method}, Reference: {reference}", y=1.05)
     for sample_id in progress_bar(comparison_samples, verbose=verbose):
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
-        embeddings = reducer.transform(data[data.sample_id == sample_id].reset_index(), features=features)
+        embeddings = reducer.transform(data[data.sample_id == sample_id], features=features)
         x = f"{method}1"
         y = f"{method}2"
         ax.scatter(reference_df[x], reference_df[y], c="blue", s=4, alpha=0.2)
@@ -306,11 +301,11 @@ def dim_reduction_grid(
                 ax=ax,
                 shade=False,
             )
-        ax.scatter(embeddings[:, 0], embeddings[:, 1], c="red", s=4, alpha=0.1)
+        ax.scatter(embeddings[x], embeddings[y], c="red", s=4, alpha=0.1)
         if kde:
             sns.kdeplot(
-                embeddings[:, 0],
-                embeddings[:, 1],
+                embeddings[x],
+                embeddings[y],
                 c="red",
                 n_levels=100,
                 ax=ax,
@@ -327,7 +322,7 @@ def dim_reduction_grid(
 def generate_groups(linkage_matrix: np.ndarray, sample_ids: Union[List[str], np.ndarray], n_groups: int):
     """
     Given the output of SimilarityMatrix (that is the linkage matrix and ordered list of sample
-    IDs) and a desired number of groups, return a Pandas DataFrame of sample IDs and assigned group ID, generated by
+    IDs) and a desired number of groups, return a polars DataFrame of sample IDs and assigned group ID, generated by
     cutting the linkage matrix in such a way that the desired number of groups are generated.
     Parameters
     ----------
@@ -339,9 +334,9 @@ def generate_groups(linkage_matrix: np.ndarray, sample_ids: Union[List[str], np.
         Desired number of groups
     Returns
     -------
-    Pandas.DataFrame
+    polars.DataFrame
     """
-    groups = pd.DataFrame(
+    groups = pl.DataFrame(
         {
             "sample_id": sample_ids,
             "group": list(
@@ -352,7 +347,7 @@ def generate_groups(linkage_matrix: np.ndarray, sample_ids: Union[List[str], np.
             ),
         }
     )
-    groups = groups.sort_values("group")
+    groups = groups.sort(by="group")
     return groups
 
 
@@ -394,14 +389,14 @@ class Harmony:
 
     Attributes
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
         Downsampled data from Experiment as generated by cytopy.flow.variance.load_and_sample
     transformer: Transformer
         Transfomation object; used to inverse transform when saving data back to the database
         after correction
     features: list
         List of features
-    meta: Pandas.DataFrame
+    meta: polars.DataFrame
         Meta DataFrame; by default it has one column that identifies 'batches' and is always 'sample_id'
     scaler: Scaler
         Scaler object; used to inverse the scale when saving data back to the database after correction
@@ -409,7 +404,7 @@ class Harmony:
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: pl.DataFrame,
         features: List[str],
         transform: Optional[str] = "logicle",
         transform_kwargs: Union[Dict[str, str], None] = None,
@@ -422,9 +417,9 @@ class Harmony:
             self.data = self.transformer.scale(data=data, features=features)
         else:
             self.data = data
-        self.data = self.data.dropna(axis=1, how="any")
+        self.data = self.data.drop_nulls()
         self.features = [x for x in features if x in self.data.columns]
-        self.meta = self.data[["sample_id"]].copy()
+        self.meta = self.data[["sample_id"]]
         self.harmony = None
         self.scaler = None
         if scale is not None:
@@ -440,6 +435,8 @@ class Harmony:
 
         Parameters
         ----------
+        var_use: str (default="sample_id")
+            Name of the meta variable to use to match batches
         kwargs:
             Additional keyword arguments passed to harmonypy.run_harmony
 
@@ -448,8 +445,10 @@ class Harmony:
         Harmony
         """
         logger.info("Running harmony")
-        data = self.data[self.features].astype(float)
-        self.harmony = harmonypy.run_harmony(data_mat=data.values, meta_data=self.meta, vars_use=var_use, **kwargs)
+        data = self.data[self.features]
+        self.harmony = harmonypy.run_harmony(
+            data_mat=data.to_numpy(), meta_data=self.meta.to_pandas(), vars_use=var_use, **kwargs
+        )
         return
 
     def plot_kde(self, var: Union[str, List[str]]):
@@ -465,16 +464,16 @@ class Harmony:
         -------
         Matplotlib.Axes
         """
-        v = self.data[var].values
+        v = self.data[var].to_numpy()
         if isinstance(var, list):
-            v = np.sum([self.data[x].values for x in var], axis=0)
+            v = np.sum([self.data[x].to_numpy() for x in var], axis=0)
         x, y = FFTKDE(kernel="gaussian", bw="silverman").fit(v).evaluate()
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.plot(x, y)
         ax.set_xlabel(var)
         return fig, ax
 
-    def add_meta_var(self, mask: pd.DataFrame, meta_var_name: str):
+    def add_meta_var(self, mask: pl.DataFrame, meta_var_name: str):
         """
         Add a binary meta variable. Should provide a mask to the 'data' attribute; rows that
         return True for this mask will have a value of 'P' in 'meta_var_name' column of 'meta',
@@ -482,7 +481,7 @@ class Harmony:
 
         Parameters
         ----------
-        mask: Pandas.DataFrame
+        mask: polars.DataFrame
         meta_var_name: str
 
         Returns
@@ -490,9 +489,9 @@ class Harmony:
         self
         """
         self.data[meta_var_name] = "N"
-        self.data.loc[mask, meta_var_name] = "P"
+        self.data[mask, meta_var_name] = "P"
         self.meta[meta_var_name] = self.data[meta_var_name]
-        self.data.drop(meta_var_name, axis=1, inplace=True)
+        self.data = self.data.drop(meta_var_name)
         return self
 
     def batch_lisi(self, meta_var: str = "sample_id", sample: float = 1.0):
@@ -520,7 +519,7 @@ class Harmony:
             raise ValueError(f"{meta_var} missing from meta attribute")
         idx = np.random.randint(self.data.shape[0], size=int(self.data.shape[0] * sample))
         return harmonypy.lisi.compute_lisi(
-            self.batch_corrected()[self.features].values[idx],
+            self.batch_corrected().filter(pl.col("Index").is_in(idx))[self.features],
             metadata=self.meta.iloc[idx],
             label_colnames=[meta_var],
         )
@@ -542,7 +541,9 @@ class Harmony:
         logger.info("Performing dimension reduction on original data")
         before = reducer.fit_transform(data=self.data.sample(n), features=self.features)
         logger.info("Performing dimension reduction on batch corrected data")
-        after = reducer.transform(data=self.batch_corrected().loc[before.index], features=self.features)
+        after = reducer.transform(
+            data=self.batch_corrected().filter(pl.col("Index").is_in([before.index])), features=self.features
+        )
         logger.info("Plotting comparison")
         fig, axes = plt.subplots(1, 2, figsize=figsize)
         sns.scatterplot(data=before, x="UMAP1", y="UMAP2", ax=axes[0], **plot_kwargs)
@@ -571,10 +572,13 @@ class Harmony:
         -------
         Matplotlib.Axes
         """
-        idx = np.random.randint(self.data.shape[0], size=int(self.data.shape[0] * sample))
+        data = self.data[self.features]
+        data["meta"] = self.meta[meta_var]
+        if sample is not None:
+            data = data.sample(frac=sample)
         before = harmonypy.lisi.compute_lisi(
-            self.data[self.features].values[idx],
-            metadata=self.meta.iloc[idx],
+            data[self.features].to_numpy(),
+            metadata=pd.DataFrame(data["meta"].to_numpy(), columns=[meta_var]),
             label_colnames=[meta_var],
         )
         data = pd.DataFrame(
@@ -590,12 +594,12 @@ class Harmony:
 
     def batch_corrected(self):
         """
-        Generates a Pandas DataFrame of batch corrected values. If L2 normalisation was performed prior to
+        Generates a polars DataFrame of batch corrected values. If L2 normalisation was performed prior to
         this, it is reversed. Additional column 'batch_id' identifies rows.
 
         Returns
         -------
-        Pandas.DataFrame
+        polars.DataFrame
 
         Raises
         ------
@@ -603,14 +607,15 @@ class Harmony:
             Run not called prior to calling 'batch_corrected'
         """
         assert self.harmony is not None, "Call 'run' first"
-        corrected = pd.DataFrame(self.harmony.Z_corr.T, columns=self.features)
-        corrected["sample_id"] = self.meta.sample_id.values
-        corrected["original_index"] = self.data["original_index"]
+        corrected = pl.DataFrame(self.harmony.Z_corr.T, columns=self.features)
+        corrected["sample_id"] = self.meta.sample_id
+        corrected["Index"] = self.data["Index"]
         return corrected
 
     def save(
         self,
         experiment: Experiment,
+        target_dir: str,
         prefix: str = "Corrected_",
         subject_mappings: Union[Dict[str, str], None] = None,
     ):
@@ -637,42 +642,34 @@ class Harmony:
             Save called before running the Harmony algorithm
         """
         assert self.harmony is not None, "Call 'run' first"
+        if not os.path.isdir(target_dir):
+            raise FileNotFoundError(f"Directory {target_dir} not found.")
         subject_mappings = subject_mappings or {}
+        channels, markers = [
+            [channel.channel for channel in experiment.panel.channels],
+            [channel.name for channel in experiment.panel.channels],
+        ]
         for sample_id, df in progress_bar(
-            self.batch_corrected().groupby("sample_id"),
+            self.batch_corrected().to_pandas().groupby("sample_id"),
             verbose=True,
             total=self.meta.sample_id.nunique(),
         ):
+            df = pl.DataFrame(df)
             if self.scaler is not None:
                 df = self.scaler.inverse(data=df, features=self.features)
             if self.transformer is not None:
                 df = self.transformer.inverse_scale(data=df, features=self.features)
-            experiment.add_dataframes(
-                sample_id=str(prefix) + str(sample_id),
-                primary_data=df[self.features],
-                mappings=[{"channel": x, "marker": x} for x in self.features],
+            filepath = os.path.join(target_dir, f"{prefix}_{sample_id}.fcs")
+            with open(filepath, "wb") as f:
+                flowio.create_fcs(
+                    event_data=df.to_numpy().flatten(),
+                    file_handle=f,
+                    channel_names=channels,
+                    opt_channel_names=markers,
+                )
+            experiment.add_filegroup(
+                sample_id=sample_id,
+                paths={"primary": filepath},
+                compensate=False,
                 subject_id=subject_mappings.get(sample_id, None),
             )
-
-
-def create_experiment(project, features: List[str], experiment_name: str) -> Experiment:
-    """
-    Utility function for creating an experiment with FileGroups that contain
-    the given features. Useful for creating an Experiment to house batch corrected
-    data.
-
-    Parameters
-    ----------
-    project: Project
-    features: list
-    experiment_name: str
-
-    Returns
-    -------
-    Experiment
-    """
-    markers = [{"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""} for x in features]
-    channels = [{"name": x, "regex": f"^{x}$", "case": 0, "permutations": ""} for x in features]
-    mappings = [(x, x) for x in features]
-    panel_definition = {"markers": markers, "channels": channels, "mappings": mappings}
-    return project.add_experiment(experiment_id=experiment_name, panel_definition=panel_definition)

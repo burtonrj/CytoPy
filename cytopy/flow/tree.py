@@ -25,19 +25,12 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+from typing import Dict
+from typing import List
 
-from ..data.population import Population
-from typing import List, Dict
 import anytree
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
+from ..data.population import Population
 
 
 def _add_leaf(tree: Dict[str, anytree.Node], population: Population):
@@ -59,9 +52,7 @@ def _add_leaf(tree: Dict[str, anytree.Node], population: Population):
 
     if population.parent not in tree.keys():
         return None
-    tree[population.population_name] = anytree.Node(
-        name=population.population_name, parent=tree[population.parent]
-    )
+    tree[population.population_name] = anytree.Node(name=population.population_name, parent=tree[population.parent])
     return tree
 
 
@@ -90,9 +81,7 @@ def _grow_tree(tree: Dict[str, anytree.Node], database_populations: List[Populat
         if branch is not None:
             tree = branch
             database_populations = [
-                p
-                for p in database_populations
-                if p.population_name != database_populations[i].population_name
+                p for p in database_populations if p.population_name != database_populations[i].population_name
             ]
         else:
             i = i + 1

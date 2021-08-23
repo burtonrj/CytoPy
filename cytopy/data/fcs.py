@@ -268,7 +268,7 @@ class FileGroup(mongoengine.Document):
             if idx is not None:
                 if isinstance(idx, np.ndarray):
                     idx = idx.tolist()
-                data = data[data.Index.is_in(idx)]
+                data = data.filter(pl.col("Index").is_in(idx))
             if sample_size is not None:
                 data = sample_dataframe(data=data, sample_size=sample_size, method=sampling_method, **sampling_kwargs)
             return data
@@ -911,8 +911,8 @@ class FileGroup(mongoengine.Document):
         transform_x, transform_y = left.geom.transform_x, left.geom.transform_y
         parent_data = self.load_population_df(population=left.parent, transform={x: transform_x, y: transform_y})
         envelope = create_envelope(
-            x_values=parent_data[parent_data.Index.is_in(new_idx), x].to_numpy(),
-            y_values=parent_data[parent_data.Index.is_in(new_idx), y].to_numpy(),
+            x_values=parent_data.filter(pl.col("Index").is_in(new_idx))[x].to_numpy(),
+            y_values=parent_data.filter(pl.col("Index").is_in(new_idx))[y].to_numpy(),
         )
         x_values, y_values = envelope.exterior.xy[0], envelope.exterior.xy[1]
         new_geom = PolygonGeom(

@@ -127,7 +127,7 @@ class Transformer:
             Chosen transform function is missing the arguments channel_indices or channels. cytopy uses
             the FlowUtils class for transformations. See FlowUtils documentation for details.
         """
-        return data.with_columns([pl.col(x).map(self.transform) for x in features]).head()
+        return data.with_columns([pl.col(x).map(self.transform) for x in features])
 
     def inverse_scale(self, data: pl.DataFrame, features: list):
         """
@@ -149,7 +149,7 @@ class Transformer:
             Chosen inverse transform function is missing the arguments channel_indices or channels.
             cytopy uses the FlowUtils class for transformations. See FlowUtils documentation for details.
         """
-        return data.with_columns([pl.col(x).map(self.inverse) for x in features]).head()
+        return data.with_columns([pl.col(x).map(self.inverse) for x in features])
 
 
 class LogicleTransformer(Transformer):
@@ -473,7 +473,7 @@ class Scaler:
             kwargs["method"] = "box_cox"
         self._scaler = SCALERS.get(method)(**kwargs)
 
-    def __call__(self, data: pl.DataFrame, features: list):
+    def __call__(self, data: pl.DataFrame, features: List[str]):
         """
         Using a given dataframe and a list of columns (features) to transform,
         call 'fit_transform' on Scikit-Learn transformer. Returns copy of
@@ -492,7 +492,7 @@ class Scaler:
         data[features] = self._scaler.fit_transform(data[features].values)
         return pl.DataFrame(data)
 
-    def inverse(self, data: pl.DataFrame, features: list):
+    def inverse(self, data: pl.DataFrame, features: List[str]):
         """
         Given dataframe and a list of columns (features) that has been previously
         transformed, apply inverse transform. Returns copy of DataFrame with

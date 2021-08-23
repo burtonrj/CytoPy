@@ -1002,7 +1002,7 @@ class CalibratedCellClassifier(BaseClassifier):
             population=self.root_population, transform=self.transform, transform_kwargs=self.transform_kwargs
         )[features]
         idx = self.targets[self.targets.sample_id == target_id, "Index"]
-        calibrated_x = original_x[original_x.Index.is_in(idx), :]
+        calibrated_x = original_x.filter(pl.col("Index").is_in(idx))
         y = self.target_predictions[target_id]["y_pred"]
         if self.scaler is not None:
             calibrated_x = self.scaler(data=calibrated_x, features=features)

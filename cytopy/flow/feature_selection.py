@@ -1850,3 +1850,13 @@ class SHAP:
 
     def summary_plot(self, **kwargs):
         return shap.summary_plot(self.shap_values, self.x, **kwargs)
+
+
+data = pl.DataFrame(
+    {
+        "x": [1, 4, 6, 2, 2, 5, 2, 3],
+        "y": [5, 2, 8, 12, 3, 5, 4, 5],
+        "z": [9, 7, 16, 4, 8, 5, 2, 3],
+        "i": ["1", "1", "2", "2", "2", "3", "3", "3"],
+    }
+)
