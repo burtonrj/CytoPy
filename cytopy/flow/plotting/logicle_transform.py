@@ -71,7 +71,7 @@ class LogicleScale(mscale.ScaleBase):
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame(data, columns=["x"])
+            data = pl.DataFrame(data, columns=["x"])
             data = self._scaler.scale(data=data, features=["x"])
             return data.values
 
@@ -89,7 +89,7 @@ class LogicleScale(mscale.ScaleBase):
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame(data, columns=["x"])
+            data = pl.DataFrame(data, columns=["x"])
             data = self._scaler.inverse_scale(data=data, features=["x"])
             return data.values
 

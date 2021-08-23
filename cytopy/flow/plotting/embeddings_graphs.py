@@ -25,11 +25,13 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from itertools import cycle
+from typing import Union
 
 import matplotlib.colors as cm
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import networkx as nx
+import pandas as pd
 import polars as pl
 import seaborn as sns
 from scipy.spatial.distance import pdist
@@ -38,15 +40,6 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import StandardScaler
 
 from ..dim_reduction import DimensionReduction
-
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 
 
 def _scatterplot_defaults(**kwargs):
@@ -59,7 +52,7 @@ def _scatterplot_defaults(**kwargs):
 
 
 def discrete_scatterplot(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     x: str,
     y: str,
     z: str or None,
@@ -93,14 +86,14 @@ def discrete_scatterplot(
     data[label] = data[label].astype(str)
     if z is not None:
         ax = fig.add_subplot(111, projection="3d")
-        for (l, df), c in zip(data.groupby(label), colours):
+        for (l, df), c in zip(data.to_pandas().groupby(label), colours):
             s = size
             if isinstance(size, str):
-                s = df[size].values
+                s = df[size]
             ax.scatter(
-                df[x].values,
-                df[y].values,
-                df[z].values,
+                df[x],
+                df[y],
+                df[z],
                 s=s,
                 color=c,
                 label=l,
@@ -111,13 +104,13 @@ def discrete_scatterplot(
     for (l, df), c in zip(data.groupby(label), colours):
         s = size
         if isinstance(size, str):
-            s = df[size].values
-        ax.scatter(df[x].values, df[y].values, color=c, label=l, s=s, **kwargs)
+            s = df[size]
+        ax.scatter(df[x], df[y], color=c, label=l, s=s, **kwargs)
     return ax
 
 
 def cont_scatterplot(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     x: str,
     y: str,
     z: str or None,
@@ -151,14 +144,14 @@ def cont_scatterplot(
     Matplotlib.Axes
     """
     if isinstance(size, str):
-        size = data[size].values
+        size = data[size].to_numpy()
     if z is not None:
         ax = fig.add_subplot(111, projection="3d")
         im = ax.scatter(
-            data[x].values,
-            data[y].values,
-            data[z].values,
-            c=data[label].values,
+            data[x].to_numpy(),
+            data[y].to_numpy(),
+            data[z].to_numpy(),
+            c=data[label].to_numpy(),
             s=size,
             cmap=cmap,
             **kwargs,
@@ -166,9 +159,9 @@ def cont_scatterplot(
     else:
         ax = fig.add_subplot(111)
         im = ax.scatter(
-            data[x].values,
-            data[y].values,
-            c=data[label].values,
+            data[x].to_numpy(),
+            data[y].to_numpy(),
+            c=data[label].to_numpy(),
             s=size,
             cmap=cmap,
             **kwargs,
@@ -178,7 +171,7 @@ def cont_scatterplot(
 
 
 def single_cell_plot(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     x: str,
     y: str,
     z: str or None = None,
@@ -243,7 +236,7 @@ def single_cell_plot(
     if label is not None:
         if discrete:
             ax = discrete_scatterplot(
-                data=data,
+                data=data.to_pandas(),
                 x=x,
                 y=y,
                 z=z,
@@ -255,11 +248,11 @@ def single_cell_plot(
             )
         else:
             if scale == "zscore":
-                data[label] = StandardScaler().fit_transform(data[label].values.reshape(-1, 1))
+                data[label] = StandardScaler().fit_transform(data[label].to_numpy().reshape(-1, 1))
             elif scale == "minmax":
-                data[label] = MinMaxScaler().fit_transform(data[label].values.reshape(-1, 1))
+                data[label] = MinMaxScaler().fit_transform(data[label].to_numpy().reshape(-1, 1))
             ax = cont_scatterplot(
-                data=data,
+                data=data.to_pandas(),
                 x=x,
                 y=y,
                 z=z,
@@ -272,7 +265,7 @@ def single_cell_plot(
             )
     else:
         if isinstance(size, str):
-            size = data[size].values
+            size = data[size].to_numpy()
         if z is not None:
             ax = fig.add_subplot(111, projection="3d")
             ax.scatter(data[x], data[y], data[z], s=size, **kwargs)
@@ -404,7 +397,7 @@ def _generate_cluster_centroids(
 
 
 def cluster_bubble_plot(
-    data: pd.DataFrame,
+    data: Union[pd.DataFrame, pl.DataFrame],
     features: list,
     cluster_label: str,
     sample_label: str,
@@ -462,6 +455,8 @@ def cluster_bubble_plot(
     -------
     Matplotlib.Axes
     """
+    if isinstance(data, pl.DataFrame):
+        data = data.to_pandas()
     fig = plt.figure(figsize=figsize)
     legend_kwargs = legend_kwargs or {}
     cbar_kwargs = cbar_kwargs or {}
@@ -480,7 +475,7 @@ def cluster_bubble_plot(
         if discrete:
             centroids[colour_label] = centroids[colour_label].astype(str)
         elif zscore:
-            centroids[colour_label] = StandardScaler().fit_transform(centroids[colour_label].values.reshape(-1, 1))
+            centroids[colour_label] = StandardScaler().fit_transform(centroids[colour_label].to_numpy().reshape(-1, 1))
         if n_components == 2:
             ax = fig.add_subplot(111)
             ax = sns.scatterplot(
@@ -550,7 +545,7 @@ def _bubbleplot_defaults(**kwargs):
 
 
 def plot_min_spanning_tree(
-    data: pd.DataFrame,
+    data: Union[pd.DataFrame, pl.DataFrame],
     features: list,
     cluster_label: str,
     sample_label: str,
@@ -579,6 +574,8 @@ def plot_min_spanning_tree(
     -------
     Matplotlib.Axes
     """
+    if isinstance(data, pl.DataFrame):
+        data = data.to_pandas()
     centroids = _generate_cluster_centroids(
         data=data,
         features=features,
@@ -602,7 +599,7 @@ def plot_min_spanning_tree(
 
     fig, ax = plt.subplots(figsize=(10, 10))
     pos = nx.spring_layout(mst, iterations=300, scale=3, dim=2)
-    sizes = centroids["cluster_size"].values * 2000
+    sizes = centroids["cluster_size"].to_numpy() * 2000
     nx.draw(
         mst,
         pos=pos,

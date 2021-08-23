@@ -33,15 +33,6 @@ from .hlog_transform import HlogMajorLocator
 from .hlog_transform import HlogMinorLocator
 from cytopy.flow.transform import AsinhTransformer
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
-
 
 class AsinhScale(mscale.ScaleBase):
     name = "asinh"
@@ -72,7 +63,7 @@ class AsinhScale(mscale.ScaleBase):
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame(data, columns=["x"])
+            data = pl.DataFrame(data, columns=["x"])
             data = self._scaler.scale(data=data, features=["x"])
             return data.values
 
@@ -90,7 +81,7 @@ class AsinhScale(mscale.ScaleBase):
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame(data, columns=["x"])
+            data = pl.DataFrame(data, columns=["x"])
             data = self._scaler.inverse_scale(data=data, features=["x"])
             return data.values
 

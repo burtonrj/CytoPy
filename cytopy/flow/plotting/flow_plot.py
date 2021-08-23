@@ -47,6 +47,7 @@ from warnings import warn
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import polars as pl
 import seaborn as sns
 from KDEpy import FFTKDE
@@ -80,7 +81,7 @@ logger = logging.getLogger("flow_plot")
 
 
 def kde1d(
-    data: pd.DataFrame,
+    data: pl.DataFrame,
     x: str,
     transform_method: str or None = None,
     bw: str or float = "silverman",
@@ -93,7 +94,7 @@ def kde1d(
 
     Parameters
     ----------
-    data: Pandas.DataFrame
+    data: polars.DataFrame
     x: str
         Column name
     transform_method: str, optional
@@ -105,7 +106,7 @@ def kde1d(
 
     Returns
     -------
-    Pandas.DataFrame
+    polars.DataFrame
         DataFrame with columns 'x' and 'y'. 'x' contains the grid space along which the PDF, 'y'
         is estimated.
     """
@@ -117,8 +118,8 @@ def kde1d(
             return_transformer=True,
             **transform_kwargs,
         )
-    x_grid, y = FFTKDE(kernel="gaussian", bw=bw).fit(data[x].values).evaluate()
-    data = pd.DataFrame({"x": x_grid, "y": y})
+    x_grid, y = FFTKDE(kernel="gaussian", bw=bw).fit(data[x].to_numpy()).evaluate()
+    data = pl.DataFrame({"x": x_grid, "y": y})
     if transform_method:
         return transformer.inverse_scale(data=data, features=["x"])
     return data
@@ -214,13 +215,13 @@ class FlowPlot:
         if self.transform_y:
             self.ax.set_yscale(self.transform_y, **self.transform_y_kwargs)
 
-    def _hist1d(self, data: pd.DataFrame, x: str, **kwargs):
+    def _hist1d(self, data: pl.DataFrame, x: str, **kwargs):
         """
         Generate a 1D KDE plot using Seaborn. Resulting axis assigned to self.ax
 
         Parameters
         ----------
-        data: Pandas.DataFrame
+        data: polars.DataFrame
             Data to plot
         x: str
             Name of the channel to plot
@@ -245,32 +246,32 @@ class FlowPlot:
             **self.transform_x_kwargs,
         )
         self.ax.plot(
-            data["x"].values,
-            data["y"].values,
+            data["x"].to_numpy(),
+            data["y"].to_numpy(),
             linewidth=kwargs.get("linewidth", 2),
             color=kwargs.get("color", "black"),
         )
         self.ax.fill_between(
-            data["x"].values,
-            data["y"].values,
+            data["x"].to_numpy(),
+            data["y"].to_numpy(),
             color=kwargs.get("fill", "#8A8A8A"),
             alpha=kwargs.get("alpha", 0.5),
         )
         self.ax.get_yaxis().set_visible(False)
 
-    def _hist2d_axis_limits(self, data: pd.DataFrame, x: str, y: str):
+    def _hist2d_axis_limits(self, data: pl.DataFrame, x: str, y: str):
         """
         Set axis limits for 2D histogram.
 
         Parameters
         ----------
-        data: Pandas.DataFrame
+        data: polars.DataFrame
         x: str
         y: str
 
         Returns
         -------
-        Pandas.DataFrame, Pandas.DataFrame
+        polars.DataFrame, polars.DataFrame
             X limit, y limit
         """
         if self.transform_x == "log":
@@ -281,23 +282,23 @@ class FlowPlot:
             ylim = transform.safe_range(data, "y")
         else:
             ylim = [data[y].min(), data[y].max()]
-        xlim = pd.DataFrame({"Min": [xlim[0]], "Max": [xlim[1]]})
-        ylim = pd.DataFrame({"Min": [ylim[0]], "Max": [ylim[1]]})
+        xlim = pl.DataFrame({"Min": [xlim[0]], "Max": [xlim[1]]})
+        ylim = pl.DataFrame({"Min": [ylim[0]], "Max": [ylim[1]]})
         return xlim, ylim
 
-    def _transform_axis_limits(self, limits: pd.DataFrame, axis: str, transform_method: str):
+    def _transform_axis_limits(self, limits: pl.DataFrame, axis: str, transform_method: str):
         """
         Transform axis limits to the same scale as data
 
         Parameters
         ----------
-        limits: Pandas.DataFrame
+        limits: polars.DataFrame
         axis: str
         transform_method: str
 
         Returns
         -------
-        Pandas.DataFrame, Transformer
+        polars.DataFrame, Transformer
         """
         transform_kwargs = {"x": self.transform_x_kwargs, "y": self.transform_y_kwargs}
         lim, transformer = transform.apply_transform(
@@ -309,14 +310,14 @@ class FlowPlot:
         )
         return lim, transformer
 
-    def _hist2d(self, data: pd.DataFrame, x: str, y: str, **kwargs) -> None:
+    def _hist2d(self, data: pl.DataFrame, x: str, y: str, **kwargs) -> None:
         """
         Generate a 2D histogram using Matplotlib
         (https://matplotlib.org/3.1.1/api/_as_gen/matplotlib.pyplot.hist2d.html)
 
         Parameters
         ----------
-        data: Pandas.DataFrame
+        data: polars.DataFrame
             Data to plot
         x: str
             X-axis channel name
@@ -333,36 +334,36 @@ class FlowPlot:
         xlim, ylim = self._hist2d_axis_limits(data=data, x=x, y=y)
         if self.transform_x:
             xlim, xtransformer = self._transform_axis_limits(limits=xlim, axis="x", transform_method=self.transform_x)
-            xgrid = pd.DataFrame({"x": np.linspace(xlim["Min"].iloc[0], xlim["Max"].iloc[0], n)})
-            xbins = xtransformer.inverse_scale(xgrid, features=["x"]).x.values
+            xgrid = pl.DataFrame({"x": np.linspace(xlim[0, "Min"], xlim[0, "Max"], n)})
+            xbins = xtransformer.inverse_scale(xgrid, features=["x"]).x.to_numpy()
         else:
-            xbins = pd.DataFrame({"x": np.linspace(xlim["Min"].iloc[0], xlim["Max"].iloc[0], n)}).x.values
+            xbins = pl.DataFrame({"x": np.linspace(xlim[0, "Min"], xlim[0, "Max"], n)}).x.to_numpy()
         if self.transform_y:
             ylim, ytransformer = self._transform_axis_limits(limits=ylim, axis="y", transform_method=self.transform_y)
-            ygrid = pd.DataFrame({"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)})
-            ybins = ytransformer.inverse_scale(ygrid, features=["y"]).y.values
+            ygrid = pl.DataFrame({"y": np.linspace(ylim[0, "Min"], ylim[0, "Max"], n)})
+            ybins = ytransformer.inverse_scale(ygrid, features=["y"]).y.to_numpy()
         else:
-            ybins = pd.DataFrame({"y": np.linspace(ylim["Min"].iloc[0], ylim["Max"].iloc[0], n)}).y.values
+            ybins = pl.DataFrame({"y": np.linspace(ylim[0, "Min"], ylim[0, "Max"], n)}).y.to_numpy()
 
         if self.downsample is not None:
             data = data.sample(frac=self.downsample)
 
         self.ax.hist2d(
-            data[x].values,
-            data[y].values,
+            data[x].to_numpy(),
+            data[y].to_numpy(),
             bins=[xbins, ybins],
             norm=LogNorm(),
             cmap=self.cmap,
             **kwargs,
         )
 
-    def _set_axis_limits(self, data: pd.DataFrame, x: str, y: str or None):
+    def _set_axis_limits(self, data: pl.DataFrame, x: str, y: str or None):
         """
         Set the axis limits. Mutates self._ax
 
         Parameters
         ----------
-        data: Pandas.DataFrame
+        data: polars.DataFrame
             Data being plotting (used to estimate quantiles9
         x: str
             X-axis channel
@@ -410,13 +411,13 @@ class FlowPlot:
         elif y is not None:
             self.ax.set_ylabel(y)
 
-    def plot(self, data: pd.DataFrame, x: str, y: str or None = None, **kwargs):
+    def plot(self, data: pl.DataFrame, x: str, y: str or None = None, **kwargs):
         """
         Plot a single population as either a 2D histogram or 1D KDE
 
         Parameters
         ----------
-        data: Pandas.DataFrame
+        data: polars.DataFrame
             Population dataframe
         x: str
             Channel to plot on the x-axis
@@ -443,7 +444,7 @@ class FlowPlot:
     def plot_gate_children(
         self,
         gate: Gate or ThresholdGate or EllipseGate or PolygonGate,
-        parent: pd.DataFrame,
+        parent: pl.DataFrame,
         lw: float = 2.5,
         y: str or None = None,
         plot_kwargs: dict or None = None,
@@ -451,14 +452,14 @@ class FlowPlot:
     ):
         """
         Plot a Gate object. This will plot the geometric shapes generated from a single Gate, overlaid on the
-        parent population given as Pandas.DataFrame. It should be noted, this will plot the geometric definitions
+        parent population given as polars.DataFrame. It should be noted, this will plot the geometric definitions
         of a gates children, i.e. the expected populations. If you have generated new populations from new data
         using a Gate you should plot with the 'plot_population_geoms' method
 
         Parameters
         ----------
         gate: Gate or ThresholdGate or EllipseGate or PolygonGate
-        parent: Pandas.DataFrame
+        parent: polars.DataFrame
             Parent DataFrame
         lw: float (default = 2.5)
             Linewidth for shapes to plot
@@ -503,7 +504,7 @@ class FlowPlot:
 
     def plot_population_geoms(
         self,
-        parent: pd.DataFrame,
+        parent: pl.DataFrame,
         children: List[Population],
         lw: float = 2.5,
         y: str or None = None,
@@ -515,12 +516,12 @@ class FlowPlot:
         """
         This will plot the geometric shapes from the list of child populations generated from a single Gate,
         overlaid on the parent population upon which the Gate has been applied. The parent data should be provided
-        as a Pandas DataFrame of single cell data and the Geoms of the resulting Populations in the list
+        as a polars DataFrame of single cell data and the Geoms of the resulting Populations in the list
         'children'.
 
         Parameters
         ----------
-        parent: Pandas.DataFrame
+        parent: polars.DataFrame
             Parent DataFrame
         children: list
             List of Population objects that derive from the parent. Population geometries will
@@ -822,8 +823,8 @@ class FlowPlot:
 
     def backgate(
         self,
-        parent: pd.DataFrame,
-        children: Dict[str, pd.DataFrame],
+        parent: pl.DataFrame,
+        children: Dict[str, pl.DataFrame],
         x: str,
         y: str or None = None,
         colours: str or None = "pastel",
@@ -842,11 +843,11 @@ class FlowPlot:
 
         Parameters
         ----------
-        parent: Pandas.DataFrame
+        parent: polars.DataFrame
             Parent single cell data
         children: dict
-            Dictionary of Pandas DataFrames, where the key corresponds to the
-            population name and the value the Pandas DataFrame of single cell events
+            Dictionary of polars DataFrames, where the key corresponds to the
+            population name and the value the polars DataFrame of single cell events
         x: str
             X-axis variable
         y: str (optional)
@@ -879,6 +880,7 @@ class FlowPlot:
         -------
         Matplotlib.axes
         """
+        parent = parent.to_pandas()
         colours = cycle(sns.color_palette(colours))
         plot_kwargs = plot_kwargs or {}
         overlay_kwargs = overlay_kwargs or {}
@@ -887,6 +889,7 @@ class FlowPlot:
         self._set_axis_limits(data=parent, x=x, y=y)
 
         for c, (child_name, df) in zip(colours, children.items()):
+            df = df.to_pandas()
             method_ = method
             if isinstance(method, dict):
                 method_ = method.get(child_name, "scatter")
@@ -941,7 +944,7 @@ class FlowPlot:
 
         Parameters
         ----------
-        data: Pandas.DataFrame
+        data: polars.DataFrame
         x: str
         y: str, optional
         method: str
@@ -998,8 +1001,8 @@ class FlowPlot:
 
         Parameters
         ----------
-        data1: Pandas.DataFrame
-        data2: Pandas.DataFrame
+        data1: polars.DataFrame
+        data2: polars.DataFrame
         x: str
         y: str, optional
         colour: str (default="#db4b6a")
@@ -1069,7 +1072,7 @@ def backgating(filegroup, populations: Dict, col_wrap: int = 3, figsize: Tuple[i
             plot = FlowPlot(ax=axes[i], **properties.get("flow_plot_kwargs", {}))
             parent = filegroup.load_population_df(population=properties.get("parent", "root"), transform=None)
             pop_df = filegroup.load_population_df(population=population, transform=None)
-            plot.overlay_plot(data1=parent, data2=pop_df, **properties["overlay_kwargs"])
+            plot.overlay_plot(data1=parent.to_pandas(), data2=pop_df.to_pandas(), **properties["overlay_kwargs"])
         fig.tight_layout()
         return fig
     except KeyError as e:
