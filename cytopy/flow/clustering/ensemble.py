@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 
+import pandas as pd
 import seaborn as sns
 
 from ...data.experiment import Experiment
@@ -47,11 +48,11 @@ class EnsembleClustering:
     def __init__(
         self,
         experiment: Experiment,
-        features: list,
-        sample_ids: list or None = None,
+        features: List[str],
+        sample_ids: Optional[List[str]] = None,
         root_population: str = "root",
         transform: Union[str, Dict] = "logicle",
-        transform_kwargs: dict or None = None,
+        transform_kwargs: Optional[Dict] = None,
         verbose: bool = True,
         population_prefix: str = "ensemble",
         sample_size: Optional[int, float] = None,
@@ -130,8 +131,8 @@ class EnsembleClustering:
             print_performance_metrics=False,
         )
         self.clustering_permutations[cluster_name] = {
-            "labels": data["cluster_label"].values,
-            "n_clusters": data["cluster_label"].nunique(),
+            "labels": data["cluster_label"],
+            "n_clusters": data["cluster_label"].n_unique(),
             "params": kwargs or {},
             "scalar": scalar,
         }
@@ -193,11 +194,10 @@ class EnsembleClustering:
 
     @valid_labels
     def clustered_heatmap(self, cluster_labels: List[int], features: Optional[List] = None, **kwargs):
-        plot_data = self.data.copy()
+        plot_data = self.data.clone()
         plot_data["cluster_label"] = cluster_labels
         plot_data = self.data.groupby("cluster_label")[self.features].median()
         features = features or self.features
-        plot_data[features] = plot_data[features].apply(pd.to_numeric)
         kwargs = kwargs or {}
         kwargs["col_cluster"] = kwargs.get("col_cluster", True)
         kwargs["figsize"] = kwargs.get("figsize", (10, 15))
@@ -213,10 +213,10 @@ class EnsembleClustering:
 
         for sample_id in progress_bar(data.sample_id.unique(), verbose=verbose):
             fg = self.experiment.get_sample(sample_id)
-            sample_data = data[data.sample_id == sample_id].copy()
+            sample_data = data[data.sample_id == sample_id]
 
             for parent, children in parent_child_mappings.items():
-                cluster_data = sample_data[sample_data["cluster_label"].isin(children)]
+                cluster_data = sample_data.filter(pd.col("cluster_label").is_in(children))
                 if cluster_data.shape[0] == 0:
                     logger.warning(f"No clusters found for {sample_id} to generate requested parent {parent}")
                     continue
@@ -228,9 +228,9 @@ class EnsembleClustering:
                     n=cluster_data.shape[0],
                     parent=self.root_population,
                     source="cluster",
-                    signature=cluster_data.mean().to_dict(),
+                    signature=cluster_data[self.features].mean().to_dict(),
                 )
-                pop.index = cluster_data.original_index.values
+                pop.index = cluster_data["Index"].values
                 fg.add_population(population=pop)
             fg.save()
 
@@ -241,7 +241,7 @@ class EnsembleClustering:
         verbose: bool = True,
         parent_populations: Optional[Dict] = None,
     ):
-        data = self.data.copy()
+        data = self.data.clone()
         data["cluster_label"] = cluster_labels
         if parent_populations is not None:
             self._create_parent_populations(data=data, parent_populations=parent_populations)
@@ -249,7 +249,7 @@ class EnsembleClustering:
 
         for sample_id in progress_bar(data.sample_id.unique(), verbose=verbose):
             fg = self.experiment.get_sample(sample_id)
-            sample_data = data[data.sample_id == sample_id].copy()
+            sample_data = data[data.sample_id == sample_id]
 
             for cluster_label, cluster in sample_data.groupby("cluster_label"):
                 population_name = (

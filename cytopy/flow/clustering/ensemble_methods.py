@@ -4,7 +4,7 @@ from typing import *
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import polars as pl
+import pandas as pd
 import scipy.cluster.hierarchy as hierarchical_cluster
 import seaborn as sns
 from scipy.spatial import distance as ssd
@@ -80,7 +80,7 @@ class CoMatrix:
         for labels in [x["labels"] for x in self.clusterings.values()]:
             co_matrix += gather_single_partition(labels)
         co_matrix_f = co_matrix / self.n_ensembles
-        header = self.data.index.values if self.index is None else self.data[self.index].values
+        header = np.arange(0, self.data.shape[0])
         co_matrix_df = pd.DataFrame(index=header, data=co_matrix_f, columns=header)
         return co_matrix_df
 

@@ -55,8 +55,8 @@ from collections import defaultdict
 from typing import *
 
 import numpy as np
+import pandas as pd
 import phenograph
-import polars as pl
 import seaborn as sns
 from sklearn.metrics import calinski_harabasz_score
 from sklearn.metrics import davies_bouldin_score
@@ -75,20 +75,6 @@ from .consensus import ConsensusCluster
 from .flowsom import FlowSOM
 from cytopy.flow.transform import Scaler
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = [
-    "Ross Burton",
-    "Žiga Sajovic",
-    "Simone Cuff",
-    "Andreas Artemiou",
-    "Matthias Eberl",
-]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 logger = logging.getLogger(__name__)
 
 
@@ -103,7 +89,7 @@ def clustering_performance(data: pd.DataFrame, labels: list):
         "Clustering performance...",
         f"Silhouette coefficient: {silhouette_score(data.values, labels, metric='euclidean')}",
         f"Calinski-Harabasz index: {calinski_harabasz_score(data.values, labels)}",
-        f"Davies-Bouldin index: {davies_bouldin_score(data.values, labels)}",
+        f"Davies-Bouldin index: {davies_bouldin_score(data.value, labels)}",
     ]:
         print(x)
         logger.info(x)
@@ -800,7 +786,7 @@ class Clustering:
             transform=transform,
             transform_kwargs=transform_kwargs,
             populations=root_population,
-        )
+        ).to_pandas()
         self.data["meta_label"] = None
         self.data["cluster_label"] = None
         logger.info("Ready to cluster!")
@@ -1248,7 +1234,7 @@ class Clustering:
                     source="cluster",
                     signature=cluster_data.mean().to_dict(),
                 )
-                pop.index = cluster_data.original_index.values
+                pop.index = cluster_data.Index.values
                 fg.add_population(population=pop)
             fg.save()
 
@@ -1312,7 +1298,7 @@ class Clustering:
                     source="cluster",
                     signature=cluster.mean().to_dict(),
                 )
-                pop.index = cluster.original_index.values
+                pop.index = cluster.Index.values
                 fg.add_population(population=pop)
             fg.save()
 

@@ -26,28 +26,14 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import bisect
+from itertools import combinations
+
+import numpy as np
 
 from ...feedback import progress_bar
-from itertools import combinations
-import numpy as np
-import bisect
 
 np.random.seed(42)
-
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = [
-    "Žiga Sajovic",
-    "Ross Burton",
-    "Simone Cuff",
-    "Andreas Artemiou",
-    "Matthias Eberl",
-]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 
 
 class ConsensusCluster:
@@ -111,9 +97,7 @@ class ConsensusCluster:
         numpy.ndarray, numpy.ndarray
             Resampled indices and numpy array of resampled data
         """
-        resampled_indices = np.random.choice(
-            range(data.shape[0]), size=int(data.shape[0] * proportion), replace=False
-        )
+        resampled_indices = np.random.choice(range(data.shape[0]), size=int(data.shape[0] * proportion), replace=False)
         return resampled_indices, data[resampled_indices, :]
 
     def fit(self, data: np.array) -> None:
@@ -129,14 +113,10 @@ class ConsensusCluster:
         # Init a connectivity matrix and an indicator matrix with zeros
         Mk = np.zeros((self.K_ - self.L_, data.shape[0], data.shape[0]))
         Is = np.zeros((data.shape[0],) * 2)
-        for k in progress_bar(
-            range(self.L_, self.K_), verbose=self.verbose
-        ):  # for each number of clusters
+        for k in progress_bar(range(self.L_, self.K_), verbose=self.verbose):  # for each number of clusters
             i_ = k - self.L_
             for h in range(self.H_):  # resample H times
-                resampled_indices, resample_data = self._internal_resample(
-                    data, self.resample_proportion_
-                )
+                resampled_indices, resample_data = self._internal_resample(data, self.resample_proportion_)
                 self.cluster_.set_params(n_clusters=k)
                 Mh = self.cluster_.fit_predict(resample_data)
                 # find indexes of elements from same clusters with bisection
@@ -165,21 +145,15 @@ class ConsensusCluster:
         self.Ak = np.zeros(self.K_ - self.L_)
         for i, m in enumerate(Mk):
             hist, bins = np.histogram(m.ravel(), density=True)
-            self.Ak[i] = np.sum(
-                h * (b - a) for b, a, h in zip(bins[1:], bins[:-1], np.cumsum(hist))
-            )
+            self.Ak[i] = np.sum(h * (b - a) for b, a, h in zip(bins[1:], bins[:-1], np.cumsum(hist)))
         # fits differences between areas under CDFs
         self.deltaK = np.array(
             [
                 (Ab - Aa) / Aa if i > 2 else Aa
-                for Ab, Aa, i in zip(
-                    self.Ak[1:], self.Ak[:-1], range(self.L_, self.K_ - 1)
-                )
+                for Ab, Aa, i in zip(self.Ak[1:], self.Ak[:-1], range(self.L_, self.K_ - 1))
             ]
         )
-        self.bestK = (
-            np.argmax(self.deltaK) + self.L_ if self.deltaK.size > 0 else self.L_
-        )
+        self.bestK = np.argmax(self.deltaK) + self.L_ if self.deltaK.size > 0 else self.L_
 
     def predict(self):
         """Predicts on the consensus matrix, for best found cluster number

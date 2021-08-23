@@ -76,14 +76,14 @@ class FlowSOM:
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: pl.DataFrame,
         features: list,
         neighborhood_function: str = "gaussian",
         normalisation: bool = False,
         verbose: bool = True,
     ):
 
-        self.data = data[features].values
+        self.data = data[features].to_numpy()
         self.normalisation = normalisation
         if normalisation:
             self.data = MinMaxScaler().fit_transform(self.data)

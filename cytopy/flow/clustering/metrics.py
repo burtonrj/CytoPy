@@ -2,7 +2,7 @@ import math
 from typing import *
 
 import numpy as np
-import polars as pl
+import pandas as pd
 from scipy.spatial import distance
 from sklearn import metrics as sklearn_metrics
 

@@ -466,7 +466,7 @@ def sample_dataframe(
 def sample_dataframe_uniform_groups(data: pl.DataFrame, group_id: str, sample_size: int):
     sample_data = list()
     n = int(sample_size / data[group_id].nunique())
-    for _, df in data.groupby(group_id):
+    for df in data.groupby(group_id):
         if n >= df.shape[0]:
             sample_data.append(df)
         else:
