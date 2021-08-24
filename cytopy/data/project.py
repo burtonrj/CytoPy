@@ -136,6 +136,7 @@ class Project(mongoengine.Document):
         if experiment_id in [x.experiment_id for x in self.experiments]:
             raise DuplicateExperimentError(f"Experiment with id {experiment_id} already exists!")
         exp = Experiment(experiment_id=experiment_id)
+        exp.generate_panel(panel_definition=panel_definition)
         exp.save()
         self.experiments.append(exp)
         self.save()

@@ -92,7 +92,9 @@ class Population(mongoengine.EmbeddedDocument):
 
     @property
     def index(self) -> Iterable[int]:
-        return pickle.loads(self._index.read())
+        idx = pickle.loads(self._index.read())
+        self._index.seek(0)
+        return idx
 
     @index.setter
     def index(self, idx: Iterable[int]):
@@ -272,6 +274,7 @@ def _merge_polygons(left: Population, right: Population, new_population_name: st
         x_values=x,
         y_values=y,
     )
+    new_idx = merge_index(left, right)
     new_population = Population(
         population_name=new_population_name,
         n=len(new_idx),
@@ -281,7 +284,7 @@ def _merge_polygons(left: Population, right: Population, new_population_name: st
         geom=new_geom,
         signature=_merge_signatures(left, right),
     )
-    new_population.index = merge_index(left, right)
+    new_population.index = new_idx
     return new_population
 
 

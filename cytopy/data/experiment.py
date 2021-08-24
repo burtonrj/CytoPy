@@ -282,6 +282,8 @@ class Experiment(mongoengine.Document):
         processing_datetime: Optional[str] = None,
         collection_datetime: Optional[str] = None,
     ):
+        if self.panel is None:
+            raise AttributeError("No panel defined.")
         if "primary" not in paths.keys():
             err = "'primary' missing from paths"
             logger.error(err)

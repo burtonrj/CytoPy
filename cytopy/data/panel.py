@@ -10,10 +10,10 @@ import mongoengine
 import pandas as pd
 
 from .errors import PanelError
-from .read_write import load_compensation_matrix
 from .read_write import match_file_ext
 from .read_write import read_from_disk
 from .read_write import read_from_remote
+from .read_write import read_headers
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def load_template(path: str) -> pd.DataFrame:
         template = pd.read_excel(path)
     else:
         raise ValueError(f"Panel template should be a csv or excel file, not {path}.")
-    required_columns = ["channel", "regex_pattern", "case_sensitive", "permutations", "names"]
+    required_columns = ["channel", "regex_pattern", "case_sensitive", "permutations", "name"]
     if not all([x in template.columns for x in required_columns]):
         raise KeyError(f"Template must contain columns {required_columns}.")
     unique_channels = len(template.channel.values) == template.channel.nunique()
@@ -40,7 +40,7 @@ class Channel(mongoengine.EmbeddedDocument):
     name = mongoengine.StringField(required=False)
     regex_pattern = mongoengine.StringField(required=False)
     case_sensitive = mongoengine.IntField(default=0)
-    permutations = mongoengine.ListField(required=False)
+    permutations = mongoengine.StringField(required=False)
 
     def query(self, x: str):
         if self.case_sensitive:
@@ -74,9 +74,9 @@ class Panel(mongoengine.EmbeddedDocument):
         matches = [channel_definition.query(channel) for channel_definition in self.channels]
         matches = [x for x in matches if x is not None]
         if len(matches) > 1:
-            raise ValueError("Channel matched more than one definition in panel. Channels must be unique.")
+            raise ValueError(f"Channel {channel} matched more than one definition in panel. Channels must be unique.")
         if len(matches) == 0:
-            raise ValueError("No matching channel found in panel.")
+            raise ValueError(f"No matching channel found in panel for {channel}")
         return matches[0]
 
     def build_mappings(self, path: Union[str, List[str]], s3_bucket: Optional[str] = None) -> Dict[str, str]:
@@ -85,16 +85,12 @@ class Panel(mongoengine.EmbeddedDocument):
                 path = [path]
             columns = None
             for path in path:
-                if s3_bucket:
-                    data = read_from_remote(s3_bucket=s3_bucket, path=path)
-                else:
-                    data = read_from_disk(path=path)
                 if columns is None:
-                    columns = data.columns
+                    columns = read_headers(path=path, s3_bucket=s3_bucket)
                 else:
-                    assert set(columns) == set(data.columns)
+                    assert set(columns) == set(read_headers(path=path, s3_bucket=s3_bucket))
             mappings = dict()
-            for col in columns:
+            for col in [x for x in columns if x != "Index"]:
                 mappings[col] = self.query_channel(channel=col)
             return mappings
         except AssertionError:
@@ -106,19 +102,14 @@ class Panel(mongoengine.EmbeddedDocument):
         logger.info(f"Generating new Panel definition from Excel file template {path}")
         if not os.path.isfile(path):
             raise PanelError(f"No such file {path}")
-        template = load_template(path=path).to_dict(orient="records")
+        template = load_template(path=path).fillna("").to_dict(orient="records")
         for row in template:
             self.channels.append(
                 Channel(
                     channel=row["channel"],
-                    regex_pattern=row["regex"],
-                    case_sensitive=row["case"],
+                    regex_pattern=row["regex_pattern"],
+                    case_sensitive=row["case_sensitive"],
                     permutations=row["permutations"],
                     name=row["name"],
                 )
             )
-
-    def validate_file(self, path: str, s3_bucket: Optional[str] = None):
-
-        for column in data.columns:
-            self.query_channel(channel=column)

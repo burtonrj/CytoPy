@@ -90,9 +90,12 @@ def compensate(data: pl.DataFrame, spill_matrix: pl.DataFrame) -> pl.DataFrame:
     -------
     polars.DataFrame
     """
-    compensated = np.linalg.solve(spill_matrix.to_numpy().T, data[:, spill_matrix.columns].to_numpy().T).T
-    data[:, spill_matrix.columns] = compensated
-    return data
+    features = [x for x in spill_matrix.columns if x != "Index"]
+    other_columns = [x for x in data.columns if x not in features]
+    compensated = pl.DataFrame(
+        np.linalg.solve(spill_matrix[features].to_numpy().T, data[features].to_numpy().T).T, columns=features
+    )
+    return data[other_columns].hstack(compensated)
 
 
 def valid_compensation_matrix_path(path: Union[str, None]):
@@ -272,19 +275,23 @@ class FileGroup(mongoengine.Document):
             if sample_size is not None:
                 data = sample_dataframe(data=data, sample_size=sample_size, method=sampling_method, **sampling_kwargs)
             return data
-        except KeyError:
-            logger.error(f"Invalid source {source} for {self.primary_id}, expected one of {self.file_paths.keys()}")
+        except KeyError as e:
+            logger.error(
+                f"Invalid source {source} for {self.primary_id}, expected one of {self.file_paths.keys()}; {e}"
+            )
             raise
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             logger.error(
                 f"Could not locate file for {source} at {self.file_paths[source]}. Has the file moved? If so "
                 f"make sure to update the database."
             )
+            logger.exception(e)
+            raise
         except ValueError as e:
-            logger.error(e)
+            logger.exception(e)
             raise
         except TypeError as e:
-            logger.error(e)
+            logger.exception(e)
             raise
 
     def add_population(self, population: Population) -> None:

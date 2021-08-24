@@ -34,6 +34,8 @@ import logging
 import os
 from multiprocessing import cpu_count
 from multiprocessing import Pool
+from typing import List
+from typing import Optional
 
 import flowio
 import numpy as np
@@ -247,8 +249,26 @@ def fcs_to_polars(fcs: flowio.FlowData) -> pl.DataFrame:
     """
     columns = [x["PnN"] for _, x in fcs.channels.items()]
     data = pl.DataFrame(np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count)), columns=columns)
+    data = data[pl.col("*").cast(pl.Float64)]
     data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
     return data
+
+
+def read_headers(path: str, s3_bucket: Optional[str] = None) -> List[str]:
+    if s3_bucket is not None:
+        if match_file_ext(path, ".csv"):
+            data = read_from_remote(s3_bucket=s3_bucket, path=path, stop_after_n_rows=3)
+        else:
+            data = read_from_remote(s3_bucket=s3_bucket, path=path)
+    else:
+        if match_file_ext(path, ".csv"):
+            data = read_from_disk(path=path, stop_after_n_rows=3)
+        elif match_file_ext(path, ".fcs"):
+            fcs = flowio.FlowData(filename=path)
+            return [x["PnN"] for _, x in fcs.channels.items()] + ["Index"]
+        else:
+            data = read_from_disk(path=path)
+    return data.columns
 
 
 def read_from_disk(path: str, **kwargs) -> pl.DataFrame:
@@ -270,10 +290,10 @@ def read_from_disk(path: str, **kwargs) -> pl.DataFrame:
     """
     if match_file_ext(path=path, ext=".fcs"):
         return fcs_to_polars(flowio.FlowData(filename=path))
-    elif match_file_ext(path=path, ext=".csv"):
-        data = pl.read_csv(path=path, **kwargs)
-    elif match_file_ext(path=path, ext=".parquet"):
-        data = pl.read_parquet(source=path, **kwargs)
+    elif match_file_ext(path, ext=".csv"):
+        data = pl.read_csv(path, **kwargs)[pl.col("*").cast(pl.Float64)]
+    elif match_file_ext(path, ext=".parquet"):
+        data = pl.read_parquet(source=path, **kwargs)[pl.col("*").cast(pl.Float64)]
     else:
         raise ValueError("Currently only support fcs, csv, or parquet file extensions")
     data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
@@ -301,10 +321,10 @@ def read_from_remote(s3_bucket: str, path: str, **kwargs) -> pl.DataFrame:
     fs = s3fs.S3FileSystem()
     if match_file_ext(path=path, ext=".csv"):
         with fs.open(f"s3://{s3_bucket}/{path}") as f:
-            data = pl.read_csv(file=f, **kwargs)
+            data = pl.read_csv(file=f, **kwargs)[pl.col("*").cast(pl.Float64)]
     elif match_file_ext(path=path, ext=".parquet"):
         data = pq.ParquetDataset(f"s3://{s3_bucket}/{path}", filesystem=fs)
-        data = pl.from_arrow(data.read(**kwargs))
+        data = pl.from_arrow(data.read(**kwargs))[pl.col("*").cast(pl.Float64)]
     else:
         raise ValueError("Currently only support csv or parquet file extensions")
     data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
