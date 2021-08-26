@@ -28,12 +28,16 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import json
 import logging
+from functools import partial
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Set
+from typing import Union
 
 import mongoengine
 import pandas as pd
+import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +97,33 @@ def safe_search(subject_id: str):
         return Subject.objects(subject_id=subject_id).get()
     except mongoengine.DoesNotExist:
         return None
+
+
+def lookup_variable(subject_id: str, key: Union[str, List[str]]) -> Union[None, str]:
+    try:
+        subject = safe_search(subject_id=subject_id)
+        if subject is None:
+            return None
+        if len(key) == 1:
+            key = key[0]
+        if isinstance(key, str):
+            return subject[key]
+        node = subject[key[0]]
+        for k in key[1:]:
+            node = node[k]
+        return node
+    except KeyError:
+        return None
+
+
+def add_meta_labels(data: Union[pd.DataFrame, pl.DataFrame], key: Union[str, List[str]], column_name: str):
+    if isinstance(data, pd.DataFrame):
+        data = pl.DataFrame(data)
+    if "subject_id" not in data.columns:
+        raise ValueError(f"Data is missing 'subject_id' column")
+    unique_subject_ids = data["subject_id"].unique()
+    lookup_func = partial(lookup_variable, key=key)
+    meta_var = pl.DataFrame(
+        [unique_subject_ids, unique_subject_ids.apply(lookup_func)], columns=["subject_id", column_name]
+    )
+    return data.join(meta_var, on="subject_id")

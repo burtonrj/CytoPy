@@ -308,6 +308,7 @@ class Experiment(mongoengine.Document):
                 channel_mappings=self.panel.build_mappings(path=paths.values(), s3_bucket=s3_bucket),
             )
         )
+        self.save()
 
     def control_counts(self, ax: Optional[plt.Axes] = None) -> plt.Axes:
         """
@@ -503,9 +504,9 @@ def single_cell_dataframe(
         logger.debug(f"Loading FileGroup data from {_id}; {fg.id}")
         pop_data = getattr(fg, method)(**kwargs)
         pop_data["sample_id"] = [_id for _ in range(pop_data.shape[0])]
-        pop_data["subject_id"] = [None for _ in range(pop_data.shape[0])]
+        pop_data["subject_id"] = ["" for _ in range(pop_data.shape[0])]
         if fg.subject:
-            pop_data["subject_id"] = fg.subject.subject_id
+            pop_data["subject_id"] = [fg.subject.subject_id for _ in range(pop_data.shape[0])]
         data.append(pop_data)
 
     data = pl.concat(data)

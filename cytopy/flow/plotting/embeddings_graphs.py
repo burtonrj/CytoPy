@@ -52,7 +52,7 @@ def _scatterplot_defaults(**kwargs):
 
 
 def discrete_scatterplot(
-    data: pl.DataFrame,
+    data: pd.DataFrame,
     x: str,
     y: str,
     z: str or None,
@@ -86,7 +86,7 @@ def discrete_scatterplot(
     data[label] = data[label].astype(str)
     if z is not None:
         ax = fig.add_subplot(111, projection="3d")
-        for (l, df), c in zip(data.to_pandas().groupby(label), colours):
+        for (l, df), c in zip(data.groupby(label), colours):
             s = size
             if isinstance(size, str):
                 s = df[size]
@@ -110,7 +110,7 @@ def discrete_scatterplot(
 
 
 def cont_scatterplot(
-    data: pl.DataFrame,
+    data: pd.DataFrame,
     x: str,
     y: str,
     z: str or None,
@@ -144,14 +144,14 @@ def cont_scatterplot(
     Matplotlib.Axes
     """
     if isinstance(size, str):
-        size = data[size].to_numpy()
+        size = data[size].values
     if z is not None:
         ax = fig.add_subplot(111, projection="3d")
         im = ax.scatter(
-            data[x].to_numpy(),
-            data[y].to_numpy(),
-            data[z].to_numpy(),
-            c=data[label].to_numpy(),
+            data[x].values,
+            data[y].values,
+            data[z].values,
+            c=data[label].values,
             s=size,
             cmap=cmap,
             **kwargs,
@@ -159,9 +159,9 @@ def cont_scatterplot(
     else:
         ax = fig.add_subplot(111)
         im = ax.scatter(
-            data[x].to_numpy(),
-            data[y].to_numpy(),
-            c=data[label].to_numpy(),
+            data[x].values,
+            data[y].values,
+            c=data[label].values,
             s=size,
             cmap=cmap,
             **kwargs,
@@ -171,7 +171,7 @@ def cont_scatterplot(
 
 
 def single_cell_plot(
-    data: pl.DataFrame,
+    data: Union[pl.DataFrame, pd.DataFrame],
     x: str,
     y: str,
     z: str or None = None,
@@ -227,7 +227,10 @@ def single_cell_plot(
     -------
     Matplotlib.Axes
     """
-    data = data.copy()
+    if isinstance(data, pl.DataFrame):
+        data = data.to_pandas()
+    else:
+        data = data.copy()
     kwargs = _scatterplot_defaults(**kwargs)
     cbar_kwargs = cbar_kwargs or {}
     data = data.dropna(axis=1, how="any")
@@ -236,7 +239,7 @@ def single_cell_plot(
     if label is not None:
         if discrete:
             ax = discrete_scatterplot(
-                data=data.to_pandas(),
+                data=data,
                 x=x,
                 y=y,
                 z=z,
@@ -248,11 +251,11 @@ def single_cell_plot(
             )
         else:
             if scale == "zscore":
-                data[label] = StandardScaler().fit_transform(data[label].to_numpy().reshape(-1, 1))
+                data[label] = StandardScaler().fit_transform(data[label].values.reshape(-1, 1))
             elif scale == "minmax":
-                data[label] = MinMaxScaler().fit_transform(data[label].to_numpy().reshape(-1, 1))
+                data[label] = MinMaxScaler().fit_transform(data[label].values.reshape(-1, 1))
             ax = cont_scatterplot(
-                data=data.to_pandas(),
+                data=data,
                 x=x,
                 y=y,
                 z=z,
@@ -265,7 +268,7 @@ def single_cell_plot(
             )
     else:
         if isinstance(size, str):
-            size = data[size].to_numpy()
+            size = data[size].values
         if z is not None:
             ax = fig.add_subplot(111, projection="3d")
             ax.scatter(data[x], data[y], data[z], s=size, **kwargs)
