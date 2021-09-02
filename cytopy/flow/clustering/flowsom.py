@@ -27,9 +27,16 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Type
 
-import polars as pl
+import numpy as np
+import pandas as pd
 from minisom import MiniSom
+from sklearn.cluster import AgglomerativeClustering
 from sklearn.preprocessing import MinMaxScaler
 
 from ...feedback import progress_bar
@@ -76,18 +83,23 @@ class FlowSOM:
 
     def __init__(
         self,
-        data: pl.DataFrame,
-        features: list,
         neighborhood_function: str = "gaussian",
         normalisation: bool = False,
         verbose: bool = True,
+        som_dim: Tuple[int, int] = (50, 50),
+        sigma: float = 1.0,
+        learning_rate: float = 0.5,
+        batch_size: int = 500,
+        random_seed: int = 42,
+        weight_init: str = "random",
+        meta_clusterer: Optional[Type] = None,
+        meta_clusterer_kwargs: Optional[Dict] = None,
+        min_n: int = 5,
+        max_n: int = 50,
+        iter_n: int = 10,
+        resample_proportion: float = 0.5,
     ):
-
-        self.data = data[features].to_numpy()
         self.normalisation = normalisation
-        if normalisation:
-            self.data = MinMaxScaler().fit_transform(self.data)
-        self.dims = len(features)
         assert neighborhood_function in [
             "gaussian",
             "mexican_hat",
@@ -105,95 +117,71 @@ class FlowSOM:
         self.meta_bestk = None
         self.meta_flatten = None
         self.meta_class = None
+        self.som_dim = som_dim
+        self.sigma = sigma
+        self.learning_rate = learning_rate
+        self.batch_size = batch_size
+        self.random_seed = random_seed
+        self.weight_init = weight_init
+        meta_clusterer_kwargs = meta_clusterer_kwargs or {}
+        self.meta_clusterer = meta_clusterer or AgglomerativeClustering
+        self.meta_clusterer = self.meta_clusterer(**meta_clusterer_kwargs)
+        self.min_n = min_n
+        self.max_n = max_n
+        self.iter_n = iter_n
+        self.resample_proportion = resample_proportion
 
-    def train(
-        self,
-        som_dim: tuple = (50, 50),
-        sigma: float = 1.0,
-        learning_rate: float = 0.5,
-        batch_size: int = 500,
-        seed: int = 42,
-        weight_init: str = "random",
-    ):
+    def fit_predict(self, data: pd.DataFrame, features: List[str]):
+        data = data[features].values
+        if self.normalisation:
+            data = MinMaxScaler().fit_transform(data)
+        self.train(data=data)
+        self.meta_cluster()
+        return self.predict(data=data)
 
-        """Train self-organising map.
-        Parameters
-        ----------
-        som_dim : tuple, (default=(250, 250))
-            dimensions of SOM embedding (number of nodes)
-        sigma : float, (default=1.0)
-            the radius of the different neighbors in the SOM, default = 1.0
-        learning_rate : float, (default=0.5)
-            alters the rate at which weights are updated
-        batch_size : int, (default=500)
-            size of batches used in training (alters number of total iterations)
-        seed : int, (default=42)
-            random seed
-        weight_init : str, (default='random')
-            how to initialise weights: either 'random' or 'pca' (Initializes the weights to span the
-            first two principal components)
-        Returns
-        -------
-        None
+    def train(self, data: np.ndarray):
+
         """
-
+        Train self-organising map.
+        """
         som = MiniSom(
-            som_dim[0],
-            som_dim[1],
-            self.dims,
-            sigma=sigma,
-            learning_rate=learning_rate,
+            self.som_dim[0],
+            self.som_dim[1],
+            data.shape[1],
+            sigma=self.sigma,
+            learning_rate=self.learning_rate,
             neighborhood_function=self.nf,
-            random_seed=seed,
+            random_seed=self.random_seed,
         )
-        if weight_init == "random":
-            som.random_weights_init(self.data)
-        elif weight_init == "pca":
+        if self.weight_init == "random":
+            som.random_weights_init(data)
+        elif self.weight_init == "pca":
             if not self.normalisation:
                 logger.warning(
                     "It is strongly recommended to normalize the data before initializing " "the weights if using PCA."
                 )
-            som.pca_weights_init(self.data)
+            som.pca_weights_init(data)
         else:
             logger.warning(
                 'Invalid value provided for "weight_init", valid input is either "random" or "pca". '
                 "Defaulting to random initialisation of weights"
             )
-            som.random_weights_init(self.data)
+            som.random_weights_init(data)
 
         logger.info("------------- Training SOM -------------")
-        som.train_batch(self.data, batch_size, verbose=True)  # random training
-        self.xn = som_dim[0]
-        self.yn = som_dim[1]
+        som.train_batch(data, self.batch_size, verbose=True)  # random training
+        self.xn = self.som_dim[0]
+        self.yn = self.som_dim[1]
         self.map = som
         self.weights = som.get_weights()
-        self.flatten_weights = self.weights.reshape(self.xn * self.yn, self.dims)
+        self.flatten_weights = self.weights.reshape(self.xn * self.yn, data.shape[1])
         logger.info("Training complete!")
         logger.info("----------------------------------------")
 
-    def meta_cluster(
-        self,
-        cluster_class: callable,
-        min_n: int = 5,
-        max_n: int = 50,
-        iter_n: int = 10,
-        resample_proportion: float = 0.5,
-    ):
+    def meta_cluster(self):
         """Perform meta-clustering. Implementation of Consensus clustering, following the paper
         https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf
-        Parameters
-        ----------
-        cluster_class :
-            clustering object (must follow Sklearn standard; needs fit_predict method called with
-            parameter n_clusters)
-        min_n : int
-            the min proposed number of clusters
-        max_n : int
-            the max proposed number of clusters
-        iter_n : int
-            the iteration times for each number of clusters
-        resample_proportion : float, (Default value = 0.5)
-            within (0, 1), the proportion of re-sampling when computing clustering
+
         Returns
         -------
         None
@@ -202,11 +190,11 @@ class FlowSOM:
         assert self.map is not None, "SOM must be trained prior to meta-clustering; call train before meta_cluster"
         # initialize cluster
         cluster_ = ConsensusCluster(
-            cluster_class,
-            min_n,
-            max_n,
-            iter_n,
-            resample_proportion=resample_proportion,
+            self.meta_clusterer,
+            self.min_n,
+            self.max_n,
+            self.iter_n,
+            resample_proportion=self.resample_proportion,
             verbose=self.verbose,
         )
         cluster_.fit(self.flatten_weights)  # fitting SOM weights into clustering algorithm
@@ -218,7 +206,7 @@ class FlowSOM:
         self.meta_flatten = cluster_.predict_data(self.flatten_weights)
         self.meta_class = self.meta_flatten.reshape(self.xn, self.yn)
 
-    def predict(self):
+    def predict(self, data: np.ndarray):
         """
         Predict the cluster allocation for each cell in the associated dataset.
         (Requires that train and meta_cluster have been called previously)
@@ -237,8 +225,8 @@ class FlowSOM:
         assert self.meta_class is not None, err_msg
         labels = []
         logger.info("---------- Predicting Labels ----------")
-        for i in progress_bar(range(len(self.data)), verbose=self.verbose):
-            xx = self.data[i, :]  # fetch the sample data
+        for i in progress_bar(range(data.shape[0]), verbose=self.verbose):
+            xx = data[i, :]  # fetch the sample data
             winner = self.map.winner(xx)  # make prediction, prediction = the closest entry location in the SOM
             c = self.meta_class[winner]  # from the location info get cluster info
             labels.append(c)

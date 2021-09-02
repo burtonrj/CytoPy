@@ -147,3 +147,13 @@ class CalinskiHarabaszScore(Metric):
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
         return sklearn_metrics.calinski_harabasz_score(data[features].values, labels=labels)
+
+
+inbuilt_metrics = {
+    "ball_hall": BallHall,
+    "baker_hubert_gamma_index": BakerHubertGammaIndex,
+    "silhouette_coef": SilhouetteCoef,
+    "davies_bouldin_index": DaviesBouldinIndex,
+    "g_plus_index": GPlusIndex,
+    "calinski_harabasz_score": CalinskiHarabaszScore,
+}

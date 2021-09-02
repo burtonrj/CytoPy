@@ -1,9 +1,16 @@
 import logging
 from collections import defaultdict
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Union
 
+import numpy as np
 import pandas as pd
 import seaborn as sns
 
+from . import metrics as cluster_metrics
 from ...data.experiment import Experiment
 from ...data.experiment import single_cell_dataframe
 from ...data.population import Population
@@ -14,8 +21,8 @@ from ..sampling import sample_dataframe_uniform_groups
 from .ensemble_methods import CoMatrix
 from .ensemble_methods import MixtureModel
 from .main import ClusteringError
+from .main import init_metrics
 from .main import remove_null_features
-from .metrics import *
 from .mutual_info import MutualInfo
 from cytopy.flow.transform import Scaler
 
@@ -36,14 +43,7 @@ def valid_labels(func: Callable):
 
 class EnsembleClustering:
 
-    default_metrics = {
-        "ball_hall": BallHall,
-        "baker_hubert_gamma_index": BakerHubertGammaIndex,
-        "silhouette_coef": SilhouetteCoef,
-        "davies_bouldin_index": DaviesBouldinIndex,
-        "g_plus_index": GPlusIndex,
-        "calinski_harabasz_score": CalinskiHarabaszScore,
-    }
+    default_metrics = cluster_metrics.inbuilt_metrics
 
     def __init__(
         self,
@@ -59,7 +59,7 @@ class EnsembleClustering:
         sample_method: str = "uniform",
         sampling_kwargs: Optional[Dict] = None,
         random_state: int = 42,
-        metrics: Optional[List[Union[str, Metric]]] = None,
+        metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
     ):
         logger.info(f"Creating new EnsembleClustering object with connection to {experiment.experiment_id}")
         np.random.seed(random_state)
@@ -69,11 +69,10 @@ class EnsembleClustering:
         self.transform = transform
         self.root_population = root_population
         self.graph = None
-        self.metrics = None
+        self.metrics = init_metrics(metrics=metrics)
         self._performance = dict()
         self.population_prefix = population_prefix
         self.clustering_permutations = dict()
-        self._populate_metrics(metrics=metrics)
 
         logger.info(f"Obtaining data for clustering for population {root_population}")
         self.data = single_cell_dataframe(
@@ -89,23 +88,6 @@ class EnsembleClustering:
         )
         self.data["cluster_label"] = None
         logger.info("Ready to cluster!")
-
-    def _populate_metrics(self, metrics: Optional[List[Union[str, Metric]]]):
-        try:
-            for m in metrics:
-                if isinstance(m, str):
-                    self.metrics.append(self.default_metrics[m])
-                else:
-                    assert isinstance(m, Metric)
-        except KeyError:
-            logger.error(f"Invalid metric, must be one of {self.default_metrics.keys()}")
-            raise
-        except AssertionError:
-            logger.error(
-                f"metrics must be a list of strings corresponding to default metrics "
-                f"({self.default_metrics.keys()}) and/or Metric objects"
-            )
-            raise
 
     def cluster(
         self,
@@ -147,7 +129,7 @@ class EnsembleClustering:
             raise ClusteringError("Add clusters before accessing metrics")
         return pd.DataFrame(self._performance)
 
-    def _cluster_metric(self, labels: np.ndarray, metric: Metric):
+    def _cluster_metric(self, labels: np.ndarray, metric: cluster_metrics.Metric):
         return metric.name, metric(self.data, self.features, labels)
 
     def co_occurrence_matrix(self, index: Optional[str]):

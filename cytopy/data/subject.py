@@ -117,13 +117,18 @@ def lookup_variable(subject_id: str, key: Union[str, List[str]]) -> Union[None, 
 
 
 def add_meta_labels(data: Union[pd.DataFrame, pl.DataFrame], key: Union[str, List[str]], column_name: str):
-    if isinstance(data, pd.DataFrame):
-        data = pl.DataFrame(data)
+    if isinstance(data, pl.DataFrame):
+        data = data.to_pandas()
+    if column_name in data.columns:
+        logger.warning(f"Data already contains column {column_name}. Will be overwritten.")
+        data.drop(column_name, axis=1, inplace=True)
     if "subject_id" not in data.columns:
         raise ValueError(f"Data is missing 'subject_id' column")
     unique_subject_ids = data["subject_id"].unique()
     lookup_func = partial(lookup_variable, key=key)
-    meta_var = pl.DataFrame(
-        [unique_subject_ids, unique_subject_ids.apply(lookup_func)], columns=["subject_id", column_name]
+    meta_var = list(map(lookup_func, unique_subject_ids))
+    return pl.DataFrame(
+        data.merge(
+            pd.DataFrame({"subject_id": unique_subject_ids, column_name: meta_var}), on="subject_id", how="left"
+        )
     )
-    return data.join(meta_var, on="subject_id")

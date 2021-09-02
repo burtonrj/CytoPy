@@ -28,8 +28,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import bisect
 from itertools import combinations
+from typing import List
 
 import numpy as np
+import pandas as pd
 
 from ...feedback import progress_bar
 
@@ -178,3 +180,7 @@ class ConsensusCluster:
         assert self.Mk is not None, "First run fit"
         self.cluster_.set_params(n_clusters=self.bestK)
         return self.cluster_.fit_predict(data)
+
+    def fit_predict(self, data: pd.DataFrame, features: List[str]):
+        self.fit(data=data[features].values)
+        return self.predict_data(data=data[features])
