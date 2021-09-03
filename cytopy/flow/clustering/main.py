@@ -875,7 +875,7 @@ class EnsembleClustering(Clustering):
         }
         logger.info("Clustering complete!")
 
-    def co_occurrence_matrix(self, index: Optional[str]):
+    def co_occurrence_matrix(self, index: Optional[str] = None):
         return CoMatrix(data=self.data, clusterings=self.clustering_permutations, index=index)
 
     def mutual_info(self, method: str = "adjusted"):
@@ -887,7 +887,7 @@ class EnsembleClustering(Clustering):
     @valid_labels
     def plot(
         self,
-        cluster_labels: List[int],
+        cluster_labels: Union[str, List[int]],
         sample_size: Union[int, None] = 100000,
         sampling_method: str = "uniform",
         method: Union[str, Type] = "UMAP",
@@ -897,6 +897,9 @@ class EnsembleClustering(Clustering):
         **kwargs,
     ):
         data = self.data.copy()
+        if isinstance(cluster_labels, str):
+            assert cluster_labels in self.clustering_permutations.keys(), "Invalid cluster name"
+            data["cluster_label"] = self.clustering_permutations[cluster_labels]["labels"]
         data["cluster_label"] = cluster_labels
         return plot_cluster_membership(
             data=data,

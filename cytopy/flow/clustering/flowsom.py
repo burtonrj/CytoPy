@@ -32,6 +32,7 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Type
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -131,10 +132,11 @@ class FlowSOM:
         self.iter_n = iter_n
         self.resample_proportion = resample_proportion
 
-    def fit_predict(self, data: pd.DataFrame, features: List[str]):
-        data = data[features].values
+    def fit_predict(self, data: Union[pd.DataFrame, np.ndarray]):
         if self.normalisation:
             data = MinMaxScaler().fit_transform(data)
+        if isinstance(data, pd.DataFrame):
+            data = data.values
         self.train(data=data)
         self.meta_cluster()
         return self.predict(data=data)

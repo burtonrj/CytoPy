@@ -20,7 +20,12 @@ class Metric:
 
 def center_dispersion(cluster: pl.DataFrame):
     cluster_center = cluster.mean()
-    return cluster.apply(lambda x: np.linalg.norm(x - cluster_center) ** 2).sum() / cluster.shape[0]
+    return pl.DataFrame(
+        [
+            cluster.apply(lambda x: np.linalg.norm(np.array(x) - cluster_center.to_numpy()) ** 2).sum()
+            / cluster.shape[0]
+        ]
+    )
 
 
 class BallHall(Metric):
@@ -34,23 +39,7 @@ class BallHall(Metric):
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
         data = pl.DataFrame(data[features])
         data["labels"] = labels
-        dispersion = data.groupby("labels").apply(center_dispersion)
-        return sum(dispersion) / data["labels"].n_unique()
-
-        # n = data["labels"].n_unique()
-        ## iterate through all the clusters
-        # for i in range(n):
-        #    sum_distance = 0
-        #    indices = [t for t, x in enumerate(labels) if x == i]
-        #    cluster_member = data.values[indices, :]
-        #    # compute the center of the cluster
-        #    cluster_center = np.mean(cluster_member, 0)
-        #    # iterate through all the members
-        #    for member in cluster_member:
-        #        sum_distance = sum_distance + math.pow(distance.euclidean(member, cluster_center), 2)
-        #    sum_total = sum_total + sum_distance / len(indices)
-        # compute the validation
-        # return sum_total / n
+        return data.groupby("labels").apply(center_dispersion).mean()[0, 0]
 
 
 class BakerHubertGammaIndex(Metric):
@@ -159,9 +148,7 @@ class CalinskiHarabaszScore(Metric):
 
 inbuilt_metrics = {
     "ball_hall": BallHall,
-    "baker_hubert_gamma_index": BakerHubertGammaIndex,
     "silhouette_coef": SilhouetteCoef,
     "davies_bouldin_index": DaviesBouldinIndex,
-    "g_plus_index": GPlusIndex,
     "calinski_harabasz_score": CalinskiHarabaszScore,
 }

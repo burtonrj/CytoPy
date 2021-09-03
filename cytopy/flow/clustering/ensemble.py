@@ -85,15 +85,15 @@ class CoMatrix:
     def __init__(
         self,
         data: pd.DataFrame,
-        clustering_permuations: Dict,
+        clusterings: Dict,
         features: list,
         index: Optional[str] = None,
     ):
         self.data = data
         self.features = features
-        self.clusterings = clustering_permuations
+        self.clusterings = clusterings
         self.n = data.shape[0]
-        self.n_ensembles = len(clustering_permuations)
+        self.n_ensembles = len(clusterings)
         self.co_matrix = self.gather_partitions()
         self.avg_dist = np.mean(ssd.squareform(1 - self.co_matrix))
         self.index = index
