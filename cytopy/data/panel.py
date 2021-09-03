@@ -70,6 +70,9 @@ class Panel(mongoengine.EmbeddedDocument):
     channels = mongoengine.EmbeddedDocumentListField(Channel)
     meta = {"db_alias": "core", "collection": "fcs_panels"}
 
+    def list_channels(self) -> List[str]:
+        return [x.name for x in self.channels]
+
     def query_channel(self, channel: str) -> str:
         matches = [channel_definition.query(channel) for channel_definition in self.channels]
         matches = [x for x in matches if x is not None]

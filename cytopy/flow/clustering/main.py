@@ -217,11 +217,12 @@ def summarise_clusters(
 
 
 class Phenograph:
-    def __init__(self, params: Dict):
+    def __init__(self, **params):
+        params = params or {}
         self.params = params
 
-    def fit_predict(self, data: pd.DataFrame, features: List[str]) -> np.ndarray:
-        communities, graph, q = phenograph.cluster(data[features], **self.params)
+    def fit_predict(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+        communities, graph, q = phenograph.cluster(data, **self.params)
         return communities
 
 
@@ -229,10 +230,11 @@ class ClusterMethod:
     def __init__(
         self,
         klass: Type,
-        params: Dict,
+        params: Optional[Dict] = None,
         verbose: bool = True,
         metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
     ):
+        params = params or {}
         self.verbose = verbose
         self.method = klass(**params)
         self.metrics = init_metrics(metrics=metrics)
@@ -302,7 +304,6 @@ class Clustering:
         verbose: bool = True,
         population_prefix: str = "cluster",
     ):
-        logger.info(f"Creating new Clustering object with connection to {experiment.experiment_id}")
         self.experiment = experiment
         self.verbose = verbose
         self.features = features
@@ -329,7 +330,6 @@ class Clustering:
         metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
         **kwargs,
     ) -> ClusterMethod:
-        kwargs = kwargs or {}
         if method == "phenograph":
             method = ClusterMethod(klass=Phenograph, params=kwargs, metrics=metrics, verbose=self.verbose)
         elif method == "flowsom":
@@ -865,7 +865,7 @@ class EnsembleClustering(Clustering):
         data, _ = method.global_clustering(data=data, features=features, evaluate=False)
         self.clustering_permutations[cluster_name] = {
             "labels": data["cluster_label"],
-            "n_clusters": data["cluster_label"].n_unique(),
+            "n_clusters": data["cluster_label"].nunique(),
             "params": clustering_params,
             "scalar": scaler,
         }

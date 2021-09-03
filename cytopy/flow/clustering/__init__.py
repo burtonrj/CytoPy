@@ -1,3 +1,3 @@
-from .consensus import *
-from .flowsom import *
-from .main import *
+from .main import ClusterMethod
+from .main import EnsembleClustering
+from .main import SingleClustering

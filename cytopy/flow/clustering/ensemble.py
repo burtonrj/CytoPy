@@ -19,7 +19,6 @@ from sklearn.metrics import adjusted_mutual_info_score
 from sklearn.metrics import normalized_mutual_info_score
 
 from ...feedback import progress_bar
-from .main import ClusteringError
 
 logger = logging.getLogger("clustering.ensemble")
 
@@ -27,7 +26,7 @@ logger = logging.getLogger("clustering.ensemble")
 def valid_labels(func: Callable):
     def wrapper(self, cluster_labels: List[int], *args, **kwargs):
         if len(cluster_labels) != self.data.shape[0]:
-            raise ClusteringError(
+            raise ValueError(
                 f"cluster_idx does not match the number of events. Did you use a valid "
                 f"finishing technique? {len(cluster_labels)} != {self.data.shape[0]}"
             )
@@ -390,13 +389,13 @@ def mutual_info(a: List[int], b: List[int], method: str):
     try:
         return methods[method](a, b)
     except KeyError:
-        ClusteringError("Mutual information method must be either 'adjusted' or 'normalized'")
+        ValueError("Mutual information method must be either 'adjusted' or 'normalized'")
 
 
 class MutualInfo:
     def __init__(self, clusterings: Dict, method: str):
         if method not in ["adjusted", "normalized"]:
-            raise ClusteringError("Mutual information method must be either 'adjusted' or 'normalized'")
+            raise ValueError("Mutual information method must be either 'adjusted' or 'normalized'")
         self.labels = {cluster_name: data["labels"] for cluster_name, data in clusterings.items()}
         self.data = pd.DataFrame(columns=list(self.labels.keys()), index=list(self.labels.keys()))
         names = list(self.labels.keys())

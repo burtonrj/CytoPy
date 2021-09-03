@@ -61,7 +61,7 @@ class ConsensusCluster:
     Ak :
         area under CDF for each number of clusters (see paper)
     deltaK :
-        changes in ares under CDF (see paper)
+        changes in areas under CDF (see paper)
     """
 
     def __init__(
@@ -72,6 +72,7 @@ class ConsensusCluster:
         n_resamples: int,
         resample_proportion: float = 0.5,
         verbose: bool = True,
+        k_param: str = "n_clusters",
     ):
         assert 0 <= resample_proportion <= 1, "proportion has to be between 0 and 1"
         self.verbose = verbose
@@ -80,6 +81,7 @@ class ConsensusCluster:
         self.L_ = smallest_cluster_n
         self.K_ = largest_cluster_n
         self.H_ = n_resamples
+        self.k_param = k_param
         self.Mk = None
         self.Ak = None
         self.deltaK = None
@@ -119,7 +121,7 @@ class ConsensusCluster:
             i_ = k - self.L_
             for h in range(self.H_):  # resample H times
                 resampled_indices, resample_data = self._internal_resample(data, self.resample_proportion_)
-                self.cluster_.set_params(n_clusters=k)
+                self.cluster_.set_params(**{self.k_param: k})
                 Mh = self.cluster_.fit_predict(resample_data)
                 # find indexes of elements from same clusters with bisection
                 # on sorted array => this is more efficient than brute force search
