@@ -31,10 +31,14 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
+from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Type
 from typing import Union
 
+import numpy as np
+import pandas as pd
 import phate
 import polars as pl
 from sklearn.decomposition import KernelPCA
@@ -43,6 +47,9 @@ from sklearn.manifold import Isomap
 from sklearn.manifold import MDS
 from sklearn.manifold import TSNE
 from umap import UMAP
+
+from ..feedback import progress_bar
+from .sampling import sample_dataframe
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +120,7 @@ class DimensionReduction:
         self.embeddings = None
         self._method_name = type(self.method).__name__
 
-    def fit(self, data: pl.DataFrame, features: List[str]) -> Union[None, pl.DataFrame]:
+    def fit(self, data: Union[pl.DataFrame, pd.DataFrame], features: List[str]) -> Union[None, pl.DataFrame]:
         """
         Fit the underlying method. Will call 'fit_transform' if fit is not supported.
 
@@ -131,9 +138,12 @@ class DimensionReduction:
         if not hasattr(self.method, "fit"):
             logger.warning(f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead.")
             return self.fit_transform(data=data, features=features)
-        self.method.fit(data[features].to_numpy())
+        if isinstance(data, pl.DataFrame):
+            self.method.fit(data[features].to_numpy())
+        else:
+            self.method.fit(data[features].values)
 
-    def fit_transform(self, data: pl.DataFrame, features: List[str]) -> pl.DataFrame:
+    def fit_transform(self, data: Union[pl.DataFrame, pd.DataFrame], features: List[str]) -> pl.DataFrame:
         """
         Fit the underlying method and generate transformed embeddings. Transformed embeddings are
         stored as new columns in the polars DataFrame. DataFrame is copied and not mutated.
@@ -148,12 +158,16 @@ class DimensionReduction:
         -------
         polars.DataFrame
         """
-        self.embeddings = self.method.fit_transform(data[features].to_numpy())
+        if isinstance(data, pl.DataFrame):
+            x = data[features].to_numpy()
+        else:
+            x = data[features].values
+        self.embeddings = self.method.fit_transform(x)
         for i, e in enumerate(self.embeddings.T):
             data[f"{self._method_name}{i + 1}"] = e
         return data
 
-    def transform(self, data: pl.DataFrame, features: List[str]) -> pl.DataFrame:
+    def transform(self, data: Union[pl.DataFrame, pd.DataFrame], features: List[str]) -> pl.DataFrame:
         """
         Generate embeddings for the given DataFrame using the current fitted method. Transformed embeddings are
         stored as new columns in the polars DataFrame. DataFrame is copied and not mutated.
@@ -178,3 +192,26 @@ class DimensionReduction:
         for i, e in enumerate(embeddings.T):
             data[f"{self._method_name}{i + 1}"] = e
         return data
+
+
+def dimension_reduction_with_sampling(
+    data: Union[pd.DataFrame, pl.DataFrame],
+    features: List[str],
+    method: str,
+    sampling_size: Union[int, float],
+    sampling_method: str = "uniform",
+    sampling_kwargs: Optional[Dict] = None,
+    verbose: bool = True,
+    **kwargs,
+) -> Union[pd.DataFrame, DimensionReduction]:
+    sampling_kwargs = sampling_kwargs or {}
+    sample = sample_dataframe(data=data, sample_size=sampling_size, method=sampling_method, **sampling_kwargs)
+    reducer = DimensionReduction(method=method, **kwargs)
+    reducer.fit(data=sample, features=features)
+    data_with_embeddings = reducer.transform(data=sample, features=features)
+    remaining_data = data[~data.index.isin(sample.index)]
+    for _, df in progress_bar(
+        remaining_data.groupby(np.arange(remaining_data.shape[0]) // sampling_size), verbose=verbose
+    ):
+        data_with_embeddings = pd.concat([data_with_embeddings, reducer.transform(data=df, features=features)])
+    return data_with_embeddings, reducer
