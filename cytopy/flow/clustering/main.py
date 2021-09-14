@@ -58,6 +58,7 @@ import numpy as np
 import pandas as pd
 import phenograph
 import seaborn as sns
+from scipy.spatial import distance as ssd
 from sklearn.metrics import calinski_harabasz_score
 from sklearn.metrics import davies_bouldin_score
 from sklearn.metrics import silhouette_score
@@ -71,8 +72,8 @@ from ...feedback import progress_bar
 from ..dim_reduction import dimension_reduction_with_sampling
 from .consensus import ConsensusCluster
 from .ensemble import CoMatrix
+from .ensemble import comparison_matrix
 from .ensemble import MixtureModel
-from .ensemble import MutualInfo
 from .flowsom import FlowSOM
 from .plotting import clustered_heatmap
 from .plotting import plot_cluster_membership
@@ -347,6 +348,15 @@ class Clustering:
             )
         return method
 
+    def scale_data(self, features: List[str], scale_method: Optional[str] = None, scale_kwargs: Optional[Dict] = None):
+        scale_kwargs = scale_kwargs or {}
+        scalar = None
+        data = self.data.copy()
+        if scale_method is not None:
+            scalar = Scaler(scale_method, **scale_kwargs)
+            data = scalar(data=self.data, features=features)
+        return data, scalar
+
     def elbow_plot(
         self,
         max_k: int,
@@ -413,7 +423,7 @@ class Clustering:
         -------
         None
         """
-        if sample_id is not "all":
+        if sample_id != "all":
             idx = self.data[self.data.sample_id == sample_id].index
             self.data.loc[idx, "cluster_label"] = self.data.loc[idx]["cluster_label"].replace(mappings)
         else:
@@ -657,7 +667,9 @@ class SingleClustering(Clustering):
         overwrite_features: Optional[List[str]] = None,
         metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
         evaluate: bool = False,
-        reduce_dimensions: bool = False,
+        scale_method: Optional[str] = None,
+        scale_kwargs: Optional[Dict] = None,
+        dim_reduction: Optional[str] = None,
         dim_reduction_kwargs: Optional[Dict] = None,
         clustering_params: Optional[Dict] = None,
     ):
@@ -665,11 +677,12 @@ class SingleClustering(Clustering):
         features = remove_null_features(self.data, features=overwrite_features)
 
         dim_reduction_kwargs = dim_reduction_kwargs or {}
-        data = (
-            self.data
-            if not reduce_dimensions
-            else dimension_reduction_with_sampling(data=self.data, features=features, **dim_reduction_kwargs)
-        )
+        data, scaler = self.scale_data(features=features, scale_method=scale_method, scale_kwargs=scale_kwargs)
+        if dim_reduction is not None:
+            data, _ = dimension_reduction_with_sampling(
+                data=self.data, features=features, method=dim_reduction, **dim_reduction_kwargs
+            )
+            features = [x for x in data.columns if dim_reduction in x]
 
         clustering_params = clustering_params or {}
         method = self._init_cluster_method(method=method, metrics=metrics, **clustering_params)
@@ -782,7 +795,11 @@ class SingleClustering(Clustering):
 
 
 def valid_labels(func: Callable):
-    def wrapper(self, cluster_labels: List[int], *args, **kwargs):
+    def wrapper(self, cluster_labels: Union[str, List[int]], *args, **kwargs):
+        if isinstance(cluster_labels, str):
+            assert cluster_labels in self.clustering_permutations.keys(), "Invalid cluster name"
+            cluster_labels = self.clustering_permutations[cluster_labels]["labels"]
+            return func(self, cluster_labels, *args, **kwargs)
         if len(cluster_labels) != self.data.shape[0]:
             raise ClusteringError(
                 f"cluster_idx does not match the number of events. Did you use a valid "
@@ -794,6 +811,52 @@ def valid_labels(func: Callable):
 
 
 class EnsembleClustering(Clustering):
+    """
+    The EnsembleClustering class provides a toolset for applying multiple clustering algorithms to a
+    dataset, reviewing the clustering results of each algorithm, comparing their performance, and then
+    forming a consensus for the clustering results that draws from the results of all the algorithms
+    combined.
+
+    Unlike the SingleClustering class, the EnsembleClustering class only supports global clustering and
+    will merge multiple FileGroups (samples) of an Experiment and treat as a single feature space. Therefore
+    it is important to address batch effects prior to applying ensemble clustering.
+
+    Clustering algorithms are applied using the 'cluster' class and like SingleClustering, require that a
+    valid method is given (either 'flowsom', 'phenograph', the name of a Scikit-Learn clustering method,
+    or a ClusterMethod class). Each clustering result will have a name and the clustering labels and meta
+    data are stored in the 'clustering_permutations' attribute. The results of the individual clustering can
+    be observed using the 'plot' and 'heatmap' methods, and the performance of all clustering algorithms
+    is accessible through the 'performance' attribute.
+
+    The outputs of clustering algorithms can also be contrasted by comparing their mutual information or rand
+    index (after adjusting for chance):
+    * Adjusted mutual information: measures the agreement between clustering results where the ground truth
+    clustering is expected to be unbalanced with possibly small clusters
+    * Adjusted rand index: a measure of similarity between clustering results where the ground truth is
+    expected to contain mostly equal sized clusters
+
+    The above are accessed using the 'comparison' method returning a clustered matrix of the pairwise
+    metrics.
+
+    To obtain a consensus multiple 'finishing' techniques can be applied. All but one use a co-occurrence matrix
+    (quantifies the number of times a pair of observations cluster together, for all observations in the dataset):
+
+    * Clustering co-occurrence: the simplest solution is that we cluster the co-occurrence matrix ensuring that
+    clusters are obtained that encapsulate data points that co-cluster robustly across methods
+    * Majority vote: using the co-occurrence matrix, cluster assignment is made by majority vote to extract
+    only consistent clusters
+    * Graph closure: by treating the co-occurrence matrix as an adjacency matrix, find the complete subgraphs within
+    the matrix bia k-cliques and percolation
+    * Mixture model: a probabilistic model of consensus using a finite mixture of multinomial distributions
+    in a space of clustering results. This method assumes that the number of clusters is predetermined and therefore
+    the methods above may be preferred.
+
+    Once multiple clustering methods have been applied, you can use the 'co_occurrence_matrix' method to generate
+    a CoMatrix object that will provide access to co-occurrence clustering, majority vote, and graph closure
+    for final label generation. Use the 'mixture_model' method to obtain a MixtureModel object to obtain final
+    labels using the multivariate mixture models.
+    """
+
     def __init__(
         self,
         experiment: Experiment,
@@ -829,15 +892,6 @@ class EnsembleClustering(Clustering):
             raise ClusteringError("Add clusters before accessing metrics")
         return pd.DataFrame(self._performance)
 
-    def scale_data(self, features: List[str], scale_method: Optional[str] = None, scale_kwargs: Optional[Dict] = None):
-        scale_kwargs = scale_kwargs or {}
-        scalar = None
-        data = self.data.copy()
-        if scale_method is not None:
-            scalar = Scaler(scale_method, **scale_kwargs)
-            data = scalar(data=self.data, features=features)
-        return data, scalar
-
     def cluster(
         self,
         cluster_name: str,
@@ -845,7 +899,7 @@ class EnsembleClustering(Clustering):
         overwrite_features: Optional[List[str]] = None,
         scale_method: Optional[str] = None,
         scale_kwargs: Optional[Dict] = None,
-        reduce_dimensions: bool = False,
+        dim_reduction: Optional[str] = None,
         dim_reduction_kwargs: Optional[Dict] = None,
         clustering_params: Optional[Dict] = None,
     ):
@@ -855,16 +909,16 @@ class EnsembleClustering(Clustering):
         features = remove_null_features(self.data, features=overwrite_features)
         method = self._init_cluster_method(method=method, metrics=self.metrics, **clustering_params)
         data, scaler = self.scale_data(features=features, scale_method=scale_method, scale_kwargs=scale_kwargs)
-        data = (
-            data
-            if not reduce_dimensions
-            else dimension_reduction_with_sampling(data=self.data, features=features, **dim_reduction_kwargs)
-        )
+        if dim_reduction is not None:
+            data, _ = dimension_reduction_with_sampling(
+                data=self.data, features=features, method=dim_reduction, **dim_reduction_kwargs
+            )
+            features = [x for x in data.columns if dim_reduction in x]
 
         logger.info(f"Running clustering: {cluster_name}")
         data, _ = method.global_clustering(data=data, features=features, evaluate=False)
         self.clustering_permutations[cluster_name] = {
-            "labels": data["cluster_label"],
+            "labels": data["cluster_label"].values,
             "n_clusters": data["cluster_label"].nunique(),
             "params": clustering_params,
             "scalar": scaler,
@@ -876,10 +930,18 @@ class EnsembleClustering(Clustering):
         logger.info("Clustering complete!")
 
     def co_occurrence_matrix(self, index: Optional[str] = None):
-        return CoMatrix(data=self.data, clusterings=self.clustering_permutations, index=index)
+        return CoMatrix(
+            data=self.data, features=self.features, clustering_permutations=self.clustering_permutations, index=index
+        )
 
-    def mutual_info(self, method: str = "adjusted"):
-        return MutualInfo(clusterings=self.clustering_permutations, method=method)
+    def comparison(self, method: str = "adjusted_mutual_info", **kwargs):
+        kwargs["figsize"] = kwargs.get("figsize", (10, 10))
+        kwargs["cmap"] = kwargs.get("cmap", "coolwarm")
+        data = comparison_matrix(clustering_permutations=self.clustering_permutations, method=method)
+        return sns.clustermap(
+            data=data,
+            **kwargs,
+        )
 
     def mixture_model(self):
         return MixtureModel(data=self.data, clustering_permuations=self.clustering_permutations)
@@ -897,9 +959,6 @@ class EnsembleClustering(Clustering):
         **kwargs,
     ):
         data = self.data.copy()
-        if isinstance(cluster_labels, str):
-            assert cluster_labels in self.clustering_permutations.keys(), "Invalid cluster name"
-            data["cluster_label"] = self.clustering_permutations[cluster_labels]["labels"]
         data["cluster_label"] = cluster_labels
         return plot_cluster_membership(
             data=data,
@@ -916,7 +975,7 @@ class EnsembleClustering(Clustering):
     @valid_labels
     def heatmap(
         self,
-        cluster_labels: List[int],
+        cluster_labels: Union[str, List[int]],
         features: Optional[str] = None,
         sample_id: Optional[str] = None,
         meta_label: bool = True,
@@ -935,6 +994,8 @@ class EnsembleClustering(Clustering):
         )
 
     @valid_labels
-    def save(self, cluster_labels: List[int], verbose: bool = True, parent_populations: Optional[Dict] = None):
+    def save(
+        self, cluster_labels: Union[str, List[int]], verbose: bool = True, parent_populations: Optional[Dict] = None
+    ):
         self.data["cluster_label"] = cluster_labels
         super().save(verbose=verbose, population_var="cluster_label", parent_populations=parent_populations)
