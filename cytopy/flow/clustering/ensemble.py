@@ -81,6 +81,10 @@ def gather_single_partition(labels: np.ndarray):
     return co_matrix
 
 
+def build_co_matrix(data: pd.DataFrame):
+    pass
+
+
 class CoMatrix:
     def __init__(
         self,

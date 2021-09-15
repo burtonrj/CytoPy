@@ -51,6 +51,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
+import pickle
 from collections import defaultdict
 from typing import *
 
@@ -58,7 +59,6 @@ import numpy as np
 import pandas as pd
 import phenograph
 import seaborn as sns
-from scipy.spatial import distance as ssd
 from sklearn.metrics import calinski_harabasz_score
 from sklearn.metrics import davies_bouldin_score
 from sklearn.metrics import silhouette_score
@@ -859,12 +859,12 @@ class EnsembleClustering(Clustering):
 
     def __init__(
         self,
-        experiment: Experiment,
-        features: list,
-        sample_ids: list or None = None,
+        experiment: Experiment = None,
+        features: List[str] = None,
+        sample_ids: Optional[List[str]] = None,
         root_population: str = "root",
         transform: str = "logicle",
-        transform_kwargs: dict or None = None,
+        transform_kwargs: Optional[Dict] = None,
         verbose: bool = True,
         population_prefix: str = "ensemble",
         random_state: int = 42,
@@ -891,6 +891,24 @@ class EnsembleClustering(Clustering):
         if len(self._performance) == 0:
             raise ClusteringError("Add clusters before accessing metrics")
         return pd.DataFrame(self._performance)
+
+    def cache(self, path: str):
+        obj_data = {
+            "performance": self._performance,
+            "clustering_permutations": self.clustering_permutations,
+            "metrics": self.metrics,
+            "data": self.data,
+        }
+        with open(path, "wb") as f:
+            pickle.dump(obj_data, f)
+
+    def load(self, path: str):
+        with open(path, "rb") as f:
+            obj_data = pickle.load(f)
+        self._performance = obj_data["performance"]
+        self.clustering_permutations = obj_data["clustering_permutations"]
+        self.metrics = obj_data["metrics"]
+        self.data = obj_data["data"]
 
     def cluster(
         self,
