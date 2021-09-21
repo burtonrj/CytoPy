@@ -27,32 +27,40 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import bisect
+import logging
 from itertools import combinations
 from typing import List
 
 import numpy as np
 import pandas as pd
+from sklearn.base import ClusterMixin
 
 from ...feedback import progress_bar
 
 np.random.seed(42)
+logger = logging.getLogger(__name__)
 
 
-class ConsensusCluster:
+class KConsensusClustering:
     """
-    Implementation of Consensus clustering, following the paper
+    Implementation of consensus clustering for varying k (number of clusters), following the paper
     https://link.springer.com/content/pdf/10.1023%2FA%3A1023949509487.pdf
     Code is adapted from https://github.com/ZigaSajovic/Consensus_Clustering
 
+    This implementation is for when the number of clusters is unknown. This method is computationally expensive
+    and therefore should be used with care. It is applied to the weight of SOM nodes in the meta-clustering step
+    of FlowSOM but can also be used for meta-clustering of cluster centroids (see SingleClustering).
+
     Parameters
     ----------
-    cluster :
-        clustering class (must be an instance of clustering algorithm with fit/fit_predict method (e.g. scikit-learn)
-    L:
+    cluster: sklearn.base.ClusterMixin
+        clustering class (must be an instance of clustering algorithm with fit/fit_predict method (e.g. scikit-learn
+        clustering class)
+    smallest_cluster_n: int
         smallest number of clusters to try
-    K:
+    largest_cluster_n: int
         biggest number of clusters to try
-    H:
+    n_resamples:
         number of resamplings for each cluster number
     resample_proportion :
         percentage to sample
@@ -66,7 +74,7 @@ class ConsensusCluster:
 
     def __init__(
         self,
-        cluster: callable,
+        cluster: ClusterMixin,
         smallest_cluster_n: int,
         largest_cluster_n: int,
         n_resamples: int,
@@ -114,6 +122,11 @@ class ConsensusCluster:
         -------
         None
         """
+        if data.shape[0] > 10000:
+            logger.warning(
+                "Consensus clustering for K is computationally expensive. Consider using EnsembleClustering "
+                "for datasets with n > 10000"
+            )
         # Init a connectivity matrix and an indicator matrix with zeros
         Mk = np.zeros((self.K_ - self.L_, data.shape[0], data.shape[0]))
         Is = np.zeros((data.shape[0],) * 2)
@@ -128,7 +141,6 @@ class ConsensusCluster:
                 id_clusts = np.argsort(Mh)
                 sorted_ = Mh[id_clusts]
                 for i in range(k):  # for each cluster
-                    #
                     ia = bisect.bisect_left(sorted_, i)
                     ib = bisect.bisect_right(sorted_, i)
                     is_ = id_clusts[ia:ib]

@@ -41,7 +41,7 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.preprocessing import MinMaxScaler
 
 from ...feedback import progress_bar
-from .consensus import ConsensusCluster
+from .consensus_k import KConsensusClustering
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"
@@ -191,7 +191,7 @@ class FlowSOM:
 
         assert self.map is not None, "SOM must be trained prior to meta-clustering; call train before meta_cluster"
         # initialize cluster
-        cluster_ = ConsensusCluster(
+        cluster_ = KConsensusClustering(
             self.meta_clusterer,
             self.min_n,
             self.max_n,

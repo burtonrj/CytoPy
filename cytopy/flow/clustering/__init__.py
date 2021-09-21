@@ -1,3 +1,2 @@
-from .main import ClusterMethod
-from .main import EnsembleClustering
-from .main import SingleClustering
+from .ensemble import EnsembleClustering
+from .single import SingleClustering

@@ -1,10 +1,15 @@
-from typing import *
+import logging
+from typing import List
+from typing import Optional
+from typing import Union
 
 import numpy as np
 import pandas as pd
 import polars as pl
 from scipy.spatial import distance
 from sklearn import metrics as sklearn_metrics
+
+logger = logging.getLogger(__name__)
 
 
 class Metric:
@@ -32,7 +37,7 @@ class BallHall(Metric):
         super().__init__(
             name="Ball Hall Index (Compactness)",
             desc="Ball-Hall Index is the mean of the mean dispersion across all clusters",
-            **kwargs
+            **kwargs,
         )
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
@@ -47,7 +52,7 @@ class BakerHubertGammaIndex(Metric):
             name="Baker-Hubert Gamma Index (Compactness)",
             desc="A measure of compactness, based on similarity between points in a cluster, "
             "compared to similarity with points in other clusters. Not memory efficient, use on small datasets.",
-            **kwargs
+            **kwargs,
         )
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
@@ -82,7 +87,7 @@ class SilhouetteCoef(Metric):
             desc="Compactness and connectedness combination that measures a ratio of within cluster "
             "distances to closest neighbors outside of cluster. This uses sklearn.metrics "
             "version of the Silhouette.",
-            **kwargs
+            **kwargs,
         )
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
@@ -96,7 +101,7 @@ class DaviesBouldinIndex(Metric):
             desc="The average similarity between clusters. Similarity is defined as the "
             "ratio of within-cluster distances to between-cluster distances. Clusters further "
             "apart and less dispersed will result in a better score.",
-            **kwargs
+            **kwargs,
         )
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
@@ -109,7 +114,7 @@ class GPlusIndex(Metric):
             name="G-plus index (Connectedness)",
             desc="The proportion of discordant pairs among all the pairs of distinct points - "
             "a measure of connectedness. Not memory efficient, use on small datasets.",
-            **kwargs
+            **kwargs,
         )
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
@@ -138,7 +143,7 @@ class CalinskiHarabaszScore(Metric):
             name="Calinski and Harabasz score (Compactness/Separation)",
             desc="The score is defined as ratio between the within-cluster dispersion and the "
             "between-cluster dispersion",
-            **kwargs
+            **kwargs,
         )
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
@@ -151,3 +156,25 @@ inbuilt_metrics = {
     "davies_bouldin_index": DaviesBouldinIndex,
     "calinski_harabasz_score": CalinskiHarabaszScore,
 }
+
+
+def init_metrics(metrics: Optional[List[Union[str, Metric]]] = None):
+    if metrics is None:
+        return [x() for x in inbuilt_metrics.values()]
+    metric_objs = list()
+    try:
+        for x in metrics:
+            if isinstance(x, str):
+                metric_objs.append(inbuilt_metrics[x]())
+            else:
+                assert isinstance(x, Metric)
+                metric_objs.append(x)
+    except KeyError:
+        logger.error(f"Invalid metric, must be one of {inbuilt_metrics.keys()}")
+        raise
+    except AssertionError:
+        logger.error(
+            f"metrics must be a list of strings corresponding to default metrics "
+            f"({inbuilt_metrics.keys()}) and/or Metric objects"
+        )
+        raise
