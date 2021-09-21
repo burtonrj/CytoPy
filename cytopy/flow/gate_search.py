@@ -35,7 +35,7 @@ from functools import partial
 from warnings import warn
 
 import numpy as np
-import polars as pl
+import pandas as pd
 from scipy.spatial.distance import cityblock
 from scipy.spatial.distance import euclidean
 from sklearn.model_selection import ParameterGrid
@@ -180,7 +180,7 @@ def cost_func(target: ChildPolygon or ChildThreshold, populations: list, method:
 def fit_gate(
     updated_params: dict,
     gate: PolygonGate or ThresholdGate or EllipseGate,
-    data: pl.DataFrame,
+    data: pd.DataFrame,
 ) -> list:
     """
     Update the Gate method parameters and fit to the given data, predicting matching
@@ -234,7 +234,7 @@ def hyperparameter_gate(
     gate: ThresholdGate or PolygonGate or EllipseGate,
     grid: dict,
     cost: str,
-    parent: pl.DataFrame,
+    parent: pd.DataFrame,
     verbose: bool = True,
 ) -> list:
     """
