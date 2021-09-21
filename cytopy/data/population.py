@@ -33,7 +33,7 @@ from typing import List
 
 import mongoengine
 import numpy as np
-import polars as pl
+import pandas as pd
 from bson.binary import Binary
 from shapely.ops import unary_union
 
@@ -195,7 +195,7 @@ def _merge_signatures(left: Population, right: Population) -> dict:
     -------
     dict
     """
-    return pl.DataFrame([left.signature, right.signature]).mean().to_pandas().to_dict()
+    return pd.DataFrame([left.signature, right.signature]).mean().to_dict()
 
 
 def _merge_thresholds(left: Population, right: Population, new_population_name: str):
@@ -322,7 +322,7 @@ def merge_non_geom_populations(populations: list, new_population_name: str):
         parent=populations[0].parent,
         warnings=warnings,
         source=populations[0].source,
-        signature=pl.DataFrame([x.signature for x in populations]).mean().to_pandas().to_dict(),
+        signature=pd.DataFrame([x.signature for x in populations]).mean().to_dict(),
     )
     new_population.index = new_idx
     return new_population

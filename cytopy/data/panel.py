@@ -11,8 +11,6 @@ import pandas as pd
 
 from .errors import PanelError
 from .read_write import match_file_ext
-from .read_write import read_from_disk
-from .read_write import read_from_remote
 from .read_write import read_headers
 
 logger = logging.getLogger(__name__)
