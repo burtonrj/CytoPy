@@ -38,7 +38,7 @@ from matplotlib.ticker import NullFormatter, LogFormatterMathtext
 from matplotlib.ticker import Locator
 from matplotlib import transforms as mtransforms
 from matplotlib import scale as mscale
-import polars as pl
+import pandas as pd
 import numpy as np
 
 
@@ -70,7 +70,7 @@ class HyperlogScale(mscale.ScaleBase):
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pl.DataFrame(data, columns=["x"])
+            data = pd.DataFrame(data, columns=["x"])
             data = self._scaler.scale(data=data, features=["x"])
             return data.values
 
@@ -89,7 +89,7 @@ class HyperlogScale(mscale.ScaleBase):
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pl.DataFrame(data, columns=["x"])
+            data = pd.DataFrame(data, columns=["x"])
             data = self._scaler.inverse_scale(data=data, features=["x"])
             return data.values
 
