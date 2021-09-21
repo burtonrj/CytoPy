@@ -17,3 +17,4 @@ BatchEffectRemoval_Local
 *.ipynb
 hc_test.fcs
 test_interact
+.pytest_cache

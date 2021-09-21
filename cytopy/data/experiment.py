@@ -30,11 +30,9 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-import gc
 import logging
 import os
 from collections import Counter
-from datetime import datetime
 from typing import Dict
 from typing import List
 from typing import Optional

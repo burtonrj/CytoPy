@@ -61,9 +61,6 @@ from typing import Union
 import numpy as np
 import pandas as pd
 import phenograph
-from sklearn.metrics import calinski_harabasz_score
-from sklearn.metrics import davies_bouldin_score
-from sklearn.metrics import silhouette_score
 
 from . import metrics as cluster_metrics
 from ...data.experiment import Experiment
@@ -84,18 +81,7 @@ class ClusteringError(Exception):
         super().__init__(message)
 
 
-def clustering_performance(data: pd.DataFrame, labels: list):
-    for x in [
-        "Clustering performance...",
-        f"Silhouette coefficient: {silhouette_score(data.values, labels, metric='euclidean')}",
-        f"Calinski-Harabasz index: {calinski_harabasz_score(data.values, labels)}",
-        f"Davies-Bouldin index: {davies_bouldin_score(data.value, labels)}",
-    ]:
-        print(x)
-        logger.info(x)
-
-
-def remove_null_features(data: pd.DataFrame, features: Optional[List[str]] = None) -> list:
+def remove_null_features(data: pd.DataFrame, features: Optional[List[str]] = None) -> List[str]:
     """
     Check for null values in the dataframe.
     Returns a list of column names for columns with no missing values.
@@ -114,7 +100,7 @@ def remove_null_features(data: pd.DataFrame, features: Optional[List[str]] = Non
     null_cols = data[features].isnull().sum()[data[features].isnull().sum() > 0].index.values
     if null_cols.size != 0:
         logger.warning(
-            f"The following columns contain null values and will be excluded from " f"clustering analysis: {null_cols}"
+            f"The following columns contain null values and will be excluded from clustering analysis: {null_cols}"
         )
     return [x for x in features if x not in null_cols]
 
@@ -146,8 +132,8 @@ def assign_metalabels(data: pd.DataFrame, metadata: pd.DataFrame):
 def summarise_clusters(
     data: pd.DataFrame,
     features: list,
-    scale: str or None = None,
-    scale_kwargs: dict or None = None,
+    scale: Optional[str] = None,
+    scale_kwargs: Optional[Dict] = None,
     summary_method: str = "median",
 ):
     """
