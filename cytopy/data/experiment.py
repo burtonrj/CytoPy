@@ -505,7 +505,7 @@ def single_cell_dataframe(
         pop_data["subject_id"] = fg.subject.subject_id
         data.append(pop_data)
 
-    data = pd.concat(data)
+    data = pd.concat(data).reset_index().rename({"index": "original_index"}, axis=1)
 
     if sample_size is not None and sampling_level == "experiment":
         data = sample_dataframe(

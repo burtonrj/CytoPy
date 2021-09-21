@@ -427,7 +427,7 @@ class Clustering:
                     source="cluster",
                     signature=cluster_data.mean().to_dict(),
                 )
-                pop.index = cluster_data.Index.values
+                pop.index = cluster_data.original_index.to_list()
                 fg.add_population(population=pop)
             fg.save()
 
@@ -491,6 +491,6 @@ class Clustering:
                     source="cluster",
                     signature=cluster.mean().to_dict(),
                 )
-                pop.index = cluster.Index.values
+                pop.index = cluster.original_index.to_list()
                 fg.add_population(population=pop)
             fg.save()

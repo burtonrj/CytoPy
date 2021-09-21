@@ -468,6 +468,7 @@ class BaseClassifier:
     ):
         """
         Add a population for events without a classification (not a member of any target population)
+
         Parameters
         ----------
         x: pandas.DataFrame
@@ -478,7 +479,7 @@ class BaseClassifier:
         -------
         None
         """
-        idx = x[np.where(y_pred == 0)[0], "Index"].to_list()
+        idx = x.iloc[np.where(y_pred == 0)[0]].index.to_list()
         pop = Population(
             population_name=f"{self.population_prefix}_Unclassified",
             source="classifier",
@@ -494,9 +495,9 @@ class BaseClassifier:
             self._add_unclassified_population(x=x, y_pred=y_pred, root_population=root_population, target=target)
         for i, pop in enumerate(self.target_populations):
             if self.multi_label:
-                idx = x[np.where(y_pred[:, i + 1] == 1)[0], "Index"].to_list()
+                idx = x.iloc[np.where(y_pred[:, i + 1] == 1)[0]].index.to_list()
             else:
-                idx = x[np.where(y_pred == i + 1)[0], "Index"].to_list()
+                idx = x.iloc[np.where(y_pred == i + 1)[0]].index.to_list()
             p = Population(
                 population_name=f"{self.population_prefix}_{pop}",
                 source="classifier",
@@ -942,9 +943,9 @@ class CalibratedCellClassifier(BaseClassifier):
     def calibrate(self):
         self.calibrator.run(var_use="sample_id")
         calibrated_data = self.calibrator.batch_corrected()
-        calibrated_training_data = calibrated_data[calibrated_data.sample_id == self.training_id].clone()()
+        calibrated_training_data = calibrated_data[calibrated_data.sample_id == self.training_id].copy()
         self._setup_training_data(calibrated_training_data=calibrated_training_data)
-        self.targets = calibrated_data[calibrated_data.sample_id != self.training_id].clone()()
+        self.targets = calibrated_data[calibrated_data.sample_id != self.training_id].copy()
         return self
 
     def _setup_training_data(self, calibrated_training_data: pd.DataFrame):
@@ -954,7 +955,7 @@ class CalibratedCellClassifier(BaseClassifier):
                 pop_idx = [
                     x
                     for x in reference.get_population(population_name=pop).index
-                    if x in calibrated_training_data["Index"]
+                    if x in calibrated_training_data["original_index"]
                 ]
                 calibrated_training_data[pop] = [0 for _ in range(calibrated_training_data.shape[0])]
                 calibrated_training_data[pop_idx, pop] = 1
@@ -1001,7 +1002,7 @@ class CalibratedCellClassifier(BaseClassifier):
         original_x = target.load_population_df(
             population=self.root_population, transform=self.transform, transform_kwargs=self.transform_kwargs
         )[features]
-        idx = self.targets[self.targets.sample_id == target_id, "Index"]
+        idx = self.targets.loc[self.targets.sample_id == target_id, "original_index"]
         calibrated_x = original_x.loc[idx]
         y = self.target_predictions[target_id]["y_pred"]
         if self.scaler is not None:
