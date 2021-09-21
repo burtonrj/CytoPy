@@ -6,7 +6,7 @@ from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
-import polars as pl
+import pandas as pd
 from sklearn import metrics as skmetrics
 from sklearn.base import ClassifierMixin
 from sklearn.model_selection import learning_curve
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def plot_learning_curve(
     model: ClassifierMixin,
-    x: pl.DataFrame,
+    x: pd.DataFrame,
     y: np.ndarray,
     ax: Optional[plt.Axes] = None,
     x_label: str = "Training examples",
@@ -158,7 +158,7 @@ def calc_metrics(
 
 def confusion_matrix_plots(
     classifier,
-    x: pl.DataFrame,
+    x: pd.DataFrame,
     y: np.ndarray,
     class_labels: list,
     cmap: str or None = None,
@@ -270,7 +270,7 @@ def multilabel(
     population_labels: list,
     features: list,
     idx: Optional[Iterable[int]] = None,
-) -> (pl.DataFrame, pl.DataFrame):
+) -> (pd.DataFrame, pd.DataFrame):
     """
     Load the root population DataFrame from the reference FileGroup (assumed to be the first
     population in 'population_labels'). Then iterate over the remaining population creating a
@@ -304,7 +304,7 @@ def singlelabel(
     population_labels: list,
     features: list,
     idx: Optional[Iterable[int]] = None,
-) -> (pl.DataFrame, np.ndarray):
+) -> (pd.DataFrame, np.ndarray):
     """
     Load the root population DataFrame from the reference FileGroup (assumed to be the first
     population in 'population_labels'). Then iterate over the remaining population creating a
@@ -325,7 +325,7 @@ def singlelabel(
     """
     root = ref.load_population_df(population=root_population, transform=None)
     if idx is not None:
-        root = root[root.Index.is_in(idx), :]
+        root = root.loc[idx]
     root["label"] = 0
     for i, pop in enumerate(population_labels):
         pop_idx = [x for x in ref.get_population(population_name=pop).index if x in root.index]
