@@ -28,14 +28,14 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from functools import partial
-from multiprocessing import cpu_count
-from multiprocessing import Pool
 from typing import List
 from typing import Tuple
+from typing import Union
 
 import alphashape
 import mongoengine
 import numpy as np
+import pandas as pd
 import polars as pl
 from matplotlib.patches import Ellipse
 from scipy import linalg
@@ -44,6 +44,8 @@ from shapely.geometry import Point
 from shapely.geometry import Polygon
 
 from ..flow import transform
+from .read_write import pandas_to_polars
+from .read_write import polars_to_pandas
 
 
 class GeometryError(Exception):
@@ -110,11 +112,11 @@ class ThresholdGeom(PopulationGeometry):
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_x)(**kwargs)
-            x = transformer.inverse_scale(pl.DataFrame({"x": [self.x_threshold]}), features=["x"])["x"].values[0]
+            x = transformer.inverse_scale(pd.DataFrame({"x": [self.x_threshold]}), features=["x"])["x"].values[0]
         if self.transform_y:
             kwargs = self.transform_y_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
-            y = transformer.inverse_scale(pl.DataFrame({"y": [self.y_threshold]}), features=["y"])["y"].values[0]
+            y = transformer.inverse_scale(pd.DataFrame({"y": [self.y_threshold]}), features=["y"])["y"].values[0]
         return x, y
 
 
@@ -154,11 +156,11 @@ class PolygonGeom(PopulationGeometry):
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_x)(**kwargs)
-            x_values = transformer.inverse_scale(pl.DataFrame({"x": self.x_values}), features=["x"])["x"].values
+            x_values = transformer.inverse_scale(pd.DataFrame({"x": self.x_values}), features=["x"])["x"].values
         if self.transform_y:
             kwargs = self.transform_y_kwargs or {}
             transformer = transform.TRANSFORMERS.get(self.transform_y)(**kwargs)
-            y_values = transformer.inverse_scale(pl.DataFrame({"y": self.y_values}), features=["y"])["y"].values
+            y_values = transformer.inverse_scale(pd.DataFrame({"y": self.y_values}), features=["y"])["y"].values
         return x_values, y_values
 
 
@@ -166,13 +168,13 @@ def point_in_poly(coords: Tuple[float], poly: Polygon) -> pl.Series:
     return poly.contains(Point(coords))
 
 
-def inside_polygon(df: pl.DataFrame, x: str, y: str, poly: Polygon) -> pl.DataFrame:
+def inside_polygon(df: Union[pl.DataFrame, pd.DataFrame], x: str, y: str, poly: Polygon) -> pl.DataFrame:
     """
     Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
 
     Parameters
     ----------
-    df: polars.DataFrame
+    df: polars.DataFrame or Pandas.DataFrame
         Data to query
     x: str
         name of x-axis plane
@@ -186,9 +188,10 @@ def inside_polygon(df: pl.DataFrame, x: str, y: str, poly: Polygon) -> pl.DataFr
     polars.DataFrame
         Masked DataFrame containing only those rows that fall within the Polygon
     """
+    df = df if isinstance(df, pl.DataFrame) else pandas_to_polars(data=df)
     point_inside_polygon = partial(point_in_poly, poly=poly)
     mask = df[[x, y]].apply(point_inside_polygon, return_dtype=pl.Boolean)
-    return df[mask, :]
+    return polars_to_pandas(data=df[mask, :])
 
 
 def polygon_overlap(poly1: Polygon, poly2: Polygon, threshold: float = 0.0):
