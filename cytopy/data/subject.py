@@ -31,13 +31,15 @@ import logging
 from functools import partial
 from typing import Dict
 from typing import List
-from typing import Optional
 from typing import Set
 from typing import Union
 
 import mongoengine
 import pandas as pd
 import polars as pl
+
+from .read_write import pandas_to_polars
+from .read_write import polars_to_pandas
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +119,7 @@ def lookup_variable(subject_id: str, key: Union[str, List[str]]) -> Union[None, 
 
 
 def add_meta_labels(data: Union[pd.DataFrame, pl.DataFrame], key: Union[str, List[str]], column_name: str):
-    if isinstance(data, pl.DataFrame):
-        data = data.to_pandas()
+    data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     if column_name in data.columns:
         logger.warning(f"Data already contains column {column_name}. Will be overwritten.")
         data.drop(column_name, axis=1, inplace=True)
@@ -127,8 +128,6 @@ def add_meta_labels(data: Union[pd.DataFrame, pl.DataFrame], key: Union[str, Lis
     unique_subject_ids = data["subject_id"].unique()
     lookup_func = partial(lookup_variable, key=key)
     meta_var = list(map(lookup_func, unique_subject_ids))
-    return pl.DataFrame(
-        data.merge(
-            pd.DataFrame({"subject_id": unique_subject_ids, column_name: meta_var}), on="subject_id", how="left"
-        )
+    return data.merge(
+        pd.DataFrame({"subject_id": unique_subject_ids, column_name: meta_var}), on="subject_id", how="left"
     )
