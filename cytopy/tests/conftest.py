@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 from mongoengine.connection import connect
 from mongoengine.connection import disconnect
+from sklearn.datasets import make_blobs
 
 from ..data.experiment import FileGroup
 from ..data.population import Population
@@ -179,3 +180,15 @@ def create_lognormal_data():
         ]
     )
     return pd.DataFrame({"x": x, "y": y})
+
+
+@pytest.fixture
+def big_blobs():
+    x, y = make_blobs(n_samples=4000000, n_features=15, random_state=42, centers=8)
+    return pd.DataFrame(x, columns=[f"f{i + 1}" for i in range(15)]), y
+
+
+@pytest.fixture
+def small_blobs():
+    x, y = make_blobs(n_samples=1000, n_features=3, random_state=42, centers=3)
+    return pd.DataFrame(x, columns=[f"f{i + 1}" for i in range(3)]), y

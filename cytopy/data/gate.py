@@ -1452,12 +1452,13 @@ class PolygonGate(Gate):
         data = self.yeo_johnson_inverse(data=data)
         polygons = list()
 
+        data = data.to_pandas()
         for i in np.unique(labels):
             try:
                 polygons.append(
                     create_envelope(
-                        x_values=data.iloc[np.where(labels == i)][self.x].to_numpy(),
-                        y_values=data.iloc[np.where(labels == i)][self.y].to_numpy(),
+                        x_values=data.iloc[np.where(labels == i)][self.x].values,
+                        y_values=data.iloc[np.where(labels == i)][self.y].values,
                         alpha=self.method_kwargs.get("envelope_alpha", 0.0),
                     )
                 )

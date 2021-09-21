@@ -11,18 +11,6 @@ from sklearn.datasets import make_blobs
 from cytopy.flow.clustering import metrics
 
 
-@pytest.fixture
-def example_data():
-    x, y = make_blobs(n_samples=100000, n_features=10, random_state=42, centers=5)
-    return pd.DataFrame(x, columns=[f"f{i + 1}" for i in range(10)]), y
-
-
-@pytest.fixture
-def small_example():
-    x, y = make_blobs(n_samples=100, n_features=2, random_state=42, centers=3)
-    return pd.DataFrame(x, columns=[f"f{i + 1}" for i in range(2)]), y
-
-
 def cluster(data: pd.DataFrame, n_clusters: int):
     kmeans = MiniBatchKMeans(n_clusters=n_clusters, batch_size=1000)
     return kmeans.fit_predict(data)

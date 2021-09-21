@@ -71,9 +71,7 @@ from ...data.subject import Subject
 from ...feedback import progress_bar
 from ..dim_reduction import dimension_reduction_with_sampling
 from .consensus import ConsensusCluster
-from .ensemble import CoMatrix
 from .ensemble import comparison_matrix
-from .ensemble import MixtureModel
 from .flowsom import FlowSOM
 from .plotting import clustered_heatmap
 from .plotting import plot_cluster_membership
