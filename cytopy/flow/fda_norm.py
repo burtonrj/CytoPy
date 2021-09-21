@@ -35,7 +35,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import matplotlib.pyplot as plt
 import numpy as np
-import polars as pl
+import pandas as pd
 from detecta import detect_peaks
 from KDEpy import FFTKDE
 from skfda.preprocessing.registration import landmark_registration_warping
@@ -229,7 +229,7 @@ def match_landmarks(p: np.ndarray, plabels: np.ndarray):
         return matching_peaks
 
 
-def estimate_pdfs(target: pl.DataFrame, ref: pl.DataFrame, var: str):
+def estimate_pdfs(target: pd.DataFrame, ref: pd.DataFrame, var: str):
     """
     Given some target and reference DataFrame, estimate PDF for each using convolution based
     kernel density estimation (see KDEpy). 'var' is the variable of interest and should be a
@@ -237,8 +237,8 @@ def estimate_pdfs(target: pl.DataFrame, ref: pl.DataFrame, var: str):
 
     Parameters
     ----------
-    target: polars.DataFrame
-    ref: polars.DataFrame
+    target: pandas.DataFrame
+    ref: pandas.DataFrame
     var: str
 
     Returns
@@ -283,9 +283,9 @@ class LandmarkReg:
 
     Parameters
     ----------
-    target: polars.DataFrame
+    target: pandas.DataFrame
         Target data to be transformed; must contain column corresponding to 'var'
-    ref: polars.DataFrame
+    ref: pandas.DataFrame
         Reference data for computing alignment; must contain column corresponding to 'var'
     var: str
         Name of the target variable to align
@@ -310,7 +310,7 @@ class LandmarkReg:
         Corresponding shifts to align the landmarks of the PDFs described in original_functions
     """
 
-    def __init__(self, target: pl.DataFrame, ref: pl.DataFrame, var: str, mpt: float = 0.001, **kwargs):
+    def __init__(self, target: pd.DataFrame, ref: pd.DataFrame, var: str, mpt: float = 0.001, **kwargs):
         y1, y2, x = estimate_pdfs(target, ref, var)
         landmarks = [peaks(y, x, mph=mpt * y.max(), **kwargs) for y in [y1, y2]]
         plabels = np.concatenate(
