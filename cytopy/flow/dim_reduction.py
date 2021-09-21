@@ -48,6 +48,7 @@ from sklearn.manifold import MDS
 from sklearn.manifold import TSNE
 from umap import UMAP
 
+from ..data.read_write import polars_to_pandas
 from ..feedback import progress_bar
 from .sampling import sample_dataframe
 
@@ -126,22 +127,20 @@ class DimensionReduction:
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: polars.DataFrame or pandas.DataFrame
         features: List[str]
             List of features (columns) to use
 
         Returns
         -------
-        None or polars.DataFrame
-            If fit is not supported, will returns a polars DataFrame.
+        None or Pandas.DataFrame
+            If fit is not supported, will returns a DataFrame.
         """
+        data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
         if not hasattr(self.method, "fit"):
             logger.warning(f"Method {self._method_name} has no method 'fit', calling 'fit_transform' instead.")
             return self.fit_transform(data=data, features=features)
-        if isinstance(data, pl.DataFrame):
-            self.method.fit(data[features].to_numpy())
-        else:
-            self.method.fit(data[features].values)
+        self.method.fit(data[features].values)
 
     def fit_transform(self, data: Union[pl.DataFrame, pd.DataFrame], features: List[str]) -> pl.DataFrame:
         """
@@ -150,18 +149,16 @@ class DimensionReduction:
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: polars.DataFrame or pandas.DataFrame
         features: List[str]
             List of features (columns) to use
 
         Returns
         -------
-        polars.DataFrame
+        Pandas.DataFrame
         """
-        if isinstance(data, pl.DataFrame):
-            x = data[features].to_numpy()
-        else:
-            x = data[features].values
+        data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
+        x = data[features].values
         self.embeddings = self.method.fit_transform(x)
         for i, e in enumerate(self.embeddings.T):
             data[f"{self._method_name}{i + 1}"] = e
@@ -176,19 +173,20 @@ class DimensionReduction:
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: polars.DataFrame or pandas.DataFrame
         features: List[str]
             List of features (columns) to use
 
         Returns
         -------
-        polars.DataFrame
+        Pandas.DataFrame
         """
+        data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
         if not hasattr(self.method, "transform"):
             logger.warning(f"Method {self._method_name} has no method 'transform', calling 'fit_transform' instead.")
             return self.fit_transform(data=data, features=features)
 
-        embeddings = self.method.transform(data[features].to_numpy())
+        embeddings = self.method.transform(data[features].values)
         for i, e in enumerate(embeddings.T):
             data[f"{self._method_name}{i + 1}"] = e
         return data

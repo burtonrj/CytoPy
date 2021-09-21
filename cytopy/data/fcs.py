@@ -42,6 +42,7 @@ import boto3
 import flowio
 import mongoengine
 import numpy as np
+import pandas as pd
 import polars as pl
 from botocore.errorfactory import ClientError
 from imblearn.over_sampling import RandomOverSampler
@@ -273,7 +274,9 @@ class FileGroup(mongoengine.Document):
                     idx = idx.tolist()
                 data = data.filter(pl.col("Index").is_in(idx))
             if sample_size is not None:
-                data = sample_dataframe(data=data, sample_size=sample_size, method=sampling_method, **sampling_kwargs)
+                data = pl.DataFrame(
+                    sample_dataframe(data=data, sample_size=sample_size, method=sampling_method, **sampling_kwargs)
+                )
             return data
         except KeyError as e:
             logger.error(
@@ -363,7 +366,7 @@ class FileGroup(mongoengine.Document):
         kfolds: int = 5,
         n_permutations: int = 25,
         sample_size: int = 10000,
-    ) -> pl.DataFrame:
+    ) -> pd.DataFrame:
         """
         Load a population from an associated control. The assumption here is that control files
         have been collected at the same time as primary staining and differ by the absence or
@@ -408,7 +411,7 @@ class FileGroup(mongoengine.Document):
 
         Returns
         -------
-        polars.DataFrame
+        Pandas.DataFrame
             Population data from control, as predicted using the primary staining
 
         Raises
@@ -471,7 +474,7 @@ class FileGroup(mongoengine.Document):
         logger.info(f"{population}: {round(training_prop_of_root, 3)}% of root in primary data")
         logger.info(f"Predicted in ctrl: {round(ctrl_prop_of_root, 3)}% of root in control data")
         ctrl = ctrl[np.where(ctrl_labels == 1)[0]]
-        return ctrl[["Index"] + features]
+        return ctrl[["Index"] + features].to_pandas().set_index("Index")
 
     def load_multiple_populations(
         self,
@@ -486,7 +489,7 @@ class FileGroup(mongoengine.Document):
         sampling_method: str = "uniform",
         sample_at_population_level: bool = True,
         **sampling_kwargs,
-    ) -> pl.DataFrame:
+    ) -> pd.DataFrame:
         """
         Load a DataFrame of single cell data obtained from multiple populations. Population data
         is merged and identifiable from the column 'population_label'
@@ -521,7 +524,7 @@ class FileGroup(mongoengine.Document):
 
         Returns
         -------
-        polars.DataFrame
+        Pandas.DataFrame
 
         Raises
         ------
@@ -553,9 +556,9 @@ class FileGroup(mongoengine.Document):
                 logger.warning(f"{self.primary_id} does not contain population {p}")
         if sample_size is not None and not sample_at_population_level:
             return sample_dataframe(
-                data=pl.concat(dataframes), sample_size=sample_size, method=sampling_method, **sampling_kwargs
+                data=pd.concat(dataframes), sample_size=sample_size, method=sampling_method, **sampling_kwargs
             )
-        return pl.concat(dataframes)
+        return pd.concat(dataframes)
 
     def load_population_df(
         self,
@@ -569,7 +572,7 @@ class FileGroup(mongoengine.Document):
         sampling_method: str = "uniform",
         label_downstream_affiliations=None,
         **sampling_kwargs,
-    ) -> pl.DataFrame:
+    ) -> pd.DataFrame:
         """
         Load the DataFrame for the events pertaining to a single population.
 
@@ -638,7 +641,7 @@ class FileGroup(mongoengine.Document):
                 comparison_pop = self.get_population(population_name=comparison_pop)
                 data[f"frac of {comparison_pop.population_name}"] = population.n / comparison_pop.n
 
-        return data
+        return data.to_pandas()
 
     def list_populations(self, regex: Optional[str] = None) -> List[str]:
         """

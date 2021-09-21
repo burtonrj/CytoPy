@@ -25,15 +25,20 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+from typing import Union
+
 import numpy as np
+import pandas as pd
 import polars as pl
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 
+from ..data.read_write import polars_to_pandas
 
-def calculate_optimal_neighbours(x: pl.DataFrame, y: np.array, scoring: str, **kwargs):
+
+def calculate_optimal_neighbours(x: Union[pl.DataFrame, pd.DataFrame], y: np.array, scoring: str, **kwargs):
     """
     Calculate the optimal n_neighbours parameter for KNeighborsClassifier using GridSearchCV.
     Returns optimal n and highest score
@@ -54,6 +59,7 @@ def calculate_optimal_neighbours(x: pl.DataFrame, y: np.array, scoring: str, **k
     AssertionError
         Less than 5 observations provided
     """
+    x = x if isinstance(x, pd.DataFrame) else polars_to_pandas(data=x)
     assert x.shape[0] > 5, "Less than 5 observations in data provided for fit"
     max_ = 500
     if (max_ - 5) > x.shape[0]:
@@ -61,12 +67,12 @@ def calculate_optimal_neighbours(x: pl.DataFrame, y: np.array, scoring: str, **k
     n = np.arange(5, max_, 10, dtype=np.int64)
     knn_ = KNeighborsClassifier(**kwargs)
     grid_cv = GridSearchCV(knn_, {"n_neighbors": n}, scoring=scoring, n_jobs=-1, cv=10)
-    grid_cv.fit(x.to_numpy(), y)
+    grid_cv.fit(x.values, y)
     return grid_cv.best_params_.get("n_neighbors"), grid_cv.best_score_
 
 
 def knn(
-    data: pl.DataFrame,
+    data: Union[pl.DataFrame, pd.DataFrame],
     labels: np.array,
     features: list,
     n_neighbours: int,
@@ -97,8 +103,9 @@ def knn(
         Training balanced accuracy score, Validation balanced accuracy score,
         Classifier (if return_model is True)
     """
+    data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     x_train, x_test, y_train, y_test = train_test_split(
-        data[features].to_numpy(), labels, test_size=holdout_size, random_state=random_state
+        data[features].values, labels, test_size=holdout_size, random_state=random_state
     )
     knn_ = KNeighborsClassifier(n_neighbors=n_neighbours, **kwargs)
     knn_.fit(x_train, y_train)

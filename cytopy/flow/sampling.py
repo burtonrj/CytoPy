@@ -40,6 +40,8 @@ import polars as pl
 from sklearn.neighbors import BallTree
 from sklearn.neighbors import KDTree
 
+from ..data.read_write import pandas_to_polars
+from ..data.read_write import polars_to_pandas
 from .neighbours import calculate_optimal_neighbours
 from .neighbours import knn
 
@@ -71,13 +73,15 @@ def uniform_downsampling(data: Union[pl.DataFrame, pd.DataFrame], sample_size: U
 
     Returns
     -------
-    polars.DataFrame
+    Polars.DataFrame or Pandas.DataFrame
+        Returns sample data type as given
 
     Raises
     ------
     SamplingError
         Sample size type is invalid; should be either int or float
     """
+    data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
     if isinstance(sample_size, int):
         if sample_size >= data.shape[0]:
             logger.warning(
@@ -202,13 +206,14 @@ def density_dependent_downsampling(
         Number of jobs to run in unison when calculating weights (defaults to all available cores)
     Returns
     -------
-    Pandas.DataFrame
-        Down-sampled polars dataframe
+    Pandas.DataFrame or Polars.DataFrame
+        Down-sampled dataframe (returns same data type as given)
     """
-    data = data if isinstance(data, pd.DataFrame) else data.to_pandas()
     if isinstance(sample_size, int) and sample_size >= data.shape[0]:
         logger.warning("Requested sample size >= size of dataframe")
         return data
+
+    data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
     features = features or list(data.columns)
     tree_sample = uniform_downsampling(data=data, sample_size=tree_sample)
     prob = density_probability_assignment(
@@ -226,8 +231,9 @@ def density_dependent_downsampling(
         )
         return uniform_downsampling(data=data, sample_size=sample_size)
     if isinstance(sample_size, int):
-        return data.sample(n=sample_size, weights=prob)
-    return data.sample(frac=sample_size, weights=prob)
+        data = data.sample(n=sample_size, weights=prob)
+    data = data.sample(frac=sample_size, weights=prob)
+    return data
 
 
 def density_probability_assignment(
@@ -277,7 +283,7 @@ def density_probability_assignment(
     -------
     numpy.ndarray
     """
-    data = data if isinstance(data, pd.DataFrame) else data.to_pandas()
+    data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
     if njobs < 0:
         njobs = cpu_count()
     tree = KDTree(sample.values, metric=distance_metric, leaf_size=100)
@@ -345,8 +351,9 @@ def upsample_density(
 
     Returns
     -------
-
+    Pandas.DataFrame or Polars.DataFrame
     """
+    data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
     features = features or list(data.columns)
     tree_sample = uniform_downsampling(data=data, sample_size=tree_sample)
     prob = density_probability_assignment(
@@ -361,7 +368,7 @@ def upsample_density(
     low_dens_idx = np.where(prob > 1.0)
     low_dens_regions = data.iloc[low_dens_idx]
     upsampled_data = [low_dens_regions for _ in range(upsample_factor)]
-    data = pl.concat([data] + upsampled_data)
+    data = pd.concat([data] + upsampled_data)
     if sample_size is None:
         return data
     return uniform_downsampling(data=data, sample_size=sample_size)
@@ -468,7 +475,7 @@ def sample_dataframe(
 
 def sample_dataframe_uniform_groups(data: Union[pl.DataFrame, pd.DataFrame], group_id: str, sample_size: int):
     sample_data = list()
-    data = data if isinstance(data, pd.DataFrame) else data.to_pandas()
+    data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
     n = int(sample_size / data[group_id].nunique())
     for df in data.groupby(group_id):
         if n >= df.shape[0]:

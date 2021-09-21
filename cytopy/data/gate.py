@@ -42,7 +42,7 @@ from warnings import warn
 
 import mongoengine
 import numpy as np
-import polars as pl
+import pandas as pd
 from detecta import detect_peaks
 from hdbscan import HDBSCAN
 from KDEpy import FFTKDE
@@ -262,30 +262,30 @@ class Gate(mongoengine.Document):
             logger.debug("Yeo-johnson transform = TRUE")
             self._yeo_johnson = PowerTransformer(method="yeo-johnson")
 
-    def yeo_johnson_transform(self, data: pl.DataFrame) -> pl.DataFrame:
+    def yeo_johnson_transform(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Apply Yeo-Johnson transformation prior to fitting gating algorithm - method that
         enforces "normality" whilst handling negative values
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
 
         Returns
         -------
-        polars.DataFrame
+        Pandas.DataFrame
             Transformed dataframe with features (defined by self.x/self.y) transformed.
         """
         logger.debug("Performing yeo-johnson transform")
         if self._yeo_johnson is not None:
             features = [i for i in [self.x, self.y] if i is not None]
             if len(features) == 1:
-                data[features] = self._yeo_johnson.fit_transform(data[features].to_numpy().reshape(-1, 1))
+                data[features] = self._yeo_johnson.fit_transform(data[features].values.reshape(-1, 1))
             else:
-                data[features] = self._yeo_johnson.fit_transform(data[features].to_numpy())
+                data[features] = self._yeo_johnson.fit_transform(data[features].values)
         return data
 
-    def yeo_johnson_inverse(self, data: pl.DataFrame) -> pl.DataFrame:
+    def yeo_johnson_inverse(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Inverse any applied Yeo-Johnson transformation to data to original space
 
@@ -295,29 +295,29 @@ class Gate(mongoengine.Document):
 
         Returns
         -------
-        polars.DataFrame
+        Pandas.DataFrame
             Inversely transformed data
         """
         logger.debug("Performing inverse yeo-johnson transform")
         if self._yeo_johnson is not None:
             features = [i for i in [self.x, self.y] if i is not None]
             if len(features) == 1:
-                data[features] = self._yeo_johnson.inverse_transform(data[features].to_numpy().reshape(-1, 1))
+                data[features] = self._yeo_johnson.inverse_transform(data[features].values.reshape(-1, 1))
             else:
-                data[features] = self._yeo_johnson.inverse_transform(data[features].to_numpy())
+                data[features] = self._yeo_johnson.inverse_transform(data[features].values)
         return data
 
-    def transform(self, data: pl.DataFrame) -> pl.DataFrame:
+    def transform(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Transform dataframe prior to gating
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
 
         Returns
         -------
-        polars.DataFrame
+        Pandas.DataFrame
             Transformed dataframe
         """
         if self.transform_x is not None:
@@ -359,18 +359,18 @@ class Gate(mongoengine.Document):
         transform_kwargs = {k: v for k, v in zip([self.x, self.y], transform_kwargs) if k is not None}
         return transforms, transform_kwargs
 
-    def _downsample(self, data: pl.DataFrame) -> Union[pl.DataFrame, None]:
+    def _downsample(self, data: pd.DataFrame) -> Union[pd.DataFrame, None]:
         """
         Perform down-sampling prior to gating. Returns down-sampled dataframe or
         None if sampling method is undefined.
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
 
         Returns
         -------
-        polars.DataFrame or None
+        Pandas.DataFrame or None
 
         Raises
         ------
@@ -397,16 +397,16 @@ class Gate(mongoengine.Document):
 
         raise GateError("Invalid downsample method, should be one of: 'uniform', 'density' or 'faithful'")
 
-    def _upsample(self, data: pl.DataFrame, sample: pl.DataFrame, populations: List[Population]) -> List[Population]:
+    def _upsample(self, data: pd.DataFrame, sample: pd.DataFrame, populations: List[Population]) -> List[Population]:
         """
         Perform up-sampling after gating using KNN. Returns list of Population objects
         with index updated to reflect the original data.
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
             Original data, prior to down-sampling
-        sample: polars.DataFrame
+        sample: Pandas.DataFrame
             Sampled data
         populations: list
             List of populations with assigned indexes
@@ -421,14 +421,14 @@ class Gate(mongoengine.Document):
             Up-sampling error; not enough events
         """
         logger.debug("Upsampling data")
-        sample = sample.clone()()
-        sample["label"] = [None for _ in range(sample.shape[0])]
+        sample = sample.copy()
+        sample["label"] = None
 
         for i, p in enumerate(populations):
             sample[sample.index.isin(p.index), "label"] = i
 
-        sample = sample["label"].fill_nan(-1)
-        labels = sample["label"].to_numpy()
+        sample = sample["label"].fillna(-1)
+        labels = sample["label"].values
         sample = sample.drop("label")
 
         new_labels = upsample_knn(
@@ -457,12 +457,12 @@ class Gate(mongoengine.Document):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
             Data to reduce
 
         Returns
         -------
-        polars.DataFrame
+        Pandas.DataFrame
         """
         logger.debug("Performing dimension reduction")
 
@@ -483,7 +483,7 @@ class Gate(mongoengine.Document):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
 
         Returns
         -------
@@ -724,7 +724,7 @@ class ThresholdGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
 
         Returns
         -------
@@ -788,7 +788,7 @@ class ThresholdGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
 
         Returns
         -------
@@ -945,8 +945,8 @@ class ThresholdGate(Gate):
 
         Parameters
         ----------
-        primary_data: polars.DataFrame
-        ctrl_data: polars.DataFrame
+        primary_data: Pandas.DataFrame
+        ctrl_data: Pandas.DataFrame
 
         Returns
         -------
@@ -1006,9 +1006,9 @@ class ThresholdGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
             Population data to fit threshold
-        ctrl_data: polars.DataFrame, optional
+        ctrl_data: Pandas.DataFrame, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
         Returns
         -------
@@ -1062,9 +1062,9 @@ class ThresholdGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
             Population data to fit threshold to
-        ctrl_data: polars.DataFrame, optional
+        ctrl_data: Pandas.DataFrame, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
 
         Returns
@@ -1107,7 +1107,7 @@ class ThresholdGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
             Data to apply static thresholds too
         Returns
         -------
@@ -1145,7 +1145,7 @@ class ThresholdGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
         x_threshold: float
         y_threshold: float (optional)
 
@@ -1264,7 +1264,7 @@ class PolygonGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
         polygons: list
 
         Returns
@@ -1422,7 +1422,7 @@ class PolygonGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
 
         Returns
         -------
@@ -1476,7 +1476,7 @@ class PolygonGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
             Population data to fit gate to
         ctrl_data: None
             Redundant parameter, necessary for Gate signature. Ignore.
@@ -1515,7 +1515,7 @@ class PolygonGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
             Population data to fit gate to
         ctrl_data: None
             Redundant parameter, necessary for Gate signature. Ignore.
@@ -1544,7 +1544,7 @@ class PolygonGate(Gate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
             Data to apply static polygons to
 
         Returns
@@ -1712,7 +1712,7 @@ class EllipseGate(PolygonGate):
 
         Parameters
         ----------
-        data: polars.DataFrame
+        data: Pandas.DataFrame
 
         Returns
         -------
@@ -1878,7 +1878,7 @@ def apply_threshold(
 
     Parameters
     ----------
-    data: polars.DataFrame
+    data: Pandas.DataFrame
     x: str
     x_threshold: float
     y: str, optional
@@ -1898,11 +1898,11 @@ def threshold_1d(data: pl.DataFrame, x: str, x_threshold: float) -> Dict[str, pl
     """
     Apply the given threshold (x_threshold) to the x-axis variable (x) and return the
     resulting dataframes corresponding to the positive and negative populations.
-    Returns a dictionary of dataframes: {'-': polars.DataFrame, '+': polars.DataFrame}
+    Returns a dictionary of dataframes: {'-': Pandas.DataFrame, '+': Pandas.DataFrame}
 
     Parameters
     ----------
-    data: polars.DataFrame
+    data: Pandas.DataFrame
     x: str
     x_threshold: float
 
@@ -1910,7 +1910,7 @@ def threshold_1d(data: pl.DataFrame, x: str, x_threshold: float) -> Dict[str, pl
     -------
     dict
         Negative population (less than threshold) and positive population (greater than or equal to threshold)
-        in a dictionary as so: {'-': polars.DataFrame, '+': polars.DataFrame}
+        in a dictionary as so: {'-': Pandas.DataFrame, '+': Pandas.DataFrame}
     """
     data = data.copy()
     return {"+": data[data[x] >= x_threshold], "-": data[data[x] < x_threshold]}
@@ -1929,7 +1929,7 @@ def threshold_2d(
 
     Parameters
     ----------
-    data: polars.DataFrame
+    data: Pandas.DataFrame
     x: str
     y: str
     x_threshold: float
@@ -2122,7 +2122,7 @@ def update_threshold(
     Parameters
     ----------
     population: Population
-    parent_data: polars.DataFrame
+    parent_data: Pandas.DataFrame
     x_threshold: float
     y_threshold: float, optional
         Required if 2D threshold geometry
@@ -2174,7 +2174,7 @@ def update_polygon(
     Parameters
     ----------
     population: Population
-    parent_data: polars.DataFrame
+    parent_data: Pandas.DataFrame
     x_values: list
     y_values: list
 

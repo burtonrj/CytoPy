@@ -39,6 +39,7 @@ from typing import Optional
 
 import flowio
 import numpy as np
+import pandas as pd
 import polars as pl
 import pyarrow.parquet as pq
 import s3fs
@@ -329,3 +330,13 @@ def read_from_remote(s3_bucket: str, path: str, **kwargs) -> pl.DataFrame:
         raise ValueError("Currently only support csv or parquet file extensions")
     data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
     return data
+
+
+def pandas_to_polars(data: pd.DataFrame) -> pl.DataFrame:
+    data = data.reset_index().rename({"index": "Index"}, axis=1)
+    return pl.DataFrame(data)
+
+
+def polars_to_pandas(data: pl.DataFrame) -> pd.DataFrame:
+    assert "Index" in data.columns, "Missing 'Index' column"
+    return data.to_pandas().set_index("Index")

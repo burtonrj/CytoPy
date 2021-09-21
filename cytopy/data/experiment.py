@@ -409,7 +409,7 @@ def single_cell_dataframe(
     sampling_level: str = "file",
     sampling_method: str = "uniform",
     sampling_kwargs: Optional[Dict] = None,
-) -> pl.DataFrame:
+) -> pd.DataFrame:
     """
     Generate a single cell DataFrame that is a concatenation of population data from many
     samples from a single Experiment. Population level data is identifiable from the 'population_label'
@@ -461,7 +461,7 @@ def single_cell_dataframe(
 
     Returns
     -------
-    polars.DataFrame
+    Pandas.DataFrame
     """
     logger.debug(f"Loading data from {experiment.experiment_id}")
     sample_ids = sample_ids or list(experiment.list_samples())
@@ -501,13 +501,11 @@ def single_cell_dataframe(
         fg = experiment.get_sample(sample_id=_id)
         logger.debug(f"Loading FileGroup data from {_id}; {fg.id}")
         pop_data = getattr(fg, method)(**kwargs)
-        pop_data["sample_id"] = [_id for _ in range(pop_data.shape[0])]
-        pop_data["subject_id"] = ["" for _ in range(pop_data.shape[0])]
-        if fg.subject:
-            pop_data["subject_id"] = [fg.subject.subject_id for _ in range(pop_data.shape[0])]
+        pop_data["sample_id"] = _id
+        pop_data["subject_id"] = fg.subject.subject_id
         data.append(pop_data)
 
-    data = pl.concat(data)
+    data = pd.concat(data)
 
     if sample_size is not None and sampling_level == "experiment":
         data = sample_dataframe(
