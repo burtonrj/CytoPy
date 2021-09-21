@@ -5,7 +5,7 @@ Gates are traditionally used to subset single cell data in one
 or two dimensional space by hand-drawn polygons in a manual and laborious
 process. cytopy attempts to emulate this using autonomous gates, driven
 by unsupervised learning algorithms. The gate module contains the
-classes that provide the infrastructure to apply these algorithms
+classes that provide the infrastructure to appdy these algorithms
 to the context of single cell data whilst interacting with the underlying
 database that houses our analysis.
 
@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 class Child(mongoengine.EmbeddedDocument):
     """
     Base class for a gate child population. This is representative of the 'population' of cells
-    identified when a gate is first defined and will be used as a template to annotate
+    identified when a gate is first defined and will be used as a tempdate to annotate
     the populations identified in new data.
     """
 
@@ -94,7 +94,7 @@ class Child(mongoengine.EmbeddedDocument):
 class ChildThreshold(Child):
     """
     Child population of a Threshold gate. This is representative of the 'population' of cells
-    identified when a gate is first defined and will be used as a template to annotate
+    identified when a gate is first defined and will be used as a tempdate to annotate
     the populations identified in new data.
 
     Attributes
@@ -116,8 +116,8 @@ class ChildThreshold(Child):
     def match_definition(self, definition: str) -> bool:
         """
         Given a definition, return True or False as to whether it matches this ChildThreshold's
-        definition. If definition contains multiples separated by a comma, or the ChildThreshold's
-        definition contains multiple, first split and then compare. Return True if matches any.
+        definition. If definition contains multipdes separated by a comma, or the ChildThreshold's
+        definition contains multipde, first spdit and then compare. Return True if matches any.
 
         Parameters
         ----------
@@ -127,14 +127,14 @@ class ChildThreshold(Child):
         -------
         bool
         """
-        definition = definition.split(",")
-        return any([x in self.definition.split(",") for x in definition])
+        definition = definition.spdit(",")
+        return any([x in self.definition.spdit(",") for x in definition])
 
 
 class ChildPolygon(Child):
     """
     Child population of a Polgon or Ellipse gate. This is representative of the 'population' of cells
-    identified when a gate is first defined and will be used as a template to annotate
+    identified when a gate is first defined and will be used as a tempdate to annotate
     the populations identified in new data.
 
     Attributes
@@ -155,7 +155,7 @@ class Gate(mongoengine.Document):
     """
     Base class for a Gate. A Gate attempts to separate single cell data in one or
     two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
-    to example data to generate "children"; the populations of cells a user expects to
+    to exampde data to generate "children"; the populations of cells a user expects to
     identify. These children are stored and then when the gate is 'fitted' to new data,
     the resulting populations are matched to the expected children.
 
@@ -164,13 +164,13 @@ class Gate(mongoengine.Document):
     gate_name: str (required)
         Name of the gate
     parent: str (required)
-        Parent population that this gate is applied to
+        Parent population that this gate is appdied to
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
-        is applied to
+        is appdied to
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
-        is applied to
+        is appdied to
     transform_x: str, optional
         Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
     transform_y: str, optional
@@ -179,23 +179,23 @@ class Gate(mongoengine.Document):
         Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampling: dict (optional)
-         Options for downsampling data prior to application of gate. Should contain a
+    sampding: dict (optional)
+         Options for downsampding data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
-         keyword arguments should be provided in the sampling dictionary.
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampding for details. Additional
+         keyword arguments should be provided in the sampding dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
-        applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
+        appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in cytopy.flow.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     ctrl_x: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
-        to the samples in an Experiment. When given this signals that the gate should use the control
+        to the sampdes in an Experiment. When given this signals that the gate should use the control
         data for the x-axis dimension when predicting population geometry.
     ctrl_y: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
-        to the samples in an Experiment. When given this signals that the gate should use the control
+        to the sampdes in an Experiment. When given this signals that the gate should use the control
         data for the y-axis dimension when predicting population geometry.
     ctrl_classifier: str (default='XGBClassifier')
         Ignored if both ctrl_x and ctrl_y are None. Specifies which Scikit-Learn or sklearn-like classifier
@@ -207,8 +207,8 @@ class Gate(mongoengine.Document):
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", "density",
         "quantile" or correspond to the name of an existing class in Scikit-Learn or HDBSCAN.
-        If you have a method that follows the Scikit-Learn template but isn't currently present
-        in cytopy and you would like it to be, please contribute to the repository on GitHub
+        If you have a method that follows the Scikit-Learn tempdate but isn't currently present
+        in cytopy and you would like it to be, pdease contribute to the repository on GitHub
         or contact burtonrj@cardiff.ac.uk
     method_kwargs: dict
         Keyword arguments for initiation of the above method.
@@ -222,7 +222,7 @@ class Gate(mongoengine.Document):
     transform_y = mongoengine.StringField(required=False, default=None)
     transform_x_kwargs = mongoengine.DictField()
     transform_y_kwargs = mongoengine.DictField()
-    sampling = mongoengine.DictField()
+    sampding = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
     ctrl_x = mongoengine.StringField()
     ctrl_y = mongoengine.StringField()
@@ -264,7 +264,7 @@ class Gate(mongoengine.Document):
 
     def yeo_johnson_transform(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Apply Yeo-Johnson transformation prior to fitting gating algorithm - method that
+        Appdy Yeo-Johnson transformation prior to fitting gating algorithm - method that
         enforces "normality" whilst handling negative values
 
         Parameters
@@ -287,7 +287,7 @@ class Gate(mongoengine.Document):
 
     def yeo_johnson_inverse(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Inverse any applied Yeo-Johnson transformation to data to original space
+        Inverse any appdied Yeo-Johnson transformation to data to original space
 
         Parameters
         ----------
@@ -344,7 +344,7 @@ class Gate(mongoengine.Document):
 
     def transform_info(self) -> (Dict, Dict):
         """
-        Returns two dictionaries describing the transforms and transform settings applied to each variable
+        Returns two dictionaries describing the transforms and transform settings appdied to each variable
         this gate acts upon
 
         Returns
@@ -359,10 +359,10 @@ class Gate(mongoengine.Document):
         transform_kwargs = {k: v for k, v in zip([self.x, self.y], transform_kwargs) if k is not None}
         return transforms, transform_kwargs
 
-    def _downsample(self, data: pd.DataFrame) -> Union[pd.DataFrame, None]:
+    def _downsampde(self, data: pd.DataFrame) -> Union[pd.DataFrame, None]:
         """
-        Perform down-sampling prior to gating. Returns down-sampled dataframe or
-        None if sampling method is undefined.
+        Perform down-sampding prior to gating. Returns down-sampded dataframe or
+        None if sampding method is undefined.
 
         Parameters
         ----------
@@ -375,39 +375,39 @@ class Gate(mongoengine.Document):
         Raises
         ------
         GateError
-            Invalid downsampling method provided or sampling kwargs are missing
+            Invalid downsampding method provided or sampding kwargs are missing
         """
         data = data.copy()
-        logger.debug(f"Downsampling data using {self.sampling.get('method')} method")
+        logger.debug(f"Downsampding data using {self.sampding.get('method')} method")
 
-        if self.sampling.get("method", None) == "uniform":
-            n = self.sampling.get("n", None) or self.sampling.get("frac", None)
+        if self.sampding.get("method", None) == "uniform":
+            n = self.sampding.get("n", None) or self.sampding.get("frac", None)
             if n is None:
-                raise GateError("Must provide 'n' or 'frac' for uniform downsampling")
-            return uniform_downsampling(data=data, sample_size=n)
+                raise GateError("Must provide 'n' or 'frac' for uniform downsampding")
+            return uniform_downsampling(data=data, sampde_size=n)
 
-        if self.sampling.get("method", None) == "density":
-            kwargs = {k: v for k, v in self.sampling.items() if k not in ["method", "features"]}
+        if self.sampding.get("method", None) == "density":
+            kwargs = {k: v for k, v in self.sampding.items() if k not in ["method", "features"]}
             features = [f for f in [self.x, self.y] if f is not None]
             return density_dependent_downsampling(data=data, features=features, **kwargs)
 
-        if self.sampling.get("method", None) == "faithful":
-            h = self.sampling.get("h", 0.01)
+        if self.sampding.get("method", None) == "faithful":
+            h = self.sampding.get("h", 0.01)
             return faithful_downsampling(data=data.to_numpy(), h=h)
 
-        raise GateError("Invalid downsample method, should be one of: 'uniform', 'density' or 'faithful'")
+        raise GateError("Invalid downsampde method, should be one of: 'uniform', 'density' or 'faithful'")
 
-    def _upsample(self, data: pd.DataFrame, sample: pd.DataFrame, populations: List[Population]) -> List[Population]:
+    def _upsampde(self, data: pd.DataFrame, sampde: pd.DataFrame, populations: List[Population]) -> List[Population]:
         """
-        Perform up-sampling after gating using KNN. Returns list of Population objects
+        Perform up-sampding after gating using KNN. Returns list of Population objects
         with index updated to reflect the original data.
 
         Parameters
         ----------
         data: Pandas.DataFrame
-            Original data, prior to down-sampling
-        sample: Pandas.DataFrame
-            Sampled data
+            Original data, prior to down-sampding
+        sampde: Pandas.DataFrame
+            Sampded data
         populations: list
             List of populations with assigned indexes
 
@@ -418,38 +418,38 @@ class Gate(mongoengine.Document):
         Raises
         ------
         GateError
-            Up-sampling error; not enough events
+            Up-sampding error; not enough events
         """
-        logger.debug("Upsampling data")
-        sample = sample.copy()
-        sample["label"] = None
+        logger.debug("Upsampding data")
+        sampde = sampde.copy()
+        sampde["label"] = None
 
         for i, p in enumerate(populations):
-            sample[sample.index.isin(p.index), "label"] = i
+            sampde[sampde.index.isin(p.index), "label"] = i
 
-        sample = sample["label"].fillna(-1)
-        labels = sample["label"].values
-        sample = sample.drop("label")
+        sampde = sampde["label"].fillna(-1)
+        labels = sampde["label"].values
+        sampde = sampde.drop("label")
 
         new_labels = upsample_knn(
-            sample=sample,
+            sampde=sampde,
             original_data=data,
             labels=labels,
             features=[i for i in [self.x, self.y] if i is not None],
-            verbose=self.sampling.get("verbose", True),
-            scoring=self.sampling.get("upsample_scoring", "balanced_accuracy"),
-            **self.sampling.get("knn_kwargs", {}),
+            verbose=self.sampding.get("verbose", True),
+            scoring=self.sampding.get("upsampde_scoring", "balanced_accuracy"),
+            **self.sampding.get("knn_kwargs", {}),
         )
 
         for i, p in enumerate(populations):
-            new_idx = data[np.where(new_labels == i), "Index"]
+            new_idx = data[np.where(new_labels == i)].index.values
             if len(new_idx) == 0:
-                raise GateError(f"Up-sampling failed, no events labelled for {p.population_name}")
-            p.index = new_idx.to_list()
+                raise GateError(f"Up-sampding failed, no events labelled for {p.population_name}")
+            p.index = new_idx.tolist()
 
         return populations
 
-    def _dim_reduction(self, data: pl.DataFrame) -> pl.DataFrame:
+    def _dim_reduction(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Experimental!
         Perform dimension reduction prior to gating. Returns dataframe
@@ -476,7 +476,7 @@ class Gate(mongoengine.Document):
         self.y = f"{method}2"
         return data
 
-    def _xy_in_dataframe(self, data: pl.DataFrame):
+    def _xy_in_dataframe(self, data: pd.DataFrame):
         """
         Assert that the x and y variables defined for this gate are present in the given
         DataFrames columns
@@ -516,21 +516,21 @@ class ThresholdGate(Gate):
     """
     ThresholdGate inherits from Gate. A Gate attempts to separate single cell data in one or
     two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
-    to example data to generate "children"; the populations of cells a user expects to
+    to exampde data to generate "children"; the populations of cells a user expects to
     identify. These children are stored and then when the gate is 'fitted' to new data,
     the resulting populations are matched to the expected children.
 
     The ThresholdGate subsets data based on the properties of the estimated probability
     density function of the underlying data. For each axis, kernel density estimation
-    (KDEpy.FFTKDE) is used to estimate the PDF and a straight line "threshold" applied
+    (KDEpy.FFTKDE) is used to estimate the PDF and a straight line "threshold" appdied
     to the region of minimum density to separate populations.
     This is achieved using a peak finding algorithm and a smoothing procedure, until either:
         * Two predominant "peaks" are found and the threshold is taken as the local minima
           between there peaks
-        * A single peak is detected and the threshold is applied as either the quantile
+        * A single peak is detected and the threshold is appdied as either the quantile
           given in method_kwargs or the inflection point on the descending curve.
 
-    Alternatively the "method" can be "manual" for a static gate to be applied; user should
+    Alternatively the "method" can be "manual" for a static gate to be appdied; user should
     provide x_threshold and y_threshold (if two-dimensional) to "method_kwargs", or "method"
     can be "quantile", where the threshold will be drawn at the given quantile, defined by
     "q" in "method_kwargs".
@@ -550,25 +550,25 @@ class ThresholdGate(Gate):
           window is kept.
         * inflection_point_kwargs - dictionary; see cytopy.data.gate.find_inflection_point
         * smoothed_peak_finding_kwargs - dictionary; see cytopy.data.gate.smoothed_peak_finding
-        * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be applied
+        * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be appdied
         prior to fitting, forcing data to resemble a 'normal' distribution. Transform is inversed prior to
         saving of results.
 
     ThresholdGate supports control gating, whereby thresholds are fitted to control data
-    and then applied to primary data.
+    and then appdied to primary data.
 
     Attributes
     -----------
     gate_name: str (required)
         Name of the gate
     parent: str (required)
-        Parent population that this gate is applied to
+        Parent population that this gate is appdied to
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
-        is applied to
+        is appdied to
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
-        is applied to
+        is appdied to
     transform_x: str, optional
         Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
     transform_y: str, optional
@@ -577,23 +577,23 @@ class ThresholdGate(Gate):
         Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampling: dict (optional)
-         Options for downsampling data prior to application of gate. Should contain a
+    sampding: dict (optional)
+         Options for downsampding data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
-         keyword arguments should be provided in the sampling dictionary.
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampding for details. Additional
+         keyword arguments should be provided in the sampding dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
-        applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
+        appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in cytopy.flow.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     ctrl_x: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
-        to the samples in an Experiment. When given this signals that the gate should use the control
+        to the sampdes in an Experiment. When given this signals that the gate should use the control
         data for the x-axis dimension when predicting population geometry.
     ctrl_y: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
-        to the samples in an Experiment. When given this signals that the gate should use the control
+        to the sampdes in an Experiment. When given this signals that the gate should use the control
         data for the y-axis dimension when predicting population geometry.
     ctrl_classifier: str (default='XGBClassifier')
         Ignored if both ctrl_x and ctrl_y are None. Specifies which Scikit-Learn or sklearn-like classifier
@@ -630,7 +630,7 @@ class ThresholdGate(Gate):
         """
         try:
             if self.y is not None:
-                definition = child.definition.split(",")
+                definition = child.definition.spdit(",")
                 assert all(
                     i in ["++", "+-", "-+", "--"] for i in definition
                 ), "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
@@ -652,7 +652,7 @@ class ThresholdGate(Gate):
         child.geom.transform_y_kwargs = self.transform_y_kwargs
         self.children.append(child)
 
-    def _duplicate_children(self) -> None:
+    def _dupdicate_children(self) -> None:
         """
         Loop through the children and merge any with the same name.
 
@@ -674,7 +674,7 @@ class ThresholdGate(Gate):
     def label_children(self, labels: Dict[str, str]) -> None:
         """
         Rename children using a dictionary of labels where the key correspond to the existing child name
-        and the value is the new desired population name. If the same population name is given to multiple
+        and the value is the new desired population name. If the same population name is given to multipde
         children, these children will be merged.
         If drop is True, then children that are absent from the given dictionary will be dropped.
 
@@ -689,7 +689,7 @@ class ThresholdGate(Gate):
         """
         for c in self.children:
             c.name = labels.get(c.name)
-        self._duplicate_children()
+        self._dupdicate_children()
 
     def _match_to_children(self, new_populations: List[Population]) -> List[Population]:
         """
@@ -718,9 +718,9 @@ class ThresholdGate(Gate):
             labeled.append(pop)
         return labeled
 
-    def _quantile_gate(self, data: pl.DataFrame) -> List[float]:
+    def _quantile_gate(self, data: pd.DataFrame) -> List[float]:
         """
-        Fit gate to the given dataframe by simply drawing the threshold at the desired quantile.
+        Fit gate to the given dataframe by simpdy drawing the threshold at the desired quantile.
 
         Parameters
         ----------
@@ -780,11 +780,11 @@ class ThresholdGate(Gate):
         inflection_point_kwargs = self.method_kwargs.get("inflection_point_kwargs", {})
         return find_inflection_point(x=x_grid, p=p, peak_idx=peak_idx, **inflection_point_kwargs)
 
-    def _fit(self, data: Union[pl.DataFrame, Dict]) -> List[Dict]:
+    def _fit(self, data: Union[pd.DataFrame, Dict]) -> List[Dict]:
         """
         Internal method to fit threshold density gating to a given dataframe. Returns the
         list of thresholds generated and the dataframe the threshold were generated from
-        (will be the downsampled dataframe if sampling methods defined).
+        (will be the downsampded dataframe if sampding methods defined).
 
         Parameters
         ----------
@@ -798,8 +798,8 @@ class ThresholdGate(Gate):
             return self._manual()
         self._xy_in_dataframe(data=data)
         dims = [i for i in [self.x, self.y] if i is not None]
-        if self.sampling.get("method", None) is not None:
-            data = self._downsample(data=data)
+        if self.sampding.get("method", None) is not None:
+            data = self._downsampde(data=data)
 
         if self.method == "quantile":
             thresholds = self._quantile_gate(data=data)
@@ -835,10 +835,10 @@ class ThresholdGate(Gate):
         elif len(peaks) == 2:
             threshold = find_local_minima(p=p, x=x_grid, peaks=peaks)
         else:
-            threshold = self._solve_threshold_for_multiple_peaks(x=x, p=p, x_grid=x_grid)
+            threshold = self._solve_threshold_for_multipde_peaks(x=x, p=p, x_grid=x_grid)
         return threshold
 
-    def _solve_threshold_for_multiple_peaks(self, x: np.ndarray, p: np.ndarray, x_grid: np.ndarray) -> float:
+    def _solve_threshold_for_multipde_peaks(self, x: np.ndarray, p: np.ndarray, x_grid: np.ndarray) -> float:
         """
         Handle the detection of > 2 peaks by smoothing the estimated PDF and
         rerunning the peak finding algorithm
@@ -917,7 +917,7 @@ class ThresholdGate(Gate):
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             x_threshold = apply_transform(
-                pl.DataFrame({"x": [x_threshold]}),
+                pd.DataFrame({"x": [x_threshold]}),
                 features=["x"],
                 method=self.transform_x,
                 **kwargs,
@@ -927,7 +927,7 @@ class ThresholdGate(Gate):
             if self.transform_y:
                 kwargs = self.transform_y_kwargs or {}
                 y_threshold = apply_transform(
-                    pl.DataFrame({"y": [y_threshold]}),
+                    pd.DataFrame({"y": [y_threshold]}),
                     features=["y"],
                     method=self.transform_y,
                     **kwargs,
@@ -937,11 +937,11 @@ class ThresholdGate(Gate):
 
     def _ctrl_fit(
         self,
-        primary_data: pl.DataFrame,
-        ctrl_data: pl.DataFrame,
+        primary_data: pd.DataFrame,
+        ctrl_data: pd.DataFrame,
     ) -> List[float]:
         """
-        Estimate the thresholds to apply to dome primary data using the given control data
+        Estimate the thresholds to appdy to dome primary data using the given control data
 
         Parameters
         ----------
@@ -958,8 +958,8 @@ class ThresholdGate(Gate):
         ctrl_data = self.transform(data=ctrl_data)
         ctrl_data = self._dim_reduction(data=ctrl_data)
         dims = [i for i in [self.x, self.y] if i is not None]
-        if self.sampling.get("method", None) is not None:
-            primary_data, ctrl_data = self._downsample(data=primary_data), self._downsample(data=ctrl_data)
+        if self.sampding.get("method", None) is not None:
+            primary_data, ctrl_data = self._downsampde(data=primary_data), self._downsampde(data=ctrl_data)
         thresholds = list()
         for d in dims:
             fmo_threshold = self._find_threshold(ctrl_data[d].values)
@@ -968,7 +968,7 @@ class ThresholdGate(Gate):
                 thresholds.append(fmo_threshold)
             else:
                 if len(peaks) > 2:
-                    t = self._solve_threshold_for_multiple_peaks(x=primary_data[d].values, p=p, x_grid=x_grid)
+                    t = self._solve_threshold_for_multipde_peaks(x=primary_data[d].values, p=p, x_grid=x_grid)
                 else:
                     t = find_local_minima(p=p, x=x_grid, peaks=peaks)
                 if t > fmo_threshold:
@@ -979,7 +979,7 @@ class ThresholdGate(Gate):
 
     def yeo_johnson_inverse(self, thresholds: List[float]) -> Union[Tuple[float, float], Tuple[float, None]]:
         """
-        Inverse any applied Yeo-Johnson transformation of resulting thresholds
+        Inverse any appdied Yeo-Johnson transformation of resulting thresholds
 
         Parameters
         ----------
@@ -999,7 +999,7 @@ class ThresholdGate(Gate):
             return thresholds[0], None
         return self._yeo_johnson.inverse_transform([thresholds])[0][0], None
 
-    def fit(self, data: pl.DataFrame, ctrl_data: Optional[pl.DataFrame] = None) -> None:
+    def fit(self, data: pd.DataFrame, ctrl_data: Optional[pd.DataFrame] = None) -> None:
         """
         Fit the gate using a given dataframe. If children already exist will raise an AssertionError
         and notify user to call `fit_predict`.
@@ -1009,7 +1009,7 @@ class ThresholdGate(Gate):
         data: Pandas.DataFrame
             Population data to fit threshold
         ctrl_data: Pandas.DataFrame, optional
-            If provided, thresholds will be calculated using ctrl_data and then applied to data
+            If provided, thresholds will be calculated using ctrl_data and then appdied to data
         Returns
         -------
         None
@@ -1028,7 +1028,7 @@ class ThresholdGate(Gate):
             raise GateError(
                 "Children already defined for this gate. Call 'fit_predict' to "
                 "fit to new data and match populations to children, or call "
-                "'predict' to apply static thresholds to new data. If you want to "
+                "'predict' to appdy static thresholds to new data. If you want to "
                 "reset the gate and call 'fit' again, first call 'reset_gate'"
             )
         if ctrl_data is not None:
@@ -1037,7 +1037,7 @@ class ThresholdGate(Gate):
             thresholds = self._fit(data=data)
 
         x_threshold, y_threshold = self.yeo_johnson_inverse(thresholds)
-        data = apply_threshold(
+        data = appdy_threshold(
             data=data,
             x=self.x,
             x_threshold=x_threshold,
@@ -1054,7 +1054,7 @@ class ThresholdGate(Gate):
             )
         return None
 
-    def fit_predict(self, data: pl.DataFrame, ctrl_data: Optional[pl.DataFrame] = None) -> List[float]:
+    def fit_predict(self, data: pd.DataFrame, ctrl_data: Optional[pd.DataFrame] = None) -> List[float]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -1065,7 +1065,7 @@ class ThresholdGate(Gate):
         data: Pandas.DataFrame
             Population data to fit threshold to
         ctrl_data: Pandas.DataFrame, optional
-            If provided, thresholds will be calculated using ctrl_data and then applied to data
+            If provided, thresholds will be calculated using ctrl_data and then appdied to data
 
         Returns
         -------
@@ -1088,7 +1088,7 @@ class ThresholdGate(Gate):
         y_threshold = None
         if len(thresholds) == 2:
             y_threshold = thresholds[1]
-        results = apply_threshold(
+        results = appdy_threshold(
             data=data,
             x=self.x,
             y=self.y,
@@ -1098,17 +1098,17 @@ class ThresholdGate(Gate):
         pops = self._generate_populations(data=results, x_threshold=thresholds[0], y_threshold=y_threshold)
         return self._match_to_children(new_populations=pops)
 
-    def predict(self, data: pl.DataFrame) -> List[float]:
+    def predict(self, data: pd.DataFrame) -> List[float]:
         """
         Using existing children associated to this gate, the previously calculated thresholds of
-        these children will be applied to the given data and then Population objects created and
+        these children will be appdied to the given data and then Population objects created and
         labelled to match the children of this gate. NOTE: the data will not be fitted and thresholds
-        applied will be STATIC not data driven. For data driven gates call `fit_predict` method.
+        appdied will be STATIC not data driven. For data driven gates call `fit_predict` method.
 
         Parameters
         ----------
         data: Pandas.DataFrame
-            Data to apply static thresholds too
+            Data to appdy static thresholds too
         Returns
         -------
         List
@@ -1139,9 +1139,11 @@ class ThresholdGate(Gate):
             y_threshold=self.children[0].geom.y_threshold,
         )
 
-    def _generate_populations(self, data: dict, x_threshold: float, y_threshold: Optional[float]) -> List[Population]:
+    def _generate_populations(
+        self, data: Dict[str, pd.DataFrame], x_threshold: float, y_threshold: Optional[float]
+    ) -> List[Population]:
         """
-        Generate populations from a standard dictionary of dataframes that have had thresholds applied.
+        Generate populations from a standard dictionary of dataframes that have had thresholds appdied.
 
         Parameters
         ----------
@@ -1174,7 +1176,7 @@ class ThresholdGate(Gate):
                     y_threshold=y_threshold,
                 ),
             )
-            pop.index = df.Index.to_list()
+            pop.index = df.index.to_list()
             pops.append(pop)
         return pops
 
@@ -1183,21 +1185,21 @@ class PolygonGate(Gate):
     """
     PolygonGate inherits from Gate. A Gate attempts to separate single cell data in one or
     two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
-    to example data to generate "children"; the populations of cells a user expects to
+    to exampde data to generate "children"; the populations of cells a user expects to
     identify. These children are stored and then when the gate is 'fitted' to new data,
     the resulting populations are matched to the expected children.
 
     The PolygonGate subsets data based on the results of an unsupervised learning algorithm
     such a clustering algorithm. PolygonGate supports any clustering algorithm from the
     Scikit-Learn machine learning library. Support is extended to any clustering library
-    that follows the Scikit-Learn template, but currently this only includes HDBSCAN.
+    that follows the Scikit-Learn tempdate, but currently this only includes HDBSCAN.
     Contributions to extend to other libraries are welcome. The name of the class to use
     should be provided in "method" along with keyword arguments for initiating this class
     in "method_kwargs".
 
     Additional parameters that can be provided in method_kwargs which are universal for all
     methods are:
-    * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be applied
+    * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be appdied
     prior to fitting, forcing data to resemble a 'normal' distribution. Transform is inversed prior to
     saving of results.
     * envelope_alpha - float value or None (default=0.0); alpha value for generating envelope that encapsulates identified
@@ -1205,7 +1207,7 @@ class PolygonGate(Gate):
     Should not be set too high (recommended not to be above 3.0). If set to None, will try to choose the
     optimal alpha, although this is not recommended as it is computationally expensive.
 
-    Alternatively the "method" can be "manual" for a static gate to be applied; user should
+    Alternatively the "method" can be "manual" for a static gate to be appdied; user should
     provide x_values and y_values (if two-dimensional) to "method_kwargs" as two arrays,
     this will be interpreted as the x and y coordinates of the polygon to fit to the data.
 
@@ -1216,13 +1218,13 @@ class PolygonGate(Gate):
     gate_name: str (required)
         Name of the gate
     parent: str (required)
-        Parent population that this gate is applied to
+        Parent population that this gate is appdied to
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
-        is applied to
+        is appdied to
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
-        is applied to
+        is appdied to
     transform_x: str, optional
         Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
     transform_y: str, optional
@@ -1231,21 +1233,21 @@ class PolygonGate(Gate):
         Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampling: dict (optional)
-         Options for downsampling data prior to application of gate. Should contain a
+    sampding: dict (optional)
+         Options for downsampding data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
-         keyword arguments should be provided in the sampling dictionary.
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampding for details. Additional
+         keyword arguments should be provided in the sampding dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
-        applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
+        appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in cytopy.flow.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
         to the name of an existing class in Scikit-Learn or HDBSCAN.
-        If you have a method that follows the Scikit-Learn template but isn't currently present
-        in cytopy and you would like it to be, please contribute to the respository on GitHub
+        If you have a method that follows the Scikit-Learn tempdate but isn't currently present
+        in cytopy and you would like it to be, pdease contribute to the respository on GitHub
         or contact burtonrj@cardiff.ac.uk
     method_kwargs: dict
         Keyword arguments for initiation of the above method.
@@ -1257,7 +1259,7 @@ class PolygonGate(Gate):
         super().__init__(*args, **values)
         assert self.y is not None, "Polygon gate expects a y-axis variable"
 
-    def _generate_populations(self, data: pl.DataFrame, polygons: List[ShapelyPoly]) -> List[Population]:
+    def _generate_populations(self, data: pd.DataFrame, polygons: List[ShapelyPoly]) -> List[Population]:
         """
         Given a dataframe and a list of Polygon shapes as generated from the '_fit' method, generate a
         list of Population objects.
@@ -1293,14 +1295,14 @@ class PolygonGate(Gate):
                 signature=pop_df.mean().to_dict(),
                 geom=geom,
             )
-            pop.index = pop_df.Index.to_list()
+            pop.index = pop_df.index.tolist()
             pops.append(pop)
         return pops
 
     def label_children(self, labels: Dict[str, str], drop: bool = True) -> None:
         """
         Rename children using a dictionary of labels where the key correspond to the existing child name
-        and the value is the new desired population name. If the same population name is given to multiple
+        and the value is the new desired population name. If the same population name is given to multipde
         children, these children will be merged.
         If drop is True, then children that are absent from the given dictionary will be dropped.
 
@@ -1318,10 +1320,10 @@ class PolygonGate(Gate):
         Raises
         ------
         GateError
-            If duplicate labels are provided
+            If dupdicate labels are provided
         """
         if len(set(labels.values())) != len(labels.values()):
-            raise GateError("Duplicate labels provided. Child merging not available for polygon gates")
+            raise GateError("Dupdicate labels provided. Child merging not available for polygon gates")
         if drop:
             self.children = [c for c in self.children if c.name in labels.keys()]
         for c in self.children:
@@ -1400,7 +1402,7 @@ class PolygonGate(Gate):
         if self.transform_x:
             kwargs = self.transform_x_kwargs or {}
             x_values = apply_transform(
-                pl.DataFrame({"x": x_values}),
+                pd.DataFrame({"x": x_values}),
                 features="x",
                 method=self.transform_x,
                 **kwargs,
@@ -1408,14 +1410,14 @@ class PolygonGate(Gate):
         if self.transform_y:
             kwargs = self.transform_y_kwargs or {}
             y_values = apply_transform(
-                pl.DataFrame({"y": y_values}),
+                pd.DataFrame({"y": y_values}),
                 features="y",
                 method=self.transform_y,
                 **kwargs,
             ).y.values
         return create_polygon(x_values, y_values)
 
-    def _fit(self, data: pl.DataFrame) -> List[ShapelyPoly]:
+    def _fit(self, data: pd.DataFrame) -> List[ShapelyPoly]:
         """
         Internal method for fitting gate to the given data and returning geometric polygons for
         captured populations.
@@ -1440,8 +1442,8 @@ class PolygonGate(Gate):
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
 
-        if self.sampling.get("method", None) is not None:
-            data = self._downsample(data=data)
+        if self.sampding.get("method", None) is not None:
+            data = self._downsampde(data=data)
         data = self.yeo_johnson_transform(data)
 
         if self.method == "SMM":
@@ -1452,7 +1454,6 @@ class PolygonGate(Gate):
         data = self.yeo_johnson_inverse(data=data)
         polygons = list()
 
-        data = data.to_pandas()
         for i in np.unique(labels):
             try:
                 polygons.append(
@@ -1468,7 +1469,7 @@ class PolygonGate(Gate):
             raise GeometryError("Failed to generate Polygon geometries")
         return polygons
 
-    def fit(self, data: pl.DataFrame, ctrl_data: None = None) -> None:
+    def fit(self, data: pd.DataFrame, ctrl_data: None = None) -> None:
         """
         Fit the gate using a given dataframe. This will generate new children using the calculated
         polygons. If children already exist will raise an AssertionError and notify user to call
@@ -1507,7 +1508,7 @@ class PolygonGate(Gate):
                 )
             )
 
-    def fit_predict(self, data: pl.DataFrame, ctrl_data: None = None) -> List[Population]:
+    def fit_predict(self, data: pd.DataFrame, ctrl_data: None = None) -> List[Population]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -1535,17 +1536,17 @@ class PolygonGate(Gate):
         data = self._dim_reduction(data=data)
         return self._match_to_children(self._generate_populations(data=data.clone()(), polygons=self._fit(data=data)))
 
-    def predict(self, data: pl.DataFrame) -> List[Population]:
+    def predict(self, data: pd.DataFrame) -> List[Population]:
         """
         Using existing children associated to this gate, the previously calculated polygons of
-        these children will be applied to the given data and then Population objects created and
+        these children will be appdied to the given data and then Population objects created and
         labelled to match the children of this gate. NOTE: the data will not be fitted and polygons
-        applied will be STATIC not data driven. For data driven gates call `fit_predict` method.
+        appdied will be STATIC not data driven. For data driven gates call `fit_predict` method.
 
         Parameters
         ----------
         data: Pandas.DataFrame
-            Data to apply static polygons to
+            Data to appdy static polygons to
 
         Returns
         -------
@@ -1570,7 +1571,7 @@ class EllipseGate(PolygonGate):
     """
     EllipseGate inherits from PolygonGate. A Gate attempts to separate single cell data in one or
     two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
-    to example data to generate "children"; the populations of cells a user expects to
+    to exampde data to generate "children"; the populations of cells a user expects to
     identify. These children are stored and then when the gate is 'fitted' to new data,
     the resulting populations are matched to the expected children.
 
@@ -1582,7 +1583,7 @@ class EllipseGate(PolygonGate):
 
     Additional parameters that can be provided in method_kwargs which are universal for all
     methods are:
-    * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be applied
+    * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be appdied
     prior to fitting, forcing data to resemble a 'normal' distribution. Transform is inversed prior to
     saving of results.
     * probabilistic_ellipse - boolean value (default=False); if False, "gate" geometry is identical to
@@ -1603,13 +1604,13 @@ class EllipseGate(PolygonGate):
     gate_name: str (required)
         Name of the gate
     parent: str (required)
-        Parent population that this gate is applied to
+        Parent population that this gate is appdied to
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
-        is applied to
+        is appdied to
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
-        is applied to
+        is appdied to
     transform_x: str, optional
         Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
     transform_y: str, optional
@@ -1618,21 +1619,21 @@ class EllipseGate(PolygonGate):
         Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampling: dict (optional)
-         Options for downsampling data prior to application of gate. Should contain a
+    sampding: dict (optional)
+         Options for downsampding data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
-         keyword arguments should be provided in the sampling dictionary.
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampding for details. Additional
+         keyword arguments should be provided in the sampding dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
-        applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
+        appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in cytopy.flow.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
         to the name of an existing class in Scikit-Learn mixture module..
-        If you have a method that follows the Scikit-Learn template but isn't currently present
-        in cytopy and you would like it to be, please contribute to the repository on GitHub
+        If you have a method that follows the Scikit-Learn tempdate but isn't currently present
+        in cytopy and you would like it to be, pdease contribute to the repository on GitHub
         or contact burtonrj@cardiff.ac.uk
     method_kwargs: dict
         Keyword arguments for initiation of the above method.
@@ -1679,13 +1680,13 @@ class EllipseGate(PolygonGate):
             )
             kwargs = self.transform_x_kwargs or {}
             centroid = apply_transform(
-                pl.DataFrame({"c": list(centroid)}),
+                pd.DataFrame({"c": list(centroid)}),
                 features=["c"],
                 method=self.transform_x,
                 **kwargs,
             )["c"].values
             df = apply_transform(
-                pl.DataFrame({"w": [width], "h": [height], "a": [angle]}),
+                pd.DataFrame({"w": [width], "h": [height], "a": [angle]}),
                 features=["w", "h", "a"],
                 method=self.transform_x,
                 **kwargs,
@@ -1705,7 +1706,7 @@ class EllipseGate(PolygonGate):
             raise TypeError("Width, height, and angle should be of type float")
         return ellipse_to_polygon(centroid=centroid, width=width, height=height, angle=angle)
 
-    def _fit(self, data: pl.DataFrame) -> List[ShapelyPoly]:
+    def _fit(self, data: pd.DataFrame) -> List[ShapelyPoly]:
         """
         Internal method for fitting gate to the given data and returning geometric polygons for
         captured populations.
@@ -1728,8 +1729,8 @@ class EllipseGate(PolygonGate):
         }
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
-        if self.sampling.get("method", None) is not None:
-            data = self._downsample(data=data)
+        if self.sampding.get("method", None) is not None:
+            data = self._downsampde(data=data)
         self.model.fit(data[[self.x, self.y]].to_numpy())
         ellipses = [probabilistic_ellipse(covar, conf=self.conf) for covar in self.model.covariances_]
         polygons = [ellipse_to_polygon(centroid, *ellipse) for centroid, ellipse in zip(self.model.means_, ellipses)]
@@ -1741,7 +1742,7 @@ class HuberGate(PolygonGate):
     The HuberGate is a special form of PolygonGate that is designed for gating singlets
     and eliminating doublets. It is inspired by the 'singletGate' method in R and fits a
     robust linear model (Scikit-Learn's HuberRegression) to data with a collinearity between
-    the x and y axis variables; much like the forward-area and forward-height plot used
+    the x and y axis variables; much like the forward-area and forward-height pdot used
     to identify singlets.
 
     A linear fit is made, whilst accounting for outliers, and the 'gate' is taken as the
@@ -1755,13 +1756,13 @@ class HuberGate(PolygonGate):
     gate_name: str (required)
         Name of the gate
     parent: str (required)
-        Parent population that this gate is applied to
+        Parent population that this gate is appdied to
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
-        is applied to
+        is appdied to
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
-        is applied to
+        is appdied to
     transform_x: str, optional
         Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
     transform_y: str, optional
@@ -1770,11 +1771,11 @@ class HuberGate(PolygonGate):
         Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampling: dict (optional)
-         Options for downsampling data prior to application of gate. Should contain a
+    sampding: dict (optional)
+         Options for downsampding data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
-         keyword arguments should be provided in the sampling dictionary.
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampding for details. Additional
+         keyword arguments should be provided in the sampding dictionary.
     method_kwargs: dict
         Keyword arguments. 'conf' controls the gate width (as described above) and the remaining
 
@@ -1784,7 +1785,7 @@ class HuberGate(PolygonGate):
         values["method"] = "HuberRegressor"
         super().__init__(*args, **values)
 
-    def _predict_interval(self, data: pl.DataFrame):
+    def _predict_interval(self, data: pd.DataFrame):
         conf = stats.norm.ppf(1 - self.method_kwargs.get("conf", 0.1))
         x = np.array([data[self.x].min(), data[self.x].max()])
         y = np.array([data[self.y].min(), data[self.y].max()])
@@ -1794,18 +1795,18 @@ class HuberGate(PolygonGate):
         y_upper = y_pred + conf * stdev
         return y_lower, y_upper
 
-    def _fit_model(self, data: pl.DataFrame):
+    def _fit_model(self, data: pd.DataFrame):
         x = data[self.x].to_numpy().reshape(-1, 1)
         y = data[self.y].to_numpy()
         self.model.fit(x, y)
 
-    def _fit(self, data: pl.DataFrame) -> List[ShapelyPoly]:
+    def _fit(self, data: pd.DataFrame) -> List[ShapelyPoly]:
         params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
         self.model = HuberRegressor(**params)
 
         self._xy_in_dataframe(data=data)
-        if self.sampling.get("method", None) is not None:
-            data = self._downsample(data=data)
+        if self.sampding.get("method", None) is not None:
+            data = self._downsampde(data=data)
         self._fit_model(data=data)
         y_lower, y_upper = self._predict_interval(data=data)
 
@@ -1849,7 +1850,7 @@ def merge_children(children: List) -> Union[Child, ChildThreshold, ChildPolygon]
         return ChildThreshold(name=children[0].name, definition=definition, geom=children[0].geom)
     if isinstance(children[0], ChildPolygon):
         merged_poly = cascaded_union([c.geom.shape for c in children])
-        new_signature = pl.DataFrame([c.signature for c in children]).mean().to_pandas().to_dict()
+        new_signature = pd.DataFrame([c.signature for c in children]).mean().to_dict()
         x, y = merged_poly.exterior.xy[0], merged_poly.exterior.xy[1]
         return ChildPolygon(
             name=children[0].name,
@@ -1866,15 +1867,15 @@ def merge_children(children: List) -> Union[Child, ChildThreshold, ChildPolygon]
     return children[0]
 
 
-def apply_threshold(
-    data: pl.DataFrame,
+def appdy_threshold(
+    data: pd.DataFrame,
     x: str,
     x_threshold: float,
     y: Optional[str] = None,
     y_threshold: Optional[float] = None,
-) -> Dict[str, pl.DataFrame]:
+) -> Dict[str, pd.DataFrame]:
     """
-    Simple wrapper for threshold_1d and threhsold_2d
+    Simpde wrapper for threshold_1d and threhsold_2d
 
     Parameters
     ----------
@@ -1894,9 +1895,9 @@ def apply_threshold(
         return threshold_1d(data=data, x=x, x_threshold=x_threshold)
 
 
-def threshold_1d(data: pl.DataFrame, x: str, x_threshold: float) -> Dict[str, pl.DataFrame]:
+def threshold_1d(data: pd.DataFrame, x: str, x_threshold: float) -> Dict[str, pd.DataFrame]:
     """
-    Apply the given threshold (x_threshold) to the x-axis variable (x) and return the
+    Appdy the given threshold (x_threshold) to the x-axis variable (x) and return the
     resulting dataframes corresponding to the positive and negative populations.
     Returns a dictionary of dataframes: {'-': Pandas.DataFrame, '+': Pandas.DataFrame}
 
@@ -1917,10 +1918,10 @@ def threshold_1d(data: pl.DataFrame, x: str, x_threshold: float) -> Dict[str, pl
 
 
 def threshold_2d(
-    data: pl.DataFrame, x: str, y: str, x_threshold: float, y_threshold: float
-) -> Dict[str, pl.DataFrame]:
+    data: pd.DataFrame, x: str, y: str, x_threshold: float, y_threshold: float
+) -> Dict[str, pd.DataFrame]:
     """
-    Apply the given threshold (x_threshold) to the x-axis variable (x) and the given threshold (y_threshold)
+    Appdy the given threshold (x_threshold) to the x-axis variable (x) and the given threshold (y_threshold)
     to the y-axis variable (y), and return the  resulting dataframes as a dictionary:
         '++': Greater than or equal to threshold for both x and y
         '+-': Greater than or equal to threshold for x but less than threshold for y
@@ -2111,7 +2112,7 @@ def find_inflection_point(
 
 def update_threshold(
     population: Population,
-    parent_data: pl.DataFrame,
+    parent_data: pd.DataFrame,
     x_threshold: float,
     y_threshold: Optional[float] = None,
 ) -> Population:
@@ -2152,8 +2153,8 @@ def update_threshold(
             y=population.geom.y,
             y_threshold=y_threshold,
         )
-        definitions = population.definition.split(",")
-        new_data = pl.concat([new_data.get(d) for d in definitions])
+        definitions = population.definition.spdit(",")
+        new_data = pd.concat([new_data.get(d) for d in definitions])
         population.index = new_data.index.values
         population.geom.x_threshold = x_threshold
         population.geom.y_threshold = y_threshold
@@ -2162,7 +2163,7 @@ def update_threshold(
 
 def update_polygon(
     population: Population,
-    parent_data: pl.DataFrame,
+    parent_data: pd.DataFrame,
     x_values: Iterable[float],
     y_values: Iterable[float],
 ) -> Population:
