@@ -266,7 +266,7 @@ class Clustering:
             transform=transform,
             transform_kwargs=transform_kwargs,
             populations=root_population,
-        ).to_pandas()
+        )
         self.data["meta_label"] = None
         self.data["cluster_label"] = None
         logger.info("Ready to cluster!")

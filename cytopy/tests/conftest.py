@@ -26,6 +26,7 @@ dictConfig(config.logging_config)
 logger = logging.getLogger(__name__)
 
 
+@pytest.fixture(scope="session")
 def setup():
     """
     Setup testing database
@@ -35,11 +36,8 @@ def setup():
     None
     """
     logger.info("Setting up testing server")
-    # Setup local paths
+    # Obtain local paths
     temp_data_path = os.path.join(ASSET_PATH, "data")
-    if os.path.isdir(temp_data_path):
-        shutil.rmtree(temp_data_path, ignore_errors=True)
-    os.mkdir(temp_data_path)
 
     # Connect and create project
     logger.info("Creating mock database 'test' and Project 'test_project'")
@@ -58,22 +56,23 @@ def setup():
 
     # Populate with GVHD flow data
     logger.info("Creating mock experiment 'test_exp'")
-    test_exp = project.add_experiment(
-        experiment_id="test_exp", panel_definition=os.path.join(ASSET_PATH, "test_panel.xlsx")
-    )
+    test_exp = project.add_experiment(experiment_id="test_exp")
+    test_exp.generate_panel(panel_definition=os.path.join(ASSET_PATH, "test_panel.xlsx"))
+
     logger.info("Adding test FCS data")
     for i in range(12):
         file_id = str(i + 1).zfill(3)
         logger.debug(f"Adding test FCS data {file_id}")
         path = os.path.join(ASSET_PATH, "gvhd_fcs", f"{file_id}.fcs")
-        test_exp.add_fcs_files(sample_id=file_id, subject_id=f"subject_{file_id}", primary_data=path, compensate=False)
+        test_exp.add_filegroup(
+            sample_id=file_id, subject_id=f"subject_{file_id}", paths=dict(primary=path), compensate=False
+        )
 
     # Yield to tests
     yield
 
     # Destroy local temp data and disconnect
     logger.info("Destroying test data and disconnecting")
-    shutil.rmtree(temp_data_path, ignore_errors=True)
     disconnect(alias="core")
 
 
