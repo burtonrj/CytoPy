@@ -1,5 +1,40 @@
-from tqdm import tqdm_notebook, tqdm
+import queue
+import sys
+import threading
+import time
+from typing import Callable
+
 from IPython import get_ipython
+from tqdm import tqdm
+from tqdm import tqdm_notebook
+
+
+def processing_animation(text: str):
+    for c in ["|", "/", "-", "\\"]:
+        sys.stdout.write(f"\r{text} {c}\r")
+        time.sleep(0.1)
+        sys.stdout.flush()
+
+
+def add_processing_animation(text: str = "processing") -> Callable:
+    def wrapper(func: Callable):
+        q = queue.Queue()
+
+        def store_in_queue(*args, **kwargs):
+            q.put(func(*args, **kwargs))
+
+        def wrap_with_ani(*args, **kwargs):
+            process = threading.Thread(target=store_in_queue, args=args, kwargs=kwargs)
+            process.start()
+            while process.is_alive():
+                processing_animation(text=text)
+            sys.stdout.flush()
+            sys.stdout.write(f"\rDone!{' ' * (len(text) + 3)}")
+            return q.get()
+
+        return wrap_with_ani
+
+    return wrapper
 
 
 def progress_bar(x: iter, verbose: bool = True, **kwargs) -> callable:

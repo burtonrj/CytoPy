@@ -187,17 +187,10 @@ class Phenograph:
 
 
 class ClusterMethod:
-    def __init__(
-        self,
-        klass: Type,
-        params: Optional[Dict] = None,
-        verbose: bool = True,
-        metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
-    ):
+    def __init__(self, klass: Type, params: Optional[Dict] = None, verbose: bool = True):
         params = params or {}
         self.verbose = verbose
         self.method = klass(**params)
-        self.metrics = cluster_metrics.init_metrics(metrics=metrics)
         self.params = params
         self.valid_method()
 
@@ -250,7 +243,10 @@ class Clustering:
         transform_kwargs: dict or None = None,
         verbose: bool = True,
         population_prefix: str = "cluster",
+        data: Optional[pd.DataFrame] = None,
+        random_state: int = 42,
     ):
+        np.random.seed(random_state)
         self.experiment = experiment
         self.verbose = verbose
         self.features = features
@@ -260,33 +256,35 @@ class Clustering:
         self.population_prefix = population_prefix
 
         logger.info(f"Obtaining data for clustering for population {root_population}")
-        self.data = single_cell_dataframe(
-            experiment=experiment,
-            sample_ids=sample_ids,
-            transform=transform,
-            transform_kwargs=transform_kwargs,
-            populations=root_population,
-        )
-        self.data["meta_label"] = None
-        self.data["cluster_label"] = None
-        logger.info("Ready to cluster!")
+        if data is None:
+            self.data = single_cell_dataframe(
+                experiment=experiment,
+                sample_ids=sample_ids,
+                transform=transform,
+                transform_kwargs=transform_kwargs,
+                populations=root_population,
+            )
+            self.data["meta_label"] = None
+            self.data["cluster_label"] = None
+            logger.info("Ready to cluster!")
+        else:
+            self.data = data
 
     def _init_cluster_method(
         self,
         method: Union[str, ClusterMethod],
-        metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
         **kwargs,
     ) -> ClusterMethod:
         if method == "phenograph":
-            method = ClusterMethod(klass=Phenograph, params=kwargs, metrics=metrics, verbose=self.verbose)
+            method = ClusterMethod(klass=Phenograph, params=kwargs, verbose=self.verbose)
         elif method == "flowsom":
-            method = ClusterMethod(klass=FlowSOM, params=kwargs, metrics=metrics, verbose=self.verbose)
+            method = ClusterMethod(klass=FlowSOM, params=kwargs, verbose=self.verbose)
         elif method == "consensus":
-            method = ClusterMethod(klass=KConsensusClustering, params=kwargs, metrics=metrics, verbose=self.verbose)
+            method = ClusterMethod(klass=KConsensusClustering, params=kwargs, verbose=self.verbose)
         elif isinstance(method, str):
             raise ValueError("If a string is given must be either 'phenograph', 'consensus' or 'flowsom'")
         elif not isinstance(method, ClusterMethod):
-            method = ClusterMethod(klass=method, params=kwargs, metrics=metrics, verbose=self.verbose)
+            method = ClusterMethod(klass=method, params=kwargs, verbose=self.verbose)
         if not isinstance(method, ClusterMethod):
             raise ValueError(
                 "Must provide a valid string, a ClusterMethod object, or a valid Scikit-Learn like "
@@ -437,7 +435,7 @@ class Clustering:
                 fg.add_population(population=pop)
             fg.save()
 
-    def save(
+    def _save(
         self,
         verbose: bool = True,
         population_var: str = "meta_label",

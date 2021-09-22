@@ -273,3 +273,11 @@ class SingleClustering(Clustering):
         ax.set_xlabel("K")
         ax.set_ylabel(ylabel)
         return ax
+
+    def save(
+        self,
+        verbose: bool = True,
+        population_var: str = "meta_label",
+        parent_populations: Optional[Dict] = None,
+    ):
+        super()._save(verbose=verbose, population_var=population_var, parent_populations=parent_populations)
