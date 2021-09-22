@@ -197,31 +197,30 @@ class EnsembleClustering(Clustering):
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
         method = self._init_cluster_method(method=method, metrics=self.metrics, **clustering_params)
-        data, scaler = self.scale_data(features=features, scale_method=scale_method, scale_kwargs=scale_kwargs)
-        if dim_reduction is not None:
-            data, _ = dimension_reduction_with_sampling(
-                data=self.data, features=features, method=dim_reduction, **dim_reduction_kwargs
-            )
-            features = [x for x in data.columns if dim_reduction in x]
+        data, features = self.scale_and_reduce(
+            features=features,
+            scale_method=scale_method,
+            scale_kwargs=scale_kwargs,
+            dim_reduction=dim_reduction,
+            dim_reduction_kwargs=dim_reduction_kwargs,
+        )
 
         logger.info(f"Running clustering: {cluster_name}")
-        data, _ = method.global_clustering(data=data, features=features, evaluate=False)
+        data = method.global_clustering(data=data, features=features)
         self.clustering_permutations[cluster_name] = {
             "labels": data["cluster_label"].values,
             "n_clusters": data["cluster_label"].nunique(),
             "params": clustering_params,
-            "scalar": scaler,
+            "scale_method": scale_method,
+            "scale_params": scale_kwargs,
+            "dim_reduction": dim_reduction,
+            "dim_reduction_params": dim_reduction_kwargs,
         }
         logger.info(f"Calculating performance metrics for {cluster_name}")
         self._performance[cluster_name] = {
             metric.name: metric(data, features, data["cluster_label"].values) for metric in self.metrics
         }
         logger.info("Clustering complete!")
-
-    def co_occurrence_matrix(self, index: Optional[str] = None):
-        return CoMatrix(
-            data=self.data, features=self.features, clustering_permutations=self.clustering_permutations, index=index
-        )
 
     def comparison(self, method: str = "adjusted_mutual_info", **kwargs):
         kwargs["figsize"] = kwargs.get("figsize", (10, 10))
@@ -231,9 +230,6 @@ class EnsembleClustering(Clustering):
             data=data,
             **kwargs,
         )
-
-    def mixture_model(self):
-        return MixtureModel(data=self.data, clustering_permuations=self.clustering_permutations)
 
     @valid_labels
     def plot(

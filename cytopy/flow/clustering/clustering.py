@@ -68,9 +68,10 @@ from ...data.experiment import single_cell_dataframe
 from ...data.population import Population
 from ...data.subject import Subject
 from ...feedback import progress_bar
+from ..dim_reduction import dimension_reduction_with_sampling
+from ..transform import Scaler
 from .consensus_k import KConsensusClustering
 from .flowsom import FlowSOM
-from cytopy.flow.transform import Scaler
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +199,7 @@ class ClusterMethod:
         self.method = klass(**params)
         self.metrics = cluster_metrics.init_metrics(metrics=metrics)
         self.params = params
+        self.valid_method()
 
     def valid_method(self):
         try:
@@ -210,32 +212,22 @@ class ClusterMethod:
     def _cluster(self, data: pd.DataFrame, features: List[str]):
         return self.method.fit_predict(data[features])
 
-    def cluster(self, data: pd.DataFrame, features: List[str], evaluate: bool = False):
-        performance = {}
+    def cluster(self, data: pd.DataFrame, features: List[str]):
         data["cluster_label"] = None
         for _id, df in progress_bar(data.groupby("sample_id"), verbose=self.verbose):
             labels = self._cluster(data, features)
             data.loc[df.index, ["cluster_label"]] = labels
-            if evaluate:
-                performance[_id] = {metric.name: metric(df, features, labels) for metric in self.metrics}
-        if evaluate:
-            return data, pd.DataFrame(performance)
-        return data, None
+        return data
 
-    def global_clustering(self, data: pd.DataFrame, features: List[str], evaluate: bool = False):
+    def global_clustering(self, data: pd.DataFrame, features: List[str]):
         data["cluster_label"] = self._cluster(data, features)
-        if evaluate:
-            return data, pd.DataFrame(
-                {metric.name: [metric(data, features, data["cluster_label"].values)] for metric in self.metrics}
-            )
-        return data, None
+        return data
 
     def meta_clustering(
         self,
         data: pd.DataFrame,
         features: List[str],
         summary_method: str = "median",
-        evaluate: bool = False,
         scale_method: Optional[str] = None,
         scale_kwargs: Optional[Dict] = None,
     ):
@@ -244,11 +236,7 @@ class ClusterMethod:
         )
         metadata["meta_label"] = self._cluster(metadata, features)
         data = assign_metalabels(data, metadata)
-        if evaluate:
-            return data, pd.DataFrame(
-                {metric.name: [metric(data, features, data["meta_label"].values)] for metric in self.metrics}
-            )
-        return data, None
+        return data
 
 
 class Clustering:
@@ -314,6 +302,24 @@ class Clustering:
             scalar = Scaler(scale_method, **scale_kwargs)
             data = scalar(data=self.data, features=features)
         return data, scalar
+
+    def scale_and_reduce(
+        self,
+        features: List[str],
+        scale_method: Optional[str] = None,
+        scale_kwargs: Optional[Dict] = None,
+        dim_reduction: Optional[str] = None,
+        dim_reduction_kwargs: Optional[Dict] = None,
+    ):
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        scale_kwargs = scale_kwargs or {}
+        data, _ = self.scale_data(features=features, scale_method=scale_method, scale_kwargs=scale_kwargs)
+        if dim_reduction is not None:
+            data, _ = dimension_reduction_with_sampling(
+                data=self.data, features=features, method=dim_reduction, **dim_reduction_kwargs
+            )
+            features = [x for x in data.columns if dim_reduction in x]
+        return data, features
 
     def reset_clusters(self):
         """

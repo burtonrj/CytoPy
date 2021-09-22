@@ -90,18 +90,17 @@ class SingleClustering(Clustering):
         - meta_label: meta cluster label (between samples)
     """
 
-    def cluster(
+    def local_clustering(
         self,
         method: Union[str, ClusterMethod, ClusterMixin],
         overwrite_features: Optional[List[str]] = None,
         metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
-        evaluate: bool = False,
         **kwargs,
     ):
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
         method = self._init_cluster_method(method=method, metrics=metrics, **kwargs)
-        self.data, self.metrics = method.cluster(data=self.data, features=features, evaluate=evaluate)
+        self.data = method.cluster(data=self.data, features=features)
         return self
 
     def global_clustering(
@@ -109,7 +108,6 @@ class SingleClustering(Clustering):
         method: Union[str, ClusterMethod, ClusterMixin],
         overwrite_features: Optional[List[str]] = None,
         metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
-        evaluate: bool = False,
         scale_method: Optional[str] = None,
         scale_kwargs: Optional[Dict] = None,
         dim_reduction: Optional[str] = None,
@@ -119,20 +117,21 @@ class SingleClustering(Clustering):
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
 
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
-        data, scaler = self.scale_data(features=features, scale_method=scale_method, scale_kwargs=scale_kwargs)
-        if dim_reduction is not None:
-            data, _ = dimension_reduction_with_sampling(
-                data=self.data, features=features, method=dim_reduction, **dim_reduction_kwargs
-            )
-            features = [x for x in data.columns if dim_reduction in x]
+        data, features = self.scale_and_reduce(
+            features=features,
+            scale_method=scale_method,
+            scale_kwargs=scale_kwargs,
+            dim_reduction=dim_reduction,
+            dim_reduction_kwargs=dim_reduction_kwargs,
+        )
 
         clustering_params = clustering_params or {}
         method = self._init_cluster_method(method=method, metrics=metrics, **clustering_params)
-        self.data, self.metrics = method.global_clustering(data=data, features=features, evaluate=evaluate)
+        data = method.global_clustering(data=data, features=features)
+        self.data["cluster_label"] = data["cluster_label"]
         return self
 
-    def meta_cluster(
+    def meta_clustering(
         self,
         method: Union[str, ClusterMethod],
         overwrite_features: Optional[List[str]] = None,
@@ -140,21 +139,21 @@ class SingleClustering(Clustering):
         scale_method: str or None = None,
         scale_kwargs: dict or None = None,
         metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
-        evaluate: bool = False,
         **kwargs,
     ):
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
         method = self._init_cluster_method(method=method, metrics=metrics, **kwargs)
-        self.data, self.metrics = method.meta_clustering(
+        data = method.meta_clustering(
             data=self.data,
             features=features,
             summary_method=summary_method,
             scale_method=scale_method,
             scale_kwargs=scale_kwargs,
-            evaluate=evaluate,
             **kwargs,
         )
+        self.data["meta_label"] = data["meta_label"]
+        return self
 
     def rename_meta_clusters(self, mappings: dict):
         """
