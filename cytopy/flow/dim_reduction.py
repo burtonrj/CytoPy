@@ -157,7 +157,7 @@ class DimensionReduction:
         -------
         Pandas.DataFrame
         """
-        data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
+        data = data.copy() if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
         x = data[features].values
         self.embeddings = self.method.fit_transform(x)
         for i, e in enumerate(self.embeddings.T):
@@ -212,4 +212,4 @@ def dimension_reduction_with_sampling(
         remaining_data.groupby(np.arange(remaining_data.shape[0]) // sampling_size), verbose=verbose
     ):
         data_with_embeddings = pd.concat([data_with_embeddings, reducer.transform(data=df, features=features)])
-    return data_with_embeddings, reducer
+    return data_with_embeddings.sort_index(axis=0), reducer

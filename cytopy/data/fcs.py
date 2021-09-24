@@ -640,8 +640,9 @@ class FileGroup(mongoengine.Document):
                     continue
                 comparison_pop = self.get_population(population_name=comparison_pop)
                 data[f"frac of {comparison_pop.population_name}"] = population.n / comparison_pop.n
-
-        return data.to_pandas()
+        if isinstance(data, pl.DataFrame):
+            return data.to_pandas()
+        return data
 
     def list_populations(self, regex: Optional[str] = None) -> List[str]:
         """

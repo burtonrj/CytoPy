@@ -57,7 +57,6 @@ class Config(SimpleNamespace):
         path = path or os.path.join(self.install_path, "config.json")
         with open(path, "r") as f:
             super().__init__(**json.load(f))
-        self.logicle_cache_size = None if self.logicle_cache_size == "None" else self.logicle_cache_size
 
     def __getitem__(self, item: str):
         try:

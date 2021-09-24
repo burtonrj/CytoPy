@@ -251,12 +251,13 @@ class Clustering:
         self.verbose = verbose
         self.features = features
         self.transform = transform
+        self.transform_kwargs = transform_kwargs
         self.root_population = root_population
-        self.metrics = None
+        self.sample_ids = sample_ids
         self.population_prefix = population_prefix
 
-        logger.info(f"Obtaining data for clustering for population {root_population}")
         if data is None:
+            logger.info(f"Obtaining data for clustering for population {root_population}")
             self.data = single_cell_dataframe(
                 experiment=experiment,
                 sample_ids=sample_ids,
@@ -310,6 +311,7 @@ class Clustering:
         dim_reduction_kwargs: Optional[Dict] = None,
     ):
         dim_reduction_kwargs = dim_reduction_kwargs or {}
+
         scale_kwargs = scale_kwargs or {}
         data, _ = self.scale_data(features=features, scale_method=scale_method, scale_kwargs=scale_kwargs)
         if dim_reduction is not None:

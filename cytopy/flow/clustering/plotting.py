@@ -5,6 +5,7 @@ from typing import Union
 
 import pandas as pd
 import seaborn as sns
+from sklearn.utils import shuffle
 
 from ..plotting import cluster_bubble_plot
 from ..plotting import single_cell_plot
@@ -51,12 +52,14 @@ def plot_cluster_membership(
     -------
     Matplotlib.Axes
     """
-    plot_data = data
+    plot_data = shuffle(data)
     if sample_size is not None:
-        if sampling_method == "uniform":
-            plot_data = sample_dataframe_uniform_groups(data=plot_data, group_id="sample_id", sample_size=sample_size)
-        else:
-            if sample_size < data.shape[0]:
+        if sample_size < plot_data.shape[0]:
+            if sampling_method == "uniform":
+                plot_data = sample_dataframe_uniform_groups(
+                    data=plot_data, group_id="sample_id", sample_size=sample_size
+                )
+            else:
                 plot_data = data.sample(sample_size)
 
     dim_reduction_kwargs = dim_reduction_kwargs or {}

@@ -94,12 +94,11 @@ class SingleClustering(Clustering):
         self,
         method: Union[str, ClusterMethod, ClusterMixin],
         overwrite_features: Optional[List[str]] = None,
-        metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
         **kwargs,
     ):
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
-        method = self._init_cluster_method(method=method, metrics=metrics, **kwargs)
+        method = self._init_cluster_method(method=method, **kwargs)
         self.data = method.cluster(data=self.data, features=features)
         return self
 
@@ -107,7 +106,6 @@ class SingleClustering(Clustering):
         self,
         method: Union[str, ClusterMethod, ClusterMixin],
         overwrite_features: Optional[List[str]] = None,
-        metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
         scale_method: Optional[str] = None,
         scale_kwargs: Optional[Dict] = None,
         dim_reduction: Optional[str] = None,
@@ -126,7 +124,7 @@ class SingleClustering(Clustering):
         )
 
         clustering_params = clustering_params or {}
-        method = self._init_cluster_method(method=method, metrics=metrics, **clustering_params)
+        method = self._init_cluster_method(method=method, **clustering_params)
         data = method.global_clustering(data=data, features=features)
         self.data["cluster_label"] = data["cluster_label"]
         return self
@@ -138,12 +136,11 @@ class SingleClustering(Clustering):
         summary_method: str = "median",
         scale_method: str or None = None,
         scale_kwargs: dict or None = None,
-        metrics: Optional[List[Union[str, cluster_metrics.Metric]]] = None,
         **kwargs,
     ):
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
-        method = self._init_cluster_method(method=method, metrics=metrics, **kwargs)
+        method = self._init_cluster_method(method=method, **kwargs)
         data = method.meta_clustering(
             data=self.data,
             features=features,

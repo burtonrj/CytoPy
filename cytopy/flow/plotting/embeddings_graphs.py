@@ -181,7 +181,7 @@ def single_cell_plot(
     figsize: tuple = (8, 8),
     include_legend: bool = False,
     cmap: str = "tab20",
-    size: int or str or None = 10,
+    size: int or str or None = 2,
     legend_kwargs: dict or None = None,
     cbar_kwargs: dict or None = None,
     **kwargs,

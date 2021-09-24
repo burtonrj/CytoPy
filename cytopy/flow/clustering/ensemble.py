@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import pickle
 from collections import defaultdict
@@ -18,6 +19,9 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from ClusterEnsembles import ClusterEnsembles
+from matplotlib import pyplot as plt
+from matplotlib.colors import LogNorm
+from matplotlib.ticker import MaxNLocator
 from sklearn.base import ClusterMixin
 from sklearn.metrics import adjusted_mutual_info_score
 from sklearn.metrics import adjusted_rand_score
@@ -26,6 +30,7 @@ from tqdm import tqdm
 from ...data.experiment import Experiment
 from ...feedback import add_processing_animation
 from ...feedback import progress_bar
+from ..dim_reduction import DimensionReduction
 from .clustering import Clustering
 from .clustering import ClusteringError
 from .clustering import ClusterMethod
@@ -61,30 +66,15 @@ def comparison_matrix(cluster_labels: Dict[str, np.ndarray], method: str = "adju
     return data
 
 
-def avg_comparison_matrix(
-    cluster_labels: Dict[str, np.ndarray], sample_size: int, method: str = "adjusted_mutual_info"
-) -> pd.DataFrame:
-    n = list(cluster_labels.values())[0].shape[0]
-    n_splits = np.ceil(n / sample_size)
-    idx = np.arange(0, n)
-    np.random.shuffle(idx)
-    idx = np.split(idx, n_splits)
-    func = partial(comparison_matrix, method=method)
-    cluster_labels = [{k: x[i] for k, x in cluster_labels} for i in idx]
-    with Pool(cpu_count()) as pool:
-        data = tqdm(pool.imap(func, cluster_labels), total=len(cluster_labels))
-    return reduce(lambda x, y: x + y, data) / len(data)
-
-
 def save_cache(func: Callable):
     def wrapper(obj, *args, **kwargs):
-        output = func(*args, **kwargs)
+        output = func(obj, *args, **kwargs)
         # Save cache
         cache = {
             "experiment": obj.experiment.id,
             "features": obj.features,
             "sample_ids": obj.sample_ids,
-            "root_population": obj.root_populations,
+            "root_population": obj.root_population,
             "transform": obj.transform,
             "transform_kwargs": obj.transform_kwargs,
             "verbose": obj.verbose,
@@ -93,10 +83,11 @@ def save_cache(func: Callable):
             "clustering_permutations": obj.clustering_permutations,
         }
         with open(obj.cache_location, "wb") as f:
+            logger.info(f"Saving results to {obj.cache_location}")
             pickle.dump(cache, file=f)
         return output
 
-    return wrapper()
+    return wrapper
 
 
 def load_cache(path: str) -> Dict:
@@ -163,13 +154,12 @@ class EnsembleClustering(Clustering):
         verbose: bool = True,
         population_prefix: str = "ensemble",
         random_state: int = 42,
-        metrics: Optional[List[Union[str, Metric]]] = None,
     ):
         if os.path.isfile(cache):
             cached_data = load_cache(path=cache)
             logger.info(f"Loading EnsembleClustering from {cache}")
             super().__init__(
-                experiment=Experiment.objects(id=cached_data["experiment"]),
+                experiment=Experiment.objects(id=cached_data["experiment"]).get(),
                 features=cached_data["features"],
                 sample_ids=cached_data["sample_ids"],
                 root_population=cached_data["root_population"],
@@ -196,7 +186,6 @@ class EnsembleClustering(Clustering):
             )
             self.clustering_permutations = dict()
         self.cache_location = cache
-        self.metrics = init_metrics(metrics=metrics)
 
     @save_cache
     def cluster(
@@ -214,7 +203,7 @@ class EnsembleClustering(Clustering):
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
-        method = self._init_cluster_method(method=method, metrics=self.metrics, **clustering_params)
+        method = self._init_cluster_method(method=method, **clustering_params)
         data, features = self.scale_and_reduce(
             features=features,
             scale_method=scale_method,
@@ -228,6 +217,7 @@ class EnsembleClustering(Clustering):
         self.clustering_permutations[cluster_name] = {
             "labels": data["cluster_label"].values,
             "n_clusters": data["cluster_label"].nunique(),
+            "features": features,
             "params": clustering_params,
             "scale_method": scale_method,
             "scale_params": scale_kwargs,
@@ -237,19 +227,11 @@ class EnsembleClustering(Clustering):
         logger.info("Clustering complete!")
         return self
 
-    def comparison(self, method: str = "adjusted_mutual_info", sample_size: Optional[int] = None, **kwargs):
-        if self.data.shape[0] > 10000:
-            logger.warning(
-                "Comparison matrix is computationally intensive. Recommend specifying 'sample_size' "
-                "for data with n over 10000; note doing so will compute the average comparison matrix."
-            )
+    def comparison(self, method: str = "adjusted_mutual_info", **kwargs):
         kwargs["figsize"] = kwargs.get("figsize", (10, 10))
         kwargs["cmap"] = kwargs.get("cmap", "coolwarm")
-        cluster_labels = {cluster_name: data["labels"] for cluster_name, data in self.clustering_permutations}
-        if sample_size is not None:
-            data = avg_comparison_matrix(cluster_labels=cluster_labels, sample_size=sample_size, method=method)
-        else:
-            data = comparison_matrix(clustering_permutations=self.clustering_permutations, method=method)
+        cluster_labels = {cluster_name: data["labels"] for cluster_name, data in self.clustering_permutations.items()}
+        data = comparison_matrix(cluster_labels=cluster_labels, method=method)
         return sns.clustermap(
             data=data,
             **kwargs,
@@ -266,7 +248,7 @@ class EnsembleClustering(Clustering):
         if consensus_method == "hbgf":
             return ClusterEnsembles.hbgf(labels=labels, nclass=k)
         if consensus_method == "nmf":
-            return ClusterEnsembles.hbgf(labels=labels, nclass=k, random_state=random_state)
+            return ClusterEnsembles.nmf(labels=labels, nclass=k, random_state=random_state)
         raise ClusteringError("Invalid consensus method, must be one of: cdpa, hgpa, mcla, hbgf, or nmf")
 
     @save_cache
@@ -294,6 +276,7 @@ class EnsembleClustering(Clustering):
         resamples: int,
         random_state: int = 42,
         metrics: Optional[List[Union[Metric, str]]] = None,
+        return_data: bool = True,
         **kwargs,
     ):
         if sample_size > self.data.shape[0]:
@@ -310,13 +293,21 @@ class EnsembleClustering(Clustering):
         results = defaultdict(list)
         for k in k_range:
             logger.info(f"Calculating consensus with k={k}...")
-            for l, df in progress_bar(zip(labels, data)):
-                l = self._consensus(consensus_method=consensus_method, k=k, labels=l, random_state=random_state)
+            for la, df in progress_bar(zip(labels, data), total=len(data)):
+                la = self._consensus(consensus_method=consensus_method, k=k, labels=la, random_state=random_state)
                 results["K"].append(k)
                 for m in metrics:
-                    results[m.name] = m(data=df, features=self.features, labels=l)
+                    results[m.name].append(m(data=df, features=self.features, labels=la))
         results = pd.DataFrame(results).melt(id_vars="K", var_name="Metric", value_name="Value")
-        return sns.relplot(data=results, x="K", y="Value", kind="line", col="Metric", **kwargs)
+        facet_kws = kwargs.pop("facet_kws", {})
+        facet_kws["sharey"] = facet_kws.get("sharey", False)
+        g = sns.relplot(data=results, x="K", y="Value", kind="line", col="Metric", facet_kws=facet_kws, **kwargs)
+        g.set_titles("{col_name}")
+        for ax in g.axes:
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        if return_data:
+            return g, results
+        return g
 
     def plot(
         self,
@@ -342,6 +333,89 @@ class EnsembleClustering(Clustering):
             discrete=discrete,
             **kwargs,
         )
+
+    def min_k(self):
+        return min([x["n_clusters"] for x in self.clustering_permutations.values()])
+
+    def max_k(self):
+        return max([x["n_clusters"] for x in self.clustering_permutations.values()])
+
+    def plot_all(
+        self,
+        sample_size: int = 100000,
+        method: Union[str, Type] = "UMAP",
+        dim_reduction_kwargs: dict or None = None,
+        label: str = "cluster_label",
+        col_wrap: int = 3,
+        figsize: Tuple[int, int] = (10, 10),
+        bins: Union[str, int] = "sqrt",
+        hist_cmap: str = "jet",
+        scatter_colours: Optional[Union[str, List[str]]] = None,
+        **kwargs,
+    ):
+        scatter_colours = scatter_colours or [
+            "#f0c0a5",
+            "#17bebb",
+            "#004d54",
+            "#bd899e",
+            "#f48174",
+            "#7ba993",
+            "#2ca58d",
+            "#a8219c",
+            "#fb1cd3",
+            "#190ff8",
+            "#000000",
+            "#F01616",
+            "#16F019",
+            "#16F0F0",
+            "#E38300",
+        ]
+        if self.max_k() > len(scatter_colours):
+            logger.warning(
+                "Max number of clusters is greater than the number of colours provided for "
+                "scatterplot - may generate a misleading plot with colours duplicated!"
+            )
+            scatter_colours = None
+
+        kwargs["s"] = kwargs.get("s", 5)
+        kwargs["edgecolors"] = kwargs.get("edgecolors", None)
+        kwargs["linewidth"] = kwargs.get("linewidth", 0)
+
+        plot_data = self.data.sample(n=sample_size)
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        reducer = DimensionReduction(method=method, **dim_reduction_kwargs)
+        plot_data = reducer.fit_transform(data=plot_data, features=self.features)
+        fig, axes = plt.subplots(
+            math.ceil((len(self.clustering_permutations) + 1) / col_wrap), col_wrap, figsize=figsize
+        )
+        axes = axes.flatten()
+
+        bins = bins if isinstance(bins, int) else int(np.sqrt(plot_data.shape[0]))
+        axes[0].hist2d(plot_data[f"{method}1"], plot_data[f"{method}2"], bins=bins, cmap=hist_cmap, norm=LogNorm())
+        axes[0].autoscale(enable=True)
+
+        for i, (name, cluster_data) in enumerate(self.clustering_permutations.items()):
+            i += 1
+            plot_data["cluster_label"] = cluster_data["labels"][plot_data.index.values]
+            plot_data["cluster_label"] = plot_data["cluster_label"].astype(str)
+            sns.scatterplot(
+                data=plot_data,
+                x=f"{method}1",
+                y=f"{method}2",
+                hue=label,
+                ax=axes[i],
+                palette=scatter_colours,
+                **kwargs,
+            )
+            axes[i].get_legend().remove()
+            axes[i].set_title(f"{name} (n_clusters={cluster_data['n_clusters']})")
+        if (len(self.clustering_permutations) + 1) < len(axes):
+            n = len(axes)
+            while n > (len(self.clustering_permutations) + 1):
+                fig.delaxes(axes[n - 1])
+                n = n - 1
+        fig.tight_layout()
+        return fig
 
     def heatmap(
         self,

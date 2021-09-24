@@ -1037,7 +1037,7 @@ class ThresholdGate(Gate):
             thresholds = self._fit(data=data)
 
         x_threshold, y_threshold = self.yeo_johnson_inverse(thresholds)
-        data = appdy_threshold(
+        data = apply_threshold(
             data=data,
             x=self.x,
             x_threshold=x_threshold,
@@ -1088,7 +1088,7 @@ class ThresholdGate(Gate):
         y_threshold = None
         if len(thresholds) == 2:
             y_threshold = thresholds[1]
-        results = appdy_threshold(
+        results = apply_threshold(
             data=data,
             x=self.x,
             y=self.y,
@@ -1867,7 +1867,7 @@ def merge_children(children: List) -> Union[Child, ChildThreshold, ChildPolygon]
     return children[0]
 
 
-def appdy_threshold(
+def apply_threshold(
     data: pd.DataFrame,
     x: str,
     x_threshold: float,

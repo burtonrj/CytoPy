@@ -35,7 +35,7 @@ def center_dispersion(cluster: pl.DataFrame):
 class BallHall(Metric):
     def __init__(self, **kwargs):
         super().__init__(
-            name="Ball Hall Index (Compactness)",
+            name="Ball Hall Index",
             desc="Ball-Hall Index is the mean of the mean dispersion across all clusters",
             **kwargs,
         )
@@ -49,7 +49,7 @@ class BallHall(Metric):
 class BakerHubertGammaIndex(Metric):
     def __init__(self, **kwargs):
         super().__init__(
-            name="Baker-Hubert Gamma Index (Compactness)",
+            name="Baker-Hubert Gamma Index",
             desc="A measure of compactness, based on similarity between points in a cluster, "
             "compared to similarity with points in other clusters. Not memory efficient, use on small datasets.",
             **kwargs,
@@ -83,7 +83,7 @@ class BakerHubertGammaIndex(Metric):
 class SilhouetteCoef(Metric):
     def __init__(self, **kwargs):
         super().__init__(
-            name="Silhouette Coefficient (Compactness/Separation)",
+            name="Silhouette Coefficient",
             desc="Compactness and connectedness combination that measures a ratio of within cluster "
             "distances to closest neighbors outside of cluster. This uses sklearn.metrics "
             "version of the Silhouette.",
@@ -97,7 +97,7 @@ class SilhouetteCoef(Metric):
 class DaviesBouldinIndex(Metric):
     def __init__(self, **kwargs):
         super().__init__(
-            name="Davies-Bouldin index (Compactness/Separation)",
+            name="Davies-Bouldin index",
             desc="The average similarity between clusters. Similarity is defined as the "
             "ratio of within-cluster distances to between-cluster distances. Clusters further "
             "apart and less dispersed will result in a better score.",
@@ -111,7 +111,7 @@ class DaviesBouldinIndex(Metric):
 class GPlusIndex(Metric):
     def __init__(self, **kwargs):
         super().__init__(
-            name="G-plus index (Connectedness)",
+            name="G-plus index",
             desc="The proportion of discordant pairs among all the pairs of distinct points - "
             "a measure of connectedness. Not memory efficient, use on small datasets.",
             **kwargs,
@@ -140,7 +140,7 @@ class GPlusIndex(Metric):
 class CalinskiHarabaszScore(Metric):
     def __init__(self, **kwargs):
         super().__init__(
-            name="Calinski and Harabasz score (Compactness/Separation)",
+            name="Calinski and Harabasz score",
             desc="The score is defined as ratio between the within-cluster dispersion and the "
             "between-cluster dispersion",
             **kwargs,

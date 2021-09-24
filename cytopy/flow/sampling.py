@@ -477,7 +477,7 @@ def sample_dataframe_uniform_groups(data: Union[pl.DataFrame, pd.DataFrame], gro
     sample_data = list()
     data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
     n = int(sample_size / data[group_id].nunique())
-    for df in data.groupby(group_id):
+    for _, df in data.groupby(group_id):
         if n >= df.shape[0]:
             sample_data.append(df)
         else:

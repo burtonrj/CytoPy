@@ -502,10 +502,12 @@ def single_cell_dataframe(
         logger.debug(f"Loading FileGroup data from {_id}; {fg.id}")
         pop_data = getattr(fg, method)(**kwargs)
         pop_data["sample_id"] = _id
-        pop_data["subject_id"] = fg.subject.subject_id
+        pop_data["subject_id"] = None
+        if fg.subject:
+            pop_data["subject_id"] = fg.subject.subject_id
         data.append(pop_data)
 
-    data = pd.concat(data).reset_index().rename({"index": "original_index"}, axis=1)
+    data = pd.concat(data).reset_index().rename({"Index": "original_index"}, axis=1)
 
     if sample_size is not None and sampling_level == "experiment":
         data = sample_dataframe(
