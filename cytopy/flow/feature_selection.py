@@ -64,8 +64,8 @@ from . import transform
 from ..data.experiment import Experiment
 from ..feedback import progress_bar
 from .cell_classifier import utils as classifier_utils
-from .plotting.embeddings_graphs import cont_scatterplot
-from .plotting.embeddings_graphs import discrete_scatterplot
+from .plotting.single_cell_plot import cont_scatterplot
+from .plotting.single_cell_plot import discrete_scatterplot
 
 logger = logging.getLogger("feature_selection")
 

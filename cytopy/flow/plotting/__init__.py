@@ -1,2 +1,3 @@
-from .embeddings_graphs import single_cell_plot, cluster_bubble_plot
 from .flow_plot import FlowPlot
+from .single_cell_plot import cluster_bubble_plot
+from .single_cell_plot import single_cell_plot
