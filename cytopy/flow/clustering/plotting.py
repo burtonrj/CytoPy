@@ -1,15 +1,26 @@
+from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Type
 from typing import Union
 
+import networkx as nx
 import pandas as pd
+import polars as pl
 import seaborn as sns
+from matplotlib import cm
+from matplotlib import pyplot as plt
+from scipy.spatial.distance import pdist
+from scipy.spatial.distance import squareform
 from sklearn.utils import shuffle
 
+from ...data.read_write import polars_to_pandas
+from ..dim_reduction import DimensionReduction
 from ..plotting import single_cell_plot
-from cytopy.flow.dim_reduction import DimensionReduction
-from cytopy.flow.sampling import sample_dataframe_uniform_groups
+from ..plotting.single_cell_plot import discrete_label
+from ..plotting.single_cell_plot import discrete_palette
+from ..sampling import sample_dataframe_uniform_groups
 
 
 def plot_cluster_membership(
@@ -329,16 +340,18 @@ def cluster_bubble_plot(
     features: list,
     cluster_label: str,
     sample_label: str,
-    colour_label: str or None = "meta_label",
-    zscore: bool = False,
+    colour_label: Optional[str] = "meta_label",
+    palette: Optional[str] = None,
     discrete: bool = True,
-    cmap: str = "tab20",
-    dim_reduction_method: str or None = "UMAP",
+    style: Optional[str] = None,
+    hue_norm: Optional[Union[plt.Normalize, Tuple[int, int]]] = (0, 1),
+    dim_reduction_method: str = "UMAP",
     n_components: int = 2,
-    dim_reduction_kwargs: dict or None = None,
+    dim_reduction_kwargs: Optional[Dict] = None,
     figsize: tuple = (8, 8),
-    legend_kwargs: dict or None = None,
-    cbar_kwargs: dict or None = None,
+    ax: Optional[plt.Axes] = None,
+    legend_kwargs: Optional[Dict] = None,
+    cbar_kwargs: Optional[Dict] = None,
     **kwargs,
 ):
     """
@@ -384,7 +397,7 @@ def cluster_bubble_plot(
     Matplotlib.Axes
     """
     if isinstance(data, pl.DataFrame):
-        data = data.to_pandas()
+        data = polars_to_pandas(data=data)
     fig = plt.figure(figsize=figsize)
     legend_kwargs = legend_kwargs or {}
     cbar_kwargs = cbar_kwargs or {}
@@ -399,59 +412,33 @@ def cluster_bubble_plot(
         n_components=n_components,
         dim_reduction_kwargs=dim_reduction_kwargs,
     )
-    if colour_label:
+
+    if colour_label is not None:
+        discrete = discrete_label(data=data, label=colour_label, discrete=discrete)
+
+    if palette is None:
         if discrete:
-            centroids[colour_label] = centroids[colour_label].astype(str)
-        elif zscore:
-            centroids[colour_label] = StandardScaler().fit_transform(centroids[colour_label].to_numpy().reshape(-1, 1))
-        if n_components == 2:
-            ax = fig.add_subplot(111)
-            ax = sns.scatterplot(
-                data=centroids,
-                x=f"{dim_reduction_method}1",
-                y=f"{dim_reduction_method}2",
-                hue=colour_label,
-                palette=cmap,
-                ax=ax,
-                size="cluster_size",
-                **kwargs,
-            )
+            palette = discrete_palette(n=data.shape[0])
         else:
-            ax = discrete_scatterplot(
-                data=centroids,
-                x=f"{dim_reduction_method}1",
-                y=f"{dim_reduction_method}2",
-                z=f"{dim_reduction_method}3",
-                size="cluster_size",
-                label=colour_label,
-                cmap=cmap,
-                fig=fig,
-                **kwargs,
-            )
-    else:
-        if n_components == 2:
-            ax = fig.add_subplot(111)
-            ax = sns.scatterplot(
-                data=centroids,
-                x=f"{dim_reduction_method}1",
-                y=f"{dim_reduction_method}2",
-                ax=ax,
-                size="cluster_size",
-                **kwargs,
-            )
-        else:
-            ax = cont_scatterplot(
-                data=data,
-                x=f"{dim_reduction_method}1",
-                y=f"{dim_reduction_method}2",
-                z=f"{dim_reduction_method}3",
-                label=colour_label,
-                size="cluster_size",
-                cmap=cmap,
-                fig=fig,
-                cbar_kwargs=cbar_kwargs,
-                **kwargs,
-            )
+            palette = "coolwarm"
+
+    data = data.dropna(axis=1, how="any")
+    ax = ax or plt.figure(figsize=figsize)[1]
+
+    ax = sns.scatterplot(
+        data=data,
+        x=f"{dim_reduction_method}1",
+        y=f"{dim_reduction_method}2",
+        hue=colour_label,
+        size="cluster_size",
+        style=style,
+        palette=palette,
+        hue_norm=hue_norm,
+        legend=False,
+        ax=ax,
+        **kwargs,
+    )
+
     legend_kwargs = legend_kwargs or {}
     legend_kwargs["bbox_to_anchor"] = legend_kwargs.get("bbox_to_anchor", (1.1, 1.0))
     ax.legend(*ax.get_legend_handles_labels(), **legend_kwargs)
@@ -470,74 +457,3 @@ def _bubbleplot_defaults(**kwargs):
         if k not in updated_kwargs.keys():
             updated_kwargs[k] = v
     return updated_kwargs
-
-
-def plot_min_spanning_tree(
-    data: Union[pd.DataFrame, pl.DataFrame],
-    features: list,
-    cluster_label: str,
-    sample_label: str,
-    colour_label: str or None = "meta_label",
-    **kwargs,
-):
-    """
-    Experimental method in version 2.0. Generates a minimum spanning tree of cluster centroids.
-
-    Parameters
-    ----------
-    data: Pandas.DataFrame
-        Single cell data
-    features: list
-        Features to include in dimension reduction and cluster centroid summarisation
-    cluster_label: str
-        Name of the column containing cluster identifier
-    sample_label: str
-        Name of the column containing sample unique identifiers
-    colour_label: str, optional (default='meta_label')
-        Column used to assign colours to data points
-    kwargs:
-        Keyword arguments passed to NetworkX.draw
-
-    Returns
-    -------
-    Matplotlib.Axes
-    """
-    if isinstance(data, pl.DataFrame):
-        data = data.to_pandas()
-    centroids = _generate_cluster_centroids(
-        data=data,
-        features=features,
-        cluster_label=cluster_label,
-        sample_label=sample_label,
-        colour_label=colour_label,
-        dim_reduction_method=None,
-        n_components=2,
-        dim_reduction_kwargs={},
-    )
-    graph = nx.Graph()
-    distance_matrix = squareform(pdist(centroids[features]), "minkowski")
-    for i in range(len(distance_matrix)):
-        for j in range(i + 1, len(distance_matrix)):
-            w = distance_matrix[i][j]
-            graph.add_edge(i, j, weight=w)
-    mst = nx.minimum_spanning_tree(graph)
-    norm = cm.Normalize(vmin=0, vmax=21, clip=True)
-    mapper = plt.cm.ScalarMappable(norm=norm, cmap=plt.get_cmap("tab10"))
-    colours = centroids[colour_label].apply(lambda x: mcolors.to_hex(mapper.to_rgba(x)))
-
-    fig, ax = plt.subplots(figsize=(10, 10))
-    pos = nx.spring_layout(mst, iterations=300, scale=3, dim=2)
-    sizes = centroids["cluster_size"].to_numpy() * 2000
-    nx.draw(
-        mst,
-        pos=pos,
-        with_labels=False,
-        node_size=sizes,
-        node_color=colours,
-        width=2,
-        alpha=0.5,
-        ax=ax,
-        **kwargs,
-    )
-    ax.legend()
-    return ax
