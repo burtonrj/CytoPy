@@ -98,8 +98,8 @@ def single_cell_plot(
     if label is not None:
         discrete = discrete_label(data=data, label=label, discrete=discrete)
     if palette is None:
-        if discrete:
-            palette = discrete_palette(n=data.shape[0])
+        if discrete and label is not None:
+            palette = discrete_palette(n=data[label].nunique())
         else:
             palette = "coolwarm"
     if size is not None:
@@ -113,7 +113,7 @@ def single_cell_plot(
     legend_kwargs = legend_kwargs or {}
 
     data = data.dropna(axis=1, how="any")
-    ax = ax or plt.figure(figsize=figsize)[1]
+    ax = ax or plt.subplots(figsize=figsize)[1]
 
     ax = sns.scatterplot(
         data=data,

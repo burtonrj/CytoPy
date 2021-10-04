@@ -31,6 +31,7 @@ from ...data.experiment import Experiment
 from ...feedback import add_processing_animation
 from ...feedback import progress_bar
 from ..dim_reduction import DimensionReduction
+from ..plotting.single_cell_plot import discrete_palette
 from .clustering import Clustering
 from .clustering import ClusteringError
 from .clustering import ClusterMethod
@@ -350,36 +351,14 @@ class EnsembleClustering(Clustering):
         figsize: Tuple[int, int] = (10, 10),
         bins: Union[str, int] = "sqrt",
         hist_cmap: str = "jet",
-        scatter_colours: Optional[Union[str, List[str]]] = None,
+        palette: Optional[Union[str, List[str]]] = None,
         **kwargs,
     ):
-        scatter_colours = scatter_colours or [
-            "#f0c0a5",
-            "#17bebb",
-            "#004d54",
-            "#bd899e",
-            "#f48174",
-            "#7ba993",
-            "#2ca58d",
-            "#a8219c",
-            "#fb1cd3",
-            "#190ff8",
-            "#000000",
-            "#F01616",
-            "#16F019",
-            "#16F0F0",
-            "#E38300",
-        ]
-        if self.max_k() > len(scatter_colours):
-            logger.warning(
-                "Max number of clusters is greater than the number of colours provided for "
-                "scatterplot - may generate a misleading plot with colours duplicated!"
-            )
-            scatter_colours = None
 
         kwargs["s"] = kwargs.get("s", 5)
         kwargs["edgecolors"] = kwargs.get("edgecolors", None)
         kwargs["linewidth"] = kwargs.get("linewidth", 0)
+        palette = palette or discrete_palette(n=self.max_k())
 
         plot_data = self.data.sample(n=sample_size)
         dim_reduction_kwargs = dim_reduction_kwargs or {}
@@ -404,7 +383,7 @@ class EnsembleClustering(Clustering):
                 y=f"{method}2",
                 hue=label,
                 ax=axes[i],
-                palette=scatter_colours,
+                palette=palette,
                 **kwargs,
             )
             axes[i].get_legend().remove()

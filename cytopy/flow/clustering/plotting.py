@@ -398,7 +398,6 @@ def cluster_bubble_plot(
     """
     if isinstance(data, pl.DataFrame):
         data = polars_to_pandas(data=data)
-    fig = plt.figure(figsize=figsize)
     legend_kwargs = legend_kwargs or {}
     cbar_kwargs = cbar_kwargs or {}
     kwargs = _bubbleplot_defaults(**kwargs)
@@ -422,11 +421,9 @@ def cluster_bubble_plot(
         else:
             palette = "coolwarm"
 
-    data = data.dropna(axis=1, how="any")
     ax = ax or plt.figure(figsize=figsize)[1]
-
     ax = sns.scatterplot(
-        data=data,
+        data=centroids,
         x=f"{dim_reduction_method}1",
         y=f"{dim_reduction_method}2",
         hue=colour_label,
@@ -438,6 +435,9 @@ def cluster_bubble_plot(
         ax=ax,
         **kwargs,
     )
+
+    if not discrete:
+        plt.gcf().colorbar(ax, ax=ax, **cbar_kwargs)
 
     legend_kwargs = legend_kwargs or {}
     legend_kwargs["bbox_to_anchor"] = legend_kwargs.get("bbox_to_anchor", (1.1, 1.0))

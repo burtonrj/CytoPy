@@ -62,7 +62,6 @@ import numpy as np
 import pandas as pd
 import phenograph
 
-from . import metrics as cluster_metrics
 from ...data.experiment import Experiment
 from ...data.experiment import single_cell_dataframe
 from ...data.population import Population
