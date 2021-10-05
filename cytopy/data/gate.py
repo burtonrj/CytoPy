@@ -179,11 +179,11 @@ class Gate(mongoengine.Document):
         Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampding: dict (optional)
-         Options for downsampding data prior to appdication of gate. Should contain a
+    sampling: dict (optional)
+         Options for downsampling data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampding for details. Additional
-         keyword arguments should be provided in the sampding dictionary.
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
         appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
@@ -191,11 +191,11 @@ class Gate(mongoengine.Document):
         Additional keyword arguments should be provided in this dictionary.
     ctrl_x: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
-        to the sampdes in an Experiment. When given this signals that the gate should use the control
+        to the samples in an Experiment. When given this signals that the gate should use the control
         data for the x-axis dimension when predicting population geometry.
     ctrl_y: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
-        to the sampdes in an Experiment. When given this signals that the gate should use the control
+        to the samples in an Experiment. When given this signals that the gate should use the control
         data for the y-axis dimension when predicting population geometry.
     ctrl_classifier: str (default='XGBClassifier')
         Ignored if both ctrl_x and ctrl_y are None. Specifies which Scikit-Learn or sklearn-like classifier
@@ -222,7 +222,7 @@ class Gate(mongoengine.Document):
     transform_y = mongoengine.StringField(required=False, default=None)
     transform_x_kwargs = mongoengine.DictField()
     transform_y_kwargs = mongoengine.DictField()
-    sampding = mongoengine.DictField()
+    sampling = mongoengine.DictField()
     dim_reduction = mongoengine.DictField()
     ctrl_x = mongoengine.StringField()
     ctrl_y = mongoengine.StringField()
@@ -359,10 +359,10 @@ class Gate(mongoengine.Document):
         transform_kwargs = {k: v for k, v in zip([self.x, self.y], transform_kwargs) if k is not None}
         return transforms, transform_kwargs
 
-    def _downsampde(self, data: pd.DataFrame) -> Union[pd.DataFrame, None]:
+    def _downsample(self, data: pd.DataFrame) -> Union[pd.DataFrame, None]:
         """
-        Perform down-sampding prior to gating. Returns down-sampded dataframe or
-        None if sampding method is undefined.
+        Perform down-sampling prior to gating. Returns down-sampled dataframe or
+        None if sampling method is undefined.
 
         Parameters
         ----------
@@ -375,38 +375,38 @@ class Gate(mongoengine.Document):
         Raises
         ------
         GateError
-            Invalid downsampding method provided or sampding kwargs are missing
+            Invalid downsampling method provided or sampling kwargs are missing
         """
         data = data.copy()
-        logger.debug(f"Downsampding data using {self.sampding.get('method')} method")
+        logger.debug(f"Downsampling data using {self.sampling.get('method')} method")
 
-        if self.sampding.get("method", None) == "uniform":
-            n = self.sampding.get("n", None) or self.sampding.get("frac", None)
+        if self.sampling.get("method", None) == "uniform":
+            n = self.sampling.get("n", None) or self.sampling.get("frac", None)
             if n is None:
-                raise GateError("Must provide 'n' or 'frac' for uniform downsampding")
-            return uniform_downsampling(data=data, sampde_size=n)
+                raise GateError("Must provide 'n' or 'frac' for uniform downsampling")
+            return uniform_downsampling(data=data, sample_size=n)
 
-        if self.sampding.get("method", None) == "density":
-            kwargs = {k: v for k, v in self.sampding.items() if k not in ["method", "features"]}
+        if self.sampling.get("method", None) == "density":
+            kwargs = {k: v for k, v in self.sampling.items() if k not in ["method", "features"]}
             features = [f for f in [self.x, self.y] if f is not None]
             return density_dependent_downsampling(data=data, features=features, **kwargs)
 
-        if self.sampding.get("method", None) == "faithful":
-            h = self.sampding.get("h", 0.01)
+        if self.sampling.get("method", None) == "faithful":
+            h = self.sampling.get("h", 0.01)
             return faithful_downsampling(data=data.to_numpy(), h=h)
 
-        raise GateError("Invalid downsampde method, should be one of: 'uniform', 'density' or 'faithful'")
+        raise GateError("Invalid downsample method, should be one of: 'uniform', 'density' or 'faithful'")
 
-    def _upsampde(self, data: pd.DataFrame, sampde: pd.DataFrame, populations: List[Population]) -> List[Population]:
+    def _upsample(self, data: pd.DataFrame, sample: pd.DataFrame, populations: List[Population]) -> List[Population]:
         """
-        Perform up-sampding after gating using KNN. Returns list of Population objects
+        Perform up-sampling after gating using KNN. Returns list of Population objects
         with index updated to reflect the original data.
 
         Parameters
         ----------
         data: Pandas.DataFrame
-            Original data, prior to down-sampding
-        sampde: Pandas.DataFrame
+            Original data, prior to down-sampling
+        sample: Pandas.DataFrame
             Sampded data
         populations: list
             List of populations with assigned indexes
@@ -418,33 +418,33 @@ class Gate(mongoengine.Document):
         Raises
         ------
         GateError
-            Up-sampding error; not enough events
+            Up-sampling error; not enough events
         """
-        logger.debug("Upsampding data")
-        sampde = sampde.copy()
-        sampde["label"] = None
+        logger.debug("Upsampling data")
+        sample = sample.copy()
+        sample["label"] = None
 
         for i, p in enumerate(populations):
-            sampde[sampde.index.isin(p.index), "label"] = i
+            sample[sample.index.isin(p.index), "label"] = i
 
-        sampde = sampde["label"].fillna(-1)
-        labels = sampde["label"].values
-        sampde = sampde.drop("label")
+        sample = sample["label"].fillna(-1)
+        labels = sample["label"].values
+        sample = sample.drop("label")
 
         new_labels = upsample_knn(
-            sampde=sampde,
+            sample=sample,
             original_data=data,
             labels=labels,
             features=[i for i in [self.x, self.y] if i is not None],
-            verbose=self.sampding.get("verbose", True),
-            scoring=self.sampding.get("upsampde_scoring", "balanced_accuracy"),
-            **self.sampding.get("knn_kwargs", {}),
+            verbose=self.sampling.get("verbose", True),
+            scoring=self.sampling.get("upsample_scoring", "balanced_accuracy"),
+            **self.sampling.get("knn_kwargs", {}),
         )
 
         for i, p in enumerate(populations):
             new_idx = data[np.where(new_labels == i)].index.values
             if len(new_idx) == 0:
-                raise GateError(f"Up-sampding failed, no events labelled for {p.population_name}")
+                raise GateError(f"Up-sampling failed, no events labelled for {p.population_name}")
             p.index = new_idx.tolist()
 
         return populations
@@ -577,11 +577,11 @@ class ThresholdGate(Gate):
         Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampding: dict (optional)
-         Options for downsampding data prior to appdication of gate. Should contain a
+    sampling: dict (optional)
+         Options for downsampling data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampding for details. Additional
-         keyword arguments should be provided in the sampding dictionary.
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
         appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
@@ -589,11 +589,11 @@ class ThresholdGate(Gate):
         Additional keyword arguments should be provided in this dictionary.
     ctrl_x: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
-        to the sampdes in an Experiment. When given this signals that the gate should use the control
+        to the samples in an Experiment. When given this signals that the gate should use the control
         data for the x-axis dimension when predicting population geometry.
     ctrl_y: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
-        to the sampdes in an Experiment. When given this signals that the gate should use the control
+        to the samples in an Experiment. When given this signals that the gate should use the control
         data for the y-axis dimension when predicting population geometry.
     ctrl_classifier: str (default='XGBClassifier')
         Ignored if both ctrl_x and ctrl_y are None. Specifies which Scikit-Learn or sklearn-like classifier
@@ -784,7 +784,7 @@ class ThresholdGate(Gate):
         """
         Internal method to fit threshold density gating to a given dataframe. Returns the
         list of thresholds generated and the dataframe the threshold were generated from
-        (will be the downsampded dataframe if sampding methods defined).
+        (will be the downsampled dataframe if sampling methods defined).
 
         Parameters
         ----------
@@ -798,8 +798,8 @@ class ThresholdGate(Gate):
             return self._manual()
         self._xy_in_dataframe(data=data)
         dims = [i for i in [self.x, self.y] if i is not None]
-        if self.sampding.get("method", None) is not None:
-            data = self._downsampde(data=data)
+        if self.sampling.get("method", None) is not None:
+            data = self._downsample(data=data)
 
         if self.method == "quantile":
             thresholds = self._quantile_gate(data=data)
@@ -958,8 +958,8 @@ class ThresholdGate(Gate):
         ctrl_data = self.transform(data=ctrl_data)
         ctrl_data = self._dim_reduction(data=ctrl_data)
         dims = [i for i in [self.x, self.y] if i is not None]
-        if self.sampding.get("method", None) is not None:
-            primary_data, ctrl_data = self._downsampde(data=primary_data), self._downsampde(data=ctrl_data)
+        if self.sampling.get("method", None) is not None:
+            primary_data, ctrl_data = self._downsample(data=primary_data), self._downsample(data=ctrl_data)
         thresholds = list()
         for d in dims:
             fmo_threshold = self._find_threshold(ctrl_data[d].values)
@@ -1233,11 +1233,11 @@ class PolygonGate(Gate):
         Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampding: dict (optional)
-         Options for downsampding data prior to appdication of gate. Should contain a
+    sampling: dict (optional)
+         Options for downsampling data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampding for details. Additional
-         keyword arguments should be provided in the sampding dictionary.
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
         appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
@@ -1442,8 +1442,8 @@ class PolygonGate(Gate):
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
 
-        if self.sampding.get("method", None) is not None:
-            data = self._downsampde(data=data)
+        if self.sampling.get("method", None) is not None:
+            data = self._downsample(data=data)
         data = self.yeo_johnson_transform(data)
 
         if self.method == "SMM":
@@ -1534,7 +1534,7 @@ class PolygonGate(Gate):
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
         data = self.transform(data=data)
         data = self._dim_reduction(data=data)
-        return self._match_to_children(self._generate_populations(data=data.clone()(), polygons=self._fit(data=data)))
+        return self._match_to_children(self._generate_populations(data=data, polygons=self._fit(data=data)))
 
     def predict(self, data: pd.DataFrame) -> List[Population]:
         """
@@ -1619,11 +1619,11 @@ class EllipseGate(PolygonGate):
         Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampding: dict (optional)
-         Options for downsampding data prior to appdication of gate. Should contain a
+    sampling: dict (optional)
+         Options for downsampling data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampding for details. Additional
-         keyword arguments should be provided in the sampding dictionary.
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
         appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
@@ -1729,8 +1729,8 @@ class EllipseGate(PolygonGate):
         }
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
-        if self.sampding.get("method", None) is not None:
-            data = self._downsampde(data=data)
+        if self.sampling.get("method", None) is not None:
+            data = self._downsample(data=data)
         self.model.fit(data[[self.x, self.y]].to_numpy())
         ellipses = [probabilistic_ellipse(covar, conf=self.conf) for covar in self.model.covariances_]
         polygons = [ellipse_to_polygon(centroid, *ellipse) for centroid, ellipse in zip(self.model.means_, ellipses)]
@@ -1771,11 +1771,11 @@ class HuberGate(PolygonGate):
         Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampding: dict (optional)
-         Options for downsampding data prior to appdication of gate. Should contain a
+    sampling: dict (optional)
+         Options for downsampling data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampding for details. Additional
-         keyword arguments should be provided in the sampding dictionary.
+         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         keyword arguments should be provided in the sampling dictionary.
     method_kwargs: dict
         Keyword arguments. 'conf' controls the gate width (as described above) and the remaining
 
@@ -1805,8 +1805,8 @@ class HuberGate(PolygonGate):
         self.model = HuberRegressor(**params)
 
         self._xy_in_dataframe(data=data)
-        if self.sampding.get("method", None) is not None:
-            data = self._downsampde(data=data)
+        if self.sampling.get("method", None) is not None:
+            data = self._downsample(data=data)
         self._fit_model(data=data)
         y_lower, y_upper = self._predict_interval(data=data)
 

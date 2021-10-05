@@ -623,7 +623,6 @@ def apply_transform_map(data: Union[pd.DataFrame, pl.DataFrame], feature_method:
     Pandas.DataFrame
         DataFrame with feature transformed
     """
-    data = data.copy()
     kwargs = kwargs or {}
     for feature, method in feature_method.items():
         transform_kwargs = kwargs.get(feature, {})

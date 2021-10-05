@@ -40,7 +40,6 @@ import polars as pl
 from sklearn.neighbors import BallTree
 from sklearn.neighbors import KDTree
 
-from ..data.read_write import pandas_to_polars
 from ..data.read_write import polars_to_pandas
 from .neighbours import calculate_optimal_neighbours
 from .neighbours import knn
@@ -81,7 +80,7 @@ def uniform_downsampling(data: Union[pl.DataFrame, pd.DataFrame], sample_size: U
     SamplingError
         Sample size type is invalid; should be either int or float
     """
-    data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
+    data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     if isinstance(sample_size, int):
         if sample_size >= data.shape[0]:
             logger.warning(
@@ -213,7 +212,7 @@ def density_dependent_downsampling(
         logger.warning("Requested sample size >= size of dataframe")
         return data
 
-    data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
+    data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     features = features or list(data.columns)
     tree_sample = uniform_downsampling(data=data, sample_size=tree_sample)
     prob = density_probability_assignment(
@@ -283,7 +282,7 @@ def density_probability_assignment(
     -------
     numpy.ndarray
     """
-    data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
+    data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     if njobs < 0:
         njobs = cpu_count()
     tree = KDTree(sample.values, metric=distance_metric, leaf_size=100)
@@ -353,7 +352,7 @@ def upsample_density(
     -------
     Pandas.DataFrame or Polars.DataFrame
     """
-    data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
+    data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     features = features or list(data.columns)
     tree_sample = uniform_downsampling(data=data, sample_size=tree_sample)
     prob = density_probability_assignment(
@@ -475,7 +474,7 @@ def sample_dataframe(
 
 def sample_dataframe_uniform_groups(data: Union[pl.DataFrame, pd.DataFrame], group_id: str, sample_size: int):
     sample_data = list()
-    data = data if isinstance(data, pd.DataFrame) else pandas_to_polars(data=data)
+    data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     n = int(sample_size / data[group_id].nunique())
     for _, df in data.groupby(group_id):
         if n >= df.shape[0]:

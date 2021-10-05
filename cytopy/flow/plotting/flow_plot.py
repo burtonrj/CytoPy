@@ -333,16 +333,16 @@ class FlowPlot:
         xlim, ylim = self._hist2d_axis_limits(data=data, x=x, y=y)
         if self.transform_x:
             xlim, xtransformer = self._transform_axis_limits(limits=xlim, axis="x", transform_method=self.transform_x)
-            xgrid = pd.DataFrame({"x": np.linspace(xlim[0, "Min"], xlim[0, "Max"], n)})
+            xgrid = pd.DataFrame({"x": np.linspace(xlim["Min"].values[0], xlim["Max"].values[0], n)})
             xbins = xtransformer.inverse_scale(xgrid, features=["x"]).x.to_numpy()
         else:
-            xbins = pd.DataFrame({"x": np.linspace(xlim[0, "Min"], xlim[0, "Max"], n)}).x.to_numpy()
+            xbins = pd.DataFrame({"x": np.linspace(xlim["Min"].values[0], xlim["Max"].values[0], n)}).x.to_numpy()
         if self.transform_y:
             ylim, ytransformer = self._transform_axis_limits(limits=ylim, axis="y", transform_method=self.transform_y)
-            ygrid = pd.DataFrame({"y": np.linspace(ylim[0, "Min"], ylim[0, "Max"], n)})
+            ygrid = pd.DataFrame({"y": np.linspace(ylim["Min"].values[0], ylim["Max"].values[0], n)})
             ybins = ytransformer.inverse_scale(ygrid, features=["y"]).y.to_numpy()
         else:
-            ybins = pd.DataFrame({"y": np.linspace(ylim[0, "Min"], ylim[0, "Max"], n)}).y.to_numpy()
+            ybins = pd.DataFrame({"y": np.linspace(ylim["Min"].values[0], ylim["Max"].values[0], n)}).y.to_numpy()
 
         if self.downsample is not None:
             data = data.sample(frac=self.downsample)

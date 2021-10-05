@@ -130,7 +130,9 @@ def single_cell_plot(
     )
 
     if not discrete:
-        plt.gcf().colorbar(ax, ax=ax, **cbar_kwargs)
+        if isinstance(hue_norm, tuple):
+            hue_norm = cm.Normalize(*hue_norm)
+        plt.gcf().colorbar(hue_norm, ax=ax, **cbar_kwargs)
 
     ax.set_xlabel(x)
     ax.set_ylabel(y)

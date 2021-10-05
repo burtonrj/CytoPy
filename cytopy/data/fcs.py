@@ -64,6 +64,7 @@ from .population import merge_non_geom_populations
 from .population import PolygonGeom
 from .population import Population
 from .read_write import load_compensation_matrix
+from .read_write import polars_to_pandas
 from .read_write import read_from_disk
 from .read_write import read_from_remote
 from .setup import Config
@@ -276,6 +277,8 @@ class FileGroup(mongoengine.Document):
             if sample_size is not None:
                 data = pl.DataFrame(
                     sample_dataframe(data=data, sample_size=sample_size, method=sampling_method, **sampling_kwargs)
+                    .reset_index()
+                    .rename({"index": "Index"}, axis=1)
                 )
             return data
         except KeyError as e:
@@ -641,7 +644,7 @@ class FileGroup(mongoengine.Document):
                 comparison_pop = self.get_population(population_name=comparison_pop)
                 data[f"frac of {comparison_pop.population_name}"] = population.n / comparison_pop.n
         if isinstance(data, pl.DataFrame):
-            return data.to_pandas()
+            return polars_to_pandas(data)
         return data
 
     def list_populations(self, regex: Optional[str] = None) -> List[str]:
