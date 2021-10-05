@@ -1,4 +1,4 @@
-from cytopy.flow.ref import create_ref_sample
+from cytopy.utils.ref import create_ref_sample
 
 
 def test_create_ref_sample(example_populated_experiment):

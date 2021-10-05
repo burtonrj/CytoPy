@@ -1,7 +1,7 @@
 import pandas as pd
 from shapely.geometry import Polygon
 
-from ..data.geometry import inside_polygon
+from cytopy.gating.geometry import inside_polygon
 
 
 def test_inside_polygon():

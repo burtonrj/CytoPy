@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 import seaborn as sns
 
-from ..flow.dim_reduction import DimensionReduction
+from ..utils.dim_reduction import DimensionReduction
 
 
 @pytest.mark.parametrize("method", ["UMAP", "tSNE", "PCA", "KernelPCA", "MDS", "Isomap", "PHATE"])

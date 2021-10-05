@@ -40,8 +40,8 @@ from minisom import MiniSom
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.preprocessing import MinMaxScaler
 
-from ...feedback import progress_bar
 from .consensus_k import KConsensusClustering
+from cytopy.feedback import progress_bar
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"

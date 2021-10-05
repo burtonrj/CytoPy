@@ -31,7 +31,7 @@ from matplotlib.ticker import Locator
 from matplotlib.ticker import LogFormatterMathtext
 from matplotlib.ticker import NullFormatter
 
-from cytopy.flow.transform import LogicleTransformer
+from cytopy.utils.transform import LogicleTransformer
 
 
 __author__ = "Ross Burton"

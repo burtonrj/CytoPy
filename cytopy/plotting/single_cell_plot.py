@@ -37,7 +37,7 @@ import pandas as pd
 import polars as pl
 import seaborn as sns
 
-from ...data.read_write import polars_to_pandas
+from cytopy.data.read_write import polars_to_pandas
 
 logger = logging.getLogger(__name__)
 

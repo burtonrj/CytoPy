@@ -2,12 +2,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
 
-from cytopy.data.gate import EllipseGate
-from cytopy.data.gate import PolygonGate
-from cytopy.data.gate import ThresholdGate
-from cytopy.data.gating_strategy import DuplicatePopulationError
-from cytopy.data.gating_strategy import GatingStrategy
 from cytopy.data.project import Project
+from cytopy.gating.gate import EllipseGate
+from cytopy.gating.gate import PolygonGate
+from cytopy.gating.gate import ThresholdGate
+from cytopy.gating.gating_strategy import DuplicatePopulationError
+from cytopy.gating.gating_strategy import GatingStrategy
 
 
 def create_gatingstrategy_and_load(example_populated_experiment):

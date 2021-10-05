@@ -54,7 +54,7 @@ def setup():
             subject_id=subject_id, age=random.randint(18, 99), gender=["male", "female"][random.randint(0, 1)]
         )
 
-    # Populate with GVHD flow data
+    # Populate with GVHD utils data
     logger.info("Creating mock experiment 'test_exp'")
     test_exp = project.add_experiment(experiment_id="test_exp")
     test_exp.generate_panel(panel_definition=os.path.join(ASSET_PATH, "test_panel.xlsx"))

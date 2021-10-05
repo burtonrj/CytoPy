@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 from sklearn.base import ClusterMixin
 
-from ...feedback import progress_bar
+from cytopy.feedback import progress_bar
 
 np.random.seed(42)
 logger = logging.getLogger(__name__)

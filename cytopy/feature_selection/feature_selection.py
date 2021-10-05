@@ -51,7 +51,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import SGDClassifier
 from sklearn.linear_model import SGDRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import LinearSVC
 from sklearn.svm import LinearSVR
 from sklearn.tree import DecisionTreeClassifier
@@ -60,12 +59,12 @@ from sklearn.tree import export_graphviz
 from sklearn.tree import plot_tree
 from yellowbrick.regressor import ResidualsPlot
 
-from . import transform
-from ..data.experiment import Experiment
-from ..feedback import progress_bar
-from .cell_classifier import utils as classifier_utils
-from .plotting.single_cell_plot import cont_scatterplot
-from .plotting.single_cell_plot import discrete_scatterplot
+from cytopy.classification import utils as classifier_utils
+from cytopy.data.experiment import Experiment
+from cytopy.feedback import progress_bar
+from cytopy.plotting.single_cell_plot import cont_scatterplot
+from cytopy.plotting.single_cell_plot import discrete_scatterplot
+from cytopy.utils import transform
 
 logger = logging.getLogger("feature_selection")
 
@@ -497,7 +496,7 @@ class InferenceTesting:
         Tabular data containing all dependent and independent variables
     scale: str, optional
         Scale data upon initiating object using one of the scaling methods provided
-        by cytopy.flow.transform.Scaler
+        by cytopy.utils.transform.Scaler
     scale_vars: List, optional
         Columns to scale. Must provide is scale is provided.
     scale_kwargs: dict, optional
@@ -506,7 +505,7 @@ class InferenceTesting:
     Attributes
     ----------
     data: polars.DataFrame
-    scaler: CytoPy.flow.transform.Scaler
+    scaler: CytoPy.utils.transform.Scaler
     """
 
     def __init__(
@@ -857,7 +856,7 @@ class PCA:
     features: list
         List of features used in PCA model
     scale: str, optional (default='standard')
-        How data should be scaled prior to generating PCA. See cytopy.flow.transform.Scaler for
+        How data should be scaled prior to generating PCA. See cytopy.utils.transform.Scaler for
         available methods.
     scale_kwargs: dict, optional
         Additional keyword arguments passed to Scaler
@@ -1181,7 +1180,7 @@ class L1Selection:
         (continuous target variable)
     scale: str, optional (default='standard')
         Whether to scale data prior to fitting model; if given, indicates which method to use, see
-        cytopy.flow.transform.Scaler for valid methods
+        cytopy.utils.transform.Scaler for valid methods
     scale_kwargs: dict, optional
         Keyword arguments to pass to Scaler
     kwargs:
@@ -1190,7 +1189,7 @@ class L1Selection:
     Attributes
     ----------
     model: Scikit-Learn classifier/regressor
-    scaler: CytoPy.flow.transform.Scaler
+    scaler: CytoPy.utils.transform.Scaler
     features: list
     x: polars.DataFrame
         Feature space
@@ -1448,7 +1447,7 @@ class DecisionTree:
             Overwrite decision tree parameters prior to fit
         performance_metrics: list, optional
             List of performance metrics to use. Must be the name of a valid Scikit-Learn metric
-            function or callable. See cytopy.flow.cell_classifier.uitls.calc_metrics
+            function or callable. See cytopy.utils.classification.uitls.calc_metrics
         kwargs:
             Additional keyword arguments passed to fit
 
@@ -1715,7 +1714,7 @@ class FeatureImportance:
         ----------
         performance_metrics: list, optional
             List of performance metrics to use. Must be the name of a valid Scikit-Learn metric
-            function or callable. See cytopy.flow.cell_classifier.uitls.calc_metrics
+            function or callable. See cytopy.utils.classification.uitls.calc_metrics
         kwargs:
             Additional keyword arguments passed to predict method of classifier
 
@@ -1782,9 +1781,9 @@ class FeatureImportance:
         permutation_kwargs: dict, optional
             Additional keyword arguments passed to sklearn.inspection.permutation_importance call
         boxplot_kwargs: dict, optional
-            See cytopy.flow.feature_selection.box_swarm_plot
+            See cytopy.utils.feature_selection.box_swarm_plot
         overlay_kwargs: dict, optional
-            See cytopy.flow.feature_selection.box_swarm_plot
+            See cytopy.utils.feature_selection.box_swarm_plot
 
         Returns
         -------

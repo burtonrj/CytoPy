@@ -44,37 +44,32 @@ import mongoengine
 import numpy as np
 import pandas as pd
 from detecta import detect_peaks
-from hdbscan import HDBSCAN
 from KDEpy import FFTKDE
 from scipy import stats
 from scipy.signal import savgol_filter
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
-from sklearn.cluster import *
 from sklearn.linear_model import HuberRegressor
-from sklearn.mixture import BayesianGaussianMixture
-from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import PowerTransformer
-from smm import SMM
 
-from ..flow.build_models import build_sklearn_model
-from ..flow.dim_reduction import DimensionReduction
-from ..flow.sampling import density_dependent_downsampling
-from ..flow.sampling import faithful_downsampling
-from ..flow.sampling import uniform_downsampling
-from ..flow.sampling import upsample_knn
-from .errors import GateError
-from .geometry import create_envelope
-from .geometry import create_polygon
-from .geometry import ellipse_to_polygon
-from .geometry import GeometryError
-from .geometry import inside_polygon
-from .geometry import PolygonGeom
-from .geometry import probabilistic_ellipse
-from .geometry import ThresholdGeom
-from .population import merge_multiple_gate_populations
-from .population import Population
-from cytopy.flow.transform import apply_transform
+from cytopy.data.errors import GateError
+from cytopy.data.population import merge_multiple_gate_populations
+from cytopy.data.population import Population
+from cytopy.gating.geometry import create_envelope
+from cytopy.gating.geometry import create_polygon
+from cytopy.gating.geometry import ellipse_to_polygon
+from cytopy.gating.geometry import GeometryError
+from cytopy.gating.geometry import inside_polygon
+from cytopy.gating.geometry import PolygonGeom
+from cytopy.gating.geometry import probabilistic_ellipse
+from cytopy.gating.geometry import ThresholdGeom
+from cytopy.utils.build_models import build_sklearn_model
+from cytopy.utils.dim_reduction import DimensionReduction
+from cytopy.utils.sampling import density_dependent_downsampling
+from cytopy.utils.sampling import faithful_downsampling
+from cytopy.utils.sampling import uniform_downsampling
+from cytopy.utils.sampling import upsample_knn
+from cytopy.utils.transform import apply_transform
 
 logger = logging.getLogger(__name__)
 
@@ -182,12 +177,12 @@ class Gate(mongoengine.Document):
     sampling: dict (optional)
          Options for downsampling data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
         appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
-        with a key "method" and the value as any supported method in cytopy.flow.dim_reduction.
+        with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     ctrl_x: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
@@ -580,12 +575,12 @@ class ThresholdGate(Gate):
     sampling: dict (optional)
          Options for downsampling data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
         appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
-        with a key "method" and the value as any supported method in cytopy.flow.dim_reduction.
+        with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     ctrl_x: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
@@ -1236,12 +1231,12 @@ class PolygonGate(Gate):
     sampling: dict (optional)
          Options for downsampling data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
         appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
-        with a key "method" and the value as any supported method in cytopy.flow.dim_reduction.
+        with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
@@ -1622,12 +1617,12 @@ class EllipseGate(PolygonGate):
     sampling: dict (optional)
          Options for downsampling data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
         appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
-        with a key "method" and the value as any supported method in cytopy.flow.dim_reduction.
+        with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
@@ -1774,7 +1769,7 @@ class HuberGate(PolygonGate):
     sampling: dict (optional)
          Options for downsampling data prior to appdication of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.flow.sampling for details. Additional
+         are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
     method_kwargs: dict
         Keyword arguments. 'conf' controls the gate width (as described above) and the remaining

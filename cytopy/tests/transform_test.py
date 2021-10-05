@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from flowutils.transforms import logicle
 
-from ..flow import transform
+from ..utils import transform
 from .conftest import create_lognormal_data
 
 logger = logging.getLogger(__name__)

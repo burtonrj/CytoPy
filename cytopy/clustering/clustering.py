@@ -62,15 +62,15 @@ import numpy as np
 import pandas as pd
 import phenograph
 
-from ...data.experiment import Experiment
-from ...data.experiment import single_cell_dataframe
-from ...data.population import Population
-from ...data.subject import Subject
-from ...feedback import progress_bar
-from ..dim_reduction import dimension_reduction_with_sampling
-from ..transform import Scaler
 from .consensus_k import KConsensusClustering
 from .flowsom import FlowSOM
+from cytopy.data.experiment import Experiment
+from cytopy.data.experiment import single_cell_dataframe
+from cytopy.data.population import Population
+from cytopy.data.subject import Subject
+from cytopy.feedback import progress_bar
+from cytopy.utils.dim_reduction import dimension_reduction_with_sampling
+from cytopy.utils.transform import Scaler
 
 logger = logging.getLogger(__name__)
 

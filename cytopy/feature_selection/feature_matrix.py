@@ -12,10 +12,10 @@ from typing import *
 
 import pandas as pd
 
-from ..data.experiment import Experiment
-from ..data.experiment import FileGroup
-from ..data.project import Project
-from ..feedback import progress_bar
+from cytopy.data.experiment import Experiment
+from cytopy.data.experiment import FileGroup
+from cytopy.data.project import Project
+from cytopy.feedback import progress_bar
 
 
 def list_all_populations(experiment: Experiment):

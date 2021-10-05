@@ -3,8 +3,8 @@ import pytest
 from shapely.geometry import Polygon as Poly
 
 from cytopy.data import population
-from cytopy.data.geometry import PolygonGeom
-from cytopy.data.geometry import ThresholdGeom
+from cytopy.gating.geometry import PolygonGeom
+from cytopy.gating.geometry import ThresholdGeom
 
 
 def generate_polygons():

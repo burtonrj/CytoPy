@@ -37,9 +37,9 @@ import pandas as pd
 from bson.binary import Binary
 from shapely.ops import unary_union
 
-from .geometry import PolygonGeom
-from .geometry import PopulationGeometry
-from .geometry import ThresholdGeom
+from cytopy.gating.geometry import PolygonGeom
+from cytopy.gating.geometry import PopulationGeometry
+from cytopy.gating.geometry import ThresholdGeom
 
 
 class Population(mongoengine.EmbeddedDocument):

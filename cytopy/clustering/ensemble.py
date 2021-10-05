@@ -3,10 +3,6 @@ import math
 import os
 import pickle
 from collections import defaultdict
-from functools import partial
-from functools import reduce
-from multiprocessing import cpu_count
-from multiprocessing import Pool
 from typing import Callable
 from typing import Dict
 from typing import List
@@ -25,13 +21,7 @@ from matplotlib.ticker import MaxNLocator
 from sklearn.base import ClusterMixin
 from sklearn.metrics import adjusted_mutual_info_score
 from sklearn.metrics import adjusted_rand_score
-from tqdm import tqdm
 
-from ...data.experiment import Experiment
-from ...feedback import add_processing_animation
-from ...feedback import progress_bar
-from ..dim_reduction import DimensionReduction
-from ..plotting.single_cell_plot import discrete_palette
 from .clustering import Clustering
 from .clustering import ClusteringError
 from .clustering import ClusterMethod
@@ -40,6 +30,11 @@ from .metrics import init_metrics
 from .metrics import Metric
 from .plotting import clustered_heatmap
 from .plotting import plot_cluster_membership
+from cytopy.data.experiment import Experiment
+from cytopy.feedback import add_processing_animation
+from cytopy.feedback import progress_bar
+from cytopy.plotting.single_cell_plot import discrete_palette
+from cytopy.utils.dim_reduction import DimensionReduction
 
 logger = logging.getLogger(__name__)
 

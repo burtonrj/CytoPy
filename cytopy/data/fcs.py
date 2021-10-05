@@ -49,16 +49,15 @@ from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import permutation_test_score
 from sklearn.model_selection import StratifiedKFold
 
-from ..flow.build_models import build_sklearn_model
-from ..flow.sampling import sample_dataframe
-from ..flow.transform import apply_transform
-from ..flow.transform import apply_transform_map
-from ..flow.transform import Transformer
-from ..flow.tree import construct_tree
+from ..utils.build_models import build_sklearn_model
+from ..utils.sampling import sample_dataframe
+from ..utils.transform import apply_transform
+from ..utils.transform import apply_transform_map
+from ..utils.transform import Transformer
+from ..utils.tree import construct_tree
 from .errors import DuplicatePopulationError
 from .errors import MissingControlError
 from .errors import MissingPopulationError
-from .geometry import create_envelope
 from .population import merge_gate_populations
 from .population import merge_non_geom_populations
 from .population import PolygonGeom
@@ -69,6 +68,7 @@ from .read_write import read_from_disk
 from .read_write import read_from_remote
 from .setup import Config
 from .subject import Subject
+from cytopy.gating.geometry import create_envelope
 
 logger = logging.getLogger(__name__)
 CONFIG = Config()
@@ -248,7 +248,7 @@ class FileGroup(mongoengine.Document):
             fraction of total events.
         sampling_method: str (default="uniform")
         sampling_kwargs:
-            Additional keyword arguments passed to cytopy.flow.sampling.sample_dataframe
+            Additional keyword arguments passed to cytopy.utils.sampling.sample_dataframe
 
         Returns
         -------
@@ -523,7 +523,7 @@ class FileGroup(mongoengine.Document):
         sample_at_population_level: bool (default=True)
             Each population is downsampled independently, rather than downsampling the final DataFrame.
         sampling_kwargs:
-            Additional keyword arguments passed to cytopy.flow.sampling.sample_dataframe
+            Additional keyword arguments passed to cytopy.utils.sampling.sample_dataframe
 
         Returns
         -------
@@ -602,7 +602,7 @@ class FileGroup(mongoengine.Document):
             fraction of total events.
         sampling_method: str (default="uniform")
         sampling_kwargs:
-            Additional keyword arguments passed to cytopy.flow.sampling.sample_dataframe
+            Additional keyword arguments passed to cytopy.utils.sampling.sample_dataframe
 
         Returns
         -------
@@ -983,7 +983,7 @@ class FileGroup(mongoengine.Document):
 
     def quantile_clean(self, upper: float = 0.999, lower: float = 0.001) -> None:
         """
-        Iterate over every channel in the flow data and cut the upper and lower quartiles.
+        Iterate over every channel in the utils data and cut the upper and lower quartiles.
 
         Parameters
         ----------

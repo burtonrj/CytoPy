@@ -566,10 +566,10 @@ def apply_transform(
     columns (features). Transformation method is specified using the
     'method' argument and should be one of:
 
-    * logicle: see cytopy.flow.transform.LogicleTransformer
-    * hyperlog: see cytopy.flow.transform.HyperlogTransformer
-    * asinh: see cytopy.flow.transform.AsinhTransformer
-    * log: see cytopy.flow.transform.LogTransformer
+    * logicle: see cytopy.utils.transform.LogicleTransformer
+    * hyperlog: see cytopy.utils.transform.HyperlogTransformer
+    * asinh: see cytopy.utils.transform.AsinhTransformer
+    * log: see cytopy.utils.transform.LogTransformer
 
     Parameters
     ----------
@@ -608,7 +608,7 @@ def apply_transform(
 
 def apply_transform_map(data: Union[pd.DataFrame, pl.DataFrame], feature_method: dict, kwargs: dict or None = None):
     """
-    Wrapper function to cytopy.flow.transform.apply_transform; takes a dictionary (feature_method) where
+    Wrapper function to cytopy.utils.transform.apply_transform; takes a dictionary (feature_method) where
     each key is the name of a feature and the value the transform to be applied to that feature.
 
     Parameters

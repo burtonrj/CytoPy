@@ -31,7 +31,7 @@ from matplotlib.ticker import NullFormatter
 
 from .hlog_transform import HlogMajorLocator
 from .hlog_transform import HlogMinorLocator
-from cytopy.flow.transform import AsinhTransformer
+from cytopy.utils.transform import AsinhTransformer
 
 
 class AsinhScale(mscale.ScaleBase):

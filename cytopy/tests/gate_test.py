@@ -1,14 +1,11 @@
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 import pytest
 from KDEpy import FFTKDE
 from scipy.spatial.distance import euclidean
-from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs
 
-from cytopy.data import gate
-from cytopy.data.geometry import *
+from cytopy.gating import gate
+from cytopy.gating.geometry import *
 
 np.random.seed(42)
 

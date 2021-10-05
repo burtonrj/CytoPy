@@ -97,7 +97,7 @@ def uniform_downsampling(data: Union[pl.DataFrame, pd.DataFrame], sample_size: U
 def faithful_downsampling(data: np.array, h: float = 0.1):
     """
     An implementation of faithful downsampling as described in:  Zare H, Shooshtari P, Gupta A, Brinkman R.
-    Data reduction for spectral clustering to analyze high throughput flow cytometry data.
+    Data reduction for spectral clustering to analyze high throughput utils cytometry data.
     BMC Bioinformatics 2010;11:403
 
     Parameters
@@ -450,7 +450,7 @@ def sample_dataframe(
     method: str
         One of 'uniform', 'density' or 'faithful'
     kwargs:
-        Additional keyword arguments passed to chosen method. See cytopy.flow.sampling for details
+        Additional keyword arguments passed to chosen method. See cytopy.utils.sampling for details
 
     Returns
     -------

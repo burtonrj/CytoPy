@@ -48,17 +48,17 @@ from sklearn.neighbors import KNeighborsClassifier
 from tensorflow.keras.models import Sequential
 
 from . import utils
-from ...data.experiment import Experiment
-from ...data.experiment import FileGroup
-from ...data.experiment import single_cell_dataframe
-from ...data.population import Population
-from ...feedback import progress_bar
-from ...flow import sampling
-from ...flow.variance import Harmony
-from cytopy.flow.transform import apply_transform
-from cytopy.flow.transform import Scaler
-from cytopy.flow.transform import Transformer
-from cytopy.flow.transform import TRANSFORMERS
+from cytopy.data.experiment import Experiment
+from cytopy.data.experiment import FileGroup
+from cytopy.data.experiment import single_cell_dataframe
+from cytopy.data.population import Population
+from cytopy.feedback import progress_bar
+from cytopy.utils import sampling
+from cytopy.utils.batch_effects import Harmony
+from cytopy.utils.transform import apply_transform
+from cytopy.utils.transform import Scaler
+from cytopy.utils.transform import Transformer
+from cytopy.utils.transform import TRANSFORMERS
 
 
 logger = logging.getLogger(__name__)
@@ -140,7 +140,7 @@ class BaseClassifier:
         ----------
         method: str
             Method used for down sampling, must be either 'uniform', 'density' or 'faithful'.
-            See cytopy.flow.sampling for more details.
+            See cytopy.utils.sampling for more details.
         sample_size: int or float
             Desired sample size
         kwargs:
@@ -167,7 +167,7 @@ class BaseClassifier:
         ----------
         method: str
             Method for transformation, valid methods are: 'logicle', 'hyperlog', 'asinh' or 'log'.
-            See cytopy.flow.transform for more details.
+            See cytopy.utils.transform for more details.
         kwargs:
             Additional keyword arguments passed to Transformer.
         Returns
@@ -203,7 +203,7 @@ class BaseClassifier:
     @check_data_init
     def scale(self, method: str = "standard", **kwargs):
         """
-        Scale training data. Many Scikit-Learn scalers supported, see cytopy.flow.transform.Scaler
+        Scale training data. Many Scikit-Learn scalers supported, see cytopy.utils.transform.Scaler
         for details. Scaler object is saved to the scaler attribute.
 
         Parameters
@@ -418,7 +418,7 @@ class BaseClassifier:
         **kwargs,
     ):
         """
-        Wraps cytopy.flow.supervised.confusion_matrix_plots (see for more details).
+        Wraps cytopy.utils.supervised.confusion_matrix_plots (see for more details).
         Given some feature space and target labels, use the model to generate a confusion
         matrix heatmap. If x and y are not provided, will use associated training data.
 
@@ -435,7 +435,7 @@ class BaseClassifier:
             Target labels. If not given, will use associated training data. To use a validation
             dataset, use the 'load_validation' method to get relevant data.
         kwargs:
-            Additional keyword arguments passed to cytopy.flow.supervised.confusion_matrix_plots
+            Additional keyword arguments passed to cytopy.utils.supervised.confusion_matrix_plots
 
         Returns
         -------

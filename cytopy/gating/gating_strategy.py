@@ -43,24 +43,24 @@ from matplotlib import gridspec
 from matplotlib.colors import LogNorm
 from matplotlib.widgets import PolygonSelector
 
-from ..feedback import progress_bar
-from ..feedback import vprint
-from ..flow.fda_norm import LandmarkReg
-from ..flow.gate_search import hyperparameter_gate
-from .errors import *
-from .experiment import Experiment
-from .fcs import FileGroup
-from .gate import EllipseGate
-from .gate import Gate
-from .gate import PolygonGate
-from .gate import PolygonGeom
-from .gate import ThresholdGate
-from .gate import ThresholdGeom
-from .gate import update_polygon
-from .gate import update_threshold
-from cytopy.flow.plotting.flow_plot import FlowPlot
-from cytopy.flow.transform import apply_transform
-from cytopy.flow.transform import apply_transform_map
+from cytopy.data.errors import *
+from cytopy.data.experiment import Experiment
+from cytopy.data.fcs import FileGroup
+from cytopy.feedback import progress_bar
+from cytopy.feedback import vprint
+from cytopy.gating.gate import EllipseGate
+from cytopy.gating.gate import Gate
+from cytopy.gating.gate import PolygonGate
+from cytopy.gating.gate import PolygonGeom
+from cytopy.gating.gate import ThresholdGate
+from cytopy.gating.gate import ThresholdGeom
+from cytopy.gating.gate import update_polygon
+from cytopy.gating.gate import update_threshold
+from cytopy.plotting.flow_plot import FlowPlot
+from cytopy.utils.fda_norm import LandmarkReg
+from cytopy.utils.gate_search import hyperparameter_gate
+from cytopy.utils.transform import apply_transform
+from cytopy.utils.transform import apply_transform_map
 
 logger = logging.getLogger(__name__)
 
@@ -315,7 +315,7 @@ class GatingStrategy(mongoengine.Document):
         to some reference data (specified by 'reference', which should be a FileGroup object, but
         if left as None, will be the FileGroup currently associated with the GatingStrategy).
         Alignment is performed using a peak finding algorithm, K means clustering, and then
-        landmark registration; see cytopy.flow.fda_norm for details.
+        landmark registration; see cytopy.utils.fda_norm for details.
 
         Parameters
         ----------
@@ -326,7 +326,7 @@ class GatingStrategy(mongoengine.Document):
             value is None (default) then the currently associated FileGroup to this GatingStrategy
             is used as the future reference
         kwargs:
-            Additional keyword arguments that will be passed to cytopy.flow.fda_norm.LandmarkReg
+            Additional keyword arguments that will be passed to cytopy.utils.fda_norm.LandmarkReg
 
         Returns
         -------
@@ -819,9 +819,9 @@ class GatingStrategy(mongoengine.Document):
         x: str
         y: str
         create_plot_kwargs
-            Additional keyword arguments passed to cytopy.flow.plotting.CreatePlot
+            Additional keyword arguments passed to cytopy.utils.plotting.CreatePlot
         backgate_kwargs
-            Additional keyword arguments passed to cytopy.flow.plotting.CreatePlot.backgate
+            Additional keyword arguments passed to cytopy.utils.plotting.CreatePlot.backgate
 
         Returns
         -------
@@ -875,9 +875,9 @@ class GatingStrategy(mongoengine.Document):
         transform_x: str (optional; default="logicle")
         transform_y: str (optional; default="logicle")
         create_plot_kwargs:
-            Additional keyword arguments passed to cytopy.flow.plotting.CreatePlot
+            Additional keyword arguments passed to cytopy.utils.plotting.CreatePlot
         plot_kwargs
-            Additional keyword arguments passed to cytopy.flow.plotting.CreatePlot.plot
+            Additional keyword arguments passed to cytopy.utils.plotting.CreatePlot.plot
 
         Returns
         -------

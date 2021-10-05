@@ -9,8 +9,6 @@ import seaborn as sns
 from sklearn.base import ClusterMixin
 
 from . import metrics as cluster_metrics
-from ...feedback import progress_bar
-from ..dim_reduction import dimension_reduction_with_sampling
 from .clustering import Clustering
 from .clustering import ClusterMethod
 from .clustering import remove_null_features
@@ -18,6 +16,8 @@ from .plotting import clustered_heatmap
 from .plotting import plot_cluster_membership
 from .plotting import plot_cluster_membership_sample
 from .plotting import plot_meta_clusters
+from cytopy.feedback import progress_bar
+from cytopy.utils.dim_reduction import dimension_reduction_with_sampling
 
 
 class SingleClustering(Clustering):
@@ -30,7 +30,7 @@ class SingleClustering(Clustering):
     by 'clustering the clusters', to do this we summarise their clusters and perform meta-clustering.
 
     The Clustering class provides all the apparatus to perform high-dimensional clustering
-    using any of the following functions from the cytopy.flow.clustering.main module:
+    using any of the following functions from the cytopy.utils.clustering.main module:
 
     * sklearn_clustering - access any of the Scikit-Learn cluster/mixture classes for unsupervised learning;
       currently also provides access to HDBSCAN
@@ -66,7 +66,7 @@ class SingleClustering(Clustering):
     root_population: str (default="root")
         Name of the Population to use as input data for clustering
     transform: str (default="logicle")
-        How to transform the data prior to clustering, see cytopy.flow.transform for valid methods
+        How to transform the data prior to clustering, see cytopy.utils.transform for valid methods
     transform_kwargs: dict, optional
         Additional keyword arguments passed to Transformer
     verbose: bool (default=True)

@@ -5,22 +5,18 @@ from typing import Tuple
 from typing import Type
 from typing import Union
 
-import networkx as nx
 import pandas as pd
 import polars as pl
 import seaborn as sns
-from matplotlib import cm
 from matplotlib import pyplot as plt
-from scipy.spatial.distance import pdist
-from scipy.spatial.distance import squareform
 from sklearn.utils import shuffle
 
-from ...data.read_write import polars_to_pandas
-from ..dim_reduction import DimensionReduction
-from ..plotting import single_cell_plot
-from ..plotting.single_cell_plot import discrete_label
-from ..plotting.single_cell_plot import discrete_palette
-from ..sampling import sample_dataframe_uniform_groups
+from cytopy.data.read_write import polars_to_pandas
+from cytopy.plotting import single_cell_plot
+from cytopy.plotting.single_cell_plot import discrete_label
+from cytopy.plotting.single_cell_plot import discrete_palette
+from cytopy.utils.dim_reduction import DimensionReduction
+from cytopy.utils.sampling import sample_dataframe_uniform_groups
 
 
 def plot_cluster_membership(
@@ -48,15 +44,15 @@ def plot_cluster_membership(
         biological sample size
     method: Union[str, Type]
         Dimensionality reduction technique; available in-built methods are: UMAP, PCA, PHATE, KernelPCA or tSNE.
-        (see cytopy.flow.dimension_reduction)
+        (see cytopy.utils.dimension_reduction)
     dim_reduction_kwargs: dict, optional
-        Additional keyword arguments passed to dimension reduction (see cytopy.flow.dim_reduction)
+        Additional keyword arguments passed to dimension reduction (see cytopy.utils.dim_reduction)
     label: str, (default='cluster_label')
         How to colour single cells
     discrete: bool (default=True)
         If True, label is treated as a discrete variable. If False, continuous colourmap will be applied.
     kwargs:
-        Additional keyword arguments passed to cytopy.flow.plotting.single_cell_plot
+        Additional keyword arguments passed to cytopy.utils.plotting.single_cell_plot
 
     Returns
     -------
@@ -89,7 +85,7 @@ def plot_cluster_membership_sample(
     **kwargs,
 ):
     """
-    Generate a single cell plot (see cytopy.flow.plotting.single_cell_plot) for a single sample,
+    Generate a single cell plot (see cytopy.utils.plotting.single_cell_plot) for a single sample,
     with cells coloured by cluster membership (default)
 
     Parameters
@@ -97,15 +93,15 @@ def plot_cluster_membership_sample(
     sample_id: str
     method: Union[str, Type]
         Dimensionality reduction technique; available in-built methods are: UMAP, PCA, PHATE, KernelPCA or tSNE.
-        (see cytopy.flow.dimension_reduction)
+        (see cytopy.utils.dimension_reduction)
     dim_reduction_kwargs: dict, optional
-        Additional keyword arguments passed to dimension reduction (see cytopy.flow.dim_reduction)
+        Additional keyword arguments passed to dimension reduction (see cytopy.utils.dim_reduction)
     label: str, (default='cluster_label')
         How to colour single cells
     discrete: bool (default=True)
         If True, label is treated as a discrete variable. If False, continuous colourmap will be applied.
     kwargs:
-        Additional keyword arguments passed to cytopy.flow.plotting.single_cell_plot
+        Additional keyword arguments passed to cytopy.utils.plotting.single_cell_plot
 
     Returns
     -------
@@ -186,7 +182,7 @@ def plot_meta_clusters(
     **kwargs,
 ):
     """
-    Generate a cluster bubble plot (see cytopy.flow.plotting.cluster_bubble_plot) where each
+    Generate a cluster bubble plot (see cytopy.utils.plotting.cluster_bubble_plot) where each
     data point (bubble) is a single cluster centroid from a unique patient. Size of the data points represents
     the fraction of cells with membership to the sample relative to the total number of events
     in that sample. By default data points are coloured by meta label membership.
@@ -196,13 +192,13 @@ def plot_meta_clusters(
     method: str
         Dimensionality reduction technique; available methods are: UMAP, PCA, PHATE, KernelPCA or tSNE
     dim_reduction_kwargs: dict, optional
-        Additional keyword arguments passed to dimension reduction (see cytopy.flow.dim_reduction)
+        Additional keyword arguments passed to dimension reduction (see cytopy.utils.dim_reduction)
     colour_label: str, (default='meta_label')
         How to colour cluster centroids
     discrete: bool (default=True)
         If True, label is treated as a discrete variable. If False, continuous colourmap will be applied.
     kwargs:
-        Additional keyword arguments passed to cytopy.flow.plotting.cluster_bubble_plot
+        Additional keyword arguments passed to cytopy.utils.plotting.cluster_bubble_plot
 
     Returns
     -------
@@ -383,7 +379,7 @@ def cluster_bubble_plot(
     n_components: int (default=2)
         Number of components to generate from dimension reduction
     dim_reduction_kwargs: dict, optional
-        Additional keyword arguments passed to dimension reduction (see cytopy.flow.dim_reduction)
+        Additional keyword arguments passed to dimension reduction (see cytopy.utils.dim_reduction)
     figsize: tuple (default=(8,8))
     legend_kwargs: dict, optional
         Keyword arguments passed to legend

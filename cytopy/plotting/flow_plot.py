@@ -54,17 +54,14 @@ from matplotlib import patches
 from matplotlib.colors import LogNorm
 from scipy.spatial import ConvexHull
 
-from . import asinh_transform
-from . import hlog_transform
-from . import logicle_transform
-from ...data.gate import EllipseGate
-from ...data.gate import Gate
-from ...data.gate import PolygonGate
-from ...data.gate import Population
-from ...data.gate import ThresholdGate
-from ...data.geometry import PolygonGeom
-from ...data.geometry import ThresholdGeom
-from ...flow import transform
+from cytopy.gating.gate import EllipseGate
+from cytopy.gating.gate import Gate
+from cytopy.gating.gate import PolygonGate
+from cytopy.gating.gate import Population
+from cytopy.gating.gate import ThresholdGate
+from cytopy.gating.geometry import PolygonGeom
+from cytopy.gating.geometry import ThresholdGeom
+from cytopy.utils import transform
 
 __author__ = "Ross Burton"
 __copyright__ = "Copyright 2020, cytopy"

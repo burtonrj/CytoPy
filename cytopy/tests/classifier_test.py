@@ -14,14 +14,14 @@ from sklearn.neighbors import KNeighborsClassifier
 
 from ..data.fcs import FileGroup
 from ..data.project import Project
-from ..flow.cell_classifier.cell_classifier import BaseClassifier
-from ..flow.cell_classifier.cell_classifier import CalibratedCellClassifier
-from ..flow.cell_classifier.cell_classifier import CellClassifier
-from ..flow.cell_classifier.cell_classifier import ClassifierError
 from .conftest import add_populations
 from .conftest import ASSET_PATH
-from cytopy.flow.transform import LogicleTransformer
-from cytopy.flow.transform import Scaler
+from cytopy.classification import BaseClassifier
+from cytopy.classification import CalibratedCellClassifier
+from cytopy.classification import CellClassifier
+from cytopy.classification import ClassifierError
+from cytopy.utils.transform import LogicleTransformer
+from cytopy.utils.transform import Scaler
 
 logger = logging.getLogger(__name__)
 

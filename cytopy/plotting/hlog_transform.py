@@ -33,7 +33,7 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
-from cytopy.flow.transform import HyperlogTransformer
+from cytopy.utils.transform import HyperlogTransformer
 from matplotlib.ticker import NullFormatter, LogFormatterMathtext
 from matplotlib.ticker import Locator
 from matplotlib import transforms as mtransforms

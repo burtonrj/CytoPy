@@ -44,7 +44,7 @@ import pandas as pd
 import polars as pl
 
 from ..feedback import progress_bar
-from ..flow.sampling import sample_dataframe
+from ..utils.sampling import sample_dataframe
 from .errors import DuplicateSampleError
 from .errors import MissingSampleError
 from .errors import PanelError
@@ -455,7 +455,7 @@ def single_cell_dataframe(
         data is sampled.
         If "population" then will attempt to sample the desired number of events from each population.
     sampling_method: str (default="uniform")
-        The sampling method to use; see cytopy.flow.sampling
+        The sampling method to use; see cytopy.utils.sampling
     sampling_kwargs: Dict, optional
         Additional keyword arguments passed to sampling method
 
