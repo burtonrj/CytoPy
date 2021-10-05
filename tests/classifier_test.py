@@ -12,14 +12,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.neighbors import KNeighborsClassifier
 
-from ..data.fcs import FileGroup
-from ..data.project import Project
 from .conftest import add_populations
 from .conftest import ASSET_PATH
 from cytopy.classification import BaseClassifier
 from cytopy.classification import CalibratedCellClassifier
 from cytopy.classification import CellClassifier
 from cytopy.classification import ClassifierError
+from cytopy.data.fcs import FileGroup
+from cytopy.data.project import Project
 from cytopy.utils.transform import LogicleTransformer
 from cytopy.utils.transform import Scaler
 

@@ -2,7 +2,6 @@ import inspect
 import logging
 import os
 import random
-import shutil
 from logging.config import dictConfig
 from typing import List
 from typing import Optional
@@ -14,11 +13,11 @@ from mongoengine.connection import connect
 from mongoengine.connection import disconnect
 from sklearn.datasets import make_blobs
 
-from ..data.experiment import FileGroup
-from ..data.population import Population
-from ..data.project import Project
-from ..data.setup import Config
-from cytopy.tests import assets
+from cytopy.data.experiment import FileGroup
+from cytopy.data.population import Population
+from cytopy.data.project import Project
+from cytopy.data.setup import Config
+from tests import assets
 
 ASSET_PATH = inspect.getmodule(assets).__path__[0]
 config = Config()

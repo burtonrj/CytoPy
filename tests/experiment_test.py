@@ -1,14 +1,10 @@
-import os
-
 import h5py
-import pandas as pd
 import pytest
 from sklearn.datasets import make_blobs
 
-from cytopy.data.errors import *
 from cytopy.data.experiment import *
-from cytopy.tests import assets
-from cytopy.tests.conftest import create_example_populations
+from tests import assets
+from tests.conftest import create_example_populations
 
 
 def test_check_excel_template():

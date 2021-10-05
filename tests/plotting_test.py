@@ -6,10 +6,10 @@ import seaborn as sns
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.colors import LogNorm
 
-from ..utils import transform
 from .conftest import create_linear_data
 from .conftest import create_lognormal_data
 from cytopy.plotting import FlowPlot
+from cytopy.utils import transform
 
 sns.set(style="white", font_scale=1.2)
 sns.set_style("ticks", {"xtick.major.size": 8, "ytick.major.size": 8})

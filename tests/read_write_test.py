@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from cytopy.data import read_write
-from cytopy.tests import assets
+from tests import assets
 
 
 @pytest.fixture()

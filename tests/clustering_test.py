@@ -3,8 +3,8 @@ import pandas as pd
 import pytest
 from sklearn.cluster import KMeans
 
-from ..clustering import clustering
-from ..data.project import Project
+from cytopy.clustering import clustering
+from cytopy.data.project import Project
 
 
 def test_remove_null_features():

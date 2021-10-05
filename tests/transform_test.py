@@ -7,8 +7,8 @@ import pandas as pd
 import pytest
 from flowutils.transforms import logicle
 
-from ..utils import transform
 from .conftest import create_lognormal_data
+from cytopy.utils import transform
 
 logger = logging.getLogger(__name__)
 

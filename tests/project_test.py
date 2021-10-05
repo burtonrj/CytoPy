@@ -4,7 +4,7 @@ import pytest
 
 from cytopy.data.errors import *
 from cytopy.data.project import Project
-from cytopy.tests import assets
+from tests import assets
 
 
 @pytest.fixture()
