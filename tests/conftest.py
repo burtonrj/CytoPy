@@ -6,6 +6,7 @@ from logging.config import dictConfig
 from typing import List
 from typing import Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
@@ -73,6 +74,14 @@ def setup():
     # Destroy local temp data and disconnect
     logger.info("Destroying test data and disconnecting")
     disconnect(alias="core")
+
+
+def savefig(figure: plt.Figure, filename: str):
+    output_dir = config["test_config"]["figure_output_path"]
+    if not os.path.isdir(output_dir):
+        os.mkdir(output_dir)
+    output_path = os.path.join(output_dir, filename)
+    figure.savefig(output_path, bbox_inches="tight")
 
 
 def add_populations(filegroups: Optional[List[str]] = None):
@@ -190,3 +199,17 @@ def big_blobs():
 def small_blobs():
     x, y = make_blobs(n_samples=1000, n_features=3, random_state=42, centers=3)
     return pd.DataFrame(x, columns=[f"f{i + 1}" for i in range(3)]), y
+
+
+@pytest.fixture
+def small_high_dim_dataframe():
+    data = list()
+    column_names = [f"f{i + 1}" for i in range(10)]
+    for i, k in enumerate([5, 5, 6, 6, 5]):
+        x = pd.DataFrame(
+            make_blobs(n_samples=1000, n_features=10, cluster_std=2.5, random_state=i, centers=k)[0],
+            columns=column_names,
+        )
+        x["sample_id"] = f"sample_{i}"
+        data.append(x)
+    return pd.concat(data).reset_index().rename({"index": "original_index"}, axis=1)

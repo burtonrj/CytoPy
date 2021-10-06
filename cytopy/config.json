@@ -24,5 +24,8 @@
         "propagate": false
       }
     }
+  },
+  "test_config": {
+    "figure_output_path": "/home/ross/CytoPyTest"
   }
 }
