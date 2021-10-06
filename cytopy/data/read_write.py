@@ -138,7 +138,7 @@ def fcs_mappings(path: str) -> list or None:
         List of channel mappings. Will return None if file fails to load.
     """
     try:
-        fo = flowio.FlowData(path)
+        fo = flowio.FlowData(filename_or_handle=path)
     except ValueError as e:
         logger.error(f"Failed to load file {path}; {e}")
         return None
@@ -265,7 +265,7 @@ def read_headers(path: str, s3_bucket: Optional[str] = None) -> List[str]:
         if match_file_ext(path, ".csv"):
             data = read_from_disk(path=path, stop_after_n_rows=3)
         elif match_file_ext(path, ".fcs"):
-            fcs = flowio.FlowData(filename=path)
+            fcs = flowio.FlowData(filename_or_handle=path)
             return [x["PnN"] for _, x in fcs.channels.items()] + ["Index"]
         else:
             data = read_from_disk(path=path)
@@ -290,7 +290,7 @@ def read_from_disk(path: str, **kwargs) -> pl.DataFrame:
         Invalid file extension
     """
     if match_file_ext(path=path, ext=".fcs"):
-        return fcs_to_polars(flowio.FlowData(filename=path))
+        return fcs_to_polars(flowio.FlowData(filename_or_handle=path))
     elif match_file_ext(path, ext=".csv"):
         data = pl.read_csv(path, **kwargs)[pl.col("*").cast(pl.Float64)]
     elif match_file_ext(path, ext=".parquet"):

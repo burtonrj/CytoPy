@@ -1,14 +1,9 @@
 #!/usr/bin.env/python
 # -*- coding: utf-8 -*-
 """
-cytopy supports the following dimension reduction methods: UMAP, tSNE,
-PCA, Kernel PCA, and PHATE. These are implemented through the dim_reduction
-function. This takes a dataframe of single cell events and generates the
-desired number of embeddings. These are returned as a matrix or
-as appended columns to the given dataframe.
+This module houses functionality for performing dimension reduction. The DimensionReduction class provides
+access to tSNE, UMAP, PCA, KernelPCA, and PHATE dimension reduction methods.
 
-If you would like to contribute to cytopy to expand the supported dimension
-reduction methods, please contact us at burtonrj@cardiff.ac.uk
 
 Copyright 2020 Ross Burton
 
