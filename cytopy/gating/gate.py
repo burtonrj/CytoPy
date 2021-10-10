@@ -81,6 +81,8 @@ class Child(mongoengine.EmbeddedDocument):
     """
 
     name = mongoengine.StringField()
+    signature = mongoengine.DictField(required=True)
+
     meta = {"allow_inheritance": True}
 
 
@@ -1045,6 +1047,7 @@ class ThresholdGate(Gate):
             self.add_child(
                 ChildThreshold(
                     name=definition,
+                    signature=df.mean(axis=1).to_dict(),
                     definition=definition,
                     geom=ThresholdGeom(x_threshold=x_threshold, y_threshold=y_threshold),
                 )

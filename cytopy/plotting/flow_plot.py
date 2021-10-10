@@ -49,6 +49,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from fast_histogram import histogram1d
+from fast_histogram import histogram2d
 from KDEpy import FFTKDE
 from matplotlib import patches
 from matplotlib.colors import LogNorm

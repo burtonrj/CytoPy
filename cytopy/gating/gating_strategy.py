@@ -30,18 +30,14 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import math
 import os
 from datetime import datetime
-from itertools import cycle
 from typing import *
 from warnings import warn
 
-import ipywidgets as widgets
 import matplotlib.pyplot as plt
 import mongoengine
 import numpy as np
 import pandas as pd
 from matplotlib import gridspec
-from matplotlib.colors import LogNorm
-from matplotlib.widgets import PolygonSelector
 
 from cytopy.data.errors import *
 from cytopy.data.experiment import Experiment
@@ -245,68 +241,15 @@ class GatingStrategy(mongoengine.Document):
         plot = FlowPlot(**create_plot_kwargs)
         return plot.plot_gate_children(gate=gate, parent=plot_data, **plot_gate_kwargs)
 
-    def add_hyperparameter_grid(self, gate_name: str, params: Dict, cost: Optional[str] = None):
-        """
-        Add a hyperparameter grid to search when applying the given gate to new data.
-        This hyperparameter grid should correspond to valid hyperparameters for the
-        corresponding gate. Invalid parameters will be ignored. Choice of the cost
-        parameter to be minimised is dependent on the type of gate:
-        * ThresholdGate:
-            - "manhattan" (default): optimal parameters are those that result in the population whom's signature
-              is of minimal distance to the original data used to define the gate. The manhattan distance is used
-              as the distance metric.
-            - "euclidean": optimal parameters are those that result in the population whom's signature
-              is of minimal distance to the original data used to define the gate. The euclidean distance is used
-              as the distance metric.
-            - "threshold_dist": optimal parameters are those that result in the threshold
-               whom's distance to the original threshold defined are smallest
-        * PolygonGate & EllipseGate:
-            - "hausdorff" (optional): parameters chosen that minimise the hausdorff distance
-              between the polygon generated from new data and the original polgon gate created
-              when the gate was defined
-            - "manhattan" (default): optimal parameters are those that result in the population whom's signature
-              is of minimal distance to the original data used to define the gate. The manhattan distance is used
-              as the distance metric.
-            - "euclidean": optimal parameters are those that result in the population whom's signature
-              is of minimal distance to the original data used to define the gate. The euclidean distance is used
-              as the distance metric.
-
-        Parameters
-        ----------
-        gate_name: str
-            Gate to define hyperparameter grid for
-        params: dict
-            Grid of hyperparameters to be searched
-        cost: str
-            What to be minimised to choose optimal hyperparameters
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        AssertionError
-            Invalid metric or hyperparameters
-        """
+    def add_hyperparameter_grid(self, gate_name: str, params: Dict):
         assert gate_name in self.list_gates(), f"{gate_name} is not a valid gate"
-        if isinstance(self.get_gate(gate_name), ThresholdGate):
-            cost = cost or "manhattan"
-            valid_metrics = ["manhattan", "threshold_dist", "euclidean"]
-            err = f"For threshold gate 'cost' should either be one of {valid_metrics}"
-            assert cost in valid_metrics, err
-        if isinstance(self.get_gate(gate_name), PolygonGate) or isinstance(self.get_gate(gate_name), EllipseGate):
-            cost = cost or "hausdorff"
-            valid_metrics = ["hausdorff", "manhattan", "euclidean"]
-            err = f"For threshold gate 'cost' should either be one of {valid_metrics}"
-            assert cost in valid_metrics, err
         err = (
             "'params' must be a dictionary with each key corresponding to a valid "
             "hyperparameter and each value a list of parameter values"
         )
         assert isinstance(params, dict), err
         assert all([isinstance(x, list) for x in params.values()]), err
-        self.hyperparameter_search[gate_name] = {"grid": params, "cost": cost}
+        self.hyperparameter_search[gate_name] = {"grid": params}
 
     def add_normalisation(self, gate_name: str, reference: Union[FileGroup, None] = None, **kwargs):
         """
@@ -535,7 +478,6 @@ class GatingStrategy(mongoengine.Document):
             populations = hyperparameter_gate(
                 gate=gate,
                 grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
-                cost=self.hyperparameter_search.get(gate.gate_name).get("cost"),
                 parent=parent_data,
                 verbose=verbose,
             )
