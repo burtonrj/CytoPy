@@ -38,6 +38,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from matplotlib.patches import Ellipse
+from numba import jit
 from scipy import linalg
 from scipy import stats
 from shapely.geometry import Point
@@ -233,6 +234,7 @@ def create_polygon(x: List[float], y: List[float]) -> Polygon:
     return Polygon([(x, y) for x, y in zip(x, y)])
 
 
+@jit(nopython=True)
 def inside_ellipse(
     data: np.array,
     center: tuple,
@@ -288,6 +290,7 @@ def inside_ellipse(
     return in_ellipse
 
 
+@jit(nopython=True)
 def probabilistic_ellipse(covariances: np.ndarray, conf: float):
     """
     Given the covariance matrix of a mixture component, calculate a elliptical shape that

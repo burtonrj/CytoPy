@@ -321,6 +321,7 @@ class FileGroup(mongoengine.Document):
             Population is missing index
         """
         logger.debug(f"Adding new population {population} to {self.primary_id}; {self.id}")
+
         if population.population_name in self.tree.keys():
             err = f"Population with name '{population.population_name}' already exists"
             raise DuplicatePopulationError(err)
@@ -808,68 +809,37 @@ class FileGroup(mongoengine.Document):
         dependencies = [x.name for x in anytree.findall(root, filter_=lambda n: node in n.path)]
         return [p for p in dependencies if p != population]
 
-    def merge_gate_populations(
-        self,
-        left: Union[Population, str],
-        right: Union[Population, str],
-        new_population_name: Optional[str] = None,
-    ) -> None:
+    def merge_populations(self, parent: str, populations: List[str], new_population_name: str) -> Population:
         """
-        Merge two populations present in the current population tree.
-        The merged population will have the combined index of both populations but
-        will not inherit any clusters and will not be associated to any children
-        downstream of either the left or right population. The population will be
-        added to the tree as a descendant of the left populations parent. New
-        population will be added to FileGroup.
+        Merge two or more populations. Merged populations are tagged with the source "merger" and are treated
+        like a "cluster" for the purposes of plotting - when plotted in a 1 dimensional space, they are shown as
+        an overlaid KDE, when plotted in a 2 dimensional space, they are plotted as either an overlaid scatterplot
+        or an estimated gate as an alpha-shape.
 
         Parameters
         ----------
-        left: Population or str
-        right: Population or str
-        new_population_name: str, optional
-
-        Returns
-        -------
-        None
-        """
-        logger.info(f"Merging {left} and {right} populations for {self.primary_id}; {self.id}")
-        if isinstance(left, str):
-            left = self.get_population(left)
-        if isinstance(right, str):
-            right = self.get_population(right)
-        self.add_population(merge_gate_populations(left=left, right=right, new_population_name=new_population_name))
-
-    def merge_non_geom_populations(self, populations: List[Union[str, Population]], new_population_name: str) -> None:
-        """
-        Merge multiple populations that are sourced either for classification or clustering methods.
-        (Not supported for populations from autonomous gates)
-
-        Parameters
-        ----------
-        populations: list
-            List of populations to merge
+        parent: str
+        populations: List[Population]
         new_population_name: str
-            Name of the new population
 
         Returns
         -------
-        None
-
-        Raises
-        ------
-        ValueError
-            If populations is invalid
+        Population
         """
-        logger.info(f"Merging {populations} populations for {self.primary_id}; {self.id}")
-        pops = list()
-        for p in populations:
-            if isinstance(p, str):
-                pops.append(self.get_population(p))
-            elif isinstance(p, Population):
-                pops.append(p)
-            else:
-                raise ValueError("populations should be a list of strings or list of Population objects")
-        self.add_population(merge_non_geom_populations(populations=pops, new_population_name=new_population_name))
+        populations = [self.get_population(population_name=p) for p in populations]
+
+        for pop in populations:
+            if parent in self.list_downstream_populations(population=pop.population_name):
+                raise ValueError(
+                    f"Cannot merge {pop.population_name} - parent {parent} is downstream from " f"this population"
+                )
+
+        new_idx = np.unique(np.concatenate([pop.index for pop in populations], axis=0), axis=0)
+        new_population = Population(
+            population_name=new_population_name, n=len(new_idx), parent=parent, source="merger"
+        )
+        new_population.index = new_idx
+        self.add_population(population=new_population)
 
     def subtract_populations(
         self,
@@ -896,8 +866,6 @@ class FileGroup(mongoengine.Document):
 
         Raises
         ------
-        ValueError
-            If left and right population are not sourced from root or Gate
         KeyError
             If left and right population do not share the same parent or the right population
             is not downstream of the left population
@@ -906,9 +874,6 @@ class FileGroup(mongoengine.Document):
         same_parent = left.parent == right.parent
         downstream = right.population_name in list(self.list_downstream_populations(left.population_name))
 
-        if left.source not in ["root", "gate"] or right.source not in ["root", "gate"]:
-            logger.error("Population source must be either 'root' or 'gate'")
-            raise ValueError("Population source must be either 'root' or 'gate'")
         if not same_parent or not downstream:
             logger.error(
                 "Right population should share the same parent as the "
@@ -921,30 +886,10 @@ class FileGroup(mongoengine.Document):
 
         new_population_name = new_population_name or f"subtract_{left.population_name}_{right.population_name}"
         new_idx = np.setdiff1d(np.array(left.index), np.array(right.index))
-        x, y = left.geom.x, left.geom.y
-        transform_x, transform_y = left.geom.transform_x, left.geom.transform_y
-        parent_data = self.load_population_df(population=left.parent, transform={x: transform_x, y: transform_y})
-        envelope = create_envelope(
-            x_values=parent_data.filter(pl.col("Index").is_in(new_idx))[x].to_numpy(),
-            y_values=parent_data.filter(pl.col("Index").is_in(new_idx))[y].to_numpy(),
-        )
-        x_values, y_values = envelope.exterior.xy[0], envelope.exterior.xy[1]
-        new_geom = PolygonGeom(
-            x=x,
-            y=y,
-            transform_x=transform_x,
-            transform_y=transform_y,
-            x_values=x_values.tolist(),
-            y_values=y_values.tolist(),
-        )
         new_population = Population(
-            population_name=new_population_name,
-            parent=left.parent,
-            n=len(new_idx),
-            geom=new_geom,
-            warnings=left.warnings + right.warnings + ["SUBTRACTED POPULATION"],
+            population_name=new_population_name, parent=left.parent, n=len(new_idx), source="subtraction"
         )
-        new_population.index = new_idx.tolist()
+        new_population.index = new_idx
         self.add_population(population=new_population)
 
     def population_stats(self, population: str, warn_missing: bool = False) -> Dict:

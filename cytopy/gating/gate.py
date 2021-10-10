@@ -53,7 +53,6 @@ from sklearn.linear_model import HuberRegressor
 from sklearn.preprocessing import PowerTransformer
 
 from cytopy.data.errors import GateError
-from cytopy.data.population import merge_multiple_gate_populations
 from cytopy.data.population import Population
 from cytopy.gating.geometry import create_envelope
 from cytopy.gating.geometry import create_polygon
@@ -82,7 +81,6 @@ class Child(mongoengine.EmbeddedDocument):
     """
 
     name = mongoengine.StringField()
-    signature = mongoengine.DictField()
     meta = {"allow_inheritance": True}
 
 
@@ -100,9 +98,6 @@ class ChildThreshold(Child):
         Definition of population e.g "+" or "-" for 1 dimensional gate or "++" etc for 2 dimensional gate
     geom: ThresholdGeom
         Geometric definition for this child population
-    signature: dict
-        Average of a population feature space (median of each channel); used to match
-        children to newly identified populations for annotating
     """
 
     definition = mongoengine.StringField()
@@ -138,9 +133,6 @@ class ChildPolygon(Child):
         Name of the child
     geom: ChildPolygon
         Geometric definition for this child population
-    signature: dict
-        Average of a population feature space (median of each channel); used to match
-        children to newly identified populations for annotating
     """
 
     geom = mongoengine.EmbeddedDocumentField(PolygonGeom)
@@ -159,13 +151,13 @@ class Gate(mongoengine.Document):
     gate_name: str (required)
         Name of the gate
     parent: str (required)
-        Parent population that this gate is appdied to
+        Parent population that this gate is applied to
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
-        is appdied to
+        is applied to
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
-        is appdied to
+        is applied to
     transform_x: str, optional
         Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
     transform_y: str, optional
@@ -175,13 +167,13 @@ class Gate(mongoengine.Document):
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
     sampling: dict (optional)
-         Options for downsampling data prior to appdication of gate. Should contain a
+         Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
          are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
-        appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
+        appdying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     ctrl_x: str (optional)
@@ -282,7 +274,7 @@ class Gate(mongoengine.Document):
 
     def yeo_johnson_inverse(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Inverse any appdied Yeo-Johnson transformation to data to original space
+        Inverse any applied Yeo-Johnson transformation to data to original space
 
         Parameters
         ----------
@@ -339,7 +331,7 @@ class Gate(mongoengine.Document):
 
     def transform_info(self) -> (Dict, Dict):
         """
-        Returns two dictionaries describing the transforms and transform settings appdied to each variable
+        Returns two dictionaries describing the transforms and transform settings applied to each variable
         this gate acts upon
 
         Returns
@@ -517,15 +509,15 @@ class ThresholdGate(Gate):
 
     The ThresholdGate subsets data based on the properties of the estimated probability
     density function of the underlying data. For each axis, kernel density estimation
-    (KDEpy.FFTKDE) is used to estimate the PDF and a straight line "threshold" appdied
+    (KDEpy.FFTKDE) is used to estimate the PDF and a straight line "threshold" applied
     to the region of minimum density to separate populations.
     This is achieved using a peak finding algorithm and a smoothing procedure, until either:
         * Two predominant "peaks" are found and the threshold is taken as the local minima
           between there peaks
-        * A single peak is detected and the threshold is appdied as either the quantile
+        * A single peak is detected and the threshold is applied as either the quantile
           given in method_kwargs or the inflection point on the descending curve.
 
-    Alternatively the "method" can be "manual" for a static gate to be appdied; user should
+    Alternatively the "method" can be "manual" for a static gate to be applied; user should
     provide x_threshold and y_threshold (if two-dimensional) to "method_kwargs", or "method"
     can be "quantile", where the threshold will be drawn at the given quantile, defined by
     "q" in "method_kwargs".
@@ -545,25 +537,25 @@ class ThresholdGate(Gate):
           window is kept.
         * inflection_point_kwargs - dictionary; see cytopy.data.gate.find_inflection_point
         * smoothed_peak_finding_kwargs - dictionary; see cytopy.data.gate.smoothed_peak_finding
-        * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be appdied
+        * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be applied
         prior to fitting, forcing data to resemble a 'normal' distribution. Transform is inversed prior to
         saving of results.
 
     ThresholdGate supports control gating, whereby thresholds are fitted to control data
-    and then appdied to primary data.
+    and then applied to primary data.
 
     Attributes
     -----------
     gate_name: str (required)
         Name of the gate
     parent: str (required)
-        Parent population that this gate is appdied to
+        Parent population that this gate is applied to
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
-        is appdied to
+        is applied to
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
-        is appdied to
+        is applied to
     transform_x: str, optional
         Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
     transform_y: str, optional
@@ -573,13 +565,13 @@ class ThresholdGate(Gate):
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
     sampling: dict (optional)
-         Options for downsampling data prior to appdication of gate. Should contain a
+         Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
          are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
-        appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
+        appdying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     ctrl_x: str (optional)
@@ -647,7 +639,7 @@ class ThresholdGate(Gate):
         child.geom.transform_y_kwargs = self.transform_y_kwargs
         self.children.append(child)
 
-    def _dupdicate_children(self) -> None:
+    def _duplicate_children(self) -> None:
         """
         Loop through the children and merge any with the same name.
 
@@ -684,7 +676,7 @@ class ThresholdGate(Gate):
         """
         for c in self.children:
             c.name = labels.get(c.name)
-        self._dupdicate_children()
+        self._duplicate_children()
 
     def _match_to_children(self, new_populations: List[Population]) -> List[Population]:
         """
@@ -706,7 +698,17 @@ class ThresholdGate(Gate):
             if len(matching_populations) == 0:
                 continue
             elif len(matching_populations) > 1:
-                pop = merge_multiple_gate_populations(matching_populations, new_population_name=c.name)
+                idx = np.unique(np.concatenate([pop.index for pop in matching_populations], axis=0), axis=0)
+                geom = matching_populations[0].geom
+                pop = Population(
+                    population_name=c.name,
+                    definition=",".join([pop.definition for pop in matching_populations]),
+                    parent=self.parent,
+                    n=len(idx),
+                    source="gate",
+                    geom=geom,
+                )
+                pop.index = idx
             else:
                 pop = matching_populations[0]
                 pop.population_name = c.name
@@ -974,7 +976,7 @@ class ThresholdGate(Gate):
 
     def yeo_johnson_inverse(self, thresholds: List[float]) -> Union[Tuple[float, float], Tuple[float, None]]:
         """
-        Inverse any appdied Yeo-Johnson transformation of resulting thresholds
+        Inverse any applied Yeo-Johnson transformation of resulting thresholds
 
         Parameters
         ----------
@@ -1004,7 +1006,7 @@ class ThresholdGate(Gate):
         data: Pandas.DataFrame
             Population data to fit threshold
         ctrl_data: Pandas.DataFrame, optional
-            If provided, thresholds will be calculated using ctrl_data and then appdied to data
+            If provided, thresholds will be calculated using ctrl_data and then applied to data
         Returns
         -------
         None
@@ -1060,7 +1062,7 @@ class ThresholdGate(Gate):
         data: Pandas.DataFrame
             Population data to fit threshold to
         ctrl_data: Pandas.DataFrame, optional
-            If provided, thresholds will be calculated using ctrl_data and then appdied to data
+            If provided, thresholds will be calculated using ctrl_data and then applied to data
 
         Returns
         -------
@@ -1096,9 +1098,9 @@ class ThresholdGate(Gate):
     def predict(self, data: pd.DataFrame) -> List[float]:
         """
         Using existing children associated to this gate, the previously calculated thresholds of
-        these children will be appdied to the given data and then Population objects created and
+        these children will be applied to the given data and then Population objects created and
         labelled to match the children of this gate. NOTE: the data will not be fitted and thresholds
-        appdied will be STATIC not data driven. For data driven gates call `fit_predict` method.
+        applied will be STATIC not data driven. For data driven gates call `fit_predict` method.
 
         Parameters
         ----------
@@ -1138,7 +1140,7 @@ class ThresholdGate(Gate):
         self, data: Dict[str, pd.DataFrame], x_threshold: float, y_threshold: Optional[float]
     ) -> List[Population]:
         """
-        Generate populations from a standard dictionary of dataframes that have had thresholds appdied.
+        Generate populations from a standard dictionary of dataframes that have had thresholds applied.
 
         Parameters
         ----------
@@ -1159,7 +1161,6 @@ class ThresholdGate(Gate):
                 parent=self.parent,
                 n=df.shape[0],
                 source="gate",
-                signature=df.mean().to_dict(),
                 geom=ThresholdGeom(
                     x=self.x,
                     y=self.y,
@@ -1194,7 +1195,7 @@ class PolygonGate(Gate):
 
     Additional parameters that can be provided in method_kwargs which are universal for all
     methods are:
-    * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be appdied
+    * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be applied
     prior to fitting, forcing data to resemble a 'normal' distribution. Transform is inversed prior to
     saving of results.
     * envelope_alpha - float value or None (default=0.0); alpha value for generating envelope that encapsulates identified
@@ -1202,7 +1203,7 @@ class PolygonGate(Gate):
     Should not be set too high (recommended not to be above 3.0). If set to None, will try to choose the
     optimal alpha, although this is not recommended as it is computationally expensive.
 
-    Alternatively the "method" can be "manual" for a static gate to be appdied; user should
+    Alternatively the "method" can be "manual" for a static gate to be applied; user should
     provide x_values and y_values (if two-dimensional) to "method_kwargs" as two arrays,
     this will be interpreted as the x and y coordinates of the polygon to fit to the data.
 
@@ -1213,13 +1214,13 @@ class PolygonGate(Gate):
     gate_name: str (required)
         Name of the gate
     parent: str (required)
-        Parent population that this gate is appdied to
+        Parent population that this gate is applied to
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
-        is appdied to
+        is applied to
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
-        is appdied to
+        is applied to
     transform_x: str, optional
         Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
     transform_y: str, optional
@@ -1229,13 +1230,13 @@ class PolygonGate(Gate):
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
     sampling: dict (optional)
-         Options for downsampling data prior to appdication of gate. Should contain a
+         Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
          are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
-        appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
+        appdying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     method: str (required)
@@ -1287,7 +1288,6 @@ class PolygonGate(Gate):
                 source="gate",
                 parent=self.parent,
                 n=pop_df.shape[0],
-                signature=pop_df.mean().to_dict(),
                 geom=geom,
             )
             pop.index = pop_df.index.tolist()
@@ -1318,7 +1318,7 @@ class PolygonGate(Gate):
             If dupdicate labels are provided
         """
         if len(set(labels.values())) != len(labels.values()):
-            raise GateError("Dupdicate labels provided. Child merging not available for polygon gates")
+            raise GateError("Duplicate labels provided. Child merging not available for polygon gates")
         if drop:
             self.children = [c for c in self.children if c.name in labels.keys()]
         for c in self.children:
@@ -1433,7 +1433,7 @@ class PolygonGate(Gate):
         """
         if self.method == "manual":
             return [self._manual()]
-        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
+        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha"]}
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
 
@@ -1534,9 +1534,9 @@ class PolygonGate(Gate):
     def predict(self, data: pd.DataFrame) -> List[Population]:
         """
         Using existing children associated to this gate, the previously calculated polygons of
-        these children will be appdied to the given data and then Population objects created and
+        these children will be applied to the given data and then Population objects created and
         labelled to match the children of this gate. NOTE: the data will not be fitted and polygons
-        appdied will be STATIC not data driven. For data driven gates call `fit_predict` method.
+        applied will be STATIC not data driven. For data driven gates call `fit_predict` method.
 
         Parameters
         ----------
@@ -1578,13 +1578,9 @@ class EllipseGate(PolygonGate):
 
     Additional parameters that can be provided in method_kwargs which are universal for all
     methods are:
-    * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be appdied
+    * yeo_johnson - boolean value (default=False); will invoke Yeo-Johnson transform to be applied
     prior to fitting, forcing data to resemble a 'normal' distribution. Transform is inversed prior to
     saving of results.
-    * probabilistic_ellipse - boolean value (default=False); if False, "gate" geometry is identical to
-    PolygonGate and the output of the mixture model is interpreted like clustering. If True, then the
-    "gate" geometry is an ellipse defined by the covariant matrix of the mixture model. If yeo_johnson
-    is True, then probabilistic_ellipse is always set to False.
     * envelope_alpha - float value or None (default=0.0); alpha value for generating envelope that encapsulates identified
     clusters, generating the Polygon we refer to as a 'gate'. By default this value is 0, generating a convex hull.
     Should not be set too high (recommended not to be above 3.0). If set to None, will try to choose the
@@ -1599,13 +1595,13 @@ class EllipseGate(PolygonGate):
     gate_name: str (required)
         Name of the gate
     parent: str (required)
-        Parent population that this gate is appdied to
+        Parent population that this gate is applied to
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
-        is appdied to
+        is applied to
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
-        is appdied to
+        is applied to
     transform_x: str, optional
         Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
     transform_y: str, optional
@@ -1615,20 +1611,20 @@ class EllipseGate(PolygonGate):
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
     sampling: dict (optional)
-         Options for downsampling data prior to appdication of gate. Should contain a
+         Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
          are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
     dim_reduction: dict (optional)
         Experimental feature. Allows for dimension reduction to be performed prior to
-        appdying gate. Gate will be appdied to the resulting embeddings. Provide a dictionary
+        applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
         with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
         Additional keyword arguments should be provided in this dictionary.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
         to the name of an existing class in Scikit-Learn mixture module..
-        If you have a method that follows the Scikit-Learn tempdate but isn't currently present
-        in cytopy and you would like it to be, pdease contribute to the repository on GitHub
+        If you have a method that follows the Scikit-Learn template but isn't currently present
+        in cytopy and you would like it to be, please contribute to the repository on GitHub
         or contact burtonrj@cardiff.ac.uk
     method_kwargs: dict
         Keyword arguments for initiation of the above method.
@@ -1715,13 +1711,7 @@ class EllipseGate(PolygonGate):
         list
             List of Shapely polygon's
         """
-        if self._yeo_johnson is not None or self.method_kwargs.get("probabilistic_ellipse", False) is False:
-            return super()._fit(data=data)
-        params = {
-            k: v
-            for k, v in self.method_kwargs.items()
-            if k not in ["yeo_johnson", "envelope_alpha", "conf", "probabilistic_ellipse"]
-        }
+        params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
         self.model = globals()[self.method](**params)
         self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
@@ -1751,13 +1741,13 @@ class HuberGate(PolygonGate):
     gate_name: str (required)
         Name of the gate
     parent: str (required)
-        Parent population that this gate is appdied to
+        Parent population that this gate is applied to
     x: str (required)
         Name of the x-axis variable forming the one/two dimensional space this gate
-        is appdied to
+        is applied to
     y: str (optional)
         Name of the y-axis variable forming the two dimensional space this gate
-        is appdied to
+        is applied to
     transform_x: str, optional
         Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
     transform_y: str, optional
@@ -1767,7 +1757,7 @@ class HuberGate(PolygonGate):
     transform_y_kwargs: dict, optional
         Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
     sampling: dict (optional)
-         Options for downsampling data prior to appdication of gate. Should contain a
+         Options for downsampling data prior to application of gate. Should contain a
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
          are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
@@ -1845,11 +1835,9 @@ def merge_children(children: List) -> Union[Child, ChildThreshold, ChildPolygon]
         return ChildThreshold(name=children[0].name, definition=definition, geom=children[0].geom)
     if isinstance(children[0], ChildPolygon):
         merged_poly = cascaded_union([c.geom.shape for c in children])
-        new_signature = pd.DataFrame([c.signature for c in children]).mean().to_dict()
         x, y = merged_poly.exterior.xy[0], merged_poly.exterior.xy[1]
         return ChildPolygon(
             name=children[0].name,
-            signature=new_signature,
             geom=PolygonGeom(
                 x=children[0].geom.x,
                 y=children[0].geom.y,
