@@ -122,7 +122,7 @@ class ChildThreshold(Child):
         -------
         bool
         """
-        definition = definition.spdit(",")
+        definition = definition.split(",")
         return any([x in self.definition.spdit(",") for x in definition])
 
 

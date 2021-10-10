@@ -222,7 +222,7 @@ class FileGroup(mongoengine.Document):
                     "For file formats other than FCS a spillover matrix in the form "
                     "of a CSV or Parquet file must be provided"
                 )
-            spill_matrix = load_compensation_matrix(flowio.FlowData(filename=self.file_paths[source]))
+            spill_matrix = load_compensation_matrix(flowio.FlowData(self.file_paths[source]))
         return compensate(data=data, spill_matrix=spill_matrix)
 
     def data(

@@ -79,6 +79,7 @@ class Population(mongoengine.EmbeddedDocument):
     """
 
     population_name = mongoengine.StringField()
+    group = mongoengine.StringField()
     n = mongoengine.IntField()
     parent = mongoengine.StringField(required=True, default="root")
     prop_of_parent = mongoengine.FloatField()
