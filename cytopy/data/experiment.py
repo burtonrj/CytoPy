@@ -40,8 +40,8 @@ from typing import Union
 
 import matplotlib.pyplot as plt
 import mongoengine
+import numpy as np
 import pandas as pd
-import polars as pl
 
 from ..feedback import progress_bar
 from ..utils.sampling import sample_dataframe
@@ -245,6 +245,9 @@ class Experiment(mongoengine.Document):
         if valid_only:
             return [f.primary_id for f in self.fcs_files if f.valid]
         return [f.primary_id for f in self.fcs_files]
+
+    def random_filegroup(self):
+        return np.random.choice(self.list_samples())
 
     def remove_sample(self, sample_id: str):
         """

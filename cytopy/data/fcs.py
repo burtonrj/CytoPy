@@ -54,13 +54,9 @@ from ..utils.sampling import sample_dataframe
 from ..utils.transform import apply_transform
 from ..utils.transform import apply_transform_map
 from ..utils.transform import Transformer
-from ..utils.tree import construct_tree
 from .errors import DuplicatePopulationError
 from .errors import MissingControlError
 from .errors import MissingPopulationError
-from .population import merge_gate_populations
-from .population import merge_non_geom_populations
-from .population import PolygonGeom
 from .population import Population
 from .read_write import load_compensation_matrix
 from .read_write import polars_to_pandas
@@ -68,7 +64,7 @@ from .read_write import read_from_disk
 from .read_write import read_from_remote
 from .setup import Config
 from .subject import Subject
-from cytopy.gating.geometry import create_envelope
+from cytopy.data.tree import construct_tree
 
 logger = logging.getLogger(__name__)
 CONFIG = Config()

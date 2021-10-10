@@ -42,14 +42,14 @@ from matplotlib import gridspec
 from cytopy.data.errors import *
 from cytopy.data.experiment import Experiment
 from cytopy.data.fcs import FileGroup
+from cytopy.data.population import PolygonGeom
+from cytopy.data.population import ThresholdGeom
 from cytopy.feedback import progress_bar
 from cytopy.feedback import vprint
 from cytopy.gating.gate import EllipseGate
 from cytopy.gating.gate import Gate
 from cytopy.gating.gate import PolygonGate
-from cytopy.gating.gate import PolygonGeom
 from cytopy.gating.gate import ThresholdGate
-from cytopy.gating.gate import ThresholdGeom
 from cytopy.gating.gate import update_polygon
 from cytopy.gating.gate import update_threshold
 from cytopy.plotting.flow_plot import FlowPlot

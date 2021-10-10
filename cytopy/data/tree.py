@@ -30,7 +30,7 @@ from typing import List
 
 import anytree
 
-from ..data.population import Population
+from .population import Population
 
 
 def _add_leaf(tree: Dict[str, anytree.Node], population: Population):

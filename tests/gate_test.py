@@ -4,6 +4,8 @@ from KDEpy import FFTKDE
 from scipy.spatial.distance import euclidean
 from sklearn.datasets import make_blobs
 
+from cytopy.data.population import PolygonGeom
+from cytopy.data.population import ThresholdGeom
 from cytopy.gating import gate
 from cytopy.gating.geometry import *
 

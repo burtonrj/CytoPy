@@ -4,14 +4,14 @@ from shapely.geometry import Polygon
 from sklearn.datasets import make_blobs
 from sklearn.mixture import GaussianMixture
 
+from cytopy.data.population import create_polygon
+from cytopy.data.population import PolygonGeom
+from cytopy.data.population import PopulationGeometry
+from cytopy.data.population import ThresholdGeom
 from cytopy.gating.geometry import create_envelope
-from cytopy.gating.geometry import create_polygon
 from cytopy.gating.geometry import inside_ellipse
 from cytopy.gating.geometry import polygon_overlap
-from cytopy.gating.geometry import PolygonGeom
-from cytopy.gating.geometry import PopulationGeometry
 from cytopy.gating.geometry import probabilistic_ellipse
-from cytopy.gating.geometry import ThresholdGeom
 
 
 def test_create_geom():

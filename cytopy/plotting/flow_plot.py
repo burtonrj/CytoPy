@@ -49,20 +49,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from fast_histogram import histogram1d
-from fast_histogram import histogram2d
 from KDEpy import FFTKDE
 from matplotlib import patches
 from matplotlib.colors import LogNorm
 from scipy.spatial import ConvexHull
 
+from cytopy.data.population import PolygonGeom
+from cytopy.data.population import ThresholdGeom
 from cytopy.gating.gate import EllipseGate
 from cytopy.gating.gate import Gate
 from cytopy.gating.gate import PolygonGate
 from cytopy.gating.gate import Population
 from cytopy.gating.gate import ThresholdGate
-from cytopy.gating.geometry import PolygonGeom
-from cytopy.gating.geometry import ThresholdGeom
 from cytopy.utils import transform
 
 __author__ = "Ross Burton"

@@ -53,15 +53,15 @@ from sklearn.linear_model import HuberRegressor
 from sklearn.preprocessing import PowerTransformer
 
 from cytopy.data.errors import GateError
+from cytopy.data.population import create_polygon
+from cytopy.data.population import PolygonGeom
 from cytopy.data.population import Population
+from cytopy.data.population import ThresholdGeom
 from cytopy.gating.geometry import create_envelope
-from cytopy.gating.geometry import create_polygon
 from cytopy.gating.geometry import ellipse_to_polygon
 from cytopy.gating.geometry import GeometryError
 from cytopy.gating.geometry import inside_polygon
-from cytopy.gating.geometry import PolygonGeom
 from cytopy.gating.geometry import probabilistic_ellipse
-from cytopy.gating.geometry import ThresholdGeom
 from cytopy.utils.build_models import build_sklearn_model
 from cytopy.utils.dim_reduction import DimensionReduction
 from cytopy.utils.sampling import density_dependent_downsampling

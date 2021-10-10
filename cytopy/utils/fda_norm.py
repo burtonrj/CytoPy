@@ -38,6 +38,7 @@ import numpy as np
 import pandas as pd
 from detecta import detect_peaks
 from KDEpy import FFTKDE
+from numba import jit
 from skfda.preprocessing.registration import landmark_registration_warping
 from skfda.preprocessing.registration import landmark_shift_deltas
 from skfda.representation.grid import FDataGrid
@@ -63,6 +64,7 @@ def peaks(y: np.ndarray, x: np.ndarray, **kwargs):
     return [x[i] for i in p]
 
 
+@jit(nopython=True)
 def filter_by_closest_centroid(x: np.ndarray, labels: np.ndarray, centroid: float):
     """
     Filter peaks ('x') to keep only those
@@ -119,6 +121,7 @@ def cluster_landmarks(p: np.ndarray, plabels: np.ndarray):
     return km_labels, centroids
 
 
+@jit(nopython=True)
 def zero_entropy_clusters(km_labels: np.ndarray, plabels: np.ndarray, centroids: np.ndarray):
     """
     Determine which clusters (if any) have zero entropy (only contains
@@ -146,6 +149,7 @@ def zero_entropy_clusters(km_labels: np.ndarray, plabels: np.ndarray, centroids:
     return zero_entropy
 
 
+@jit(nopython=True)
 def unique_clusters_filter_nearest_centroid(
     p: np.ndarray, plabels: np.ndarray, km_labels: np.ndarray, centroids: np.ndarray
 ):
