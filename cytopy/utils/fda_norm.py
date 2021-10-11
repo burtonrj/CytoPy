@@ -64,7 +64,7 @@ def peaks(y: np.ndarray, x: np.ndarray, **kwargs):
     return [x[i] for i in p]
 
 
-@jit(nopython=True)
+@jit()
 def filter_by_closest_centroid(x: np.ndarray, labels: np.ndarray, centroid: float):
     """
     Filter peaks ('x') to keep only those
@@ -120,7 +120,7 @@ def cluster_landmarks(p: np.ndarray, plabels: np.ndarray):
     return km_labels, centroids
 
 
-@jit(nopython=True)
+@jit()
 def zero_entropy_clusters(km_labels: np.ndarray, plabels: np.ndarray, centroids: np.ndarray):
     """
     Determine which clusters (if any) have zero entropy (only contains
@@ -148,7 +148,7 @@ def zero_entropy_clusters(km_labels: np.ndarray, plabels: np.ndarray, centroids:
     return zero_entropy
 
 
-@jit(nopython=True)
+@jit()
 def unique_clusters_filter_nearest_centroid(
     p: np.ndarray, plabels: np.ndarray, km_labels: np.ndarray, centroids: np.ndarray
 ):
