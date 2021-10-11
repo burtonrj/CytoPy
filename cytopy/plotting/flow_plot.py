@@ -46,14 +46,15 @@ from warnings import warn
 
 import matplotlib
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 import seaborn as sns
 from KDEpy import FFTKDE
 from matplotlib import patches
 from matplotlib.colors import LogNorm
 from scipy.spatial import ConvexHull
 
+from .asinh_transform import *
+from .hlog_transform import *
+from .logicle_transform import *
 from cytopy.data.population import PolygonGeom
 from cytopy.data.population import ThresholdGeom
 from cytopy.gating.gate import EllipseGate
@@ -64,7 +65,7 @@ from cytopy.gating.gate import ThresholdGate
 from cytopy.utils import transform
 
 __author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
+__copyright__ = "Copyright 2020"
 __credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
 __license__ = "MIT"
 __version__ = "2.0.0"

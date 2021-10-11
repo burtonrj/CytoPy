@@ -626,12 +626,10 @@ class GatingStrategy(mongoengine.Document):
                     hyperparam_search=hyperparam_search,
                 )
                 self.save(save_strategy=False, save_filegroup=True)
-                logger.info(f"{s} - gated successfully!")
                 if plots_path is not None:
                     fig = self.plot_all_gates()
                     fig.savefig(f"{plots_path}/{s}.png", facecolor="white", dpi=100)
                     plt.close(fig)
-                    logger.info(f"{s} - gates plotted to {plots_path}")
             except DuplicatePopulationError as e:
                 logger.error(f"{s} - {str(e)}")
             except InsufficientEventsError as e:

@@ -37,7 +37,7 @@ from cytopy.utils.transform import AsinhTransformer
 class AsinhScale(mscale.ScaleBase):
     name = "asinh"
 
-    def __init__(self, axis, t: int = 262144, m: float = 4.5, a: float = 0, **kwargs):
+    def __init__(self, axis, t: int = 262144, m: float = 4.5, a: float = 0.5, **kwargs):
         super().__init__(axis=axis)
         self._formatting_kwargs = kwargs or {}
         self._scaler = AsinhTransformer(m=m, t=t, a=a)

@@ -159,7 +159,6 @@ def inside_ellipse(
     return in_ellipse
 
 
-@jit(nopython=True)
 def probabilistic_ellipse(covariances: np.ndarray, conf: float):
     """
     Given the covariance matrix of a mixture component, calculate a elliptical shape that

@@ -83,7 +83,6 @@ def filter_by_closest_centroid(x: np.ndarray, labels: np.ndarray, centroid: floa
     float, float
         Peaks closest to centroid in cluster 1, Peaks closest to centroid in cluster 2
     """
-    x, labels = np.array(x), np.array(labels)
     y1 = x[np.where(labels == 0)]
     y2 = x[np.where(labels == 1)]
     if len(y1) > 1:

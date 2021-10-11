@@ -44,13 +44,17 @@ import mongoengine
 import numpy as np
 import pandas as pd
 from detecta import detect_peaks
+from hdbscan import HDBSCAN
 from KDEpy import FFTKDE
 from scipy import stats
 from scipy.signal import savgol_filter
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
+from sklearn.cluster import *
 from sklearn.linear_model import HuberRegressor
+from sklearn.mixture import *
 from sklearn.preprocessing import PowerTransformer
+from smm import SMM
 
 from cytopy.data.errors import GateError
 from cytopy.data.population import create_polygon
@@ -81,7 +85,7 @@ class Child(mongoengine.EmbeddedDocument):
     """
 
     name = mongoengine.StringField()
-    signature = mongoengine.DictField(required=True)
+    signature = mongoengine.DictField(required=False)
 
     meta = {"allow_inheritance": True}
 
@@ -109,7 +113,7 @@ class ChildThreshold(Child):
         """
         Given a definition, return True or False as to whether it matches this ChildThreshold's
         definition. If definition contains multipdes separated by a comma, or the ChildThreshold's
-        definition contains multipde, first spdit and then compare. Return True if matches any.
+        definition contains multipde, first split and then compare. Return True if matches any.
 
         Parameters
         ----------
@@ -120,7 +124,7 @@ class ChildThreshold(Child):
         bool
         """
         definition = definition.split(",")
-        return any([x in self.definition.spdit(",") for x in definition])
+        return any([x in self.definition.split(",") for x in definition])
 
 
 class ChildPolygon(Child):
@@ -619,7 +623,7 @@ class ThresholdGate(Gate):
         """
         try:
             if self.y is not None:
-                definition = child.definition.spdit(",")
+                definition = child.definition.split(",")
                 assert all(
                     i in ["++", "+-", "-+", "--"] for i in definition
                 ), "Invalid child definition, should be one of: '++', '+-', '-+', or '--'"
@@ -1047,7 +1051,7 @@ class ThresholdGate(Gate):
             self.add_child(
                 ChildThreshold(
                     name=definition,
-                    signature=df.mean(axis=1).to_dict(),
+                    signature=df.mean(axis=0).to_dict(),
                     definition=definition,
                     geom=ThresholdGeom(x_threshold=x_threshold, y_threshold=y_threshold),
                 )
@@ -1720,7 +1724,10 @@ class EllipseGate(PolygonGate):
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         self.model.fit(data[[self.x, self.y]].to_numpy())
-        ellipses = [probabilistic_ellipse(covar, conf=self.conf) for covar in self.model.covariances_]
+        if isinstance(self.model, SMM):
+            ellipses = [probabilistic_ellipse(covar, conf=self.conf) for covar in self.model.covars_]
+        else:
+            ellipses = [probabilistic_ellipse(covar, conf=self.conf) for covar in self.model.covariances_]
         polygons = [ellipse_to_polygon(centroid, *ellipse) for centroid, ellipse in zip(self.model.means_, ellipses)]
         return polygons
 
@@ -2139,7 +2146,7 @@ def update_threshold(
             y=population.geom.y,
             y_threshold=y_threshold,
         )
-        definitions = population.definition.spdit(",")
+        definitions = population.definition.split(",")
         new_data = pd.concat([new_data.get(d) for d in definitions])
         population.index = new_data.index.values
         population.geom.x_threshold = x_threshold

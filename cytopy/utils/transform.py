@@ -241,13 +241,13 @@ class AsinhTransformer(Transformer):
     ----------
     m: float (default=4.5)
         Number of decades the true logarithmic scale approaches at the high end of the scale
-    a: float (default=0)
+    a: float (default=0.5)
         Additional number of negative decades
     t: int (default=262144)
         Top of the linear scale
     """
 
-    def __init__(self, m: float = 4.5, a: float = 0.0, t: int = 262144):
+    def __init__(self, m: float = 4.5, a: float = 0.5, t: int = 262144):
         super().__init__(
             transform_function=asinh_transformed_series,
             inverse_function=inverse_asinh_transformed_series,

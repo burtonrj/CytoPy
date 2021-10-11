@@ -248,7 +248,8 @@ def fcs_to_polars(fcs: flowio.FlowData) -> pl.DataFrame:
     ValueError
         Incorrect number of columns provided
     """
-    columns = [x["PnN"] for _, x in fcs.channels.items()]
+    channels = {int(k): v["PnN"] for k, v in fcs.channels.items()}
+    columns = [x[1] for x in sorted(channels.items())]
     data = pl.DataFrame(np.reshape(np.array(fcs.events, dtype=np.float32), (-1, fcs.channel_count)), columns=columns)
     data = data[pl.col("*").cast(pl.Float64)]
     data["Index"] = np.arange(0, data.shape[0], dtype=np.int32)
