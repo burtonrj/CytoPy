@@ -46,15 +46,15 @@ from cytopy.data.population import PolygonGeom
 from cytopy.data.population import ThresholdGeom
 from cytopy.feedback import progress_bar
 from cytopy.feedback import vprint
+from cytopy.gating.fda_norm import LandmarkReg
 from cytopy.gating.gate import EllipseGate
 from cytopy.gating.gate import Gate
 from cytopy.gating.gate import PolygonGate
 from cytopy.gating.gate import ThresholdGate
 from cytopy.gating.gate import update_polygon
 from cytopy.gating.gate import update_threshold
+from cytopy.gating.gate_search import hyperparameter_gate
 from cytopy.plotting.flow_plot import FlowPlot
-from cytopy.utils.fda_norm import LandmarkReg
-from cytopy.utils.gate_search import hyperparameter_gate
 from cytopy.utils.transform import apply_transform
 from cytopy.utils.transform import apply_transform_map
 
@@ -117,7 +117,6 @@ class GatingStrategy(mongoengine.Document):
     name = mongoengine.StringField(required=True, unique=True)
     gates = mongoengine.ListField(mongoengine.ReferenceField(Gate, reverse_delete_rule=mongoengine.PULL))
     hyperparameter_search = mongoengine.DictField()
-    normalisation = mongoengine.DictField()
     creation_date = mongoengine.DateTimeField(default=datetime.now)
     last_edit = mongoengine.DateTimeField(default=datetime.now)
     flags = mongoengine.StringField(required=False)
@@ -201,146 +200,9 @@ class GatingStrategy(mongoengine.Document):
         self._gate_exists(gate=gate)
         return [g for g in self.gates if g.gate_name == gate][0]
 
-    def preview_gate(
-        self,
-        gate: str or ThresholdGate or PolygonGate or EllipseGate,
-        create_plot_kwargs: Optional[Dict] = None,
-        plot_gate_kwargs: Optional[Dict] = None,
-    ):
-        """
-        Preview the results of some given Gate
-
-        Parameters
-        ----------
-        gate: str or ThresholdGate or PolygonGate or EllipseGate
-            Name of an existing Gate or a Gate object
-        create_plot_kwargs: dict (optional)
-            Additional arguments passed to CreatePlot
-        plot_gate_kwargs: dict (optional)
-            Additional arguments passed to plot_gate call of CreatePlot
-
-        Returns
-        -------
-        Matplotlib.Axes
-        """
-        create_plot_kwargs = create_plot_kwargs or {}
-        plot_gate_kwargs = plot_gate_kwargs or {}
-        if isinstance(gate, str):
-            gate = self.get_gate(gate=gate)
-        data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=False)
-        plot_data = data
-        gate.fit(data=data, ctrl_data=ctrl_parent_data)
-        create_plot_kwargs["transform_x"] = create_plot_kwargs.get("transform_x", None) or gate.transform_x
-        create_plot_kwargs["transform_y"] = create_plot_kwargs.get("transform_y", None) or gate.transform_y
-        create_plot_kwargs["transform_x_kwargs"] = (
-            create_plot_kwargs.get("transform_x_kwargs", None) or gate.transform_x_kwargs
-        )
-        create_plot_kwargs["transform_y_kwargs"] = (
-            create_plot_kwargs.get("transform_y_kwargs", None) or gate.transform_y_kwargs
-        )
-        plot = FlowPlot(**create_plot_kwargs)
-        return plot.plot_gate_children(gate=gate, parent=plot_data, **plot_gate_kwargs)
-
-    def add_hyperparameter_grid(self, gate_name: str, params: Dict):
-        assert gate_name in self.list_gates(), f"{gate_name} is not a valid gate"
-        err = (
-            "'params' must be a dictionary with each key corresponding to a valid "
-            "hyperparameter and each value a list of parameter values"
-        )
-        assert isinstance(params, dict), err
-        assert all([isinstance(x, list) for x in params.values()]), err
-        self.hyperparameter_search[gate_name] = {"grid": params}
-
-    def add_normalisation(self, gate_name: str, reference: Union[FileGroup, None] = None, **kwargs):
-        """
-        Add landmark registration for normalisation to a Gate. In short, if normalisation is added
-        to a gate (specified by 'gate_name') data that this gate is applied too, will be 'aligned'
-        to some reference data (specified by 'reference', which should be a FileGroup object, but
-        if left as None, will be the FileGroup currently associated with the GatingStrategy).
-        Alignment is performed using a peak finding algorithm, K means clustering, and then
-        landmark registration; see cytopy.utils.fda_norm for details.
-
-        Parameters
-        ----------
-        gate_name: str
-            Name of the gate to assign normalisation to
-        reference: FileGroup, optional
-            FileGroup that will be used as reference data for future data to be aligned. If
-            value is None (default) then the currently associated FileGroup to this GatingStrategy
-            is used as the future reference
-        kwargs:
-            Additional keyword arguments that will be passed to cytopy.utils.fda_norm.LandmarkReg
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        AssertionError
-            If invalid gate name provided
-        """
-        reference = reference or self.filegroup
-        assert gate_name in self.list_gates(), "Invalid gate name"
-        self.normalisation[gate_name] = {
-            "reference": str(reference.id),
-            "kwargs": kwargs,
-        }
-
-    def normalise_data(self, gate_name: str) -> pd.DataFrame:
-        """
-        Given the name of an existing Gate, perform normalisation of the parent
-        population using the details specified in the normalisation attribute. If
-        no normalisation has been specified for the given gate, the parent population
-        will be returned without normalisation performed.
-
-        Parameters
-        ----------
-        gate_name: str
-
-        Returns
-        -------
-        pandas.DataFrame
-        """
-        if gate_name not in self.normalisation.keys():
-            return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)[0]
-        gate = self.get_gate(gate_name)
-        if self.normalisation.get(gate_name).get("reference") == str(self.filegroup.id):
-            return self._load_gate_dataframes(gate=self.get_gate(gate_name), fda_norm=False)[0]
-        ref = FileGroup.objects(id=self.normalisation.get(gate_name).get("reference")).get()
-        kwargs = self.normalisation.get(gate_name).get("kwargs")
-
-        data = self.filegroup.load_population_df(population=gate.parent, transform=None)
-        for d, t, tkwargs in zip(
-            [gate.x, gate.y],
-            [gate.transform_x, gate.transform_y],
-            [gate.transform_x_kwargs, gate.transform_y_kwargs],
-        ):
-            if d is None:
-                continue
-            ref_df = ref.load_population_df(population=gate.parent, transform=t, transform_kwargs=tkwargs)
-            target_df = self.filegroup.load_population_df(population=gate.parent, transform=None)
-            target_df, transformer = apply_transform(
-                data=target_df,
-                method=t,
-                return_transformer=True,
-                features=[d],
-                **tkwargs,
-            )
-            try:
-                lr = LandmarkReg(target=target_df, ref=ref_df, var=d, **kwargs)
-                target_df[d] = lr().shift_data(target_df[d].values)
-            except ValueError as e:
-                warn(f"Failed to normalise data in {d} dimension, continuing without normalisation; " f"{str(e)}")
-            if transformer is not None:
-                target_df = transformer.inverse_scale(data=target_df, features=[d])
-            data[d] = target_df[d]
-        return data
-
     def _load_gate_dataframes(
         self,
         gate: Gate,
-        fda_norm: bool = False,
         verbose: bool = True,
         ctrl: bool = True,
     ) -> (pd.DataFrame, pd.DataFrame) or None:
@@ -351,8 +213,6 @@ class GatingStrategy(mongoengine.Document):
         ----------
         gate: Gate
             Gate that will be applied
-        fda_norm: bool (default=False)
-            Perform normalisation if defined for Gate
         verbose: bool (default=True)
             Provide standard feedback
         ctrl: bool (default=True)
@@ -366,8 +226,6 @@ class GatingStrategy(mongoengine.Document):
         parent = self.filegroup.load_population_df(
             population=gate.parent, transform=None, label_downstream_affiliations=False
         )
-        if fda_norm:
-            return self.normalise_data(gate_name=gate.gate_name), None
         if gate.ctrl_x is not None and ctrl:
             ctrls = {}
             ctrl_classifier_params = gate.ctrl_classifier_params or {}
@@ -401,7 +259,47 @@ class GatingStrategy(mongoengine.Document):
             return parent, ctrls
         return parent, None
 
-    def apply_gate(
+    def preview(
+        self,
+        gate: str or ThresholdGate or PolygonGate or EllipseGate,
+        create_plot_kwargs: Optional[Dict] = None,
+        plot_gate_kwargs: Optional[Dict] = None,
+    ):
+        """
+        Preview the results of some given Gate
+
+        Parameters
+        ----------
+        gate: str or ThresholdGate or PolygonGate or EllipseGate
+            Name of an existing Gate or a Gate object
+        create_plot_kwargs: dict (optional)
+            Additional arguments passed to CreatePlot
+        plot_gate_kwargs: dict (optional)
+            Additional arguments passed to plot_gate call of CreatePlot
+
+        Returns
+        -------
+        Matplotlib.Axes
+        """
+        create_plot_kwargs = create_plot_kwargs or {}
+        plot_gate_kwargs = plot_gate_kwargs or {}
+        if isinstance(gate, str):
+            gate = self.get_gate(gate=gate)
+        data, ctrl_parent_data = self._load_gate_dataframes(gate=gate)
+        plot_data = data
+        gate.fit(data=data, ctrl_data=ctrl_parent_data)
+        create_plot_kwargs["transform_x"] = create_plot_kwargs.get("transform_x", None) or gate.transform_x
+        create_plot_kwargs["transform_y"] = create_plot_kwargs.get("transform_y", None) or gate.transform_y
+        create_plot_kwargs["transform_x_kwargs"] = (
+            create_plot_kwargs.get("transform_x_kwargs", None) or gate.transform_x_kwargs
+        )
+        create_plot_kwargs["transform_y_kwargs"] = (
+            create_plot_kwargs.get("transform_y_kwargs", None) or gate.transform_y_kwargs
+        )
+        plot = FlowPlot(**create_plot_kwargs)
+        return plot.plot_gate_children(gate=gate, parent=plot_data, **plot_gate_kwargs)
+
+    def apply(
         self,
         gate: Union[str, Gate, ThresholdGate, PolygonGate, EllipseGate],
         plot: bool = True,
@@ -409,8 +307,8 @@ class GatingStrategy(mongoengine.Document):
         add_to_strategy: bool = True,
         create_plot_kwargs: Optional[Dict] = None,
         plot_gate_kwargs: Optional[Dict] = None,
-        hyperparam_search: bool = True,
-        fda_norm: bool = False,
+        hyperparameter_search: bool = True,
+        normalise: bool = False,
         overwrite_method_kwargs: Optional[Dict] = None,
     ):
         """
@@ -432,11 +330,11 @@ class GatingStrategy(mongoengine.Document):
             Additional arguments passed to CreatePlot
         plot_gate_kwargs: dict (optional)
             Additional arguments passed to plot_gate call of CreatePlot
-        hyperparam_search: bool (default=True)
+        hyperparameter_search: bool (default=True)
             If True and hyperparameter grid has been defined for the chosen gate,
             then hyperparameter search is performed to find the optimal fit for the
             newly encountered data.
-        fda_norm: bool (default=False)
+        normalise: bool (default=False)
             Perform normalisation if defined for Gate
         overwrite_method_kwargs: dict, optional
             If a dictionary is provided (and hyperparameter search isn't defined for this gate)
@@ -466,23 +364,24 @@ class GatingStrategy(mongoengine.Document):
 
         create_plot_kwargs = create_plot_kwargs or {}
         plot_gate_kwargs = plot_gate_kwargs or {}
-        parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm, verbose=verbose)
+        parent_data, ctrl_parent_data = self._load_gate_dataframes(gate=gate, verbose=verbose)
         original_method_kwargs = gate.method_kwargs.copy()
 
         if overwrite_method_kwargs is not None:
             gate.method_kwargs = overwrite_method_kwargs
         if gate.ctrl_x is not None:
             assert isinstance(gate, ThresholdGate), "Control gate only supported for ThresholdGate"
-            populations = gate.fit_predict(data=parent_data, ctrl_data=ctrl_parent_data)
-        elif gate.gate_name in self.hyperparameter_search.keys() and hyperparam_search:
+            populations, _ = gate.fit_predict(data=parent_data, ctrl_data=ctrl_parent_data, norm=normalise)
+        elif gate.gate_name in self.hyperparameter_search.keys() and hyperparameter_search:
             populations = hyperparameter_gate(
                 gate=gate,
-                grid=self.hyperparameter_search.get(gate.gate_name).get("grid"),
+                grid=self.hyperparameter_search.get(gate.gate_name),
                 parent=parent_data,
                 verbose=verbose,
+                norm=normalise,
             )
         else:
-            populations = gate.fit_predict(data=parent_data)
+            populations, _ = gate.fit_predict(data=parent_data, norm=normalise)
         for p in populations:
             self.filegroup.add_population(population=p)
         if verbose:
@@ -498,8 +397,8 @@ class GatingStrategy(mongoengine.Document):
     def apply_all(
         self,
         verbose: bool = True,
-        fda_norm: bool = False,
-        hyperparam_search: bool = False,
+        normalise: bool = False,
+        hyperparameter_search: bool = False,
     ):
         """
         Apply all the gates associated to this GatingStrategy
@@ -508,9 +407,9 @@ class GatingStrategy(mongoengine.Document):
         ----------
         verbose: bool (default=True)
             If True, print feedback to stdout
-        fda_norm: bool (default=False)
+        normalise: bool (default=False)
              Perform normalisation if defined for Gate
-        hyperparam_search: bool (default=False)
+        hyperparameter_search: bool (default=False)
             If True and hyperparameter grid has been defined for the chosen gate,
             then hyperparameter search is performed to find the optimal fit for the
             newly encountered data.
@@ -554,17 +453,17 @@ class GatingStrategy(mongoengine.Document):
             if gate.parent in self.list_populations():
                 if self.filegroup.population_stats(gate.parent).get("n") <= 3:
                     raise InsufficientEventsError(
-                        f"Insufficient events in parent population {gate.parent}",
+                        population_id=gate.parent,
                         filegroup_id=self.filegroup.primary_id,
                     )
                 feedback(f"------ Applying {gate.gate_name} ------")
-                self.apply_gate(
+                self.apply(
                     gate=gate,
                     plot=False,
                     verbose=verbose,
                     add_to_strategy=False,
-                    fda_norm=fda_norm,
-                    hyperparam_search=hyperparam_search,
+                    normalise=normalise,
+                    hyperparameter_search=hyperparameter_search,
                 )
                 feedback("----------------------------------------")
                 gates_to_apply = [g for g in gates_to_apply if g.gate_name != gate.gate_name]
@@ -579,8 +478,8 @@ class GatingStrategy(mongoengine.Document):
     def apply_to_experiment(
         self,
         experiment: Experiment,
-        fda_norm: bool = False,
-        hyperparam_search: bool = False,
+        normalise: bool = False,
+        hyperparameter_search: bool = False,
         plots_path: Optional[str] = None,
         sample_ids: Union[list, None] = None,
         verbose: bool = True,
@@ -622,8 +521,8 @@ class GatingStrategy(mongoengine.Document):
             try:
                 self.apply_all(
                     verbose=False,
-                    fda_norm=fda_norm,
-                    hyperparam_search=hyperparam_search,
+                    normalise=normalise,
+                    hyperparameter_search=hyperparameter_search,
                 )
                 self.save(save_strategy=False, save_filegroup=True)
                 if plots_path is not None:
@@ -641,6 +540,20 @@ class GatingStrategy(mongoengine.Document):
             except OverflowError as e:
                 logger.error(f"{s} - {str(e)}")
         logger.info(f" -- {experiment.experiment_id} complete --")
+
+    def add_hyperparameter_grid(self, gate_name: str, params: Dict):
+        assert gate_name in self.list_gates(), f"{gate_name} is not a valid gate"
+        err = (
+            "'params' must be a dictionary with each key corresponding to a valid "
+            "hyperparameter and each value a list of parameter values"
+        )
+        assert isinstance(params, dict), err
+        assert all([isinstance(x, list) for x in params.values()]), err
+        self.hyperparameter_search[gate_name] = {"grid": params}
+
+    def add_normalisation(self, gate: str):
+        gate = self.get_gate(gate=gate)
+        gate.add_normalisation_reference(ref=self._load_gate_dataframes(gate=gate, ctrl=False))
 
     def plot_all_gates(self):
         """
@@ -680,6 +593,7 @@ class GatingStrategy(mongoengine.Document):
         None
         """
         self.gates = [g for g in self.gates if g.gate_name != gate_name]
+        self.hyperparameter_search.pop(gate_name, None)
 
     def delete_populations(self, populations: Union[str, list]):
         """
@@ -729,8 +643,9 @@ class GatingStrategy(mongoengine.Document):
             gate in self.list_gates()
         ), f"Gate {gate} not recognised. Have you applied it and added it to the strategy?"
         gate = self.get_gate(gate=gate)
-        fda_norm = gate.gate_name in self.normalisation.keys()
-        parent, _ = self._load_gate_dataframes(gate=gate, fda_norm=fda_norm, ctrl=False)
+        parent, _ = self._load_gate_dataframes(gate=gate, ctrl=False)
+        if any([self.filegroup.get_population(c.name).normalised for c in gate.children]):
+            parent = gate.inverse_transform(gate.normalise(target=gate.transform(parent)))
         plotting = FlowPlot(**create_plot_kwargs)
         return plotting.plot_population_geoms(
             parent=parent,
@@ -868,11 +783,9 @@ class GatingStrategy(mongoengine.Document):
     ):
         gate = self.gate_children_present_in_filegroup(self.get_gate(gate=gate_name))
         transforms, transform_kwargs = gate.transform_info()
-        parent = self.filegroup.load_population_df(
-            population=gate.parent,
-            transform=transforms,
-            transform_kwargs=transform_kwargs,
-        )
+        parent = gate.transform(self._load_gate_dataframes(gate=gate, ctrl=False)[0])
+        if any([self.filegroup.get_population(c.name).normalised for c in gate.children]):
+            parent = gate.normalise(target=parent)
         for child in gate.children:
             pop = self.filegroup.get_population(population_name=child.name)
             xt = x_threshold
@@ -908,11 +821,9 @@ class GatingStrategy(mongoengine.Document):
     def edit_polygon_gate(self, gate_name: str, coords: Dict[str, Iterable[float]], transform: bool = True):
         gate = self.gate_children_present_in_filegroup(self.get_gate(gate=gate_name))
         transforms, transform_kwargs = gate.transform_info()
-        parent = self.filegroup.load_population_df(
-            population=gate.parent,
-            transform=transforms,
-            transform_kwargs=transform_kwargs,
-        )
+        parent = gate.transform(self._load_gate_dataframes(gate=gate, ctrl=False)[0])
+        if any([self.filegroup.get_population(c.name).normalised for c in gate.children]):
+            parent = gate.normalise(target=parent)
         for child in gate.children:
             pop = self.filegroup.get_population(population_name=child.name)
             try:
@@ -947,6 +858,18 @@ class GatingStrategy(mongoengine.Document):
         None
         """
         downstream_populations = self.filegroup.list_downstream_populations(population=population_name)
+        normalised_downstream_populations = [
+            pop for pop in downstream_populations if self.filegroup.get_population(pop).normalised
+        ]
+        if len(normalised_downstream_populations) > 0:
+            logger.warning(
+                f"The following populations downstream from the edit are created from a Gate that normalises "
+                f"the data: {normalised_downstream_populations}. These populations will be deleted and "
+                f"the gates must be reapplied."
+            )
+            self.delete_populations(populations=normalised_downstream_populations)
+            downstream_populations = self.filegroup.list_downstream_populations(population=population_name)
+
         for pop in downstream_populations:
             pop = self.filegroup.get_population(pop)
             transforms = {

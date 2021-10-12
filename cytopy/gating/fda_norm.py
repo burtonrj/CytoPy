@@ -33,9 +33,16 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import pickle
+from typing import List
+from typing import Optional
+from typing import Union
+
 import matplotlib.pyplot as plt
+import mongoengine
 import numpy as np
 import pandas as pd
+from bson import Binary
 from detecta import detect_peaks
 from KDEpy import FFTKDE
 from numba import jit
@@ -45,7 +52,43 @@ from skfda.representation.grid import FDataGrid
 from sklearn.cluster import KMeans
 
 
-def peaks(y: np.ndarray, x: np.ndarray, **kwargs):
+class Normalisation(mongoengine.EmbeddedDocument):
+    peaks = mongoengine.ListField()
+    _ref_grid = mongoengine.FileField(db_alias="core", collection_name="reference_grid")
+    _ref_density = mongoengine.FileField(db_alias="core", collection_name="reference_density")
+
+    def __write(self, attr: str, x: np.ndarray):
+        x = x.tolist()
+        attr = getattr(self, attr)
+        if attr:
+            attr.replace(Binary(pickle.dumps(x, protocol=2)))
+        else:
+            attr.new_file()
+            attr.write(Binary(pickle.dumps(x, protocol=2)))
+            attr.close()
+
+    @property
+    def ref_grid(self) -> np.ndarray:
+        x = pickle.loads(self._ref_grid.read())
+        self._ref_grid.seek(0)
+        return np.array(x)
+
+    @ref_grid.setter
+    def ref_grid(self, x: np.ndarray):
+        self.__write("_ref_grid", x)
+
+    @property
+    def ref_density(self) -> np.ndarray:
+        x = pickle.loads(self._ref_density.read())
+        self._ref_density.seek(0)
+        return np.array(x)
+
+    @ref_density.setter
+    def ref_density(self, x: np.ndarray):
+        self.__write("_ref_density", x)
+
+
+def peaks(y: np.ndarray, x: np.ndarray, **kwargs) -> List:
     """
     Detect peaks of some function, y, in the grid space, x.
 
@@ -205,7 +248,7 @@ def match_landmarks(p: np.ndarray, plabels: np.ndarray):
         (2, n) array, where n is the number of clusters. Order conserved between samples; first
         row is peaks from target, second row is peaks from reference.
     """
-    p, plabels = np.array(p), np.array(plabels)
+    p, plabels = np.array(p, dtype=float), np.array(plabels, dtype=int)
     km_labels, centroids = cluster_landmarks(p, plabels)
     # Search for clusters with zero entropy
     zero_entropy = zero_entropy_clusters(km_labels, plabels, centroids)
@@ -232,7 +275,9 @@ def match_landmarks(p: np.ndarray, plabels: np.ndarray):
         return matching_peaks
 
 
-def estimate_pdfs(target: pd.DataFrame, ref: pd.DataFrame, var: str):
+def estimate_pdfs(
+    target: pd.DataFrame, ref: Union[pd.DataFrame, np.ndarray], var: str, grid: Optional[np.ndarray] = None
+):
     """
     Given some target and reference DataFrame, estimate PDF for each using convolution based
     kernel density estimation (see KDEpy). 'var' is the variable of interest and should be a
@@ -243,18 +288,22 @@ def estimate_pdfs(target: pd.DataFrame, ref: pd.DataFrame, var: str):
     target: pandas.DataFrame
     ref: pandas.DataFrame
     var: str
+    grid: Numpy.array, optional
 
     Returns
     -------
     (numpy.ndarray, numpy.ndarray, numpy.ndarray)
         Target PDF, reference PDF, and grid space
     """
-    min_ = np.min([target[var].min(), ref[var].min()])
-    max_ = np.max([target[var].max(), ref[var].max()])
-    x = np.linspace(min_ - 0.1, max_ + 0.1, 100000)
-    y1 = FFTKDE(kernel="gaussian", bw="silverman").fit(target[var].to_numpy()).evaluate(x)
-    y2 = FFTKDE(kernel="gaussian", bw="silverman").fit(ref[var].to_numpy()).evaluate(x)
-    return y1, y2, x
+    if isinstance(ref, pd.DataFrame):
+        min_ = np.min([target[var].min(), ref[var].min()])
+        max_ = np.max([target[var].max(), ref[var].max()])
+        x = np.linspace(min_ - 0.1, max_ + 0.1, 100000)
+        y1 = FFTKDE(kernel="gaussian", bw="silverman").fit(target[var].to_numpy()).evaluate(x)
+        y2 = FFTKDE(kernel="gaussian", bw="silverman").fit(ref[var].to_numpy()).evaluate(x)
+        return y1, y2, x
+    y1 = FFTKDE(kernel="gaussian", bw="silverman").fit(target[var].to_numpy()).evaluate(grid)
+    return y1, ref, grid
 
 
 class LandmarkReg:
@@ -313,15 +362,31 @@ class LandmarkReg:
         Corresponding shifts to align the landmarks of the PDFs described in original_functions
     """
 
-    def __init__(self, target: pd.DataFrame, ref: pd.DataFrame, var: str, mpt: float = 0.001, **kwargs):
-        y1, y2, x = estimate_pdfs(target, ref, var)
-        landmarks = [peaks(y, x, mph=mpt * y.max(), **kwargs) for y in [y1, y2]]
+    def __init__(
+        self,
+        target: pd.DataFrame,
+        ref: Union[pd.DataFrame, np.ndarray],
+        var: str,
+        mpt: float = 0.001,
+        grid: Optional[np.ndarray] = None,
+        ref_peaks: Optional[List] = None,
+        **kwargs
+    ):
+        y1, y2, x = estimate_pdfs(target, ref, var, grid)
+        if ref_peaks:
+            landmarks = [peaks(y1, x, mph=mpt * y1.max(), **kwargs), ref_peaks]
+        else:
+            landmarks = [peaks(y, x, mph=mpt * y.max(), **kwargs) for y in [y1, y2]]
+
         plabels = np.concatenate(
             [
                 [0 for _ in range(len(landmarks[0]))],
                 [1 for _ in range(len(landmarks[1]))],
             ]
         )
+        self.reference_landmarks = landmarks[1]
+        self.grid = x
+        self.ref_density = y2
         landmarks = np.array([x for sl in landmarks for x in sl])
         self.landmarks = match_landmarks(landmarks, plabels)
         self.original_functions = FDataGrid([y1, y2], grid_points=x)

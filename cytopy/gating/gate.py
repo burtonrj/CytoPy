@@ -32,6 +32,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 from collections import Counter
 from string import ascii_uppercase
+from typing import Callable
 from typing import Dict
 from typing import Iterable
 from typing import List
@@ -53,6 +54,7 @@ from shapely.ops import cascaded_union
 from sklearn.cluster import *
 from sklearn.linear_model import HuberRegressor
 from sklearn.mixture import *
+from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import PowerTransformer
 from smm import SMM
 
@@ -61,18 +63,20 @@ from cytopy.data.population import create_polygon
 from cytopy.data.population import PolygonGeom
 from cytopy.data.population import Population
 from cytopy.data.population import ThresholdGeom
+from cytopy.gating.fda_norm import LandmarkReg
+from cytopy.gating.fda_norm import Normalisation
 from cytopy.gating.geometry import create_envelope
 from cytopy.gating.geometry import ellipse_to_polygon
 from cytopy.gating.geometry import GeometryError
 from cytopy.gating.geometry import inside_polygon
 from cytopy.gating.geometry import probabilistic_ellipse
 from cytopy.utils.build_models import build_sklearn_model
-from cytopy.utils.dim_reduction import DimensionReduction
 from cytopy.utils.sampling import density_dependent_downsampling
 from cytopy.utils.sampling import faithful_downsampling
 from cytopy.utils.sampling import uniform_downsampling
 from cytopy.utils.sampling import upsample_knn
 from cytopy.utils.transform import apply_transform
+from cytopy.utils.transform import TRANSFORMERS
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +152,7 @@ class Gate(mongoengine.Document):
     """
     Base class for a Gate. A Gate attempts to separate single cell data in one or
     two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
-    to exampde data to generate "children"; the populations of cells a user expects to
+    to example data to generate "children"; the populations of cells a user expects to
     identify. These children are stored and then when the gate is 'fitted' to new data,
     the resulting populations are matched to the expected children.
 
@@ -177,11 +181,6 @@ class Gate(mongoengine.Document):
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
          are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
-    dim_reduction: dict (optional)
-        Experimental feature. Allows for dimension reduction to be performed prior to
-        appdying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
-        with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
-        Additional keyword arguments should be provided in this dictionary.
     ctrl_x: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
         to the samples in an Experiment. When given this signals that the gate should use the control
@@ -216,7 +215,6 @@ class Gate(mongoengine.Document):
     transform_x_kwargs = mongoengine.DictField()
     transform_y_kwargs = mongoengine.DictField()
     sampling = mongoengine.DictField()
-    dim_reduction = mongoengine.DictField()
     ctrl_x = mongoengine.StringField()
     ctrl_y = mongoengine.StringField()
     ctrl_classifier = mongoengine.StringField(default="XGBClassifier")
@@ -225,7 +223,11 @@ class Gate(mongoengine.Document):
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
     children = mongoengine.EmbeddedDocumentListField(Child)
-
+    normalisation_x = mongoengine.EmbeddedDocumentField(Normalisation)
+    normalisation_y = mongoengine.EmbeddedDocumentField(Normalisation)
+    hyperparameter_search = mongoengine.DictField()
+    smart = mongoengine.BooleanField(default=False)
+    smart_bounds = mongoengine.DictField()
     meta = {"db_alias": "core", "collection": "gates", "allow_inheritance": True}
 
     def __init__(self, *args, **values):
@@ -335,6 +337,65 @@ class Gate(mongoengine.Document):
             )
         return data
 
+    def inverse_transform(self, data: pd.DataFrame) -> pd.DataFrame:
+        err = "Transform must be applied to data prior to calling 'inverse_transform'"
+        if self.transform_x is not None:
+            assert self.x_transformer is not None, err
+            data = self.x_transformer.inverse_scale(data=data, features=[self.x])
+        if self.transform_y is not None:
+            assert self.y_transformer is not None, err
+            data = self.y_transformer.inverse_scale(data=data, features=[self.y])
+        return data
+
+    def preprocess_data(self, data: pd.DataFrame, norm_ref: Optional[pd.DataFrame] = None, norm: bool = False):
+        self._xy_in_dataframe(data=data)
+        data = data.copy()
+        data = self.transform(data=data)
+
+        try:
+            if norm:
+                self.normalise(target=data, ref=norm_ref)
+        except ValueError as e:
+            logger.error("Failed to normalise data prior to fitting gate.")
+            logger.exception(e)
+            norm = False
+        return data, norm
+
+    def normalise(self, target: pd.DataFrame, ref: Optional[pd.DataFrame] = None):
+        if ref is not None:
+            self._xy_in_dataframe(data=ref)
+            ref = self.transform(data=ref)
+        for axis in ["x", "y"]:
+            var = getattr(self, axis)
+            if var:
+                norm = getattr(self, f"normalisation_{axis}")
+                if norm:
+                    lr = LandmarkReg(
+                        target=target, ref=norm.ref_density, var=var, grid=norm.ref_grid, ref_peaks=norm.peaks
+                    )
+                else:
+                    assert ref is not None, "No normalisation defined on gate, must provide reference DataFrame."
+                    lr = LandmarkReg(target=target, ref=ref, var=var)
+                    norm = Normalisation(peaks=lr.reference_landmarks)
+                    norm.ref_grid = lr.grid
+                    norm.ref_density = lr.ref_density
+                    setattr(self, f"normalisation_{axis}", norm)
+                target[var] = lr().shift_data(target[var].values)
+
+    def add_normalisation_reference(self, ref: pd.DataFrame):
+        self._xy_in_dataframe(data=ref)
+        ref = self.transform(data=ref)
+        for axis in ["x", "y"]:
+            var = getattr(self, axis)
+            min_, max_ = ref[var].min(), ref[var].max()
+            x = np.linspace(min_ - 0.1, max_ + 0.1, 100000)
+            y = FFTKDE(kernel="gaussian", bw="silverman").fit(ref[var].to_numpy()).evaluate(x)
+            peaks = list(detect_peaks(y, mph=0.001 * y.max()))
+            norm = Normalisation(peaks=peaks)
+            norm.ref_grid = x
+            norm.ref_density = y
+            setattr(self, f"normalisation_{axis}", norm)
+
     def transform_info(self) -> (Dict, Dict):
         """
         Returns two dictionaries describing the transforms and transform settings applied to each variable
@@ -442,33 +503,6 @@ class Gate(mongoengine.Document):
 
         return populations
 
-    def _dim_reduction(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Experimental!
-        Perform dimension reduction prior to gating. Returns dataframe
-        with appended columns for embeddings
-
-        Parameters
-        ----------
-        data: Pandas.DataFrame
-            Data to reduce
-
-        Returns
-        -------
-        Pandas.DataFrame
-        """
-        logger.debug("Performing dimension reduction")
-
-        method = self.dim_reduction.get("method", None)
-        if method is None:
-            return data
-        kwargs = {k: v for k, v in self.dim_reduction.items() if k != "method"}
-        reducer = DimensionReduction(method=method, n_components=2, **kwargs)
-        data = reducer.fit_transform(data=data, features=kwargs.get("features", data.columns))
-        self.x = f"{method}1"
-        self.y = f"{method}2"
-        return data
-
     def _xy_in_dataframe(self, data: pd.DataFrame):
         """
         Assert that the x and y variables defined for this gate are present in the given
@@ -509,7 +543,7 @@ class ThresholdGate(Gate):
     """
     ThresholdGate inherits from Gate. A Gate attempts to separate single cell data in one or
     two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
-    to exampde data to generate "children"; the populations of cells a user expects to
+    to example data to generate "children"; the populations of cells a user expects to
     identify. These children are stored and then when the gate is 'fitted' to new data,
     the resulting populations are matched to the expected children.
 
@@ -530,7 +564,7 @@ class ThresholdGate(Gate):
 
     Additional kwargs to control behaviour of ThresholdGate when method is "density"
     can be given in method_kwargs:
-        *  kernel (default="guassian") - kernel used for KDE calculation
+        * kernel (default="guassian") - kernel used for KDE calculation
            (see KDEpy.FFTKDE for avialable kernels)
         * bw (default="silverman") - bandwidth to use for KDE calculation, can either be
           "silverman" or "ISJ" or a float value (see KDEpy)
@@ -575,11 +609,6 @@ class ThresholdGate(Gate):
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
          are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
-    dim_reduction: dict (optional)
-        Experimental feature. Allows for dimension reduction to be performed prior to
-        appdying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
-        with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
-        Additional keyword arguments should be provided in this dictionary.
     ctrl_x: str (optional)
         If a value is given here it should be the name of a control specimen commonly associated
         to the samples in an Experiment. When given this signals that the gate should use the control
@@ -723,7 +752,7 @@ class ThresholdGate(Gate):
 
     def _quantile_gate(self, data: pd.DataFrame) -> List[float]:
         """
-        Fit gate to the given dataframe by simpdy drawing the threshold at the desired quantile.
+        Fit gate to the given dataframe by simply drawing the threshold at the desired quantile.
 
         Parameters
         ----------
@@ -956,10 +985,6 @@ class ThresholdGate(Gate):
         List
             List of thresholds [x dimension threshold, y dimension threshold]
         """
-        self._xy_in_dataframe(data=primary_data)
-        self._xy_in_dataframe(data=ctrl_data)
-        ctrl_data = self.transform(data=ctrl_data)
-        ctrl_data = self._dim_reduction(data=ctrl_data)
         dims = [i for i in [self.x, self.y] if i is not None]
         if self.sampling.get("method", None) is not None:
             primary_data, ctrl_data = self._downsample(data=primary_data), self._downsample(data=ctrl_data)
@@ -1013,6 +1038,7 @@ class ThresholdGate(Gate):
             Population data to fit threshold
         ctrl_data: Pandas.DataFrame, optional
             If provided, thresholds will be calculated using ctrl_data and then applied to data
+
         Returns
         -------
         None
@@ -1023,8 +1049,9 @@ class ThresholdGate(Gate):
             If gate Children have already been defined i.e. fit has been called previously
         """
         data = data.copy()
+        self._xy_in_dataframe(data=data)
         data = self.transform(data=data)
-        data = self._dim_reduction(data=data)
+
         if self._yeo_johnson is not None:
             data = self.yeo_johnson_transform(data)
         if len(self.children) != 0:
@@ -1035,6 +1062,8 @@ class ThresholdGate(Gate):
                 "reset the gate and call 'fit' again, first call 'reset_gate'"
             )
         if ctrl_data is not None:
+            self._xy_in_dataframe(data=ctrl_data)
+            ctrl_data = self.transform(data=ctrl_data)
             thresholds = self._ctrl_fit(primary_data=data, ctrl_data=ctrl_data)
         else:
             thresholds = self._fit(data=data)
@@ -1058,7 +1087,14 @@ class ThresholdGate(Gate):
             )
         return None
 
-    def fit_predict(self, data: pd.DataFrame, ctrl_data: Optional[pd.DataFrame] = None) -> List[float]:
+    def fit_predict(
+        self,
+        data: pd.DataFrame,
+        ctrl_data: Optional[pd.DataFrame] = None,
+        norm: bool = False,
+        norm_ref: Optional[pd.DataFrame] = None,
+        cached_data: bool = False,
+    ) -> List[float]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -1082,10 +1118,14 @@ class ThresholdGate(Gate):
             If fit has not been called prior to fit_predict
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
-        data = data.copy()
-        data = self.transform(data=data)
-        data = self._dim_reduction(data=data)
+        if not cached_data:
+            data, norm = self.preprocess_data(data=data, norm_ref=norm_ref, norm=norm)
+
         if ctrl_data is not None:
+            self._xy_in_dataframe(data=ctrl_data)
+            ctrl_data = self.transform(data=ctrl_data)
+            if norm:
+                self.normalise(target=ctrl_data, ref=norm_ref)
             thresholds = self._ctrl_fit(primary_data=data, ctrl_data=ctrl_data)
         else:
             thresholds = self._fit(data=data)
@@ -1099,8 +1139,10 @@ class ThresholdGate(Gate):
             x_threshold=thresholds[0],
             y_threshold=y_threshold,
         )
-        pops = self._generate_populations(data=results, x_threshold=thresholds[0], y_threshold=y_threshold)
-        return self._match_to_children(new_populations=pops)
+        pops = self._generate_populations(
+            data=results, x_threshold=thresholds[0], y_threshold=y_threshold, normalised=norm
+        )
+        return self._match_to_children(new_populations=pops), data
 
     def predict(self, data: pd.DataFrame) -> List[float]:
         """
@@ -1126,7 +1168,6 @@ class ThresholdGate(Gate):
         assert len(self.children) > 0, "Must call 'fit' prior to predict"
         self._xy_in_dataframe(data=data)
         data = self.transform(data=data)
-        data = self._dim_reduction(data=data)
         if self.y is not None:
             data = threshold_2d(
                 data=data,
@@ -1144,7 +1185,7 @@ class ThresholdGate(Gate):
         )
 
     def _generate_populations(
-        self, data: Dict[str, pd.DataFrame], x_threshold: float, y_threshold: Optional[float]
+        self, data: Dict[str, pd.DataFrame], normalised: bool, x_threshold: float, y_threshold: Optional[float]
     ) -> List[Population]:
         """
         Generate populations from a standard dictionary of dataframes that have had thresholds applied.
@@ -1177,6 +1218,7 @@ class ThresholdGate(Gate):
                     transform_y_kwargs=self.transform_y_kwargs,
                     x_threshold=x_threshold,
                     y_threshold=y_threshold,
+                    normalised=normalised,
                 ),
             )
             pop.index = df.index.to_list()
@@ -1188,7 +1230,7 @@ class PolygonGate(Gate):
     """
     PolygonGate inherits from Gate. A Gate attempts to separate single cell data in one or
     two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
-    to exampde data to generate "children"; the populations of cells a user expects to
+    to example data to generate "children"; the populations of cells a user expects to
     identify. These children are stored and then when the gate is 'fitted' to new data,
     the resulting populations are matched to the expected children.
 
@@ -1241,11 +1283,6 @@ class PolygonGate(Gate):
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
          are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
-    dim_reduction: dict (optional)
-        Experimental feature. Allows for dimension reduction to be performed prior to
-        appdying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
-        with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
-        Additional keyword arguments should be provided in this dictionary.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
         to the name of an existing class in Scikit-Learn or HDBSCAN.
@@ -1262,7 +1299,9 @@ class PolygonGate(Gate):
         super().__init__(*args, **values)
         assert self.y is not None, "Polygon gate expects a y-axis variable"
 
-    def _generate_populations(self, data: pd.DataFrame, polygons: List[ShapelyPoly]) -> List[Population]:
+    def _generate_populations(
+        self, data: pd.DataFrame, polygons: List[ShapelyPoly], normalised: bool
+    ) -> List[Population]:
         """
         Given a dataframe and a list of Polygon shapes as generated from the '_fit' method, generate a
         list of Population objects.
@@ -1296,6 +1335,7 @@ class PolygonGate(Gate):
                 parent=self.parent,
                 n=pop_df.shape[0],
                 geom=geom,
+                normalised=normalised,
             )
             pop.index = pop_df.index.tolist()
             pops.append(pop)
@@ -1442,7 +1482,6 @@ class PolygonGate(Gate):
             return [self._manual()]
         params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha"]}
         self.model = globals()[self.method](**params)
-        self._xy_in_dataframe(data=data)
 
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
@@ -1496,8 +1535,8 @@ class PolygonGate(Gate):
         """
         if len(self.children) != 0:
             GateError("Gate is already defined, call 'reset_gate' to clear children")
+        self._xy_in_dataframe(data=data)
         data = self.transform(data=data)
-        data = self._dim_reduction(data=data)
         polygons = self._fit(data=data)
         for name, poly in zip(ascii_uppercase, polygons):
             self.add_child(
@@ -1510,7 +1549,14 @@ class PolygonGate(Gate):
                 )
             )
 
-    def fit_predict(self, data: pd.DataFrame, ctrl_data: None = None) -> List[Population]:
+    def fit_predict(
+        self,
+        data: pd.DataFrame,
+        ctrl_data: None = None,
+        norm: bool = False,
+        norm_ref: Optional[pd.DataFrame] = None,
+        cached_data: bool = False,
+    ) -> List[Population]:
         """
         Fit the gate using a given dataframe and then associate predicted Population objects to
         existing children. If no children exist, an AssertionError will be raised prompting the
@@ -1534,9 +1580,12 @@ class PolygonGate(Gate):
             If fit has not been previously called
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
-        data = self.transform(data=data)
-        data = self._dim_reduction(data=data)
-        return self._match_to_children(self._generate_populations(data=data, polygons=self._fit(data=data)))
+        if not cached_data:
+            data, norm = self.preprocess_data(data=data, norm_ref=norm_ref, norm=norm)
+        return (
+            self._match_to_children(self._generate_populations(data=data, polygons=self._fit(data=data), norm=norm)),
+            data,
+        )
 
     def predict(self, data: pd.DataFrame) -> List[Population]:
         """
@@ -1561,7 +1610,6 @@ class PolygonGate(Gate):
             If fit has not been previously called
         """
         data = self.transform(data=data)
-        data = self._dim_reduction(data=data)
         polygons = [create_polygon(c.geom.x_values, c.geom.y_values) for c in self.children]
         populations = self._generate_populations(data=data, polygons=polygons)
         for p, name in zip(populations, [c.name for c in self.children]):
@@ -1573,7 +1621,7 @@ class EllipseGate(PolygonGate):
     """
     EllipseGate inherits from PolygonGate. A Gate attempts to separate single cell data in one or
     two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
-    to exampde data to generate "children"; the populations of cells a user expects to
+    to example data to generate "children"; the populations of cells a user expects to
     identify. These children are stored and then when the gate is 'fitted' to new data,
     the resulting populations are matched to the expected children.
 
@@ -1622,11 +1670,6 @@ class EllipseGate(PolygonGate):
          key/value pair for desired method e.g ({"method": "uniform"). Available methods
          are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
          keyword arguments should be provided in the sampling dictionary.
-    dim_reduction: dict (optional)
-        Experimental feature. Allows for dimension reduction to be performed prior to
-        applying gate. Gate will be applied to the resulting embeddings. Provide a dictionary
-        with a key "method" and the value as any supported method in cytopy.utils.dim_reduction.
-        Additional keyword arguments should be provided in this dictionary.
     method: str (required)
         Name of the underlying algorithm to use. Should have a value of: "manual", or correspond
         to the name of an existing class in Scikit-Learn mixture module..
@@ -1720,7 +1763,6 @@ class EllipseGate(PolygonGate):
         """
         params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
         self.model = globals()[self.method](**params)
-        self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         self.model.fit(data[[self.x, self.y]].to_numpy())
@@ -1799,7 +1841,6 @@ class HuberGate(PolygonGate):
         params = {k: v for k, v in self.method_kwargs.items() if k not in ["yeo_johnson", "envelope_alpha", "conf"]}
         self.model = HuberRegressor(**params)
 
-        self._xy_in_dataframe(data=data)
         if self.sampling.get("method", None) is not None:
             data = self._downsample(data=data)
         self._fit_model(data=data)

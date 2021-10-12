@@ -192,6 +192,7 @@ class Population(mongoengine.EmbeddedDocument):
     parent = mongoengine.StringField(required=True, default="root")
     prop_of_parent = mongoengine.FloatField()
     prop_of_total = mongoengine.FloatField()
+    normalised = mongoengine.BooleanField()
     geom = mongoengine.EmbeddedDocumentField(PopulationGeometry)
     definition = mongoengine.StringField()
     source = mongoengine.StringField(

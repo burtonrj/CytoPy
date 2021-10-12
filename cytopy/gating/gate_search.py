@@ -32,6 +32,8 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from functools import partial
+from multiprocessing import cpu_count
+from multiprocessing import Pool
 from typing import Dict
 from typing import List
 from typing import Union
@@ -42,8 +44,8 @@ from numba import jit
 from scipy.spatial.distance import cosine
 from sklearn.model_selection import ParameterGrid
 
-from ..data import Population
-from ..feedback import progress_bar
+from cytopy.data import Population
+from cytopy.feedback import progress_bar
 from cytopy.gating.gate import EllipseGate
 from cytopy.gating.gate import PolygonGate
 from cytopy.gating.gate import ThresholdGate
@@ -70,6 +72,8 @@ def fit_gate(
     updated_params: dict,
     gate: PolygonGate or ThresholdGate or EllipseGate,
     data: pd.DataFrame,
+    cached_data: bool,
+    norm: bool,
 ) -> list:
     """
     Update the Gate method parameters and fit to the given data, predicting matching
@@ -90,7 +94,7 @@ def fit_gate(
         List of new Population objects
     """
     gate.method_kwargs = updated_params
-    return gate.fit_predict(data=data)
+    return gate.fit_predict(data=data, cached_data=cached_data, norm=norm)
 
 
 def calculate_signatures(parent: pd.DataFrame, features: List[str], populations_idx: List[List[int]]) -> np.ndarray:
@@ -125,6 +129,12 @@ def threshold_gate_hyperparam_search(gate: ThresholdGate, parent: pd.DataFrame, 
     return optimal_populations
 
 
+def hausdorff_distance(child, populations):
+    search_space = [p for p in populations if p.population_name == child.name]
+    idx = np.argmin([child.geom.shape.hausdorff_distance(p.geom.shape) for p in search_space])
+    return search_space[int(idx)]
+
+
 def polygon_gate_hyperparam_search(gate: Union[PolygonGate, EllipseGate], populations: List[List[Population]]):
     populations = remove_null_populations(population_grid=populations)
     populations = [p for sl in populations for p in sl]
@@ -141,15 +151,17 @@ def hyperparameter_gate(
     grid: Dict,
     parent: pd.DataFrame,
     verbose: bool = True,
+    norm: bool = False,
 ) -> list:
     original_kwargs = gate.method_kwargs.copy()
     grid = grid.copy()
     grid = ParameterGrid(grid)
-    fitter = partial(fit_gate, gate=gate, data=parent)
-    populations = list()
-
-    for params in progress_bar(grid, verbose=verbose, total=len(grid)):
-        populations.append(fitter(params))
+    grid = list(grid.__iter__())
+    first_populations, parent = fit_gate(updated_params=grid[0], data=parent, cached_data=False, gate=gate, norm=norm)
+    populations = [first_populations]
+    fitter = partial(fit_gate, gate=gate, data=parent, norm=norm)
+    for params in progress_bar(grid[1:], verbose=verbose, total=len(grid[1:])):
+        populations.append(fitter(params)[0])
     gate.method_kwargs = original_kwargs
 
     if isinstance(gate, ThresholdGate):

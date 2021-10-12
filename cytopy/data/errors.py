@@ -81,4 +81,4 @@ class MissingPopulationError(Exception):
 
 class InsufficientEventsError(Exception):
     def __init__(self, population_id: str, filegroup_id: str):
-        super().__init__(f"Insufficient events in {population_id} does not exists for {filegroup_id}!")
+        super().__init__(f"Insufficient events in {population_id} for {filegroup_id}!")
