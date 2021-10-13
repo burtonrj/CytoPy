@@ -1,5 +1,3 @@
-from ..data.population import PolygonGeom
-from ..data.population import ThresholdGeom
 from .gate import EllipseGate
 from .gate import HuberGate
 from .gate import PolygonGate

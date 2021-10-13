@@ -347,39 +347,28 @@ class Gate(mongoengine.Document):
             data = self.y_transformer.inverse_scale(data=data, features=[self.y])
         return data
 
-    def preprocess_data(self, data: pd.DataFrame, norm_ref: Optional[pd.DataFrame] = None, norm: bool = False):
+    def preprocess_data(self, data: pd.DataFrame, norm: bool = False):
         self._xy_in_dataframe(data=data)
         data = data.copy()
         data = self.transform(data=data)
 
         try:
             if norm:
-                self.normalise(target=data, ref=norm_ref)
+                self.normalise(target=data)
         except ValueError as e:
             logger.error("Failed to normalise data prior to fitting gate.")
             logger.exception(e)
             norm = False
         return data, norm
 
-    def normalise(self, target: pd.DataFrame, ref: Optional[pd.DataFrame] = None):
-        if ref is not None:
-            self._xy_in_dataframe(data=ref)
-            ref = self.transform(data=ref)
+    def normalise(self, target: pd.DataFrame):
         for axis in ["x", "y"]:
             var = getattr(self, axis)
-            if var:
-                norm = getattr(self, f"normalisation_{axis}")
-                if norm:
-                    lr = LandmarkReg(
-                        target=target, ref=norm.ref_density, var=var, grid=norm.ref_grid, ref_peaks=norm.peaks
-                    )
-                else:
-                    assert ref is not None, "No normalisation defined on gate, must provide reference DataFrame."
-                    lr = LandmarkReg(target=target, ref=ref, var=var)
-                    norm = Normalisation(peaks=lr.reference_landmarks)
-                    norm.ref_grid = lr.grid
-                    norm.ref_density = lr.ref_density
-                    setattr(self, f"normalisation_{axis}", norm)
+            norm = getattr(self, f"normalisation_{axis}")
+            if var is not None and norm is not None:
+                lr = LandmarkReg(
+                    target=target, ref=norm.ref_density, var=var, grid=norm.ref_grid, ref_peaks=norm.peaks
+                )
                 target[var] = lr().shift_data(target[var].values)
 
     def add_normalisation_reference(self, ref: pd.DataFrame):
@@ -387,14 +376,15 @@ class Gate(mongoengine.Document):
         ref = self.transform(data=ref)
         for axis in ["x", "y"]:
             var = getattr(self, axis)
-            min_, max_ = ref[var].min(), ref[var].max()
-            x = np.linspace(min_ - 0.1, max_ + 0.1, 100000)
-            y = FFTKDE(kernel="gaussian", bw="silverman").fit(ref[var].to_numpy()).evaluate(x)
-            peaks = list(detect_peaks(y, mph=0.001 * y.max()))
-            norm = Normalisation(peaks=peaks)
-            norm.ref_grid = x
-            norm.ref_density = y
-            setattr(self, f"normalisation_{axis}", norm)
+            if var:
+                min_, max_ = ref[var].min(), ref[var].max()
+                x = np.linspace(min_ - 0.1, max_ + 0.1, 100000)
+                y = FFTKDE(kernel="gaussian", bw="silverman").fit(ref[var].to_numpy()).evaluate(x)
+                peaks = [int(i) for i in detect_peaks(y, mph=0.001 * y.max())]
+                norm = Normalisation(peaks=peaks)
+                norm.ref_grid = x
+                norm.ref_density = y
+                setattr(self, f"normalisation_{axis}", norm)
 
     def transform_info(self) -> (Dict, Dict):
         """
@@ -1092,7 +1082,6 @@ class ThresholdGate(Gate):
         data: pd.DataFrame,
         ctrl_data: Optional[pd.DataFrame] = None,
         norm: bool = False,
-        norm_ref: Optional[pd.DataFrame] = None,
         cached_data: bool = False,
     ) -> List[float]:
         """
@@ -1119,13 +1108,13 @@ class ThresholdGate(Gate):
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
         if not cached_data:
-            data, norm = self.preprocess_data(data=data, norm_ref=norm_ref, norm=norm)
+            data, norm = self.preprocess_data(data=data, norm=norm)
 
         if ctrl_data is not None:
             self._xy_in_dataframe(data=ctrl_data)
             ctrl_data = self.transform(data=ctrl_data)
             if norm:
-                self.normalise(target=ctrl_data, ref=norm_ref)
+                self.normalise(target=ctrl_data)
             thresholds = self._ctrl_fit(primary_data=data, ctrl_data=ctrl_data)
         else:
             thresholds = self._fit(data=data)
@@ -1182,6 +1171,7 @@ class ThresholdGate(Gate):
             data=data,
             x_threshold=self.children[0].geom.x_threshold,
             y_threshold=self.children[0].geom.y_threshold,
+            normalised=False,
         )
 
     def _generate_populations(
@@ -1209,6 +1199,7 @@ class ThresholdGate(Gate):
                 parent=self.parent,
                 n=df.shape[0],
                 source="gate",
+                normalised=normalised,
                 geom=ThresholdGeom(
                     x=self.x,
                     y=self.y,
@@ -1218,7 +1209,6 @@ class ThresholdGate(Gate):
                     transform_y_kwargs=self.transform_y_kwargs,
                     x_threshold=x_threshold,
                     y_threshold=y_threshold,
-                    normalised=normalised,
                 ),
             )
             pop.index = df.index.to_list()
@@ -1417,6 +1407,9 @@ class PolygonGate(Gate):
         List
         """
         matched_populations = list()
+        if len(new_populations) == 0 and len(self.children) == 0:
+            new_populations[0].population_name = self.children[0].name
+            return new_populations
         for child in self.children:
             hausdorff_distances = [child.geom.shape.hausdorff_distance(pop.geom.shape) for pop in new_populations]
             matching_population = new_populations[int(np.argmin(hausdorff_distances))]
@@ -1554,7 +1547,6 @@ class PolygonGate(Gate):
         data: pd.DataFrame,
         ctrl_data: None = None,
         norm: bool = False,
-        norm_ref: Optional[pd.DataFrame] = None,
         cached_data: bool = False,
     ) -> List[Population]:
         """
@@ -1581,9 +1573,11 @@ class PolygonGate(Gate):
         """
         assert len(self.children) > 0, "No children defined for gate, call 'fit' before calling 'fit_predict'"
         if not cached_data:
-            data, norm = self.preprocess_data(data=data, norm_ref=norm_ref, norm=norm)
+            data, norm = self.preprocess_data(data=data, norm=norm)
         return (
-            self._match_to_children(self._generate_populations(data=data, polygons=self._fit(data=data), norm=norm)),
+            self._match_to_children(
+                self._generate_populations(data=data, polygons=self._fit(data=data), normalised=norm)
+            ),
             data,
         )
 
@@ -1611,7 +1605,7 @@ class PolygonGate(Gate):
         """
         data = self.transform(data=data)
         polygons = [create_polygon(c.geom.x_values, c.geom.y_values) for c in self.children]
-        populations = self._generate_populations(data=data, polygons=polygons)
+        populations = self._generate_populations(data=data, polygons=polygons, normalised=False)
         for p, name in zip(populations, [c.name for c in self.children]):
             p.population_name = name
         return populations
@@ -2176,6 +2170,7 @@ def update_threshold(
             population.definition
         )
         population.index = new_data.index.values
+        population.n = len(population.index)
         population.geom.x_threshold = x_threshold
     else:
         if y_threshold is None:
@@ -2226,4 +2221,5 @@ def update_polygon(
     population.geom.x_values = x_values
     population.geom.y_values = y_values
     population.index = new_data.index.values
+    population.n = len(population.index)
     return population

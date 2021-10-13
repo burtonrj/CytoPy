@@ -549,11 +549,11 @@ class GatingStrategy(mongoengine.Document):
         )
         assert isinstance(params, dict), err
         assert all([isinstance(x, list) for x in params.values()]), err
-        self.hyperparameter_search[gate_name] = {"grid": params}
+        self.hyperparameter_search[gate_name] = params
 
     def add_normalisation(self, gate: str):
         gate = self.get_gate(gate=gate)
-        gate.add_normalisation_reference(ref=self._load_gate_dataframes(gate=gate, ctrl=False))
+        gate.add_normalisation_reference(ref=self._load_gate_dataframes(gate=gate, ctrl=False)[0])
 
     def plot_all_gates(self):
         """

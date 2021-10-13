@@ -230,27 +230,37 @@ class InteractiveGateEditor(widgets.HBox):
         return geom
 
     def _poly_update(self, _):
+        self.progress_bar.value = 1
         verts = self.selector.verts
         verts.append(verts[0])
         verts = np.array(verts)
         c = self.gate_geometry[self.child_select.value]["colour"].values[0]
+        self.progress_bar.value = 2
         self.gate_geometry[self.child_select.value] = pd.DataFrame(
             {self.gate.x: verts[:, 0], self.gate.y: verts[:, 1], "colour": [c for _ in range(verts.shape[0])]}
         )
+        self.progress_bar.value = 3
         geom = self.gate_geometry[self.child_select.value]
         self.artists[self.child_select.value].set_data(
             geom[[self.gate.x, self.gate.y]].values[:, 0], geom[[self.gate.x, self.gate.y]].values[:, 1]
         )
+        self.progress_bar.value = 4
         self.fig.canvas.draw()
+        self.progress_bar.value = 5
 
     def _update_threshold(self, value: Union[str, int, float], axis: str):
+        self.progress_bar.value = 1
         try:
             self.gate_geometry[f"{axis}_threshold"] = float(value)
             set_data = getattr(self.artists[axis], f"set_{axis}data")
+            self.progress_bar.value = 3
             set_data(np.array([float(value), float(value)]))
+            self.progress_bar.value = 4
             self.fig.canvas.draw()
+            self.progress_bar.value = 5
         except ValueError:
             logger.debug("Invalid value passed to text field")
+            self.progress_bar.value = 5
 
     def _update_x_threshold(self, change: Dict):
         self._update_threshold(value=change["new"], axis="x")
@@ -259,6 +269,7 @@ class InteractiveGateEditor(widgets.HBox):
         self._update_threshold(value=change["new"], axis="y")
 
     def _apply_click(self, _):
+        self.progress_bar.value = 2
         if isinstance(self.gate, ThresholdGate):
             self.gs.edit_threshold_gate(
                 gate_name=self.gate.gate_name,
@@ -266,6 +277,7 @@ class InteractiveGateEditor(widgets.HBox):
                 y_threshold=self.gate_geometry["y_threshold"],
                 transform=False,
             )
+            self.progress_bar.value = 5
         else:
             self.gs.edit_polygon_gate(
                 gate_name=self.gate.gate_name,
@@ -274,7 +286,10 @@ class InteractiveGateEditor(widgets.HBox):
                 },
                 transform=False,
             )
+            self.progress_bar.value = 5
 
     def _save_click(self, _):
+        self.progress_bar.value = 1
         self.gs.save()
+        self.progress_bar.value = 5
         logger.info("Changes saved!")

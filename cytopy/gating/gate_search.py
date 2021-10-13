@@ -159,7 +159,7 @@ def hyperparameter_gate(
     grid = list(grid.__iter__())
     first_populations, parent = fit_gate(updated_params=grid[0], data=parent, cached_data=False, gate=gate, norm=norm)
     populations = [first_populations]
-    fitter = partial(fit_gate, gate=gate, data=parent, norm=norm)
+    fitter = partial(fit_gate, gate=gate, data=parent, norm=norm, cached_data=True)
     for params in progress_bar(grid[1:], verbose=verbose, total=len(grid[1:])):
         populations.append(fitter(params)[0])
     gate.method_kwargs = original_kwargs

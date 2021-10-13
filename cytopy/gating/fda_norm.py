@@ -248,7 +248,6 @@ def match_landmarks(p: np.ndarray, plabels: np.ndarray):
         (2, n) array, where n is the number of clusters. Order conserved between samples; first
         row is peaks from target, second row is peaks from reference.
     """
-    p, plabels = np.array(p, dtype=float), np.array(plabels, dtype=int)
     km_labels, centroids = cluster_landmarks(p, plabels)
     # Search for clusters with zero entropy
     zero_entropy = zero_entropy_clusters(km_labels, plabels, centroids)

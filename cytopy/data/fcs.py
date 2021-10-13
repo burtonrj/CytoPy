@@ -688,6 +688,13 @@ class FileGroup(mongoengine.Document):
         for pre, fill, node in anytree.RenderTree(root):
             print("%s%s" % (pre, node.name))
 
+    def rename_population(self, old_name: str, new_name: str):
+        assert new_name not in self.list_populations(), f"{new_name} already exists!"
+        pop = self.get_population(population_name=old_name)
+        pop.population_name = new_name
+        self.tree[old_name].name = new_name
+        self.tree[new_name] = self.tree.pop(old_name)
+
     def delete_populations(self, populations: Union[str, List[str]]) -> None:
         """
         Delete given populations. Populations downstream from delete population(s) will
