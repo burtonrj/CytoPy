@@ -28,7 +28,7 @@ def test_summarise_clusters(small_blobs, scale, method):
 
 def test_construct_cluster_method(small_blobs):
     clusterer = clustering.ClusterMethod(klass=KMeans, params={"n_clusters": 5}, verbose=True)
-    assert len(clusterer.metrics) == len(clustering.cluster_metrics.inbuilt_metrics)
+    assert len(clusterer.metrics) == len(clustering.cluster_metrics.default_internal_metrics)
     assert clusterer.params == {"n_clusters": 5}
 
 

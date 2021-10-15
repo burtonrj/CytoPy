@@ -19,15 +19,14 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import MaxNLocator
 from sklearn.base import ClusterMixin
-from sklearn.metrics import adjusted_mutual_info_score
-from sklearn.metrics import adjusted_rand_score
 
 from .clustering import Clustering
 from .clustering import ClusteringError
 from .clustering import ClusterMethod
 from .clustering import remove_null_features
-from .metrics import init_metrics
-from .metrics import Metric
+from .metrics import comparison_matrix
+from .metrics import init_internal_metrics
+from .metrics import InternalMetric
 from .plotting import clustered_heatmap
 from .plotting import plot_cluster_membership
 from cytopy.data.experiment import Experiment
@@ -37,29 +36,6 @@ from cytopy.plotting.single_cell_plot import discrete_palette
 from cytopy.utils.dim_reduction import DimensionReduction
 
 logger = logging.getLogger(__name__)
-
-
-def adjusted_score(a: List[int], b: List[int], method: str):
-    methods = {
-        "adjusted_mutual_info": adjusted_mutual_info_score,
-        "adjusted_rand_score": adjusted_rand_score,
-    }
-    try:
-        return methods[method](a, b)
-    except KeyError:
-        ValueError(f"Method must be one of {methods.keys()}")
-
-
-def comparison_matrix(cluster_labels: Dict[str, np.ndarray], method: str = "adjusted_mutual_info") -> pd.DataFrame:
-    data = pd.DataFrame(columns=list(cluster_labels.keys()), index=list(cluster_labels.keys()), dtype=float)
-    names = list(cluster_labels.keys())
-    for n1 in progress_bar(names):
-        for n2 in names:
-            if np.isnan(data.loc[n1, n2]):
-                mi = float(adjusted_score(cluster_labels[n1], cluster_labels[n2], method=method))
-                data.at[n1, n2] = mi
-                data.at[n2, n1] = mi
-    return data
 
 
 def save_cache(func: Callable):
@@ -271,14 +247,14 @@ class EnsembleClustering(Clustering):
         sample_size: int,
         resamples: int,
         random_state: int = 42,
-        metrics: Optional[List[Union[Metric, str]]] = None,
+        metrics: Optional[List[Union[InternalMetric, str]]] = None,
         return_data: bool = True,
         **kwargs,
     ):
         if sample_size > self.data.shape[0]:
             raise ClusteringError(f"Sample size cannot exceed size of data ({self.data.shape[0]})")
         logger.info("Sampling...")
-        metrics = init_metrics(metrics=metrics)
+        metrics = init_internal_metrics(metrics=metrics)
         labels = []
         data = []
         for _ in progress_bar(range(resamples), total=resamples):

@@ -237,7 +237,7 @@ class SingleClustering(Clustering):
         max_k: int,
         cluster_n_param: str,
         method: Union[str, ClusterMethod],
-        metric: cluster_metrics.Metric,
+        metric: cluster_metrics.InternalMetric,
         overwrite_features: Optional[List[str]] = None,
         sample_id: Optional[str] = None,
         reduce_dimensions: bool = False,
