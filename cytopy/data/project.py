@@ -106,7 +106,7 @@ class Project(mongoengine.Document):
             logger.error(f"Invalid experiment; {experiment_id} does not exist")
             raise MissingExperimentError(f"Invalid experiment; {experiment_id} does not exist")
 
-    def add_experiment(self, experiment_id: str, panel_definition: str or dict) -> Experiment:
+    def add_experiment(self, experiment_id: str, panel_definition: str) -> Experiment:
         """
         Add new experiment to project. Note you must provide either a path to an excel template for the panel
         definition (panel_definition) or the name of an existing panel (panel_name). If panel_definition is provided,
@@ -117,7 +117,7 @@ class Project(mongoengine.Document):
         -----------
         experiment_id: str
             experiment name
-        panel_definition: str or dict
+        panel_definition: str
             Path to excel template for generating the panel
 
         Returns

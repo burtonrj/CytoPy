@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import seaborn as sns
+from matplotlib.cm import ScalarMappable
 
 from cytopy.data.read_write import polars_to_pandas
 
@@ -132,7 +133,7 @@ def single_cell_plot(
     if not discrete:
         if isinstance(hue_norm, tuple):
             hue_norm = cm.Normalize(*hue_norm)
-        plt.gcf().colorbar(hue_norm, ax=ax, **cbar_kwargs)
+        plt.gcf().colorbar(ScalarMappable(norm=hue_norm, cmap=palette), ax=ax, **cbar_kwargs)
 
     ax.set_xlabel(x)
     ax.set_ylabel(y)

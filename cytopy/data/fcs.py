@@ -464,17 +464,17 @@ class FileGroup(mongoengine.Document):
                 f"...Performance (average across permutations; standard dev): "
                 f"{round(np.mean(permutation_scores), 4)}; {round(np.std(permutation_scores), 4)}"
             )
-            logger.info(f"...p-value (comparison of original score to permuations): {round(pvalue, 4)}")
+            logger.info(f"...p-value (comparison of original score to permutations): {round(pvalue, 4)}")
 
         logger.info("Predicting population for control data...")
         classifier.fit(x, y)
         ctrl_labels = classifier.predict(ctrl[features].to_numpy())
-        training_prop_of_root = self.get_population(population).n / self.get_population("root").n
-        ctrl_prop_of_root = np.sum(ctrl_labels) / ctrl.shape[0]
+        training_prop_of_root = (self.get_population(population).n / self.get_population("root").n) * 100
+        ctrl_prop_of_root = (np.sum(ctrl_labels) / ctrl.shape[0]) * 100
         logger.info(f"{population}: {round(training_prop_of_root, 3)}% of root in primary data")
         logger.info(f"Predicted in ctrl: {round(ctrl_prop_of_root, 3)}% of root in control data")
-        ctrl = ctrl[np.where(ctrl_labels == 1)[0]]
-        return ctrl[["Index"] + features].to_pandas().set_index("Index")
+        ctrl = ctrl.iloc[np.where(ctrl_labels == 1)[0]]
+        return ctrl[features].copy()
 
     def load_multiple_populations(
         self,
@@ -1014,25 +1014,21 @@ def _load_data_for_ctrl_estimate(
     -------
     polars.DataFrame, polars.DataFrame, Transformer
     """
-    training = filegroup.data(source="primary")
+    training = polars_to_pandas(filegroup.data(source="primary"))
     population_idx = filegroup.get_population(target_population).index
     training["label"] = [0 for _ in range(training.shape[0])]
-    training[training.Index.is_in(population_idx), "label"] = 1
-    ctrl = filegroup.data(source=ctrl)
+    training.loc[population_idx, ["label"]] = 1
+    ctrl = polars_to_pandas(filegroup.data(source=ctrl))
 
     features = [x for x in training.columns if x != "label"]
     if transform:
         training = apply_transform(data=training, features=features, method=transform, **transform_kwargs)
         ctrl = apply_transform(data=ctrl, features=features, method=transform, **transform_kwargs)
 
-    time_columns = [col for col in training.columns if re.match("time", col, re.IGNORECASE)]
-    for t in time_columns:
-        training.drop(t, axis=1, inplace=True)
-        ctrl.drop(t, axis=1, inplace=True)
-
+    features = [col for col in training.columns if not re.match("time", col, re.IGNORECASE)]
     sampler = RandomOverSampler(random_state=42)
     x_resampled, y_resampled = sampler.fit_resample(training[features].values, training["label"].values)
-    training = pl.DataFrame(x_resampled, columns=features)
+    training = pd.DataFrame(x_resampled, columns=features)
     training["label"] = y_resampled
     if training.shape[0] > sample_size:
         training = training.sample(n=sample_size)

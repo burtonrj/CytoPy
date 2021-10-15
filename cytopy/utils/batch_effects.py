@@ -33,8 +33,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 import math
 import os
+import pickle
 from typing import *
-from warnings import warn
 
 import flowio
 import harmonypy
@@ -43,11 +43,13 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from KDEpy import FFTKDE
-from scipy.cluster import hierarchy
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
 
 from ..data.experiment import Experiment
+from ..data.panel import Channel
+from ..data.panel import Panel
+from ..data.project import Project
 from ..feedback import progress_bar
 from ..feedback import vprint
 from ..utils import transform as transform_module
@@ -191,7 +193,7 @@ def marker_variance(
 
     comparison_samples = comparison_samples or [x for x in data.sample_id.unique() if x != reference]
     fig = plt.figure(figsize=figsize)
-    markers = markers or data.get(reference).columns
+    markers = markers or data.columns.tolist()
     i = 0
     nrows = math.ceil(len(markers) / 3)
     fig.suptitle(f"Per-channel KDE, Reference: {reference}", y=1.02)
@@ -207,7 +209,7 @@ def marker_variance(
         for comparison_sample_id in comparison_samples:
             df = data[data.sample_id == comparison_sample_id]
             if marker not in df.columns:
-                warn(f"{marker} missing from {comparison_sample_id}, this marker will be ignored")
+                logger.warning(f"{marker} missing from {comparison_sample_id}, this marker will be ignored")
             else:
                 x, y = FFTKDE(kernel=kernel, bw=kde_bw).fit(df[marker].to_numpy()).evaluate()
                 ax.plot(x, y, color="r", **kwargs)
@@ -282,7 +284,7 @@ def dim_reduction_grid(
     for sample_id in progress_bar(comparison_samples, verbose=verbose):
         i += 1
         ax = fig.add_subplot(nrows, 3, i)
-        embeddings = reducer.transform(data[data.sample_id == sample_id], features=features)
+        embeddings = reducer.transform(data[data.sample_id == sample_id].copy(), features=features)
         x = f"{method}1"
         y = f"{method}2"
         ax.scatter(reference_df[x], reference_df[y], c="blue", s=4, alpha=0.2)
@@ -357,20 +359,24 @@ class Harmony:
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Union[pd.DataFrame, str],
         features: List[str],
         transform: Optional[str] = "logicle",
         transform_kwargs: Union[Dict[str, str], None] = None,
         scale: Optional[str] = "standard",
         scale_kwargs: Optional[Dict] = None,
+        harmony_cache: Optional[str] = None,
     ):
+        if isinstance(data, str):
+            data = pd.read_csv(data)
+
         transform_kwargs = transform_kwargs or {}
         self.transformer = None if transform is None else TRANSFORMERS[transform](**transform_kwargs)
         if self.transformer is not None:
             self.data = self.transformer.scale(data=data, features=features)
         else:
             self.data = data
-        self.data = self.data.dropna()
+        self.data = self.data[~self.data[features].isnull().any(axis=1)].reset_index(drop=True)
         self.features = [x for x in features if x in self.data.columns]
         self.meta = self.data[["sample_id"]]
         self.harmony = None
@@ -380,6 +386,18 @@ class Harmony:
             scale = transform_module.Scaler(method=scale, **scale_kwargs)
             self.data = scale(data=self.data, features=self.features)
             self.scaler = scale
+        if harmony_cache is not None:
+            logger.warning(
+                "Loading harmony object from disk. It is the users responsibility to ensure that the "
+                "cached harmony object matches the loaded dataframe!"
+            )
+            with open(harmony_cache, "rb") as f:
+                self.harmony = pickle.load(f)
+
+    def cache(self, data_path: str = "harmony_data.csv", harmony_path: str = "harmony.pkl"):
+        self.data.to_csv(data_path, index=False)
+        with open(harmony_path, "wb") as f:
+            pickle.dump(self.harmony, f)
 
     def run(self, var_use: str = "sample_id", **kwargs):
         """
@@ -445,7 +463,9 @@ class Harmony:
         self.data = self.data.drop(meta_var_name)
         return self
 
-    def batch_lisi(self, meta_var: str = "sample_id", sample: float = 1.0):
+    def batch_lisi(
+        self, meta_var: str = "sample_id", sample: Optional[int] = 1000, idx: Optional[Iterable[int]] = None
+    ):
         """
         Compute LISI using the given meta_var as label
 
@@ -468,12 +488,18 @@ class Harmony:
         if meta_var not in self.meta.columns:
             logger.error(f"{meta_var} missing from meta attribute")
             raise ValueError(f"{meta_var} missing from meta attribute")
-        idx = np.random.randint(self.data.shape[0], size=int(self.data.shape[0] * sample))
         corrected = self.batch_corrected()
+        corrected["meta"] = self.meta[meta_var]
+
+        if idx is not None:
+            corrected = corrected.iloc[idx]
+        elif sample is not None:
+            corrected = corrected.sample(n=sample)
+
         return harmonypy.lisi.compute_lisi(
-            corrected.iloc[idx][self.features],
-            metadata=self.meta.iloc[idx],
-            label_colnames=[meta_var],
+            corrected[self.features].values,
+            metadata=corrected[["meta"]],
+            label_colnames=["meta"],
         )
 
     def plot_correction(
@@ -523,7 +549,7 @@ class Harmony:
                 ax.legend().remove()
         return fig
 
-    def batch_lisi_distribution(self, meta_var: str = "sample_id", sample: Union[float, None] = 0.1, **kwargs):
+    def batch_lisi_distribution(self, meta_var: str = "sample_id", sample: Optional[int] = 1000, **kwargs):
         """
         Plot the distribution of LISI using the given meta_var as label
 
@@ -531,7 +557,7 @@ class Harmony:
         ----------
         meta_var: str (default="sample_id")
         sample: float (default=1.)
-            Fraction to downsample data to prior to calculating LISI. Downsampling is recommended
+            Number of events to sample prior to calculating LISI. Downsampling is recommended
             for large datasets, since LISI is computationally expensive
         kwargs:
             Additional keyword arguments passed to Seaborn.histplot
@@ -540,19 +566,21 @@ class Harmony:
         -------
         Matplotlib.Axes
         """
-        data = self.data[self.features]
+        data = self.data[self.features].copy()
         data["meta"] = self.meta[meta_var]
+        idx = None
         if sample is not None:
-            data = data.sample(frac=sample)
+            data = data.sample(n=sample)
+            idx = data.index.values
         before = harmonypy.lisi.compute_lisi(
-            data[self.features].to_numpy(),
-            metadata=pd.DataFrame(data["meta"].to_numpy(), columns=[meta_var]),
-            label_colnames=[meta_var],
+            data[self.features].values,
+            metadata=data[["meta"]],
+            label_colnames=["meta"],
         )
         data = pd.DataFrame(
             {
                 "Before": before.reshape(-1),
-                "After": self.batch_lisi(meta_var=meta_var, sample=sample).reshape(-1),
+                "After": self.batch_lisi(meta_var=meta_var, idx=idx).reshape(-1),
             }
         )
         data = data.melt(var_name="Data", value_name="LISI")
@@ -582,9 +610,10 @@ class Harmony:
 
     def save(
         self,
-        experiment: Experiment,
-        target_dir: str,
-        prefix: str = "Corrected_",
+        project: Project,
+        fcs_dir: str,
+        experiment_id: str,
+        prefix: str = "HarmonyCorrected_",
         subject_mappings: Union[Dict[str, str], None] = None,
     ):
         """
@@ -598,7 +627,8 @@ class Harmony:
             Prefix added to sample ID when creating new FileGroup
         subject_mappings: dict, optional
             If provided, key values should match batch_id and value the Subject to associate the new
-            FileGroup to
+            FileGroup to. If None and the 'data' attribute has 'subject_id' column, associations will
+            be inferred from here.
 
         Returns
         -------
@@ -610,34 +640,54 @@ class Harmony:
             Save called before running the Harmony algorithm
         """
         assert self.harmony is not None, "Call 'run' first"
-        if not os.path.isdir(target_dir):
-            raise FileNotFoundError(f"Directory {target_dir} not found.")
+        assert experiment_id not in project.list_experiments(), f"Experiment with ID {experiment_id} already exists!"
+        if not os.path.isdir(fcs_dir):
+            raise FileNotFoundError(f"Directory {fcs_dir} not found.")
+
+        logger.info(f"Creating {experiment_id}...")
+        exp = Experiment(experiment_id=experiment_id)
+        exp.panel = Panel()
+        for channel in self.features:
+            exp.panel.channels.append(Channel(channel=channel, name=channel))
+        exp.save()
+        project.experiments.append(exp)
+        project.save()
+
         subject_mappings = subject_mappings or {}
-        channels, markers = [
-            [channel.channel for channel in experiment.panel.channels],
-            [channel.name for channel in experiment.panel.channels],
-        ]
-        for sample_id, df in progress_bar(
-            self.batch_corrected().groupby("sample_id"),
-            verbose=True,
-            total=self.meta.sample_id.nunique(),
-        ):
-            df = pd.DataFrame(df)
-            if self.scaler is not None:
-                df = self.scaler.inverse(data=df, features=self.features)
-            if self.transformer is not None:
-                df = self.transformer.inverse_scale(data=df, features=self.features)
-            filepath = os.path.join(target_dir, f"{prefix}_{sample_id}.fcs")
-            with open(filepath, "wb") as f:
-                flowio.create_fcs(
-                    event_data=df.to_numpy().flatten(),
-                    file_handle=f,
-                    channel_names=channels,
-                    opt_channel_names=markers,
+        if len(subject_mappings) == 0 and "subject_id" in self.data.columns:
+            logger.info("Inferring subject mappings from data attribute")
+            subject_mappings = self.data[["sample_id", "subject_id"]]
+            subject_mappings = dict(zip(subject_mappings.sample_id, subject_mappings.subject_id))
+
+        logger.info(f"Saving corrected data to disk and associating to {experiment_id}")
+        try:
+            for sample_id, df in progress_bar(
+                self.batch_corrected().groupby("sample_id"),
+                verbose=True,
+                total=self.meta.sample_id.nunique(),
+            ):
+                df = df[self.features]
+                if self.scaler is not None:
+                    df = self.scaler.inverse(data=df, features=self.features)
+                if self.transformer is not None:
+                    df = self.transformer.inverse_scale(data=df, features=self.features)
+                filepath = os.path.join(fcs_dir, f"{prefix}_{sample_id}.fcs")
+                with open(filepath, "wb") as f:
+                    flowio.create_fcs(
+                        event_data=df.to_numpy().flatten(),
+                        file_handle=f,
+                        channel_names=self.features,
+                        opt_channel_names=self.features,
+                    )
+                exp.add_filegroup(
+                    sample_id=sample_id,
+                    paths={"primary": filepath},
+                    compensate=False,
+                    subject_id=subject_mappings.get(sample_id, None),
                 )
-            experiment.add_filegroup(
-                sample_id=sample_id,
-                paths={"primary": filepath},
-                compensate=False,
-                subject_id=subject_mappings.get(sample_id, None),
-            )
+            project.save()
+        except (TypeError, ValueError, AttributeError, AssertionError) as e:
+            logger.error("Failed to save data. Rolling back changes.")
+            logger.exception(e)
+            project.delete_experiment(experiment_id=experiment_id)
+            project.save()

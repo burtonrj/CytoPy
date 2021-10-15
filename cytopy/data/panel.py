@@ -41,16 +41,19 @@ class Channel(mongoengine.EmbeddedDocument):
     permutations = mongoengine.StringField(required=False)
 
     def query(self, x: str):
-        if self.case_sensitive:
-            if re.search(self.regex_pattern, x):
+        if self.regex_pattern:
+            if self.case_sensitive:
+                if re.search(self.regex_pattern, x):
+                    return self.name if self.name else self.channel
+                return None
+            if re.search(self.regex_pattern, x, re.IGNORECASE):
                 return self.name if self.name else self.channel
-            return None
-        if re.search(self.regex_pattern, x, re.IGNORECASE):
-            return self.name if self.name else self.channel
         if self.permutations:
             for p in self.permutations.split(","):
                 if x == p:
                     return self.name if self.name else self.channel
+        if x == self.channel:
+            return self.name
         return None
 
 
