@@ -70,6 +70,7 @@ from cytopy.data.population import Population
 from cytopy.data.subject import Subject
 from cytopy.feedback import progress_bar
 from cytopy.utils.dim_reduction import dimension_reduction_with_sampling
+from cytopy.utils.dim_reduction import DimensionReduction
 from cytopy.utils.transform import Scaler
 
 logger = logging.getLogger(__name__)
@@ -236,12 +237,12 @@ class Clustering:
         self,
         experiment: Experiment,
         features: list,
+        population_prefix: str,
         sample_ids: list or None = None,
         root_population: str = "root",
         transform: str = "logicle",
         transform_kwargs: dict or None = None,
         verbose: bool = True,
-        population_prefix: str = "cluster",
         data: Optional[pd.DataFrame] = None,
         random_state: int = 42,
     ):
@@ -310,13 +311,27 @@ class Clustering:
         dim_reduction_kwargs: Optional[Dict] = None,
     ):
         dim_reduction_kwargs = dim_reduction_kwargs or {}
-
+        downsample = dim_reduction_kwargs.pop("downsample", True)
+        sample_n = dim_reduction_kwargs.pop("sample_n", 10000)
+        if sample_n >= self.data.shape[0]:
+            downsample = None
         scale_kwargs = scale_kwargs or {}
         data, _ = self.scale_data(features=features, scale_method=scale_method, scale_kwargs=scale_kwargs)
         if dim_reduction is not None:
-            data, _ = dimension_reduction_with_sampling(
-                data=self.data, features=features, method=dim_reduction, **dim_reduction_kwargs
-            )
+            if downsample:
+                logger.info(f"Embeddings will be calculated on a subsample of {sample_n} events.")
+                data, _ = dimension_reduction_with_sampling(
+                    data=self.data, features=features, method=dim_reduction, **dim_reduction_kwargs
+                )
+            else:
+                if self.data.shape[0] > 500000:
+                    logger.warning(
+                        f"No downsampling specified, yet your data is rather big! This might "
+                        f"take a while or might use a lot of memory! Specify 'downsample' as "
+                        f"True and a sample_n to perform embedding on a subsample."
+                    )
+                    reducer = DimensionReduction(method=dim_reduction, **dim_reduction_kwargs)
+                    data = reducer.fit_transform(data=data, features=features)
             features = [x for x in data.columns if dim_reduction in x]
         return data, features
 

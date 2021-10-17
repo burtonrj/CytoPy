@@ -359,17 +359,13 @@ class Harmony:
 
     def __init__(
         self,
-        data: Union[pd.DataFrame, str],
+        data: pd.DataFrame,
         features: List[str],
         transform: Optional[str] = "logicle",
         transform_kwargs: Union[Dict[str, str], None] = None,
         scale: Optional[str] = "standard",
         scale_kwargs: Optional[Dict] = None,
-        harmony_cache: Optional[str] = None,
     ):
-        if isinstance(data, str):
-            data = pd.read_csv(data)
-
         transform_kwargs = transform_kwargs or {}
         self.transformer = None if transform is None else TRANSFORMERS[transform](**transform_kwargs)
         if self.transformer is not None:
@@ -386,18 +382,6 @@ class Harmony:
             scale = transform_module.Scaler(method=scale, **scale_kwargs)
             self.data = scale(data=self.data, features=self.features)
             self.scaler = scale
-        if harmony_cache is not None:
-            logger.warning(
-                "Loading harmony object from disk. It is the users responsibility to ensure that the "
-                "cached harmony object matches the loaded dataframe!"
-            )
-            with open(harmony_cache, "rb") as f:
-                self.harmony = pickle.load(f)
-
-    def cache(self, data_path: str = "harmony_data.csv", harmony_path: str = "harmony.pkl"):
-        self.data.to_csv(data_path, index=False)
-        with open(harmony_path, "wb") as f:
-            pickle.dump(self.harmony, f)
 
     def run(self, var_use: str = "sample_id", **kwargs):
         """

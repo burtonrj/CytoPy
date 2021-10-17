@@ -1,17 +1,24 @@
+from collections import defaultdict
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Type
 from typing import Union
 
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from sklearn.base import ClusterMixin
 
 from . import metrics as cluster_metrics
+from ..plotting.general import box_swarm_plot
+from ..plotting.general import build_plot_grid
 from .clustering import Clustering
 from .clustering import ClusterMethod
 from .clustering import remove_null_features
+from .metrics import init_internal_metrics
+from .metrics import InternalMetric
 from .plotting import clustered_heatmap
 from .plotting import plot_cluster_membership
 from .plotting import plot_cluster_membership_sample
@@ -229,8 +236,45 @@ class SingleClustering(Clustering):
     ):
         features = features or self.features
         return clustered_heatmap(
-            data=self.data, features=features, sample_id=sample_id, meta_label=meta_label ** kwargs
+            data=self.data, features=features, sample_id=sample_id, meta_label=meta_label, **kwargs
         )
+
+    def performance(
+        self,
+        metrics: Optional[List[Union[str, InternalMetric]]] = None,
+        sample_n: int = 10000,
+        resamples: int = 10,
+        features: Optional[List[str]] = None,
+        label: str = "cluster_label",
+        plot: bool = True,
+        verbose: bool = True,
+        col_wrap: int = 2,
+        figure_kwargs: Optional[Dict] = None,
+        **plot_kwargs,
+    ):
+        if sample_n > self.data.shape[0]:
+            raise ValueError(f"sample_n is greater than the total number of events: {sample_n} > {self.data.shape[0]}")
+        features = features or self.features
+        metrics = init_internal_metrics(metrics=metrics)
+        results = defaultdict(list)
+        for _ in progress_bar(range(resamples), verbose=verbose, total=resamples):
+            df = self.data.sample(n=sample_n)
+            for m in metrics:
+                results[m.name].append(m(data=df, features=features, labels=df[label]))
+        if plot:
+            figure_kwargs = figure_kwargs or {}
+            figure_kwargs["figsize"] = figure_kwargs.get("figure_size", (10, 10))
+            fig, axes = build_plot_grid(n=len(metrics), col_wrap=col_wrap, **figure_kwargs)
+            for i, (m, data) in enumerate(results.items()):
+                box_swarm_plot(
+                    plot_df=pd.DataFrame({"Method": [m.name] * len(data), "Score": data}),
+                    x="Method",
+                    y="Score",
+                    ax=axes[i],
+                    **plot_kwargs,
+                )
+            return results, fig
+        return results
 
     def choose_k(
         self,
@@ -274,7 +318,7 @@ class SingleClustering(Clustering):
     def save(
         self,
         verbose: bool = True,
-        population_var: str = "meta_label",
+        population_var: str = "cluster_label",
         parent_populations: Optional[Dict] = None,
     ):
         super()._save(verbose=verbose, population_var=population_var, parent_populations=parent_populations)
