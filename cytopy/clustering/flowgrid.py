@@ -142,7 +142,7 @@ class FlowGrid:
 
     def density_query(
         self, unique_array: np.ndarray, counts: np.ndarray, nn_model: NearestNeighbors
-    ) -> Tuple[Dict[np.ndarray], np.ndarray]:
+    ) -> Tuple[Dict[int, np.ndarray], np.ndarray]:
         """
         The density query function determines the core bins. It starts with filtering out bins whose
         density is lower than min_den_b, followed by nearest neighbor search using radius_neighbors from
@@ -182,7 +182,7 @@ class FlowGrid:
             query_d[check_index[core]] = neighborhoods[core]
         return query_d, core_or_non
 
-    def bfs(self, query_d: Dict[np.ndarray], core_non: np.ndarray) -> np.ndarray:
+    def bfs(self, query_d: Dict[int, np.ndarray], core_non: np.ndarray) -> np.ndarray:
         """
         Breadth first search to group the core bins with their connected bins.
         The initial setting is assigning all bin label as -1 which stands for noise

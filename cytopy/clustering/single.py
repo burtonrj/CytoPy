@@ -27,6 +27,11 @@ from cytopy.feedback import progress_bar
 from cytopy.utils.dim_reduction import dimension_reduction_with_sampling
 
 
+def count_to_proportion(df):
+    df["Percentage"] = (df["Count"] / df["Count"].sum()) * 100
+    return df
+
+
 class SingleClustering(Clustering):
     """
     High-dimensional clustering offers the advantage of an unbiased approach
@@ -232,12 +237,21 @@ class SingleClustering(Clustering):
         )
 
     def heatmap(
-        self, features: Optional[str] = None, sample_id: Optional[str] = None, meta_label: bool = True, **kwargs
+        self,
+        features: Optional[str] = None,
+        sample_id: Optional[str] = None,
+        meta_label: bool = True,
+        include_labels: Optional[List[str]] = None,
+        **kwargs,
     ):
         features = features or self.features
-        return clustered_heatmap(
-            data=self.data, features=features, sample_id=sample_id, meta_label=meta_label, **kwargs
-        )
+        data = self.data.copy()
+        if include_labels:
+            if meta_label:
+                data = data[data["meta_label"].isin(include_labels)]
+            else:
+                data = data[data["cluster_label"].isin(include_labels)]
+        return clustered_heatmap(data=data, features=features, sample_id=sample_id, meta_label=meta_label, **kwargs)
 
     def performance(
         self,
@@ -275,6 +289,17 @@ class SingleClustering(Clustering):
                 )
             return results, fig
         return results
+
+    def cluster_proportions(
+        self, label: str = "cluster_label", x_label: Optional[str] = None, y_label: Optional[str] = None, **plot_kwargs
+    ):
+        plot_data = self.data.groupby("sample_id").apply(count_to_proportion)
+        ax = box_swarm_plot(plot_df=plot_data, x="cluster_label", y="Percentage")
+        if x_label:
+            ax.set_xlabel(x_label)
+        if y_label:
+            ax.set_ylabel(y_label)
+        return ax
 
     def choose_k(
         self,
