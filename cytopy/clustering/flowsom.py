@@ -39,6 +39,7 @@ import pandas as pd
 from minisom import MiniSom
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import RobustScaler
 
 from .consensus_k import KConsensusClustering
 from cytopy.feedback import progress_bar
@@ -134,7 +135,7 @@ class FlowSOM:
 
     def fit_predict(self, data: Union[pd.DataFrame, np.ndarray]):
         if self.normalisation:
-            data = MinMaxScaler().fit_transform(data)
+            data = RobustScaler().fit_transform(data)
         if isinstance(data, pd.DataFrame):
             data = data.values
         self.train(data=data)
