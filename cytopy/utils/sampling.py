@@ -168,7 +168,7 @@ def density_dependent_downsampling(
     outlier_dens: int = 1,
     target_dens: int = 5,
     njobs: int = -1,
-):
+) -> pd.DataFrame:
     """
     Perform density dependent down-sampling to remove risk of under-sampling rare populations;
     adapted from SPADE*
@@ -205,7 +205,7 @@ def density_dependent_downsampling(
         Number of jobs to run in unison when calculating weights (defaults to all available cores)
     Returns
     -------
-    Pandas.DataFrame or Polars.DataFrame
+    Pandas.DataFrame
         Down-sampled dataframe (returns same data type as given)
     """
     if isinstance(sample_size, int) and sample_size >= data.shape[0]:
@@ -230,9 +230,8 @@ def density_dependent_downsampling(
         )
         return uniform_downsampling(data=data, sample_size=sample_size)
     if isinstance(sample_size, int):
-        data = data.sample(n=sample_size, weights=prob)
-    data = data.sample(frac=sample_size, weights=prob)
-    return data
+        return data.sample(n=sample_size, weights=prob)
+    return data.sample(frac=sample_size, weights=prob)
 
 
 def density_probability_assignment(
@@ -350,7 +349,7 @@ def upsample_density(
 
     Returns
     -------
-    Pandas.DataFrame or Polars.DataFrame
+    Pandas.DataFrame
     """
     data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     features = features or list(data.columns)
@@ -410,7 +409,7 @@ def upsample_knn(
         Array of labels for original data
     """
     logger.info("Upsampling...")
-    n = kwargs.get("n_neighbors", None)
+    n = kwargs.pop("n_neighbors", None)
     if n is None:
         logger.info("Calculating optimal n_neighbours by grid search CV...")
         n, score = calculate_optimal_neighbours(x=sample[features], y=labels, scoring=scoring, **kwargs)

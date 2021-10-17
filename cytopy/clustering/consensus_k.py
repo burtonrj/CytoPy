@@ -30,6 +30,7 @@ import bisect
 import logging
 from itertools import combinations
 from typing import List
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -77,7 +78,7 @@ class KConsensusClustering:
         cluster: ClusterMixin,
         smallest_cluster_n: int,
         largest_cluster_n: int,
-        n_resamples: int,
+        n_resamples: int = 10,
         resample_proportion: float = 0.5,
         verbose: bool = True,
         k_param: str = "n_clusters",
@@ -195,6 +196,8 @@ class KConsensusClustering:
         self.cluster_.set_params(n_clusters=self.bestK)
         return self.cluster_.fit_predict(data)
 
-    def fit_predict(self, data: pd.DataFrame, features: List[str]):
-        self.fit(data=data[features].values)
-        return self.predict_data(data=data[features])
+    def fit_predict(self, data: Union[pd.DataFrame, np.ndarray]):
+        if isinstance(data, pd.DataFrame):
+            data = data.values
+        self.fit(data=data)
+        return self.predict_data(data=data)

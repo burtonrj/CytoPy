@@ -65,6 +65,8 @@ import phenograph
 from .consensus_k import KConsensusClustering
 from .flowgrid import FlowGrid
 from .flowsom import FlowSOM
+from .latent import LatentClustering
+from .spade import CytoSPADE
 from cytopy.data.experiment import Experiment
 from cytopy.data.experiment import single_cell_dataframe
 from cytopy.data.population import Population
@@ -285,6 +287,10 @@ class Clustering:
             method = ClusterMethod(klass=KConsensusClustering, params=kwargs, verbose=self.verbose)
         elif method == "flowgrid":
             method = ClusterMethod(klass=FlowGrid, params=kwargs, verbose=self.verbose)
+        elif method == "spade":
+            method = ClusterMethod(klass=CytoSPADE, params=kwargs, verbose=self.verbose)
+        elif method == "latent":
+            method = ClusterMethod(klass=LatentClustering, params=kwargs, verbose=self.verbose)
         elif isinstance(method, str):
             raise ValueError("If a string is given must be either 'phenograph', 'consensus' or 'flowsom'")
         elif not isinstance(method, ClusterMethod):
