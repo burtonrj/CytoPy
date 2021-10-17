@@ -448,7 +448,6 @@ class Clustering:
                     n=cluster_data.shape[0],
                     parent=self.root_population,
                     source="cluster",
-                    signature=cluster_data.mean().to_dict(),
                 )
                 pop.index = cluster_data.original_index.to_list()
                 fg.add_population(population=pop)
@@ -488,6 +487,8 @@ class Clustering:
                 raise ValueError("Meta clustering has not been performed")
 
         if parent_populations is not None:
+            err = f"One or more cluster_labels are missing a parent definition"
+            assert all([x in parent_populations.keys() for x in self.data.cluster_label.unique()]), err
             self._create_parent_populations(population_var=population_var, parent_populations=parent_populations)
         parent_populations = parent_populations or {}
 
@@ -512,7 +513,6 @@ class Clustering:
                     n=cluster.shape[0],
                     parent=parent,
                     source="cluster",
-                    signature=cluster.mean().to_dict(),
                 )
                 pop.index = cluster.original_index.to_list()
                 fg.add_population(population=pop)

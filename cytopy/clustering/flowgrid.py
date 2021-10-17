@@ -16,12 +16,11 @@ from cytopy.feedback import progress_bar
 logger = logging.getLogger(__name__)
 
 
-@jit(no_python=True)
 def dividing_one_d(data: np.array, d2: int, bin_n: int, index: Optional[np.array] = None):
     if index is None:
         index = np.arange(data.shape[0])
     x = data[index, d2]
-    bin_list = [None for i in bin_n]
+    bin_list = [None for _ in range(bin_n)]
     temp_index = np.arange(x.shape[0])
     st, end = np.min(x), np.max(x)
     for i in range(st, end + 1):
@@ -33,11 +32,11 @@ def dividing_one_d(data: np.array, d2: int, bin_n: int, index: Optional[np.array
     return bin_list
 
 
-def combine(data: np.array, index_list: np.array, d2: int) -> Dict:
+def combine(data: np.array, index_list: np.array, d2: int, bin_n: int) -> Dict:
     new_index_dict = {}
     for index, value in enumerate(index_list):
         if value is not None:
-            th_index_list = dividing_one_d(data, d2, value)
+            th_index_list = dividing_one_d(data=data, d2=d2, bin_n=bin_n, index=value)
             for k, i in enumerate(th_index_list):
                 if i is not None:
                     new_index_dict[(index, k)] = i
@@ -47,7 +46,7 @@ def combine(data: np.array, index_list: np.array, d2: int) -> Dict:
 def dividing_bins(data: np.array, bin_n: int, verbose: bool = True) -> Dict:
     d = data.shape[1]
     th_index_list = dividing_one_d(data, d2=0, bin_n=bin_n)
-    new_index_dict = combine(data=data, index_list=th_index_list, d2=1)
+    new_index_dict = combine(data=data, index_list=th_index_list, d2=1, bin_n=bin_n)
     if d > 2:
         next_d = {}
         new_d = {}
@@ -132,7 +131,7 @@ class FlowGrid:
         n, d = data.shape
         scaler = MinMaxScaler(feature_range=(0, self.bin_n - 10 ** (-7)), copy=False)
         scaler.fit(data)
-        x = scaler.transform(data).astype(u"int8")
+        x = scaler.transform(data).astype("int8")
 
         if np.log(n) / np.log(10) > 4 and d < 11 and self.bin_n < 11:
             unique_array, unique_index, counts = unique_bins(data=x, bin_n=self.bin_n, verbose=self.verbose)
@@ -159,9 +158,10 @@ class FlowGrid:
         -------
         Tuple[Dict[Numpy.Array], Numpy.Array]
         """
-        logger.info("Querying bin density to determine core bins")
         self.bins_number = unique_array.shape[0]
+        logger.info(f"Querying bin density to determine core bins (Total bins={self.bins_number})")
         tf_array = np.greater(counts, self.min_den_b)
+        assert len(tf_array) > 0, f"No bins with > {self.min_den_c} events"
         index_array = np.arange(self.bins_number)
         check_index = index_array[tf_array]
         check_nn = unique_array[tf_array]
@@ -263,4 +263,4 @@ class FlowGrid:
         unique_array, unique_index, counts = self.dividing_bins(data=data)
         bin_labels = self.density_scan(unique_array, counts)
         logger.info("Clustering complete!")
-        return bin_labels[unique_index]
+        return bin_labels[unique_index].astype(int)

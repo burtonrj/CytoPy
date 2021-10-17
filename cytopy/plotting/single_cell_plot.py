@@ -52,7 +52,7 @@ def discrete_palette(n: int) -> str:
         "Max number of unique labels is greater than the maximum number of colours (20) provided for "
         "scatterplot - may generate a misleading plot with colours duplicated!"
     )
-    return None
+    return "tab20"
 
 
 def discrete_label(data: pd.DataFrame, label: str, discrete: Optional[bool] = None):
@@ -125,7 +125,7 @@ def single_cell_plot(
         style=style,
         palette=palette,
         hue_norm=hue_norm,
-        legend=False,
+        legend=include_legend,
         ax=ax,
         **kwargs,
     )

@@ -281,7 +281,7 @@ class SingleClustering(Clustering):
             fig, axes = build_plot_grid(n=len(metrics), col_wrap=col_wrap, **figure_kwargs)
             for i, (m, data) in enumerate(results.items()):
                 box_swarm_plot(
-                    plot_df=pd.DataFrame({"Method": [m.name] * len(data), "Score": data}),
+                    plot_df=pd.DataFrame({"Method": [m] * len(data), "Score": data}),
                     x="Method",
                     y="Score",
                     ax=axes[i],
@@ -293,8 +293,11 @@ class SingleClustering(Clustering):
     def cluster_proportions(
         self, label: str = "cluster_label", x_label: Optional[str] = None, y_label: Optional[str] = None, **plot_kwargs
     ):
-        plot_data = self.data.groupby("sample_id").apply(count_to_proportion)
-        ax = box_swarm_plot(plot_df=plot_data, x="cluster_label", y="Percentage")
+        x = self.data.groupby("sample_id")[label].value_counts()
+        x.name = "Count"
+        x = x.reset_index()
+        plot_data = x.groupby("sample_id").apply(count_to_proportion)
+        ax = box_swarm_plot(plot_df=plot_data, x="cluster_label", y="Percentage", **plot_kwargs)
         if x_label:
             ax.set_xlabel(x_label)
         if y_label:
