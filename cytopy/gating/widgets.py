@@ -14,6 +14,7 @@ from matplotlib.widgets import PolygonSelector
 
 from .gate import PolygonGate
 from .gate import ThresholdGate
+from .gating_strategy import FileGroup
 from .gating_strategy import GatingStrategy
 
 logger = logging.getLogger(__name__)
@@ -293,3 +294,80 @@ class InteractiveGateEditor(widgets.HBox):
         self.gs.save()
         self.progress_bar.value = 5
         logger.info("Changes saved!")
+
+
+class ManualLatentGating:
+    def __init__(
+        self,
+        filegroup: FileGroup,
+        parent_population: str = "root",
+        source: str = "primary",
+        transform: str = "logicle",
+        transform_kwargs: Optional[Dict] = None,
+        figsize: Tuple[int, int] = (5, 5),
+        min_bins: int = 250,
+    ):
+        super().__init__()
+        # -- Organise data
+        transform_kwargs = transform_kwargs or {}
+        self.fg = filegroup
+        self.data = self.fg.load_population_df(
+            population=parent_population,
+        )
+        self.min_bins = min_bins
+        self.artists = {}
+
+        # -- Define canvas
+        output = widgets.Output()
+        with output:
+            self.fig, self.ax = plt.subplots(constrained_layout=True, figsize=figsize)
+        self.fig.canvas.toolbar_position = "bottom"
+
+        # -- Define widgets
+
+        # UMAP settings
+        self.sample_size = widgets.IntSlider(
+            value=10000, min=10000, max=1000000, step=100, description="Training sample size"
+        )
+        self.n_neighbors = widgets.IntSlider(value=15, min=3, max=1000, step=1, description="N neighbours")
+        self.min_dist = widgets.IntSlider(value=0.1, min=0.0, max=0.99, step=0.05, description="N neighbours")
+        self.metric = widgets.Dropdown(
+            description="Metric",
+            disabled=False,
+            options=["euclidean", "manhattan", "chebyshev", "minkowski", "cosine"],
+            value="euclidean",
+        )
+        self.umap_settings = {"sample_size": 10000, "n_neighbors": 15, "min_dist": 0.1, "metric": "euclidean"}
+
+        # Other plotting settings
+        self.plot_colour = widgets.Dropdown(
+            description="Plot colour/type", disabled=False, options=["Density", "Scatter"] + self.gs.filegroup.d
+        )
+
+        # Population settings
+        self.pop_select = widgets.Dropdown(
+            description="Population",
+            disabled=False,
+            options=self.gs.filegroup.list_populations(),
+            value="root",
+        )
+        self.population_name = widgets.Text(disabled=True, description="Population name")
+
+        # Buttons
+        self.plot_button = widgets.Button(
+            description="Plot", disabled=True, tooltip="Compute and plot embeddings", button_style="warning"
+        )
+        self.apply_button = widgets.Button(
+            description="Apply", disabled=True, tooltip="Create/edit population", button_style="warning"
+        )
+        self.save_button = widgets.Button(
+            description="Save", disabled=False, tooltip="Save changes", button_style="danger"
+        )
+
+        # -- Actions
+        self.selector = None
+        self.progress_bar = widgets.IntProgress(description="Loading:", value=5, min=0, max=5)
+
+        self.plot_button.on_click(self._plot)
+        self.apply_button.on_click(self._apply_click)
+        self.save_button.on_click(self._save_click)

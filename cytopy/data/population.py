@@ -198,6 +198,7 @@ class Population(mongoengine.EmbeddedDocument):
     source = mongoengine.StringField(
         required=True, choices=["root", "gate", "cluster", "classifier", "merger", "subtraction"]
     )
+    data_source = mongoengine.StringField(default="primary")
     _index = mongoengine.FileField(db_alias="core", collection_name="population_index")
 
     @property

@@ -30,6 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 import os
 import re
+import sre_parse
 from typing import Dict
 from typing import Generator
 from typing import Iterable
@@ -149,22 +150,39 @@ class FileGroup(mongoengine.Document):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tree = {}
+        assert "primary" in self.file_paths.keys(), f"'primary' missing from file_paths"
         if self.id:
-            self.tree = construct_tree(populations=self.populations)
+            for key in self.file_paths.keys():
+                if "root" not in self.list_populations(data_source=key):
+                    self.populations.append(
+                        Population(
+                            population_name="root",
+                            n=self.data(source=key).shape[0],
+                            parent="root",
+                            source="root",
+                            data_source=key,
+                            prop_of_parent=1.0,
+                            prop_of_total=1.0,
+                        )
+                    )
+                    self.save()
+                self.tree[key] = construct_tree(populations=[p for p in self.populations if p.data_source == key])
         else:
-            data = self.data(source="primary")
-            self.populations = [
-                Population(
-                    population_name="root",
-                    n=data.shape[0],
-                    parent="root",
-                    source="root",
-                    prop_of_parent=1.0,
-                    prop_of_total=1.0,
-                )
-            ]
-            self.populations[0].index = data.Index.to_list()
-            self.tree = {"root": anytree.Node(name="root", parent=None)}
+            for key in self.file_paths.keys():
+                data = self.data(source=key)
+                self.populations = [
+                    Population(
+                        population_name="root",
+                        n=data.shape[0],
+                        parent="root",
+                        source="root",
+                        data_source=key,
+                        prop_of_parent=1.0,
+                        prop_of_total=1.0,
+                    )
+                ]
+                self.populations[0].index = data.Index.to_list()
+                self.tree[key] = {"root": anytree.Node(name="root", parent=None)}
             self.save()
 
     def clean(self):
@@ -318,8 +336,8 @@ class FileGroup(mongoengine.Document):
         """
         logger.debug(f"Adding new population {population} to {self.primary_id}; {self.id}")
 
-        if population.population_name in self.tree.keys():
-            err = f"Population with name '{population.population_name}' already exists"
+        if population.population_name in self.tree[population.data_source].keys():
+            err = f"Population with name '{population.population_name}' already exists (for {population.data_source})"
             raise DuplicatePopulationError(err)
         if population.index is None:
             raise ValueError("Population index is empty")
@@ -330,8 +348,8 @@ class FileGroup(mongoengine.Document):
         if population.prop_of_total is None:
             population.prop_of_total = population.n / self.get_population(population_name="root").n
         self.populations.append(population)
-        self.tree[population.population_name] = anytree.Node(
-            name=population.population_name, parent=self.tree.get(population.parent)
+        self.tree[population.data_source][population.population_name] = anytree.Node(
+            name=population.population_name, parent=self.tree[population.data_source].get(population.parent)
         )
 
     def update_population(self, pop: Population) -> None:
@@ -349,11 +367,18 @@ class FileGroup(mongoengine.Document):
         None
         """
         logger.debug(f"Updating population {pop.population_name}")
-        assert pop.population_name in self.list_populations(), "Invalid population, does not exist"
-        self.populations = [p for p in self.populations if p.population_name != pop.population_name]
-        self.populations.append(pop)
+        old_pop = self.get_population(population_name=pop.population_name, data_source=pop.data_source)
+        old_pop.n = pop.n
+        old_pop.parent = pop.parent
+        old_pop.prop_of_parent = pop.prop_of_parent
+        old_pop.prop_of_total = pop.prop_of_total
+        old_pop.normalised = pop.normalised
+        old_pop.geom = pop.geom
+        old_pop.definition = pop.definition
+        old_pop.source = pop.source
+        old_pop.index = pop.index
 
-    def load_ctrl_population_df(
+    def infer_ctrl_population_df(
         self,
         ctrl: str,
         population: str,
@@ -488,6 +513,7 @@ class FileGroup(mongoengine.Document):
         sample_size: Optional[Union[int, float]] = None,
         sampling_method: str = "uniform",
         sample_at_population_level: bool = True,
+        data_source: str = "primary",
         **sampling_kwargs,
     ) -> pd.DataFrame:
         """
@@ -540,6 +566,7 @@ class FileGroup(mongoengine.Document):
             features_to_transform=features_to_transform,
             label_parent=label_parent,
             frac_of=frac_of,
+            data_source=data_source,
         )
         if sample_size is not None and sample_at_population_level:
             kwargs["sample_size"] = sample_size
@@ -553,7 +580,7 @@ class FileGroup(mongoengine.Document):
                 pop_data["population_label"] = [p for _ in range(pop_data.shape[0])]
                 dataframes.append(pop_data)
             except ValueError:
-                logger.warning(f"{self.primary_id} does not contain population {p}")
+                logger.warning(f"{self.primary_id} ({data_source}) does not contain population {p}")
         if sample_size is not None and not sample_at_population_level:
             return sample_dataframe(
                 data=pd.concat(dataframes), sample_size=sample_size, method=sampling_method, **sampling_kwargs
@@ -570,6 +597,7 @@ class FileGroup(mongoengine.Document):
         frac_of: Optional[List[str]] = None,
         sample_size: Optional[Union[int, float]] = None,
         sampling_method: str = "uniform",
+        data_source: str = "primary",
         label_downstream_affiliations=None,
         **sampling_kwargs,
     ) -> pd.DataFrame:
@@ -617,7 +645,7 @@ class FileGroup(mongoengine.Document):
         population = self.get_population(population_name=population)
         transform_kwargs = transform_kwargs or {}
         data = self.data(
-            source="primary",
+            source=data_source,
             idx=population.index,
             sample_size=sample_size,
             sampling_method=sampling_method,
@@ -644,7 +672,9 @@ class FileGroup(mongoengine.Document):
             return polars_to_pandas(data)
         return data
 
-    def list_populations(self, regex: Optional[str] = None) -> List[str]:
+    def list_populations(
+        self, regex: Optional[str] = None, source: Optional[str] = None, data_source: str = "primary"
+    ) -> List[str]:
         """
         List population names
 
@@ -657,13 +687,18 @@ class FileGroup(mongoengine.Document):
         -------
         List
         """
-        populations = [p.population_name for p in self.populations]
+        populations = [p for p in self.populations if p.data_source == data_source]
+        if source:
+            populations = [p for p in populations if p.source == source]
+        populations = [p.population_name for p in populations]
         if regex:
             regex = re.compile(regex)
             return list(filter(regex.match, populations))
         return populations
 
-    def print_population_tree(self, image: bool = False, path: Optional[str] = None) -> None:
+    def print_population_tree(
+        self, data_source: str = "primary", image: bool = False, path: Optional[str] = None
+    ) -> None:
         """
         Print population tree to stdout or save as an image if 'image' is True.
 
@@ -679,7 +714,7 @@ class FileGroup(mongoengine.Document):
         -------
         None
         """
-        root = self.tree["root"]
+        root = self.tree[data_source]["root"]
         if image:
             from anytree.exporter import DotExporter
 
@@ -688,14 +723,14 @@ class FileGroup(mongoengine.Document):
         for pre, fill, node in anytree.RenderTree(root):
             print("%s%s" % (pre, node.name))
 
-    def rename_population(self, old_name: str, new_name: str):
-        assert new_name not in self.list_populations(), f"{new_name} already exists!"
-        pop = self.get_population(population_name=old_name)
+    def rename_population(self, old_name: str, new_name: str, data_source: str = "primary"):
+        assert new_name not in self.list_populations(data_source=data_source), f"{new_name} already exists!"
+        pop = self.get_population(population_name=old_name, data_source=data_source)
         pop.population_name = new_name
-        self.tree[old_name].name = new_name
-        self.tree[new_name] = self.tree.pop(old_name)
+        self.tree[data_source][old_name].name = new_name
+        self.tree[data_source][new_name] = self.tree.pop(old_name)
 
-    def delete_populations(self, populations: Union[str, List[str]]) -> None:
+    def delete_populations(self, populations: Union[str, List[str]], data_source: str = "primary") -> None:
         """
         Delete given populations. Populations downstream from delete population(s) will
         also be removed.
@@ -716,17 +751,21 @@ class FileGroup(mongoengine.Document):
             If invalid value given for populations
         """
         if populations == "all":
-            logger.debug(f"Deleting all populations in {self.primary_id}; {self.id}")
+            logger.debug(f"Deleting all populations in {self.primary_id}; {data_source}; {self.id}")
             for p in self.populations:
-                self.tree[p.population_name].parent = None
-            self.populations = [p for p in self.populations if p.population_name == "root"]
-            self.tree = {name: node for name, node in self.tree.items() if name == "root"}
+                self.tree[data_source][p.population_name].parent = None
+            self.populations = [
+                p for p in self.populations if p.population_name == "root" and p.data_source == data_source
+            ]
+            self.tree[data_source] = {name: node for name, node in self.tree[data_source].items() if name == "root"}
         else:
             try:
-                logger.debug(f"Deleting population(s) {populations} in {self.primary_id}; {self.id}")
+                logger.debug(f"Deleting population(s) {populations} in {self.primary_id}; {data_source}; {self.id}")
                 assert isinstance(populations, list), "Provide a list of population names for removal"
                 assert "root" not in populations, "Cannot delete root population"
-                downstream_effects = [self.list_downstream_populations(p) for p in populations]
+                downstream_effects = [
+                    self.list_downstream_populations(p, data_source=data_source) for p in populations
+                ]
                 downstream_effects = set([x for sl in downstream_effects for x in sl])
                 if len(downstream_effects) > 0:
                     logger.warning(
@@ -735,16 +774,24 @@ class FileGroup(mongoengine.Document):
                         f"{downstream_effects}"
                     )
                 populations = list(set(list(downstream_effects) + populations))
-                self.populations = [p for p in self.populations if p.population_name not in populations]
+                self.populations = [
+                    p
+                    for p in self.populations
+                    if p.population_name not in populations and p.data_source == data_source
+                ]
                 for name in populations:
-                    self.tree[name].parent = None
-                self.tree = {name: node for name, node in self.tree.items() if name not in populations}
+                    self.tree[data_source][name].parent = None
+                self.tree = {name: node for name, node in self.tree[data_source].items() if name not in populations}
             except AssertionError as e:
                 logger.warning(e)
             except ValueError as e:
                 logger.warning(e)
 
-    def get_population(self, population_name: str) -> Population:
+    def get_population(
+        self,
+        population_name: str,
+        data_source: str = "primary",
+    ) -> Population:
         """
         Given the name of a population associated to the FileGroup, returns the Population object, with
         index and control index ready loaded.
@@ -763,11 +810,13 @@ class FileGroup(mongoengine.Document):
         MissingPopulationError
             If population doesn't exist
         """
-        if population_name not in list(self.list_populations()):
+        if population_name not in list(self.list_populations(data_source=data_source)):
             raise MissingPopulationError(f"Population {population_name} does not exist")
-        return [p for p in self.populations if p.population_name == population_name][0]
+        return [p for p in self.populations if p.population_name == population_name and p.data_source == data_source][
+            0
+        ]
 
-    def get_population_by_parent(self, parent: str) -> Generator:
+    def get_population_by_parent(self, parent: str, data_source: str = "primary") -> Generator:
         """
         Given the name of some parent population, return a list of Population object whom's parent matches
 
@@ -782,10 +831,10 @@ class FileGroup(mongoengine.Document):
             List of Populations
         """
         for p in self.populations:
-            if p.parent == parent and p.population_name != "root":
+            if p.parent == parent and p.population_name != "root" and p.data_source == data_source:
                 yield p
 
-    def list_downstream_populations(self, population: str) -> Union[List[str], None]:
+    def list_downstream_populations(self, population: str, data_source: str = "primary") -> Union[List[str], None]:
         """For a given population find all dependencies
 
         Parameters
@@ -803,16 +852,18 @@ class FileGroup(mongoengine.Document):
         MissingPopulationError
             If Population does not exist
         """
-        if population not in self.tree.keys():
+        if population not in self.tree[data_source].keys():
             raise MissingPopulationError(
                 f"population {population} does not exist; valid population names include: {self.tree.keys()}"
             )
-        root = self.tree["root"]
-        node = self.tree[population]
+        root = self.tree[data_source]["root"]
+        node = self.tree[data_source][population]
         dependencies = [x.name for x in anytree.findall(root, filter_=lambda n: node in n.path)]
         return [p for p in dependencies if p != population]
 
-    def merge_populations(self, parent: str, populations: List[str], new_population_name: str) -> Population:
+    def merge_populations(
+        self, parent: str, populations: List[str], new_population_name: str, data_source: str = "primary"
+    ) -> Population:
         """
         Merge two or more populations. Merged populations are tagged with the source "merger" and are treated
         like a "cluster" for the purposes of plotting - when plotted in a 1 dimensional space, they are shown as
@@ -829,7 +880,7 @@ class FileGroup(mongoengine.Document):
         -------
         Population
         """
-        populations = [self.get_population(population_name=p) for p in populations]
+        populations = [self.get_population(population_name=p, data_source=data_source) for p in populations]
 
         for pop in populations:
             if parent in self.list_downstream_populations(population=pop.population_name):
@@ -839,7 +890,11 @@ class FileGroup(mongoengine.Document):
 
         new_idx = np.unique(np.concatenate([pop.index for pop in populations], axis=0), axis=0)
         new_population = Population(
-            population_name=new_population_name, n=len(new_idx), parent=parent, source="merger"
+            population_name=new_population_name,
+            n=len(new_idx),
+            parent=parent,
+            source="merger",
+            data_source=data_source,
         )
         new_population.index = new_idx
         self.add_population(population=new_population)
@@ -876,16 +931,18 @@ class FileGroup(mongoengine.Document):
         logger.info(f"Subtracting {right} population from {left} for {self.primary_id}; {self.id}")
         same_parent = left.parent == right.parent
         downstream = right.population_name in list(self.list_downstream_populations(left.population_name))
-
+        same_source = left.data_source == right.data_source
         if not same_parent or not downstream:
-            logger.error(
-                "Right population should share the same parent as the "
-                "left population or be downstream of the left population"
+            err = (
+                "Right population should share the same parent as the left population or be "
+                "downstream of the left population"
             )
-            raise KeyError(
-                "Right population should share the same parent as the "
-                "left population or be downstream of the left population"
-            )
+            logger.error(err)
+            raise KeyError(err)
+        if not same_source:
+            err = "Right and left population must be from the same data source"
+            logger.error(err)
+            raise KeyError(err)
 
         new_population_name = new_population_name or f"subtract_{left.population_name}_{right.population_name}"
         new_idx = np.setdiff1d(np.array(left.index), np.array(right.index))
@@ -895,7 +952,7 @@ class FileGroup(mongoengine.Document):
         new_population.index = new_idx
         self.add_population(population=new_population)
 
-    def population_stats(self, population: str, warn_missing: bool = False) -> Dict:
+    def population_stats(self, population: str, warn_missing: bool = False, data_source: str = "primary") -> Dict:
         """
         Returns a dictionary of statistics (number of events, proportion of parent, and proportion of all events)
         for the requested population.
@@ -910,9 +967,9 @@ class FileGroup(mongoengine.Document):
         Dict
         """
         try:
-            pop = self.get_population(population_name=population)
-            parent = self.get_population(population_name=pop.parent)
-            root = self.get_population(population_name="root")
+            pop = self.get_population(population_name=population, data_source=data_source)
+            parent = self.get_population(population_name=pop.parent, data_source=data_source)
+            root = self.get_population(population_name="root", data_source=data_source)
             return {
                 "population_name": population,
                 "n": pop.n,
@@ -929,7 +986,7 @@ class FileGroup(mongoengine.Document):
                 "frac_of_root": 0,
             }
 
-    def quantile_clean(self, upper: float = 0.999, lower: float = 0.001) -> None:
+    def quantile_clean(self, upper: float = 0.999, lower: float = 0.001, data_source: str = "primary") -> None:
         """
         Iterate over every channel in the utils data and cut the upper and lower quartiles.
 
@@ -951,6 +1008,7 @@ class FileGroup(mongoengine.Document):
             parent="root",
             source="root",
             n=df.shape[0],
+            data_source=data_source,
         )
         self.add_population(clean_pop)
 

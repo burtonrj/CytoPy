@@ -233,7 +233,7 @@ class GatingStrategy(mongoengine.Document):
             if not verbose:
                 kwargs["verbose"] = False
             if gate.ctrl_x is not None:
-                x = self.filegroup.load_ctrl_population_df(
+                x = self.filegroup.infer_ctrl_population_df(
                     ctrl=gate.ctrl_x,
                     population=gate.parent,
                     classifier=gate.ctrl_classifier,
@@ -243,7 +243,7 @@ class GatingStrategy(mongoengine.Document):
                 )
                 ctrls[gate.ctrl_x] = x[gate.ctrl_x].to_numpy()
             if gate.ctrl_y is not None:
-                y = self.filegroup.load_ctrl_population_df(
+                y = self.filegroup.infer_ctrl_population_df(
                     ctrl=gate.ctrl_y,
                     population=gate.parent,
                     classifier=gate.ctrl_classifier,

@@ -589,7 +589,6 @@ class Harmony:
         assert self.harmony is not None, "Call 'run' first"
         corrected = pd.DataFrame(self.harmony.Z_corr.T, columns=self.features)
         corrected["sample_id"] = self.meta.sample_id
-        corrected["original_index"] = self.data["original_index"]
         return corrected
 
     def save(
