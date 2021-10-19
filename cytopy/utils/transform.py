@@ -530,7 +530,7 @@ class Scaler:
             kwargs["method"] = "box_cox"
         self._scaler = SCALERS.get(method)(**kwargs)
 
-    def __call__(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]):
+    def fit_transform(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]):
         """
         Using a given dataframe and a list of columns (features) to transform,
         call 'fit_transform' on Scikit-Learn transformer. Returns copy of
@@ -547,6 +547,11 @@ class Scaler:
         """
         data = data.copy() if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
         data[features] = self._scaler.fit_transform(data[features].values)
+        return data
+
+    def transform(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]):
+        data = data.copy() if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
+        data[features] = self._scaler.transform(data[features].values)
         return data
 
     def inverse(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]):

@@ -56,12 +56,8 @@ from .asinh_transform import *
 from .hlog_transform import *
 from .logicle_transform import *
 from cytopy.data.population import PolygonGeom
+from cytopy.data.population import Population
 from cytopy.data.population import ThresholdGeom
-from cytopy.gating.gate import EllipseGate
-from cytopy.gating.gate import Gate
-from cytopy.gating.gate import PolygonGate
-from cytopy.gating.gate import Population
-from cytopy.gating.gate import ThresholdGate
 from cytopy.utils import transform
 
 __author__ = "Ross Burton"
@@ -440,7 +436,7 @@ class FlowPlot:
 
     def plot_gate_children(
         self,
-        gate: Gate or ThresholdGate or EllipseGate or PolygonGate,
+        gate,
         parent: pd.DataFrame,
         lw: float = 2.5,
         y: str or None = None,
@@ -484,7 +480,7 @@ class FlowPlot:
         gate_colours = cycle(["#c92c2c", "#2df74e", "#e0d572", "#000000", "#64b9c4", "#9e3657"])
         self.ax = self.plot(data=parent, x=gate.x, y=gate.y or y, **plot_kwargs)
         # If threshold, add threshold lines to plot and return axes
-        if isinstance(gate, ThresholdGate):
+        if gate.__class__.__name__ == "ThresholdGate":
             return self._plot_threshold(
                 definitions={c.definition: c.name for c in gate.children},
                 geoms=[c.geom for c in gate.children],

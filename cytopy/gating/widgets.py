@@ -408,6 +408,21 @@ class ManualLatentGating:
         self.lock_button.on_click(self._lock_unlock)
         self.save_button.on_click(self._save)
 
+        # -- Layout
+        top = widgets.HBox(widgets.Label(""))
+        controls = widgets.VBox(
+            [
+                self.apply_button,
+                self.save_button,
+                self.progress_bar,
+            ]
+        )
+        controls.layout = make_box_layout()
+        _ = widgets.Box([output])
+        output.layout = make_box_layout()
+
+        self.children = [controls, output]
+
     def _dimension_reduction(self):
         if not all([getattr(self, key).value == value for key, value in self.umap_settings.items()]):
             self.umap_settings["sample_size"] = int(self.sample_size.value)

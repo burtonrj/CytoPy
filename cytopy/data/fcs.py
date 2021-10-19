@@ -30,7 +30,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 import os
 import re
-import sre_parse
 from typing import Dict
 from typing import Generator
 from typing import Iterable
@@ -47,6 +46,7 @@ import pandas as pd
 import polars as pl
 from botocore.errorfactory import ClientError
 from imblearn.over_sampling import RandomOverSampler
+from sklearn.base import ClassifierMixin
 from sklearn.model_selection import permutation_test_score
 from sklearn.model_selection import StratifiedKFold
 
@@ -54,6 +54,7 @@ from ..utils.build_models import build_sklearn_model
 from ..utils.sampling import sample_dataframe
 from ..utils.transform import apply_transform
 from ..utils.transform import apply_transform_map
+from ..utils.transform import Scaler
 from ..utils.transform import Transformer
 from .errors import DuplicatePopulationError
 from .errors import MissingControlError
@@ -382,7 +383,8 @@ class FileGroup(mongoengine.Document):
         self,
         ctrl: str,
         population: str,
-        classifier: str = "XGBClassifier",
+        features: Optional[List[str]] = None,
+        classifier: Union[str, ClassifierMixin] = "XGBClassifier",
         classifier_params: Optional[Dict] = None,
         scoring: str = "balanced_accuracy",
         transform: str = "logicle",
@@ -391,6 +393,7 @@ class FileGroup(mongoengine.Document):
         kfolds: int = 5,
         n_permutations: int = 25,
         sample_size: int = 10000,
+        scale: Optional[str] = "standard",
     ) -> pd.DataFrame:
         """
         Load a population from an associated control. The assumption here is that control files
@@ -447,18 +450,22 @@ class FileGroup(mongoengine.Document):
         MissingControlError
             If the chosen control does not exist
         """
-        logger.info(
+        logger.debug(
             f"Predicting {population} in control data in {self.primary_id} {ctrl} using {classifier} classifier"
         )
         transform_kwargs = transform_kwargs or {}
         if ctrl not in self.file_paths.keys():
             raise MissingControlError(f"No such control {ctrl} associated to this FileGroup")
-        params = classifier_params or {}
-        transform_kwargs = transform_kwargs or {}
-        classifier = build_sklearn_model(klass=classifier, **params)
+        if isinstance(classifier, str):
+            params = classifier_params or {}
+            transform_kwargs = transform_kwargs or {}
+            classifier = build_sklearn_model(klass=classifier, **params)
         assert population in self.list_populations(), f"Desired population {population} not found"
 
-        logger.info("Loading primary and control data")
+        if scale is not None:
+            scale = Scaler(method=scale)
+
+        logger.debug("Loading primary and control data")
         training, ctrl = _load_data_for_ctrl_estimate(
             filegroup=self,
             target_population=population,
@@ -467,12 +474,15 @@ class FileGroup(mongoengine.Document):
             sample_size=sample_size,
             **transform_kwargs,
         )
-        features = [x for x in training.columns if x not in ["label", "Index"]]
-        features = [x for x in features if x in ctrl.columns]
+        if features is None:
+            features = [x for x in training.columns if x not in ["label", "Index"]]
+            features = [x for x in features if x in ctrl.columns]
+        if scale is not None:
+            training = scale.fit_transform(data=training, features=features)
         x, y = training[features].to_numpy(), training["label"].to_numpy()
-
+        stats = {"sample_id": [self.primary_id], "ctrl": [ctrl]}
         if evaluate_classifier:
-            logger.info("Evaluating classifier with permutation testing...")
+            logger.debug("Evaluating classifier with permutation testing...")
             skf = StratifiedKFold(n_splits=kfolds, random_state=42, shuffle=True)
             score, permutation_scores, pvalue = permutation_test_score(
                 classifier,
@@ -484,22 +494,36 @@ class FileGroup(mongoengine.Document):
                 n_jobs=-1,
                 random_state=42,
             )
-            logger.info(f"...Performance (without permutations): {round(score, 4)}")
-            logger.info(
+            stats["Score (without permutations)"] = [round(score, 4)]
+            stats["Avg permuted score"] = [round(np.mean(permutation_scores), 4)]
+            stats["Permuted score std"] = [round(np.std(permutation_scores), 4)]
+            stats["Permutation p-value"] = [round(pvalue, 4)]
+            logger.debug(f"...Performance (without permutations): {round(score, 4)}")
+            logger.debug(
                 f"...Performance (average across permutations; standard dev): "
                 f"{round(np.mean(permutation_scores), 4)}; {round(np.std(permutation_scores), 4)}"
             )
             logger.info(f"...p-value (comparison of original score to permutations): {round(pvalue, 4)}")
 
-        logger.info("Predicting population for control data...")
+        logger.debug("Predicting population for control data...")
         classifier.fit(x, y)
+
+        if scale is not None:
+            ctrl = scale.fit_transform(data=ctrl, features=features)
+
         ctrl_labels = classifier.predict(ctrl[features].to_numpy())
         training_prop_of_root = (self.get_population(population).n / self.get_population("root").n) * 100
         ctrl_prop_of_root = (np.sum(ctrl_labels) / ctrl.shape[0]) * 100
-        logger.info(f"{population}: {round(training_prop_of_root, 3)}% of root in primary data")
-        logger.info(f"Predicted in ctrl: {round(ctrl_prop_of_root, 3)}% of root in control data")
+        stats["% in primary data"] = [training_prop_of_root]
+        stats["% in ctrl data"] = [ctrl_prop_of_root]
+        logger.debug(f"{population}: {round(training_prop_of_root, 3)}% of root in primary data")
+        logger.debug(f"Predicted in ctrl: {round(ctrl_prop_of_root, 3)}% of root in control data")
         ctrl = ctrl.iloc[np.where(ctrl_labels == 1)[0]]
-        return ctrl[features].copy()
+
+        if scale is not None:
+            ctrl = scale.inverse(data=ctrl, features=features)
+
+        return ctrl.copy(), pd.DataFrame(stats)
 
     def load_multiple_populations(
         self,
@@ -638,7 +662,7 @@ class FileGroup(mongoengine.Document):
         ValueError
             Invalid population, does not exist
         """
-        if population not in self.tree.keys():
+        if population not in self.tree[data_source].keys():
             logger.error(f"Invalid population, {population} does not exist for {self.primary_id}; {self.id}")
             raise ValueError(f"Invalid population, {population} does not exist")
 
@@ -728,7 +752,7 @@ class FileGroup(mongoengine.Document):
         pop = self.get_population(population_name=old_name, data_source=data_source)
         pop.population_name = new_name
         self.tree[data_source][old_name].name = new_name
-        self.tree[data_source][new_name] = self.tree.pop(old_name)
+        self.tree[data_source][new_name] = self.tree[data_source].pop(old_name)
 
     def delete_populations(self, populations: Union[str, List[str]], data_source: str = "primary") -> None:
         """
@@ -854,7 +878,7 @@ class FileGroup(mongoengine.Document):
         """
         if population not in self.tree[data_source].keys():
             raise MissingPopulationError(
-                f"population {population} does not exist; valid population names include: {self.tree.keys()}"
+                f"population {population} does not exist; valid population names include: {self.tree[data_source].keys()}"
             )
         root = self.tree[data_source]["root"]
         node = self.tree[data_source][population]
