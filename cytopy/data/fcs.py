@@ -30,6 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 import os
 import re
+from copy import deepcopy
 from typing import Dict
 from typing import Generator
 from typing import Iterable
@@ -46,20 +47,17 @@ import pandas as pd
 import polars as pl
 from botocore.errorfactory import ClientError
 from imblearn.over_sampling import RandomOverSampler
-from sklearn.base import ClassifierMixin
-from sklearn.model_selection import permutation_test_score
-from sklearn.model_selection import StratifiedKFold
 
-from ..utils.build_models import build_sklearn_model
+from ..utils.geometry import inside_polygon
 from ..utils.sampling import sample_dataframe
 from ..utils.transform import apply_transform
 from ..utils.transform import apply_transform_map
-from ..utils.transform import Scaler
 from ..utils.transform import Transformer
 from .errors import DuplicatePopulationError
-from .errors import MissingControlError
 from .errors import MissingPopulationError
+from .population import PolygonGeom
 from .population import Population
+from .population import ThresholdGeom
 from .read_write import load_compensation_matrix
 from .read_write import polars_to_pandas
 from .read_write import read_from_disk
@@ -155,17 +153,21 @@ class FileGroup(mongoengine.Document):
         if self.id:
             for key in self.file_paths.keys():
                 if "root" not in self.list_populations(data_source=key):
-                    self.populations.append(
-                        Population(
-                            population_name="root",
-                            n=self.data(source=key).shape[0],
-                            parent="root",
-                            source="root",
-                            data_source=key,
-                            prop_of_parent=1.0,
-                            prop_of_total=1.0,
-                        )
+                    root = Population(
+                        population_name="root",
+                        n=self.data(source=key).shape[0],
+                        parent="root",
+                        source="root",
+                        data_source=key,
+                        prop_of_parent=1.0,
+                        prop_of_total=1.0,
                     )
+                    root.index = self.data(source=key)["Index"].tolist()
+                    self.populations.append(root)
+                    self.save()
+                elif len(self.get_population("root", data_source=key).index) == 0:
+                    root = self.get_population("root", data_source=key)
+                    root.index = self.data(source=key)["Index"].to_list()
                     self.save()
                 self.tree[key] = construct_tree(populations=[p for p in self.populations if p.data_source == key])
         else:
@@ -345,9 +347,14 @@ class FileGroup(mongoengine.Document):
         if population.n is None:
             population.n = len(population.index)
         if population.prop_of_parent is None:
-            population.prop_of_parent = population.n / self.get_population(population_name=population.parent).n
+            population.prop_of_parent = (
+                population.n
+                / self.get_population(population_name=population.parent, data_source=population.data_source).n
+            )
         if population.prop_of_total is None:
-            population.prop_of_total = population.n / self.get_population(population_name="root").n
+            population.prop_of_total = (
+                population.n / self.get_population(population_name="root", data_source=population.data_source).n
+            )
         self.populations.append(population)
         self.tree[population.data_source][population.population_name] = anytree.Node(
             name=population.population_name, parent=self.tree[population.data_source].get(population.parent)
@@ -378,152 +385,6 @@ class FileGroup(mongoengine.Document):
         old_pop.definition = pop.definition
         old_pop.source = pop.source
         old_pop.index = pop.index
-
-    def infer_ctrl_population_df(
-        self,
-        ctrl: str,
-        population: str,
-        features: Optional[List[str]] = None,
-        classifier: Union[str, ClassifierMixin] = "XGBClassifier",
-        classifier_params: Optional[Dict] = None,
-        scoring: str = "balanced_accuracy",
-        transform: str = "logicle",
-        transform_kwargs: Optional[Dict] = None,
-        evaluate_classifier: bool = True,
-        kfolds: int = 5,
-        n_permutations: int = 25,
-        sample_size: int = 10000,
-        scale: Optional[str] = "standard",
-    ) -> pd.DataFrame:
-        """
-        Load a population from an associated control. The assumption here is that control files
-        have been collected at the same time as primary staining and differ by the absence or
-        permutation of a marker/channel/stain. Therefore the population of interest in the
-        primary staining will be used as training data to identify the equivalent population in
-        the control.
-
-        The user should specify the control file, the population they want (which MUST already exist
-        in the primary staining) and the type of classifier to use. Additional parameters can be
-        passed to control the classifier and stratified cross validation with permutation testing
-        will be performed if evaluate_classifier is set to True.
-
-        Parameters
-        ----------
-        ctrl: str
-            Control file to estimate population for
-        population: str
-            Population of interest. MUST already exist in the primary staining.
-        classifier: str (default='XGBClassifier')
-            Classifier to use. String value should correspond to a valid Scikit-Learn classifier class
-            name or XGBClassifier for XGBoost.
-        classifier_params: dict, optional
-            Additional keyword arguments passed when initiating the classifier
-        scoring: str (default='balanced_accuracy')
-            Method used to evaluate the performance of the classifier if evaluate_classifier is True.
-            String value should be one of the functions of Scikit-Learn's classification metrics:
-            https://scikit-learn.org/stable/modules/model_evaluation.html.
-        transform: str (default='logicle')
-            Transformation to be applied to data prior to classification
-        transform_kwargs: dict, optional
-            Additional keyword arguments applied to Transformer
-        evaluate_classifier: bool (default=True)
-            If True, stratified cross validation with permutating testing is applied prior to
-            predicting control population,  feeding back to stdout the performance of the classifier
-            across k folds and n permutations
-        kfolds: int (default=5)
-            Number of cross validation rounds to perform if evaluate_classifier is True
-        n_permutations: int (default=25)
-            Number of rounds of permutation testing to perform if evaluate_classifier is True
-        sample_size: int (default=10000)
-            Number of events to sample from primary data for training
-
-        Returns
-        -------
-        Pandas.DataFrame
-            Population data from control, as predicted using the primary staining
-
-        Raises
-        ------
-        AssertionError
-            If desired population is not found in the primary staining
-
-        MissingControlError
-            If the chosen control does not exist
-        """
-        logger.debug(
-            f"Predicting {population} in control data in {self.primary_id} {ctrl} using {classifier} classifier"
-        )
-        transform_kwargs = transform_kwargs or {}
-        if ctrl not in self.file_paths.keys():
-            raise MissingControlError(f"No such control {ctrl} associated to this FileGroup")
-        if isinstance(classifier, str):
-            params = classifier_params or {}
-            transform_kwargs = transform_kwargs or {}
-            classifier = build_sklearn_model(klass=classifier, **params)
-        assert population in self.list_populations(), f"Desired population {population} not found"
-
-        if scale is not None:
-            scale = Scaler(method=scale)
-
-        logger.debug("Loading primary and control data")
-        training, ctrl = _load_data_for_ctrl_estimate(
-            filegroup=self,
-            target_population=population,
-            ctrl=ctrl,
-            transform=transform,
-            sample_size=sample_size,
-            **transform_kwargs,
-        )
-        if features is None:
-            features = [x for x in training.columns if x not in ["label", "Index"]]
-            features = [x for x in features if x in ctrl.columns]
-        if scale is not None:
-            training = scale.fit_transform(data=training, features=features)
-        x, y = training[features].to_numpy(), training["label"].to_numpy()
-        stats = {"sample_id": [self.primary_id], "ctrl": [ctrl]}
-        if evaluate_classifier:
-            logger.debug("Evaluating classifier with permutation testing...")
-            skf = StratifiedKFold(n_splits=kfolds, random_state=42, shuffle=True)
-            score, permutation_scores, pvalue = permutation_test_score(
-                classifier,
-                x,
-                y,
-                cv=skf,
-                n_permutations=n_permutations,
-                scoring=scoring,
-                n_jobs=-1,
-                random_state=42,
-            )
-            stats["Score (without permutations)"] = [round(score, 4)]
-            stats["Avg permuted score"] = [round(np.mean(permutation_scores), 4)]
-            stats["Permuted score std"] = [round(np.std(permutation_scores), 4)]
-            stats["Permutation p-value"] = [round(pvalue, 4)]
-            logger.debug(f"...Performance (without permutations): {round(score, 4)}")
-            logger.debug(
-                f"...Performance (average across permutations; standard dev): "
-                f"{round(np.mean(permutation_scores), 4)}; {round(np.std(permutation_scores), 4)}"
-            )
-            logger.info(f"...p-value (comparison of original score to permutations): {round(pvalue, 4)}")
-
-        logger.debug("Predicting population for control data...")
-        classifier.fit(x, y)
-
-        if scale is not None:
-            ctrl = scale.fit_transform(data=ctrl, features=features)
-
-        ctrl_labels = classifier.predict(ctrl[features].to_numpy())
-        training_prop_of_root = (self.get_population(population).n / self.get_population("root").n) * 100
-        ctrl_prop_of_root = (np.sum(ctrl_labels) / ctrl.shape[0]) * 100
-        stats["% in primary data"] = [training_prop_of_root]
-        stats["% in ctrl data"] = [ctrl_prop_of_root]
-        logger.debug(f"{population}: {round(training_prop_of_root, 3)}% of root in primary data")
-        logger.debug(f"Predicted in ctrl: {round(ctrl_prop_of_root, 3)}% of root in control data")
-        ctrl = ctrl.iloc[np.where(ctrl_labels == 1)[0]]
-
-        if scale is not None:
-            ctrl = scale.inverse(data=ctrl, features=features)
-
-        return ctrl.copy(), pd.DataFrame(stats)
 
     def load_multiple_populations(
         self,
@@ -663,10 +524,9 @@ class FileGroup(mongoengine.Document):
             Invalid population, does not exist
         """
         if population not in self.tree[data_source].keys():
-            logger.error(f"Invalid population, {population} does not exist for {self.primary_id}; {self.id}")
-            raise ValueError(f"Invalid population, {population} does not exist")
+            raise MissingPopulationError(population_id=population)
 
-        population = self.get_population(population_name=population)
+        population = self.get_population(population_name=population, data_source=data_source)
         transform_kwargs = transform_kwargs or {}
         data = self.data(
             source=data_source,
@@ -835,7 +695,7 @@ class FileGroup(mongoengine.Document):
             If population doesn't exist
         """
         if population_name not in list(self.list_populations(data_source=data_source)):
-            raise MissingPopulationError(f"Population {population_name} does not exist")
+            raise MissingPopulationError(population_id=population_name)
         return [p for p in self.populations if p.population_name == population_name and p.data_source == data_source][
             0
         ]
@@ -1115,3 +975,77 @@ def _load_data_for_ctrl_estimate(
     if training.shape[0] > sample_size:
         training = training.sample(n=sample_size)
     return training, ctrl
+
+
+def copy_populations_to_controls_using_geoms(
+    filegroup: FileGroup, ctrl: Optional[List[str]] = None, flag: float = 0.25
+):
+    if ctrl not in filegroup.file_paths.keys():
+        raise ValueError("Invalid ctrl, does not exist for given FileGroup")
+    stats = {"Population": [], "% of parent (primary)": [], "% of parent (ctrl)": [], "Flag": []}
+    queue = list(filegroup.tree["primary"]["root"].children)
+    while len(queue) > 0:
+        next_pop = queue.pop(0)
+        pop = filegroup.get_population(next_pop.name, data_source="primary")
+        queue = queue + list(filegroup.tree["primary"][pop.population_name].children)
+        if not pop.geom or pop.parent not in filegroup.list_populations(data_source=ctrl):
+            logger.warning(f"Skipping {pop.population_name}: missing parent or no geom defined")
+            continue
+        parent_df = filegroup.load_population_df(
+            population=pop.parent,
+            transform={pop.geom.x: pop.geom.transform_x, pop.geom.y: pop.geom.transform_y},
+            transform_kwargs={
+                pop.geom.x: pop.geom.transform_x_kwargs or {},
+                pop.geom.y: pop.geom.transform_y_kwargs or {},
+            },
+            data_source=ctrl,
+        )
+        if isinstance(pop.geom, PolygonGeom):
+            data = inside_polygon(data=parent_df, x=pop.geom.x, y=pop.geom.y, poly=pop.geom.shape)
+        elif isinstance(pop.geom, ThresholdGeom):
+            if pop.definition == "+":
+                data = parent_df[parent_df[pop.geom.x] >= pop.geom.x_threshold]
+            elif pop.definition == "-":
+                data = parent_df[parent_df[pop.geom.x] < pop.geom.x_threshold]
+            elif pop.definition == "--":
+                data = parent_df[
+                    (parent_df[pop.geom.x] < pop.geom.x_threshold) & (parent_df[pop.geom.y] < pop.geom.y_threshold)
+                ]
+            elif pop.definition == "-+":
+                data = parent_df[
+                    (parent_df[pop.geom.x] < pop.geom.x_threshold) & (parent_df[pop.geom.y] >= pop.geom.y_threshold)
+                ]
+            elif pop.definition == "+-":
+                data = parent_df[
+                    (parent_df[pop.geom.x] >= pop.geom.x_threshold) & (parent_df[pop.geom.y] < pop.geom.y_threshold)
+                ]
+            elif pop.definition == "++":
+                data = parent_df[
+                    (parent_df[pop.geom.x] >= pop.geom.x_threshold) & (parent_df[pop.geom.y] >= pop.geom.y_threshold)
+                ]
+            else:
+                raise ValueError("Unrecognised definition for ThresholdGeom")
+        else:
+            logger.warning(f"Skipping {pop.population_name}: unrecognised geometry")
+            continue
+        ctrl_pop = Population(
+            population_name=pop.population_name,
+            parent=pop.parent,
+            n=data.shape[0],
+            geom=deepcopy(pop.geom),
+            definition=pop.definition,
+            source=pop.source,
+            data_source=ctrl,
+        )
+        ctrl_pop.index = data.index.to_list()
+        filegroup.add_population(population=ctrl_pop)
+        ctrl_pop = filegroup.get_population(population_name=pop.population_name, data_source=ctrl)
+        primary_prop = round(pop.prop_of_parent * 100, 5)
+        ctrl_prop = round(ctrl_pop.prop_of_parent * 100, 5)
+        stats["Population"].append(pop.population_name)
+        stats["% of parent (primary)"].append(primary_prop)
+        stats["% of parent (ctrl)"].append(ctrl_prop)
+        floor = np.max([0, primary_prop - (primary_prop * flag)])
+        ceil = np.min([100, primary_prop + (primary_prop * flag)])
+        stats["Flag"].append(floor > ctrl_prop > ceil)
+    return filegroup, pd.DataFrame(stats)

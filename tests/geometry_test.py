@@ -8,10 +8,10 @@ from cytopy.data.population import create_polygon
 from cytopy.data.population import PolygonGeom
 from cytopy.data.population import PopulationGeometry
 from cytopy.data.population import ThresholdGeom
-from cytopy.gating.geometry import create_envelope
-from cytopy.gating.geometry import inside_ellipse
-from cytopy.gating.geometry import polygon_overlap
-from cytopy.gating.geometry import probabilistic_ellipse
+from cytopy.utils.geometry import create_envelope
+from cytopy.utils.geometry import inside_ellipse
+from cytopy.utils.geometry import polygon_overlap
+from cytopy.utils.geometry import probabilistic_ellipse
 
 
 def test_create_geom():

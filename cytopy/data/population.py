@@ -26,6 +26,7 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import logging
 import pickle
 from typing import Iterable
 from typing import List
@@ -37,6 +38,8 @@ from bson.binary import Binary
 from shapely.geometry import Polygon
 
 from cytopy.utils import transform
+
+logger = logging.getLogger(__name__)
 
 
 class PopulationGeometry(mongoengine.EmbeddedDocument):
@@ -203,9 +206,13 @@ class Population(mongoengine.EmbeddedDocument):
 
     @property
     def index(self) -> Iterable[int]:
-        idx = pickle.loads(self._index.read())
-        self._index.seek(0)
-        return idx
+        try:
+            idx = pickle.loads(self._index.read())
+            self._index.seek(0)
+            return idx
+        except TypeError:
+            logger.error(f"Index is None for population {self.population_name}")
+            return []
 
     @index.setter
     def index(self, idx: Iterable[int]):

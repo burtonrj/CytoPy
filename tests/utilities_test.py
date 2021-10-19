@@ -1,7 +1,7 @@
 import pandas as pd
 from shapely.geometry import Polygon
 
-from cytopy.gating.geometry import inside_polygon
+from cytopy.utils.geometry import inside_polygon
 
 
 def test_inside_polygon():
@@ -22,6 +22,6 @@ def test_inside_polygon():
             "y": [1.5, 3.5, 3.5, 2.0, 1.5, 0.5, 2.0, 2.7, 2.0],
         }
     )
-    df = inside_polygon(df=df, x="x", y="y", poly=poly)
+    df = inside_polygon(data=df, x="x", y="y", poly=poly)
     assert df.shape[0] == 4
     assert list(df.index.values) == [0, 4, 6, 7]

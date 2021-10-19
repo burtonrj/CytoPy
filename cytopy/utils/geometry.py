@@ -54,13 +54,13 @@ def point_in_poly(coords: Tuple[float], poly: Polygon) -> pl.Series:
     return poly.contains(Point(coords))
 
 
-def inside_polygon(df: Union[pl.DataFrame, pd.DataFrame], x: str, y: str, poly: Polygon) -> pl.DataFrame:
+def inside_polygon(data: Union[pl.DataFrame, pd.DataFrame], x: str, y: str, poly: Polygon) -> pl.DataFrame:
     """
     Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
 
     Parameters
     ----------
-    df: polars.DataFrame or Pandas.DataFrame
+    data: polars.DataFrame or Pandas.DataFrame
         Data to query
     x: str
         name of x-axis plane
@@ -74,10 +74,10 @@ def inside_polygon(df: Union[pl.DataFrame, pd.DataFrame], x: str, y: str, poly: 
     polars.DataFrame
         Masked DataFrame containing only those rows that fall within the Polygon
     """
-    df = df if isinstance(df, pl.DataFrame) else pandas_to_polars(data=df)
+    data = data if isinstance(data, pl.DataFrame) else pandas_to_polars(data=data)
     point_inside_polygon = partial(point_in_poly, poly=poly)
-    mask = df[[x, y]].apply(point_inside_polygon, return_dtype=pl.Boolean)
-    return polars_to_pandas(data=df[mask, :])
+    mask = data[[x, y]].apply(point_inside_polygon, return_dtype=pl.Boolean)
+    return polars_to_pandas(data=data[mask, :])
 
 
 def polygon_overlap(poly1: Polygon, poly2: Polygon, threshold: float = 0.0):

@@ -32,7 +32,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 from collections import Counter
 from string import ascii_uppercase
-from typing import Callable
 from typing import Dict
 from typing import Iterable
 from typing import List
@@ -45,16 +44,12 @@ import mongoengine
 import numpy as np
 import pandas as pd
 from detecta import detect_peaks
-from hdbscan import HDBSCAN
 from KDEpy import FFTKDE
 from scipy import stats
 from scipy.signal import savgol_filter
 from shapely.geometry import Polygon as ShapelyPoly
 from shapely.ops import cascaded_union
-from sklearn.cluster import *
 from sklearn.linear_model import HuberRegressor
-from sklearn.mixture import *
-from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import PowerTransformer
 from smm import SMM
 
@@ -65,18 +60,17 @@ from cytopy.data.population import Population
 from cytopy.data.population import ThresholdGeom
 from cytopy.gating.fda_norm import LandmarkReg
 from cytopy.gating.fda_norm import Normalisation
-from cytopy.gating.geometry import create_envelope
-from cytopy.gating.geometry import ellipse_to_polygon
-from cytopy.gating.geometry import GeometryError
-from cytopy.gating.geometry import inside_polygon
-from cytopy.gating.geometry import probabilistic_ellipse
 from cytopy.utils.build_models import build_sklearn_model
+from cytopy.utils.geometry import create_envelope
+from cytopy.utils.geometry import ellipse_to_polygon
+from cytopy.utils.geometry import GeometryError
+from cytopy.utils.geometry import inside_polygon
+from cytopy.utils.geometry import probabilistic_ellipse
 from cytopy.utils.sampling import density_dependent_downsampling
 from cytopy.utils.sampling import faithful_downsampling
 from cytopy.utils.sampling import uniform_downsampling
 from cytopy.utils.sampling import upsample_knn
 from cytopy.utils.transform import apply_transform
-from cytopy.utils.transform import TRANSFORMERS
 
 logger = logging.getLogger(__name__)
 
@@ -1308,7 +1302,7 @@ class PolygonGate(Gate):
         """
         pops = list()
         for name, poly in zip(ascii_uppercase, polygons):
-            pop_df = inside_polygon(df=data, x=self.x, y=self.y, poly=poly)
+            pop_df = inside_polygon(data=data, x=self.x, y=self.y, poly=poly)
             geom = PolygonGeom(
                 x=self.x,
                 y=self.y,
@@ -2217,7 +2211,7 @@ def update_polygon(
     if isinstance(y_values, np.ndarray):
         y_values = y_values.tolist()
     poly = create_polygon(x=x_values, y=y_values)
-    new_data = inside_polygon(df=parent_data, x=population.geom.x, y=population.geom.y, poly=poly)
+    new_data = inside_polygon(data=parent_data, x=population.geom.x, y=population.geom.y, poly=poly)
     population.geom.x_values = x_values
     population.geom.y_values = y_values
     population.index = new_data.index.values

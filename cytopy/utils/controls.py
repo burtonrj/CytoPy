@@ -58,7 +58,7 @@ def plot_embeddings(
     axes[1].legend(bbox_to_anchor=(1.5, 1.0))
     lgd = axes[1].get_legend()
     for handle in lgd.legendHandles:
-        handle.set_sizes([10.0])
+        handle.set_sizes([20.0])
     axes[0].set_title("Primary")
     axes[1].set_title("Control")
     return fig
@@ -114,24 +114,34 @@ class ControlComparison:
                 logger.warning(f"{fg.primary_id} missing {ctrl} file.")
             elif population not in fg.list_populations(data_source="primary"):
                 logger.warning(f"Population '{population}' missing in primary staining for {fg.primary_id}.")
+            elif population not in fg.list_populations(data_source=ctrl):
+                logger.warning(f"Population '{population}' missing in {ctrl} control staining for {fg.primary_id}.")
             else:
                 self.filegroups.append(fg)
+
+    def create_groups(self):
+        pass
+
+    def compare_embeddings(self):
+        pass
+
+    def compare_distributions(self):
+        pass
+
+    def compare_embeddings_groups(self):
+        pass
+
+    def compared_distributions_groups(self):
+        pass
 
     def __call__(
         self,
         vars_to_compare: List[str],
-        classifier: Union[str, ClassifierMixin] = "XGBClassifier",
-        classifier_params: Optional[Dict] = None,
-        features: Optional[List[str]] = None,
-        scoring: str = "balanced_accuracy",
-        evaluate_classifier: bool = True,
-        scale: Optional[str] = "standard",
-        kfolds: int = 5,
-        n_permutations: int = 25,
-        sample_size: int = 100000,
+        umap_plot: bool = True,
         plot_dir: Optional[str] = None,
+        sample_size: int = 50000,
+        features: Optional[List[str]] = None,
         embeddings_parent: str = "root",
-        embeddings_sample_size: int = 50000,
         umap_kwargs: Optional[Dict] = None,
         filegroups: Optional[List[str]] = None,
         verbose: bool = True,
@@ -141,37 +151,24 @@ class ControlComparison:
                 raise FileNotFoundError(f"No such directory {plot_dir}")
         else:
             plot_dir = os.getcwd()
-        prediction_stats = []
         comparison_stats = []
-        filegroups = [f for f in self.filegroups if f.primary_id in filegroups]
+        if filegroups:
+            filegroups = [f for f in self.filegroups if f.primary_id in filegroups]
+        else:
+            filegroups = self.filegroups
         for fg in progress_bar(filegroups, verbose=verbose):
-            ctrl_data, stats = fg.infer_ctrl_population_df(
-                ctrl=self.ctrl,
-                population=self.population,
-                transform=self.transform,
-                transform_kwargs=self.transform_kwargs,
-                classifier=classifier,
-                classifier_params=classifier_params,
-                features=features,
-                scoring=scoring,
-                kfolds=kfolds,
-                n_permutations=n_permutations,
-                evaluate_classifier=evaluate_classifier,
-                sample_size=sample_size,
-                scale=scale,
-            )
-            prediction_stats.append(stats)
-            if embeddings_parent not in fg.list_populations(data_source=self.ctrl):
-                logger.error(
-                    f"Chosen parent {embeddings_parent} does not exist for {self.ctrl} control "
-                    f"in {fg.primary_id}. Skipping embedding plot"
-                )
-            else:
+            if umap_plot:
+                if embeddings_parent not in fg.list_populations(data_source=self.ctrl):
+                    logger.error(
+                        f"Chosen parent {embeddings_parent} does not exist for {self.ctrl} control "
+                        f"in {fg.primary_id}. Skipping embedding plot"
+                    )
+                    continue
                 primary_parent = fg.load_population_df(
                     population=embeddings_parent,
                     transform=self.transform,
                     data_source="primary",
-                    sample_size=embeddings_sample_size,
+                    sample_size=sample_size,
                 )
                 primary_idx = fg.get_population(self.population, data_source="primary").index
                 primary_idx = [i for i in primary_idx if i in primary_parent.index]
@@ -179,9 +176,10 @@ class ControlComparison:
                     population=embeddings_parent,
                     transform=self.transform,
                     data_source=self.ctrl,
-                    sample_size=embeddings_sample_size,
+                    sample_size=sample_size,
                 )
-                ctrl_idx = [i for i in ctrl_data.index if i in ctrl_parent.index]
+                ctrl_idx = fg.get_population(self.population, data_source=self.ctrl).index
+                ctrl_idx = [i for i in ctrl_idx if i in ctrl_parent.index]
                 umap_kwargs = umap_kwargs or {}
                 fig = plot_embeddings(
                     primary=primary_parent,
@@ -199,10 +197,16 @@ class ControlComparison:
                     transform=self.transform,
                     transform_kwargs=self.transform_kwargs,
                     sample_size=sample_size,
+                    data_source="primary",
                 )[var].values
-                y = ctrl_data[var].values
+                y = fg.load_population_df(
+                    self.population,
+                    transform=self.transform,
+                    transform_kwargs=self.transform_kwargs,
+                    sample_size=sample_size,
+                    data_source=self.ctrl,
+                )[var].values
                 fig = plot_distributions(primary=x, ctrl=y)
                 fig.savefig(os.path.join(plot_dir, f"{fg.primary_id}_{var}.png"), bbox_inches="tight")
-                comparison_stats.append(statistics(x=x, y=y, ctrl=self.ctrl, var=var, sample_id=fg.primary_id))
             plt.close("all")
-        return pd.concat(prediction_stats).reset_index(drop=True), pd.concat(comparison_stats).reset_index(drop=True)
+        return

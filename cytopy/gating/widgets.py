@@ -21,7 +21,7 @@ from .gate import PolygonGate
 from .gate import ThresholdGate
 from .gating_strategy import FileGroup
 from .gating_strategy import GatingStrategy
-from .geometry import inside_polygon
+from cytopy.utils.geometry import inside_polygon
 
 logger = logging.getLogger(__name__)
 

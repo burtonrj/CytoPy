@@ -7,7 +7,7 @@ from sklearn.datasets import make_blobs
 from cytopy.data.population import PolygonGeom
 from cytopy.data.population import ThresholdGeom
 from cytopy.gating import gate
-from cytopy.gating.geometry import *
+from cytopy.utils.geometry import *
 
 np.random.seed(42)
 
