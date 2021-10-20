@@ -500,6 +500,9 @@ def single_cell_dataframe(
 
     for _id in progress_bar(sample_ids, verbose=verbose):
         fg = experiment.get_sample(sample_id=_id)
+        if data_source not in fg.file_paths.keys():
+            logger.warning(f"{_id} missing data source {data_source}")
+            continue
         logger.debug(f"Loading FileGroup data from {_id}; {fg.id}")
         pop_data = getattr(fg, method)(**kwargs)
         pop_data["sample_id"] = _id

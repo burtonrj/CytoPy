@@ -32,6 +32,8 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import datetime
+from copy import deepcopy
+from typing import List
 
 import mongoengine
 
@@ -256,3 +258,19 @@ class Project(mongoengine.Document):
             e.delete()
         super().delete(*args, **kwargs)
         logger.info("Project deleted.")
+
+
+def merge_experiments(
+    project: Project, experiment_left: Experiment, experiment_right: Experiment, new_experiment_id: str
+) -> Experiment:
+    assert new_experiment_id not in project.list_experiments(), f"{new_experiment_id} already exists!"
+    experiment_left = project.get_experiment(experiment_id=experiment_left)
+    experiment_right = project.get_experiment(experiment_id=experiment_right)
+    assert experiment_right.panel == experiment_left.panel, f"Experiments must have identical panels"
+    new_experiment = Experiment(experiment_id=new_experiment_id)
+    new_experiment.panel = deepcopy(experiment_left.panel)
+    new_experiment.fcs_files = experiment_left.fcs_files + experiment_right.fcs_files
+    new_experiment.save()
+    project.experiments.append(new_experiment)
+    project.save()
+    return new_experiment
