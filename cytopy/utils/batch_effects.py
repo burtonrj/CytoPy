@@ -380,7 +380,7 @@ class Harmony:
         if scale is not None:
             scale_kwargs = scale_kwargs or {}
             scale = transform_module.Scaler(method=scale, **scale_kwargs)
-            self.data = scale(data=self.data, features=self.features)
+            self.data = scale.fit_transform(data=self.data, features=self.features)
             self.scaler = scale
 
     def run(self, var_use: str = "sample_id", **kwargs):

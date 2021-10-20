@@ -89,6 +89,19 @@ class Subject(mongoengine.DynamicDocument):
                 .rename({"index": field}, axis=1)
             )
 
+    def lookup_var(self, key: Union[str, List[str]]):
+        try:
+            if len(key) == 1:
+                key = key[0]
+            if isinstance(key, str):
+                return self[key]
+            node = self[key[0]]
+            for k in key[1:]:
+                node = node[k]
+            return node
+        except KeyError:
+            return None
+
 
 def common_fields(subjects: List[Subject]) -> Set:
     return set.intersection(*[set(s.fields) for s in subjects])
@@ -106,14 +119,7 @@ def lookup_variable(subject_id: str, key: Union[str, List[str]]) -> Union[None, 
         subject = safe_search(subject_id=subject_id)
         if subject is None:
             return None
-        if len(key) == 1:
-            key = key[0]
-        if isinstance(key, str):
-            return subject[key]
-        node = subject[key[0]]
-        for k in key[1:]:
-            node = node[k]
-        return node
+        return subject.lookup_var(key)
     except KeyError:
         return None
 

@@ -94,6 +94,7 @@ class FlowSOM:
         batch_size: int = 500,
         random_seed: int = 42,
         weight_init: str = "random",
+        return_all_clusters: bool = False,
         meta_clusterer: Optional[Type] = None,
         meta_clusterer_kwargs: Optional[Dict] = None,
         min_n: int = 5,
@@ -126,6 +127,7 @@ class FlowSOM:
         self.random_seed = random_seed
         self.weight_init = weight_init
         meta_clusterer_kwargs = meta_clusterer_kwargs or {}
+        self.return_all_clusters = return_all_clusters
         self.meta_clusterer = meta_clusterer or AgglomerativeClustering
         self.meta_clusterer = self.meta_clusterer(**meta_clusterer_kwargs)
         self.min_n = min_n

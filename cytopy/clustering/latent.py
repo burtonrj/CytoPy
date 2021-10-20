@@ -67,8 +67,8 @@ class LatentClustering:
         labels = self.model.fit_predict(sample[features].values)
         logger.info("Up-sampling to original space")
         labels = upsample_knn(
-            sample=sample[features],
-            original_data=data[features],
+            sample=sample,
+            original_data=data,
             labels=labels,
             features=data.columns,
             **self.upsampling_kwargs,

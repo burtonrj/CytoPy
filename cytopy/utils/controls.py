@@ -1,5 +1,6 @@
 import logging
 import os
+from collections import defaultdict
 from typing import Dict
 from typing import Iterable
 from typing import List
@@ -11,7 +12,6 @@ import numpy as np
 import pandas as pd
 import pingouin as pg
 import seaborn as sns
-from sklearn.base import ClassifierMixin
 
 from cytopy.data.experiment import Experiment
 from cytopy.feedback import progress_bar
@@ -68,7 +68,7 @@ def plot_distributions(primary: np.ndarray, ctrl: np.ndarray) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(5, 5))
     sns.kdeplot(primary, ax=ax, shade=True, color="#4240CE", label="Primary")
     sns.kdeplot(ctrl, ax=ax, shade=True, color="#D53A3A", label="Control")
-    ax.axvline(np.quantile(ctrl, q=0.95), color="black", linestyle="--")
+    ax.axvline(np.quantile(ctrl, q=0.995), color="black", linestyle="--")
     ax.legend(bbox_to_anchor=(1.15, 1.0))
     return fig
 
@@ -103,12 +103,15 @@ class ControlComparison:
         population: str,
         transform: str = "logicle",
         transform_kwargs: Optional[Dict] = None,
+        meta_var: Optional[Union[str, List[str]]] = None,
     ):
         self.ctrl = ctrl
         self.population = population
         self.transform = transform
         self.transform_kwargs = transform_kwargs or {}
         self.filegroups = []
+        self.meta_var = meta_var
+        self.groups = defaultdict(list)
         for fg in experiment.fcs_files:
             if ctrl not in fg.file_paths.keys():
                 logger.warning(f"{fg.primary_id} missing {ctrl} file.")
@@ -118,95 +121,96 @@ class ControlComparison:
                 logger.warning(f"Population '{population}' missing in {ctrl} control staining for {fg.primary_id}.")
             else:
                 self.filegroups.append(fg)
+        self.create_groups()
+
+    def filter_filegroups(self, filter_: Optional[List[str]] = None):
+        return self.filegroups if filter_ is None else [f for f in self.filegroups if f.primary_id in filter_]
 
     def create_groups(self):
-        pass
+        for fg in self.filegroups:
+            if not fg.subject:
+                continue
+            var = fg.subject.lookup_var(key=self.meta_var)
+            if var is None:
+                self.groups["undefined"].append(fg.primary_id)
+            else:
+                self.groups[var].append(fg.primary_id)
 
-    def compare_embeddings(self):
-        pass
-
-    def compare_distributions(self):
-        pass
-
-    def compare_embeddings_groups(self):
-        pass
-
-    def compared_distributions_groups(self):
-        pass
-
-    def __call__(
+    def compare_embeddings(
         self,
-        vars_to_compare: List[str],
-        umap_plot: bool = True,
-        plot_dir: Optional[str] = None,
-        sample_size: int = 50000,
-        features: Optional[List[str]] = None,
-        embeddings_parent: str = "root",
+        parent: str,
+        sample_size: int,
         umap_kwargs: Optional[Dict] = None,
+        features: Optional[List[str]] = None,
+        filegroups: Optional[List[str]] = None,
+        verbose: bool = True,
+        plot_dir: Optional[str] = None,
+    ):
+        plot_dir = plot_dir or os.getcwd()
+        filegroups = self.filter_filegroups(filter_=filegroups)
+        umap_kwargs = umap_kwargs or {}
+        if not os.path.isdir(plot_dir):
+            raise FileNotFoundError(f"No such directory {plot_dir}")
+        for fg in progress_bar(filegroups, verbose=verbose):
+            if parent not in fg.list_populations(data_source=self.ctrl):
+                logger.error(
+                    f"Chosen parent {parent} does not exist for {self.ctrl} control "
+                    f"in {fg.primary_id}. Skipping embedding plot"
+                )
+                continue
+            primary_parent = fg.load_population_df(
+                population=parent,
+                transform=self.transform,
+                data_source="primary",
+                sample_size=sample_size,
+            )
+            primary_idx = fg.get_population(self.population, data_source="primary").index
+            primary_idx = [i for i in primary_idx if i in primary_parent.index]
+            ctrl_parent = fg.load_population_df(
+                population=parent,
+                transform=self.transform,
+                data_source=self.ctrl,
+                sample_size=sample_size,
+            )
+            ctrl_idx = fg.get_population(self.population, data_source=self.ctrl).index
+            ctrl_idx = [i for i in ctrl_idx if i in ctrl_parent.index]
+            fig = plot_embeddings(
+                primary=primary_parent,
+                primary_idx=primary_idx,
+                ctrl=ctrl_parent,
+                ctrl_idx=ctrl_idx,
+                features=features,
+                population_label=self.population,
+                **umap_kwargs,
+            )
+            fig.savefig(os.path.join(plot_dir, f"{fg.primary_id}.png"), bbox_inches="tight")
+            plt.close("all")
+
+    def compare_distributions(
+        self,
+        var: Union[str, List[str]],
+        plot_dir: Optional[str] = None,
+        sample_size: int = 10000,
         filegroups: Optional[List[str]] = None,
         verbose: bool = True,
     ):
-        if plot_dir:
-            if not os.path.isdir(plot_dir):
-                raise FileNotFoundError(f"No such directory {plot_dir}")
-        else:
-            plot_dir = os.getcwd()
-        comparison_stats = []
-        if filegroups:
-            filegroups = [f for f in self.filegroups if f.primary_id in filegroups]
-        else:
-            filegroups = self.filegroups
+        plot_dir = plot_dir or os.getcwd()
+        filegroups = self.filter_filegroups(filter_=filegroups)
         for fg in progress_bar(filegroups, verbose=verbose):
-            if umap_plot:
-                if embeddings_parent not in fg.list_populations(data_source=self.ctrl):
-                    logger.error(
-                        f"Chosen parent {embeddings_parent} does not exist for {self.ctrl} control "
-                        f"in {fg.primary_id}. Skipping embedding plot"
-                    )
-                    continue
-                primary_parent = fg.load_population_df(
-                    population=embeddings_parent,
-                    transform=self.transform,
-                    data_source="primary",
-                    sample_size=sample_size,
-                )
-                primary_idx = fg.get_population(self.population, data_source="primary").index
-                primary_idx = [i for i in primary_idx if i in primary_parent.index]
-                ctrl_parent = fg.load_population_df(
-                    population=embeddings_parent,
-                    transform=self.transform,
-                    data_source=self.ctrl,
-                    sample_size=sample_size,
-                )
-                ctrl_idx = fg.get_population(self.population, data_source=self.ctrl).index
-                ctrl_idx = [i for i in ctrl_idx if i in ctrl_parent.index]
-                umap_kwargs = umap_kwargs or {}
-                fig = plot_embeddings(
-                    primary=primary_parent,
-                    primary_idx=primary_idx,
-                    ctrl=ctrl_parent,
-                    ctrl_idx=ctrl_idx,
-                    features=features,
-                    population_label=self.population,
-                    **umap_kwargs,
-                )
-                fig.savefig(os.path.join(plot_dir, f"{fg.primary_id}_embeddings.png"), bbox_inches="tight")
-            for var in vars_to_compare:
-                x = fg.load_population_df(
-                    self.population,
-                    transform=self.transform,
-                    transform_kwargs=self.transform_kwargs,
-                    sample_size=sample_size,
-                    data_source="primary",
-                )[var].values
-                y = fg.load_population_df(
-                    self.population,
-                    transform=self.transform,
-                    transform_kwargs=self.transform_kwargs,
-                    sample_size=sample_size,
-                    data_source=self.ctrl,
-                )[var].values
-                fig = plot_distributions(primary=x, ctrl=y)
-                fig.savefig(os.path.join(plot_dir, f"{fg.primary_id}_{var}.png"), bbox_inches="tight")
+            x = fg.load_population_df(
+                self.population,
+                transform=self.transform,
+                transform_kwargs=self.transform_kwargs,
+                sample_size=sample_size,
+                data_source="primary",
+            )[var].values
+            y = fg.load_population_df(
+                self.population,
+                transform=self.transform,
+                transform_kwargs=self.transform_kwargs,
+                sample_size=sample_size,
+                data_source=self.ctrl,
+            )[var].values
+            fig = plot_distributions(primary=x, ctrl=y)
+            fig.savefig(os.path.join(plot_dir, f"{fg.primary_id}_{var}.png"), bbox_inches="tight")
             plt.close("all")
-        return

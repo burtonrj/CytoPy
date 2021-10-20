@@ -175,7 +175,7 @@ def summarise_clusters(
     scale_kwargs = scale_kwargs or {}
     if scale is not None:
         scaler = Scaler(method=scale, **scale_kwargs)
-        data = scaler(data=data, features=features)
+        data = scaler.fit_transform(data=data, features=features)
     return data
 
 
@@ -238,7 +238,7 @@ class ClusterMethod:
 class Clustering:
     def __init__(
         self,
-        experiment: Experiment,
+        experiment: Union[Experiment, List[Experiment]],
         features: list,
         population_prefix: str,
         sample_ids: list or None = None,
@@ -308,7 +308,7 @@ class Clustering:
         data = self.data.copy()
         if scale_method is not None:
             scalar = Scaler(scale_method, **scale_kwargs)
-            data = scalar(data=self.data, features=features)
+            data = scalar.fit_transform(data=self.data, features=features)
         return data, scalar
 
     def scale_and_reduce(

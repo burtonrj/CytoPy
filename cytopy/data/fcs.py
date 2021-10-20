@@ -399,6 +399,7 @@ class FileGroup(mongoengine.Document):
         sampling_method: str = "uniform",
         sample_at_population_level: bool = True,
         data_source: str = "primary",
+        meta_vars: Optional[Dict] = None,
         **sampling_kwargs,
     ) -> pd.DataFrame:
         """
@@ -452,6 +453,7 @@ class FileGroup(mongoengine.Document):
             label_parent=label_parent,
             frac_of=frac_of,
             data_source=data_source,
+            meta_vars=meta_vars,
         )
         if sample_size is not None and sample_at_population_level:
             kwargs["sample_size"] = sample_size
@@ -483,6 +485,7 @@ class FileGroup(mongoengine.Document):
         sample_size: Optional[Union[int, float]] = None,
         sampling_method: str = "uniform",
         data_source: str = "primary",
+        meta_vars: Optional[Dict] = None,
         label_downstream_affiliations=None,
         **sampling_kwargs,
     ) -> pd.DataFrame:
@@ -542,8 +545,15 @@ class FileGroup(mongoengine.Document):
         elif isinstance(transform, dict):
             data = apply_transform_map(data=data, feature_method=transform, kwargs=transform_kwargs)
 
+        if isinstance(data, pl.DataFrame):
+            data = polars_to_pandas(data)
+
         if label_parent:
-            data["parent_label"] = [population.parent for _ in range(data.shape[0])]
+            data["parent_label"] = population.parent
+
+        if meta_vars is not None and self.subject:
+            for col_name, key in meta_vars.items():
+                data[col_name] = self.subject.lookup_var(key=key)
 
         if frac_of is not None:
             for comparison_pop in frac_of:
@@ -552,8 +562,7 @@ class FileGroup(mongoengine.Document):
                     continue
                 comparison_pop = self.get_population(population_name=comparison_pop)
                 data[f"frac of {comparison_pop.population_name}"] = population.n / comparison_pop.n
-        if isinstance(data, pl.DataFrame):
-            return polars_to_pandas(data)
+
         return data
 
     def list_populations(

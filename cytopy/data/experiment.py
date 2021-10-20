@@ -330,7 +330,9 @@ class Experiment(mongoengine.Document):
         ax.bar(ctrl_counts.keys(), ctrl_counts.values())
         return ax
 
-    def population_statistics(self, populations: Union[List, None] = None) -> pd.DataFrame:
+    def population_statistics(
+        self, populations: Union[List, None] = None, meta_vars: Optional[Dict] = None
+    ) -> pd.DataFrame:
         """
         Generates a Pandas DataFrame of population statistics for all FileGroups
         of an Experiment, for the given populations or all available populations
@@ -352,6 +354,9 @@ class Experiment(mongoengine.Document):
                 s = f.subject
                 if s is not None:
                     df["subject_id"] = s.subject_id
+                    if meta_vars is not None:
+                        for col_name, key in meta_vars.items():
+                            df[col_name] = s.lookup_var(key=key)
                 data.append(df)
         return pd.concat(data).reset_index(drop=True)
 
@@ -405,13 +410,14 @@ def single_cell_dataframe(
     transform_kwargs: Optional[Dict] = None,
     sample_ids: Optional[List[str]] = None,
     verbose: bool = True,
-    ctrl: Optional[str] = None,
+    data_source: str = "primary",
     label_parent: bool = False,
     frac_of: Optional[List[str]] = None,
     sample_size: Optional[Union[int, float]] = None,
     sampling_level: str = "file",
     sampling_method: str = "uniform",
     sampling_kwargs: Optional[Dict] = None,
+    meta_vars: Optional[Dict] = None,
 ) -> pd.DataFrame:
     """
     Generate a single cell DataFrame that is a concatenation of population data from many
@@ -478,6 +484,8 @@ def single_cell_dataframe(
         transform_kwargs=transform_kwargs,
         label_parent=label_parent,
         frac_of=frac_of,
+        data_source=data_source,
+        meta_vars=meta_vars,
     )
 
     if sample_size is not None and sampling_level == "file":
@@ -489,16 +497,6 @@ def single_cell_dataframe(
         kwargs["regex"] = regex
         kwargs["populations"] = populations
         kwargs.pop("population")
-        if ctrl:
-            raise ValueError(
-                "load_multiple_populations does not support control data. Load ctrl populations "
-                "individually and merge post-hoc."
-            )
-    elif ctrl:
-        method = "load_ctrl_population_df"
-        kwargs.pop("label_parent")
-        kwargs.pop("frac_of")
-        kwargs["ctrl"] = ctrl
 
     for _id in progress_bar(sample_ids, verbose=verbose):
         fg = experiment.get_sample(sample_id=_id)
