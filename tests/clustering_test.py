@@ -77,7 +77,7 @@ def test_construct_clustering():
         experiment=exp,
         features=exp.panel.list_channels(),
         root_population="root",
-        transform="logicle",
+        transform="asinh",
         population_prefix="clustering_test",
     )
     assert isinstance(clusterer.data, pd.DataFrame)
@@ -94,7 +94,7 @@ def base_clustering():
         experiment=exp,
         features=exp.panel.list_channels(),
         root_population="root",
-        transform="logicle",
+        transform="asinh",
         population_prefix="clustering_test",
     )
     return clusterer

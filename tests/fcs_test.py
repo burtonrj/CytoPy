@@ -201,7 +201,7 @@ def test_add_population(example_populated_experiment):
 def test_load_population_df(example_populated_experiment, pop_name, n):
     create_example_populations(example_populated_experiment.get_sample("test sample")).save()
     fg = reload_filegroup(project_id="test", exp_id="test experiment", sample_id="test sample")
-    df = fg.load_population_df(population=pop_name, transform="logicle")
+    df = fg.load_population_df(population=pop_name, transform="asinh")
     assert isinstance(df, pd.DataFrame)
     assert df.shape == (n, 7)
 
@@ -210,7 +210,7 @@ def test_load_population_df(example_populated_experiment, pop_name, n):
 def test_load_ctrl_population_df(example_populated_experiment, pop_name, n):
     create_example_populations(example_populated_experiment.get_sample("test sample")).save()
     fg = reload_filegroup(project_id="test", exp_id="test experiment", sample_id="test sample")
-    df = fg.infer_ctrl_population_df(ctrl="test_ctrl", population=pop_name, transform="logicle")
+    df = fg.infer_ctrl_population_df(ctrl="test_ctrl", population=pop_name, transform="asinh")
     assert isinstance(df, pd.DataFrame)
     assert df.shape == (n, 7)
 

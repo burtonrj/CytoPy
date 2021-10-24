@@ -138,7 +138,7 @@ def create_example_populations(filegroup: FileGroup, n_populations: int = 3):
         [f"pop{i + 1}" for i in range(n_populations)],
         ["root"] + [f"pop{i + 1}" for i in range(n_populations - 1)],
     ):
-        parent_df = filegroup.load_population_df(population=parent, transform="logicle")
+        parent_df = filegroup.load_population_df(population=parent, transform="asinh")
         x = parent_df["FS Lin"].median()
         idx = parent_df[parent_df["FS Lin"] >= x].index.values
         p = Population(population_name=pname, n=len(idx), parent=parent, index=idx, source="gate")

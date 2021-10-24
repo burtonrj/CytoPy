@@ -818,7 +818,7 @@ def sample_experiment_data(
     sampling_method: str = "uniform",
     sampling_level: str = "file",
     sampling_kwargs: Optional[Dict] = None,
-    transform: Optional[Union[str, Dict]] = "logicle",
+    transform: Optional[Union[str, Dict]] = "asinh",
     transform_kwargs: Optional[Dict] = None,
     targets: Optional[List[str]] = None,
 ) -> pd.DataFrame:
@@ -879,7 +879,7 @@ class CalibratedCellClassifier(BaseClassifier):
         sampling_method: str = "uniform",
         sampling_level: str = "file",
         sampling_kwargs: Optional[Dict] = None,
-        transform: Optional[Union[str, Dict]] = "logicle",
+        transform: Optional[Union[str, Dict]] = "asinh",
         transform_kwargs: Optional[Dict] = None,
         targets: Optional[List[str]] = None,
         **harmony_kwargs,

@@ -302,7 +302,7 @@ class InteractiveGateEditor(widgets.HBox):
         logger.info("Changes saved!")
 
 
-class ManualLatentGating:
+class ManualLatentGating(widgets.HBox):
     colours = cycle(
         [
             "#c92c2c",
@@ -323,7 +323,7 @@ class ManualLatentGating:
         filegroup: FileGroup,
         parent_population: str = "root",
         source: str = "primary",
-        transform: str = "logicle",
+        transform: str = "asinh",
         transform_kwargs: Optional[Dict] = None,
         features: Optional[List[str]] = None,
         figsize: Tuple[int, int] = (5, 5),

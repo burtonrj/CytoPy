@@ -15,7 +15,7 @@ from cytopy.utils.geometry import probabilistic_ellipse
 
 
 def test_create_geom():
-    kwargs = dict(x="X", y="Y", transform_x="logicle", transform_y="logicle")
+    kwargs = dict(x="X", y="Y", transform_x="asinh", transform_y="asinh")
     test = PopulationGeometry(**kwargs)
     for k, v in kwargs.items():
         assert test[k] == v
@@ -25,8 +25,8 @@ def test_create_threshold():
     kwargs = dict(
         x="X",
         y="Y",
-        transform_x="logicle",
-        transform_y="logicle",
+        transform_x="asinh",
+        transform_y="asinh",
         x_threshold=4.344,
         y_threshold=2.435,
     )
@@ -39,8 +39,8 @@ def test_create_polygongeom():
     kwargs = dict(
         x="X",
         y="Y",
-        transform_x="logicle",
-        transform_y="logicle",
+        transform_x="asinh",
+        transform_y="asinh",
         x_values=list(np.random.normal(0, 0.5, 1000)),
         y_values=list(np.random.normal(0, 0.5, 1000)),
     )

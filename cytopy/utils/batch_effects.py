@@ -361,7 +361,7 @@ class Harmony:
         self,
         data: pd.DataFrame,
         features: List[str],
-        transform: Optional[str] = "logicle",
+        transform: Optional[str] = "asinh",
         transform_kwargs: Union[Dict[str, str], None] = None,
         scale: Optional[str] = "standard",
         scale_kwargs: Optional[Dict] = None,

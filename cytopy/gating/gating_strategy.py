@@ -714,8 +714,8 @@ class GatingStrategy(mongoengine.Document):
         population: str,
         x: str,
         y: Optional[str] = None,
-        transform_x: Optional[str] = "logicle",
-        transform_y: Optional[str] = "logicle",
+        transform_x: Optional[str] = "asinh",
+        transform_y: Optional[str] = "asinh",
         create_plot_kwargs: Optional[Dict] = None,
         **plot_kwargs,
     ):
@@ -727,8 +727,8 @@ class GatingStrategy(mongoengine.Document):
         population: str
         x: str
         y: str (optional)
-        transform_x: str (optional; default="logicle")
-        transform_y: str (optional; default="logicle")
+        transform_x: str (optional; default="asinh")
+        transform_y: str (optional; default="asinh")
         create_plot_kwargs:
             Additional keyword arguments passed to cytopy.utils.plotting.CreatePlot
         plot_kwargs

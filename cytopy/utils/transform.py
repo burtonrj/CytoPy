@@ -116,18 +116,12 @@ def inverse_hyperlog_transform_series(series: pl.Series, **kwargs):
     return pl.Series(transforms._hyperlog_inverse(series.to_numpy(), **kwargs))
 
 
-def asinh_transformed_series(series: pl.Series, m: float = 4.5, a: float = 0.5, t: int = 262144):
-    pre_scale = np.sinh(m * np.log(10)) / t
-    transpose = a * np.log(10)
-    divisor = (m + a) * np.log(10)
-    return (np.arcsinh(series * pre_scale) * transpose) / divisor
+def asinh_transformed_series(series: pl.Series, cofactor: float = 150.0):
+    return np.arcsinh(series / cofactor)
 
 
-def inverse_asinh_transformed_series(series: pl.Series, m: float = 4.5, a: float = 0.5, t: int = 262144):
-    pre_scale = np.sinh(m * np.log(10)) / t
-    transpose = a * np.log(10)
-    divisor = (m + a) * np.log(10)
-    return (np.sinh((series * divisor) - transpose)) / pre_scale
+def inverse_asinh_transformed_series(series: pl.Series, cofactor: float = 150.0):
+    return np.sinh(series) * cofactor
 
 
 class Transformer:
@@ -285,21 +279,14 @@ class AsinhTransformer(Transformer):
 
     Parameters
     ----------
-    m: float (default=4.5)
-        Number of decades the true logarithmic scale approaches at the high end of the scale
-    a: float (default=0.5)
-        Additional number of negative decades
-    t: int (default=262144)
-        Top of the linear scale
+    cofactor: float (default=150.)
     """
 
-    def __init__(self, m: float = 4.5, a: float = 0.5, t: int = 262144):
+    def __init__(self, cofactor: float = 150.0):
         super().__init__(
             transform_function=asinh_transformed_series,
             inverse_function=inverse_asinh_transformed_series,
-            m=m,
-            a=a,
-            t=t,
+            cofactor=cofactor,
         )
 
 
@@ -608,7 +595,7 @@ TRANSFORMERS = {
 def apply_transform(
     data: Union[pd.DataFrame, pl.DataFrame],
     features: List[str],
-    method: str = "logicle",
+    method: str = "asinh",
     return_transformer: bool = False,
     **kwargs,
 ):

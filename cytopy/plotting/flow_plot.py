@@ -126,10 +126,10 @@ class FlowPlot:
 
     Parameters
     -----------
-    transform_x: str (default = "logicle")
+    transform_x: str (default = "asinh")
         How to transform the x-axis. Method 'plot_gate' overwrites this value with the value associated with
         the gate
-    transform_y: str (default = "logicle")
+    transform_y: str (default = "asinh")
         How to transform the y-axis. Method 'plot_gate' overwrites this value with the value associated with
         the gate
     title: str, optional
@@ -161,8 +161,8 @@ class FlowPlot:
 
     def __init__(
         self,
-        transform_x: str or None = "logicle",
-        transform_y: str or None = "logicle",
+        transform_x: str or None = "asinh",
+        transform_y: str or None = "asinh",
         transform_x_kwargs: dict or None = None,
         transform_y_kwargs: dict or None = None,
         xlabel: str or None = None,

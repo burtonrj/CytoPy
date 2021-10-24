@@ -164,7 +164,7 @@ def test_base_classifier_downsample(iris, method: str, sample_size: Union[int, f
 def test_base_classifier_transform(iris):
     x, y, features = iris
     classifier = base_classifier(model=KNeighborsClassifier(), x=x, y=y, features=features)
-    classifier.transform(method="logicle")
+    classifier.transform(method="asinh")
     assert isinstance(classifier.transformer, LogicleTransformer)
     assert (classifier.x["sepal length (cm)"] < 0.2).all()
 

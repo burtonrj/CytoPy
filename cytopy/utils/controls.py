@@ -101,7 +101,7 @@ class ControlComparison:
         experiment: Experiment,
         ctrl: str,
         population: str,
-        transform: str = "logicle",
+        transform: str = "asinh",
         transform_kwargs: Optional[Dict] = None,
         meta_var: Optional[Union[str, List[str]]] = None,
     ):

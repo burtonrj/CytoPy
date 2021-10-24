@@ -32,6 +32,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import json
 import logging
 import os
+import re
+from collections import defaultdict
 from multiprocessing import cpu_count
 from multiprocessing import Pool
 from typing import List
@@ -47,7 +49,7 @@ import s3fs
 logger = logging.getLogger(__name__)
 
 
-def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True, exclude_dir: str = "DUPLICATES") -> list:
+def filter_fcs_files(fcs_dir: str, exclude_files: Optional[str] = None, exclude_dir: Optional[str] = None) -> list:
     """
     Given a directory, return file paths for all fcs files in directory and subdirectories contained within
 
@@ -55,11 +57,10 @@ def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True, exclude_dir: str 
     ----------
     fcs_dir: str
         path to directory for search
-    exclude_comps: bool
-        if True, compensation files will be ignored (note: function searches for 'comp' in file name
-        for exclusion)
-    exclude_dir: str (default = 'DUPLICATES')
-        Will ignore any directories with this name
+    exclude_files: str, optional
+        Regex pattern - matching files will be ignored
+    exclude_dir: str, optional
+        Regex pattern - will ignore any matching subdirectories
     Returns
     --------
     List
@@ -67,10 +68,11 @@ def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True, exclude_dir: str 
     """
     fcs_files = []
     for root, dirs, files in os.walk(fcs_dir):
-        if os.path.basename(root) == exclude_dir:
-            continue
-        if exclude_comps:
-            fcs = [f for f in files if f.lower().endswith(".fcs") and f.lower().find("comp") == -1]
+        if exclude_dir:
+            if re.match(exclude_dir, os.path.basename(root)):
+                continue
+        if exclude_files:
+            fcs = [f for f in files if f.lower().endswith(".fcs") and not re.match(exclude_files, f)]
         else:
             fcs = [f for f in files if f.lower().endswith(".fcs")]
         fcs = [os.path.join(root, f) for f in fcs]
@@ -78,7 +80,7 @@ def filter_fcs_files(fcs_dir: str, exclude_comps: bool = True, exclude_dir: str 
     return fcs_files
 
 
-def get_fcs_file_paths(
+def parse_directory_for_fcs_files(
     fcs_dir: str,
     control_names: list,
     ctrl_id: str,
@@ -104,6 +106,8 @@ def get_fcs_file_paths(
     dict
         standard dictionary of fcs files contained in target directory
     """
+    filetree = defaultdict(defaultdict(list))
+
     file_tree = dict(primary=[], controls={})
     fcs_files = filter_fcs_files(fcs_dir, exclude_comps=ignore_comp, exclude_dir=exclude_dir)
     ctrl_files = [f for f in fcs_files if f.find(ctrl_id) != -1]

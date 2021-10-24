@@ -31,7 +31,7 @@ def create_poly_gate():
         x="FSC-A",
         y="CD3",
         transform_x=None,
-        transform_y="logicle",
+        transform_y="asinh",
         method="manual",
         method_kwargs={"x_values": x, "y_values": y},
     )
@@ -45,7 +45,7 @@ def create_threshold_gate():
         x="FSC-A",
         y="CD3",
         transform_x=None,
-        transform_y="logicle",
+        transform_y="asinh",
         method="density",
     )
     return threshold
@@ -58,7 +58,7 @@ def create_ellipse_gate():
         x="FSC-A",
         y="CD3",
         transform_x=None,
-        transform_y="logicle",
+        transform_y="asinh",
         method="GaussianMixture",
         method_kwargs={
             "n_components": 3,
@@ -89,7 +89,7 @@ def apply_some_gates(gs: GatingStrategy):
     gate.gate_name = "test threshold 2"
     gate.parent = "pop2"
     gate.x, gate.y = "CD57", None
-    gate.transform_x, gate.transform_y = "logicle", None
+    gate.transform_x, gate.transform_y = "asinh", None
     gs.preview_gate(gate=gate)
     gate.label_children({"+": "pop3", "-": "pop4"})
     gs.apply_gate(gate=gate)

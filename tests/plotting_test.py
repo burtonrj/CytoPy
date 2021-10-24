@@ -63,8 +63,8 @@ def test_valid_transform():
 
 def test_create_flowplot_object():
     plotter = FlowPlot()
-    assert plotter.transform_x == "logicle"
-    assert plotter.transform_y == "logicle"
+    assert plotter.transform_x == "asinh"
+    assert plotter.transform_y == "asinh"
     assert plotter.transform_x_kwargs == {}
     assert plotter.transform_y_kwargs == {}
     assert plotter.labels.get("x", None) is None
@@ -139,8 +139,8 @@ def test_plot_2dhistogram(tx, ty, xkwargs, ykwargs):
 def test_plot_axis_limits():
     data = create_lognormal_data()
     plotter = FlowPlot(
-        transform_x="logicle",
-        transform_y="logicle",
+        transform_x="asinh",
+        transform_y="asinh",
         title="Axis limits",
         xlim=(1000, 10000),
     )

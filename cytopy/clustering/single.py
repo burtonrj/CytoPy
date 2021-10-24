@@ -16,6 +16,7 @@ from ..plotting.general import box_swarm_plot
 from ..plotting.general import build_plot_grid
 from .clustering import Clustering
 from .clustering import ClusterMethod
+from .clustering import init_cluster_method
 from .clustering import remove_null_features
 from .metrics import init_internal_metrics
 from .metrics import InternalMetric
@@ -77,7 +78,7 @@ class SingleClustering(Clustering):
         samples from Experiment.
     root_population: str (default="root")
         Name of the Population to use as input data for clustering
-    transform: str (default="logicle")
+    transform: str (default="asinh")
         How to transform the data prior to clustering, see cytopy.utils.transform for valid methods
     transform_kwargs: dict, optional
         Additional keyword arguments passed to Transformer
@@ -110,7 +111,7 @@ class SingleClustering(Clustering):
     ):
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
-        method = self._init_cluster_method(method=method, **kwargs)
+        method = init_cluster_method(method=method, **kwargs)
         self.data = method.cluster(data=self.data, features=features)
         return self
 
@@ -159,7 +160,6 @@ class SingleClustering(Clustering):
             summary_method=summary_method,
             scale_method=scale_method,
             scale_kwargs=scale_kwargs,
-            **kwargs,
         )
         self.data["meta_label"] = data["meta_label"]
         return self
@@ -291,13 +291,25 @@ class SingleClustering(Clustering):
         return results
 
     def cluster_proportions(
-        self, label: str = "cluster_label", x_label: Optional[str] = None, y_label: Optional[str] = None, **plot_kwargs
+        self,
+        label: str = "cluster_label",
+        x_label: Optional[str] = None,
+        y_label: Optional[str] = None,
+        filter_clusters: Optional[List] = None,
+        hue: Optional[str] = None,
+        **plot_kwargs,
     ):
-        x = self.data.groupby("sample_id")[label].value_counts()
+        data = self.data.copy()
+        if filter_clusters:
+            data = data[data[label].isin(filter_clusters)]
+        x = data.groupby("sample_id")[label].value_counts()
         x.name = "Count"
         x = x.reset_index()
-        plot_data = x.groupby("sample_id").apply(count_to_proportion)
-        ax = box_swarm_plot(plot_df=plot_data, x="cluster_label", y="Percentage", **plot_kwargs)
+        plot_data = x.groupby("sample_id").apply(count_to_proportion).reset_index()
+        if hue:
+            colour_mapping = self.data[["sample_id", hue]].drop_duplicates()
+            plot_data = plot_data.merge(colour_mapping, on="sample_id")
+        ax = box_swarm_plot(plot_df=plot_data, x=label, y="Percentage", hue=hue, **plot_kwargs)
         if x_label:
             ax.set_xlabel(x_label)
         if y_label:

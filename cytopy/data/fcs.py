@@ -46,13 +46,11 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from botocore.errorfactory import ClientError
-from imblearn.over_sampling import RandomOverSampler
 
 from ..utils.geometry import inside_polygon
 from ..utils.sampling import sample_dataframe
 from ..utils.transform import apply_transform
 from ..utils.transform import apply_transform_map
-from ..utils.transform import Transformer
 from .errors import DuplicatePopulationError
 from .errors import MissingPopulationError
 from .population import PolygonGeom
@@ -390,7 +388,7 @@ class FileGroup(mongoengine.Document):
         self,
         populations: Optional[List[str]] = None,
         regex: Optional[str] = None,
-        transform: Optional[Union[str, Dict]] = "logicle",
+        transform: Optional[Union[str, Dict]] = "asinh",
         features_to_transform: Optional[List] = None,
         transform_kwargs: Optional[Dict] = None,
         label_parent: bool = False,
@@ -413,7 +411,7 @@ class FileGroup(mongoengine.Document):
         regex: str, optional
             Provide a regular expression pattern and will return matching populations (ignores populations
             if provided)
-        transform: str or dict, optional (default="logicle")
+        transform: str or dict, optional (default="asinh")
             Transform to be applied; specify a value of None to not perform any transformation
         features_to_transform: list, optional
             Features (columns) to be transformed. If not provied, all columns transformed
@@ -477,7 +475,7 @@ class FileGroup(mongoengine.Document):
     def load_population_df(
         self,
         population: str,
-        transform: str or Optional[Dict] = "logicle",
+        transform: str or Optional[Dict] = "asinh",
         features_to_transform: list or None = None,
         transform_kwargs: Optional[Dict] = None,
         label_parent: bool = False,
@@ -496,7 +494,7 @@ class FileGroup(mongoengine.Document):
         ----------
         population: str
             Name of the desired population
-        transform: str or dict, optional (default="logicle")
+        transform: str or dict, optional (default="asinh")
             Transform to be applied; specify a value of None to not perform any transformation
         features_to_transform: list, optional
             Features (columns) to be transformed. If not provied, all columns transformed
@@ -674,7 +672,9 @@ class FileGroup(mongoengine.Document):
                 ]
                 for name in populations:
                     self.tree[data_source][name].parent = None
-                self.tree = {name: node for name, node in self.tree[data_source].items() if name not in populations}
+                self.tree[data_source] = {
+                    name: node for name, node in self.tree[data_source].items() if name not in populations
+                }
             except AssertionError as e:
                 logger.warning(e)
             except ValueError as e:
@@ -879,32 +879,6 @@ class FileGroup(mongoengine.Document):
                 "frac_of_root": 0,
             }
 
-    def quantile_clean(self, upper: float = 0.999, lower: float = 0.001, data_source: str = "primary") -> None:
-        """
-        Iterate over every channel in the utils data and cut the upper and lower quartiles.
-
-        Parameters
-        ----------
-        upper: float (default=0.999)
-        lower: float (default=0.001)
-
-        Returns
-        -------
-        None
-        """
-        df = self.load_population_df("root", transform="logicle")
-        for x in df.columns:
-            df = df[(df[x] >= df[x].quantile(lower)) & (df[x] <= df[x].quantile(upper))]
-        clean_pop = Population(
-            population_name="root_clean",
-            index=df.index.values,
-            parent="root",
-            source="root",
-            n=df.shape[0],
-            data_source=data_source,
-        )
-        self.add_population(clean_pop)
-
     def write_to_fcs(self, path: str, source: str = "primary"):
         with open(path, "wb") as f:
             channels, markers = zip(**self.channel_mappings)
@@ -931,59 +905,6 @@ def population_stats(filegroup: FileGroup) -> pl.DataFrame:
     polars.DataFrame
     """
     return pl.DataFrame([filegroup.population_stats(p) for p in list(filegroup.list_populations())])
-
-
-def _load_data_for_ctrl_estimate(
-    filegroup: FileGroup,
-    target_population: str,
-    ctrl: str,
-    transform: str,
-    sample_size: int,
-    **transform_kwargs,
-) -> (pl.DataFrame, pl.DataFrame, Transformer):
-    """
-    Utility function for loading dataframes for estimating a control population. Given the FileGroup
-    of interest, the target population, and the name of the control, the population from the primary
-    staining will be loaded, class imbalance accounted for using random over sampling (resampling
-    all classes except the majority) and down sampling performed if necessary (if sample_size <
-    total population size). The root population of the control will also be loaded into a DataFrame.
-    Both DataFrames are transformed and the training data (primary stain population) control root population,
-    and the Transformer returned.
-
-    Parameters
-    ----------
-    filegroup: FileGroup
-    target_population: str
-    ctrl: str
-    transform: str
-    sample_size: int
-    transform_cache: bool
-    transform_kwargs:
-        Additional keyword arguments passed to apply_transform call
-
-    Returns
-    -------
-    polars.DataFrame, polars.DataFrame, Transformer
-    """
-    training = polars_to_pandas(filegroup.data(source="primary"))
-    population_idx = filegroup.get_population(target_population).index
-    training["label"] = [0 for _ in range(training.shape[0])]
-    training.loc[population_idx, ["label"]] = 1
-    ctrl = polars_to_pandas(filegroup.data(source=ctrl))
-
-    features = [x for x in training.columns if x != "label"]
-    if transform:
-        training = apply_transform(data=training, features=features, method=transform, **transform_kwargs)
-        ctrl = apply_transform(data=ctrl, features=features, method=transform, **transform_kwargs)
-
-    features = [col for col in training.columns if not re.match("time", col, re.IGNORECASE)]
-    sampler = RandomOverSampler(random_state=42)
-    x_resampled, y_resampled = sampler.fit_resample(training[features].values, training["label"].values)
-    training = pd.DataFrame(x_resampled, columns=features)
-    training["label"] = y_resampled
-    if training.shape[0] > sample_size:
-        training = training.sample(n=sample_size)
-    return training, ctrl
 
 
 def copy_populations_to_controls_using_geoms(

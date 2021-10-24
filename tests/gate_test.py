@@ -30,8 +30,8 @@ def test_childthreshold_init():
             y="y",
             x_threshold=0.5,
             y_threshold=0.5,
-            transform_x="logicle",
-            transform_y="logicle",
+            transform_x="asinh",
+            transform_y="asinh",
         ),
     )
     assert test_child.name == "test"
@@ -43,8 +43,8 @@ def test_childthreshold_init():
     assert test_child.geom.y == "y"
     assert test_child.geom.x_threshold == 0.5
     assert test_child.geom.y_threshold == 0.5
-    assert test_child.geom.transform_x == "logicle"
-    assert test_child.geom.transform_x == "logicle"
+    assert test_child.geom.transform_x == "asinh"
+    assert test_child.geom.transform_x == "asinh"
 
 
 @pytest.mark.parametrize("definition,expected", [("+", True), ("-", False)])
@@ -58,8 +58,8 @@ def test_childthreshold_match_definition_1d(definition, expected):
             y="y",
             x_threshold=0.5,
             y_threshold=0.5,
-            transform_x="logicle",
-            transform_y="logicle",
+            transform_x="asinh",
+            transform_y="asinh",
         ),
     )
     assert test_child.match_definition("+") == expected
@@ -85,8 +85,8 @@ def test_childthreshold_match_definition_2d(definition, expected):
             y="y",
             x_threshold=0.5,
             y_threshold=0.5,
-            transform_x="logicle",
-            transform_y="logicle",
+            transform_x="asinh",
+            transform_y="asinh",
         ),
     )
     assert test_child.match_definition("++") == expected
@@ -158,7 +158,7 @@ def test_transform_x():
         x="X",
         y="Y",
         method="manual",
-        transform_x="logicle",
+        transform_x="asinh",
     )
     data = pd.DataFrame(
         {
@@ -183,8 +183,8 @@ def test_transform_xy():
         x="X",
         y="Y",
         method="manual",
-        transform_x="logicle",
-        transform_y="logicle",
+        transform_x="asinh",
+        transform_y="asinh",
     )
     data = pd.DataFrame(
         {
@@ -311,7 +311,7 @@ def test_threshold_add_child():
         x="X",
         y="Y",
         method="manual",
-        transform_x="logicle",
+        transform_x="asinh",
     )
     child = gate.ChildThreshold(
         name="test child",
@@ -322,7 +322,7 @@ def test_threshold_add_child():
     assert len(threshold.children)
     assert threshold.children[0].geom.x == threshold.x
     assert threshold.children[0].geom.y == threshold.y
-    assert threshold.children[0].geom.transform_x == "logicle"
+    assert threshold.children[0].geom.transform_x == "asinh"
     assert not threshold.children[0].geom.transform_y
 
 

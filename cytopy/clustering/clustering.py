@@ -126,8 +126,7 @@ def assign_metalabels(data: pd.DataFrame, metadata: pd.DataFrame):
     Pandas.DataFrame
     """
     data = data.drop("meta_label", axis=1)
-    return pd.merge(
-        data,
+    return data.merge(
         metadata[["sample_id", "cluster_label", "meta_label"]],
         on=["sample_id", "cluster_label"],
     )
@@ -211,7 +210,7 @@ class ClusterMethod:
     def cluster(self, data: pd.DataFrame, features: List[str]):
         data["cluster_label"] = None
         for _id, df in progress_bar(data.groupby("sample_id"), verbose=self.verbose):
-            labels = self._cluster(data, features)
+            labels = self._cluster(df, features)
             data.loc[df.index, ["cluster_label"]] = labels
         return data
 
@@ -227,12 +226,42 @@ class ClusterMethod:
         scale_method: Optional[str] = None,
         scale_kwargs: Optional[Dict] = None,
     ):
+        data = data.copy()
         metadata = summarise_clusters(
             data=data, features=features, summary_method=summary_method, scale=scale_method, scale_kwargs=scale_kwargs
         )
         metadata["meta_label"] = self._cluster(metadata, features)
         data = assign_metalabels(data, metadata)
         return data
+
+
+def init_cluster_method(
+    method: Union[str, ClusterMethod],
+    verbose: bool,
+    **kwargs,
+) -> ClusterMethod:
+    if method == "phenograph":
+        method = ClusterMethod(klass=Phenograph, params=kwargs, verbose=verbose)
+    elif method == "flowsom":
+        method = ClusterMethod(klass=FlowSOM, params=kwargs, verbose=verbose)
+    elif method == "consensus":
+        method = ClusterMethod(klass=KConsensusClustering, params=kwargs, verbose=verbose)
+    elif method == "flowgrid":
+        method = ClusterMethod(klass=FlowGrid, params=kwargs, verbose=verbose)
+    elif method == "spade":
+        method = ClusterMethod(klass=CytoSPADE, params=kwargs, verbose=verbose)
+    elif method == "latent":
+        method = ClusterMethod(klass=LatentClustering, params=kwargs, verbose=verbose)
+    elif isinstance(method, str):
+        raise ValueError("If a string is given must be either 'phenograph', 'consensus' or 'flowsom'")
+    elif not isinstance(method, ClusterMethod):
+        method = ClusterMethod(klass=method, params=kwargs, verbose=verbose)
+    if not isinstance(method, ClusterMethod):
+        raise ValueError(
+            "Must provide a valid string, a ClusterMethod object, or a valid Scikit-Learn like "
+            "clustering class (must have 'fit_predict' method)."
+        )
+    return method
 
 
 class Clustering:
@@ -243,7 +272,7 @@ class Clustering:
         population_prefix: str,
         sample_ids: list or None = None,
         root_population: str = "root",
-        transform: str = "logicle",
+        transform: str = "asinh",
         transform_kwargs: dict or None = None,
         verbose: bool = True,
         data: Optional[pd.DataFrame] = None,
@@ -273,34 +302,6 @@ class Clustering:
             logger.info("Ready to cluster!")
         else:
             self.data = data
-
-    def _init_cluster_method(
-        self,
-        method: Union[str, ClusterMethod],
-        **kwargs,
-    ) -> ClusterMethod:
-        if method == "phenograph":
-            method = ClusterMethod(klass=Phenograph, params=kwargs, verbose=self.verbose)
-        elif method == "flowsom":
-            method = ClusterMethod(klass=FlowSOM, params=kwargs, verbose=self.verbose)
-        elif method == "consensus":
-            method = ClusterMethod(klass=KConsensusClustering, params=kwargs, verbose=self.verbose)
-        elif method == "flowgrid":
-            method = ClusterMethod(klass=FlowGrid, params=kwargs, verbose=self.verbose)
-        elif method == "spade":
-            method = ClusterMethod(klass=CytoSPADE, params=kwargs, verbose=self.verbose)
-        elif method == "latent":
-            method = ClusterMethod(klass=LatentClustering, params=kwargs, verbose=self.verbose)
-        elif isinstance(method, str):
-            raise ValueError("If a string is given must be either 'phenograph', 'consensus' or 'flowsom'")
-        elif not isinstance(method, ClusterMethod):
-            method = ClusterMethod(klass=method, params=kwargs, verbose=self.verbose)
-        if not isinstance(method, ClusterMethod):
-            raise ValueError(
-                "Must provide a valid string, a ClusterMethod object, or a valid Scikit-Learn like "
-                "clustering class (must have 'fit_predict' method)."
-            )
-        return method
 
     def scale_data(self, features: List[str], scale_method: Optional[str] = None, scale_kwargs: Optional[Dict] = None):
         scale_kwargs = scale_kwargs or {}
@@ -377,7 +378,7 @@ class Clustering:
         else:
             self.data["cluster_label"] = self.data["cluster_label"].replace(mappings)
 
-    def load_meta_variable(self, variable: str, verbose: bool = True, embedded: list or None = None):
+    def load_meta_variable(self, variable_name: str, key: Union[str, List[str]], verbose: bool = True):
         """
         Load a meta-variable for each Subject, adding this variable as a new column. If a sample
         is not associated to a Subject or the meta variable is missing from a Subject, value will be
@@ -395,22 +396,12 @@ class Clustering:
         -------
         None
         """
-        self.data[variable] = None
+        self.data[variable_name] = None
         for _id in progress_bar(self.data.subject_id.unique(), verbose=verbose):
             if _id is None:
                 continue
             p = Subject.objects(subject_id=_id).get()
-            try:
-                if embedded is not None:
-                    x = None
-                    for key in embedded:
-                        x = p[key]
-                    self.data.loc[self.data.subject_id == _id, variable] = x[variable]
-                else:
-                    self.data.loc[self.data.subject_id == _id, variable] = p[variable]
-            except KeyError:
-                logger.warning(f"{_id} is missing meta-variable {variable}")
-                self.data.loc[self.data.subject_id == _id, variable] = None
+            self.data.loc[self.data.subject_id == _id, variable_name] = p.lookup_var(key=key)
 
     def _create_parent_populations(self, population_var: str, parent_populations: Dict, verbose: bool = True):
         """

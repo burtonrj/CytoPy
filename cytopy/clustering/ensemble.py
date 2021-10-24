@@ -23,6 +23,7 @@ from sklearn.base import ClusterMixin
 from .clustering import Clustering
 from .clustering import ClusteringError
 from .clustering import ClusterMethod
+from .clustering import init_cluster_method
 from .clustering import remove_null_features
 from .metrics import comparison_matrix
 from .metrics import init_internal_metrics
@@ -121,7 +122,7 @@ class EnsembleClustering(Clustering):
         features: List[str] = None,
         sample_ids: Optional[List[str]] = None,
         root_population: str = "root",
-        transform: str = "logicle",
+        transform: str = "asinh",
         transform_kwargs: Optional[Dict] = None,
         verbose: bool = True,
         population_prefix: str = "ensemble",
@@ -175,7 +176,7 @@ class EnsembleClustering(Clustering):
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
-        method = self._init_cluster_method(method=method, **clustering_params)
+        method = init_cluster_method(method=method, **clustering_params)
         data, features = self.scale_and_reduce(
             features=features,
             scale_method=scale_method,
