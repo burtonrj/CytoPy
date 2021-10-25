@@ -907,9 +907,7 @@ def population_stats(filegroup: FileGroup) -> pl.DataFrame:
     return pl.DataFrame([filegroup.population_stats(p) for p in list(filegroup.list_populations())])
 
 
-def copy_populations_to_controls_using_geoms(
-    filegroup: FileGroup, ctrl: Optional[List[str]] = None, flag: float = 0.25
-):
+def copy_populations_to_controls_using_geoms(filegroup: FileGroup, ctrl: str, flag: float = 0.25):
     if ctrl not in filegroup.file_paths.keys():
         raise ValueError("Invalid ctrl, does not exist for given FileGroup")
     stats = {"Population": [], "% of parent (primary)": [], "% of parent (ctrl)": [], "Flag": []}

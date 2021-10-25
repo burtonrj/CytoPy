@@ -32,21 +32,52 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import json
 import logging
 import os
+import pickle
 import re
 from collections import defaultdict
 from multiprocessing import cpu_count
 from multiprocessing import Pool
+from typing import Iterable
 from typing import List
 from typing import Optional
 
 import flowio
+import mongoengine
 import numpy as np
 import pandas as pd
 import polars as pl
 import pyarrow.parquet as pq
 import s3fs
+from bson import Binary
 
 logger = logging.getLogger(__name__)
+
+
+class BaseIndexDocument(mongoengine.EmbeddedDocument):
+    _index = mongoengine.FileField(db_alias="core", collection_name="event_index")
+
+    @property
+    def index(self) -> Iterable[int]:
+        try:
+            idx = pickle.loads(self._index.read())
+            self._index.seek(0)
+            return idx
+        except TypeError:
+            logger.error(f"Index is None.")
+            return []
+
+    @index.setter
+    def index(self, idx: Iterable[int]):
+        if isinstance(idx, np.ndarray):
+            idx = idx.tolist()
+        if self._index:
+            self._index.replace(Binary(pickle.dumps(idx, protocol=2)))
+        else:
+            self._index.new_file()
+            self._index.write(Binary(pickle.dumps(idx, protocol=2)))
+            self._index.close()
+
+    meta = {"allow_inheritance": True}
 
 
 def filter_fcs_files(fcs_dir: str, exclude_files: Optional[str] = None, exclude_dir: Optional[str] = None) -> list:

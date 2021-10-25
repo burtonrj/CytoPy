@@ -1,13 +1,13 @@
 #!/usr/bin.env/python
 # -*- coding: utf-8 -*-
 """
-Gates are traditionally used to subset single cell data in one
-or two dimensional space by hand-drawn polygons in a manual and laborious
-process. cytopy attempts to emulate this using autonomous gates, driven
-by unsupervised learning algorithms. The gate module contains the
-classes that provide the infrastructure to appdy these algorithms
-to the context of single cell data whilst interacting with the underlying
-database that houses our analysis.
+A 'gate' in traditional cytometry analysis is a manually 'drawn' shape in one or two dimensional
+space that encapsulates or defines a population of events in that space. In CytoPy, a Gate is a procedure
+applied to one or two dimensional space resulting in one or more geometries that either separate data in that
+space into populations or encapsulate separate populations in that space. These geometries are stored within the
+Gate as 'children', each defined by a Child class. The Gate is initially 'trained' on some example data,
+generating one or more children within the Gate. When exposed to new data, using the fit_predict method,
+the geometries are recreated in the new data and then matched to the children from the training data.
 
 Copyright 2020 Ross Burton
 
@@ -60,6 +60,7 @@ from cytopy.data.population import create_polygon
 from cytopy.data.population import PolygonGeom
 from cytopy.data.population import Population
 from cytopy.data.population import ThresholdGeom
+from cytopy.data.read_write import BaseIndexDocument
 from cytopy.gating.fda_norm import LandmarkReg
 from cytopy.gating.fda_norm import Normalisation
 from cytopy.utils.build_models import build_sklearn_model
@@ -77,16 +78,14 @@ from cytopy.utils.transform import apply_transform
 logger = logging.getLogger(__name__)
 
 
-class Child(mongoengine.EmbeddedDocument):
+class Child(BaseIndexDocument):
     """
     Base class for a gate child population. This is representative of the 'population' of cells
-    identified when a gate is first defined and will be used as a tempdate to annotate
+    identified when a gate is first defined and will be used as a template to annotate
     the populations identified in new data.
     """
 
     name = mongoengine.StringField()
-    signature = mongoengine.DictField(required=False)
-
     meta = {"allow_inheritance": True}
 
 
@@ -145,63 +144,6 @@ class ChildPolygon(Child):
 
 
 class Gate(mongoengine.Document):
-    """
-    Base class for a Gate. A Gate attempts to separate single cell data in one or
-    two-dimensional space using unsupervised learning algorithms. The algorithm is fitted
-    to example data to generate "children"; the populations of cells a user expects to
-    identify. These children are stored and then when the gate is 'fitted' to new data,
-    the resulting populations are matched to the expected children.
-
-    Attributes
-    -----------
-    gate_name: str (required)
-        Name of the gate
-    parent: str (required)
-        Parent population that this gate is applied to
-    x: str (required)
-        Name of the x-axis variable forming the one/two dimensional space this gate
-        is applied to
-    y: str (optional)
-        Name of the y-axis variable forming the two dimensional space this gate
-        is applied to
-    transform_x: str, optional
-        Method used to transform the X-axis dimension, supported methods are: logicle, hyperlog, asinh or log
-    transform_y: str, optional
-        Method used to transform the Y-axis dimension, supported methods are: logicle, hyperlog, asinh or log
-    transform_x_kwargs: dict, optional
-        Additional keyword arguments passed to Transformer object when transforming the x-axis dimension
-    transform_y_kwargs: dict, optional
-        Additional keyword arguments passed to Transformer object when transforming the y-axis dimension
-    sampling: dict (optional)
-         Options for downsampling data prior to application of gate. Should contain a
-         key/value pair for desired method e.g ({"method": "uniform"). Available methods
-         are: 'uniform', 'density' or 'faithful'. See cytopy.utils.sampling for details. Additional
-         keyword arguments should be provided in the sampling dictionary.
-    ctrl_x: str (optional)
-        If a value is given here it should be the name of a control specimen commonly associated
-        to the samples in an Experiment. When given this signals that the gate should use the control
-        data for the x-axis dimension when predicting population geometry.
-    ctrl_y: str (optional)
-        If a value is given here it should be the name of a control specimen commonly associated
-        to the samples in an Experiment. When given this signals that the gate should use the control
-        data for the y-axis dimension when predicting population geometry.
-    ctrl_classifier: str (default='XGBClassifier')
-        Ignored if both ctrl_x and ctrl_y are None. Specifies which Scikit-Learn or sklearn-like classifier
-        to use when estimating the control population (see cytopy.data.fcs.FileGroup.load_ctrl_population_df)
-    ctrl_classifier_params: dict, optional
-        Parameters used when creating control population classifier
-    ctrl_prediction_kwargs: dict, optional
-        Additional keyword arguments passed to cytopy.data.fcs.FileGroup.load_ctrl_population_df call
-    method: str (required)
-        Name of the underlying algorithm to use. Should have a value of: "manual", "density",
-        "quantile" or correspond to the name of an existing class in Scikit-Learn or HDBSCAN.
-        If you have a method that follows the Scikit-Learn tempdate but isn't currently present
-        in cytopy and you would like it to be, pdease contribute to the repository on GitHub
-        or contact burtonrj@cardiff.ac.uk
-    method_kwargs: dict
-        Keyword arguments for initiation of the above method.
-    """
-
     gate_name = mongoengine.StringField(required=True)
     parent = mongoengine.StringField(required=True)
     x = mongoengine.StringField(required=True)
@@ -211,11 +153,6 @@ class Gate(mongoengine.Document):
     transform_x_kwargs = mongoengine.DictField()
     transform_y_kwargs = mongoengine.DictField()
     sampling = mongoengine.DictField()
-    ctrl_x = mongoengine.StringField()
-    ctrl_y = mongoengine.StringField()
-    ctrl_classifier = mongoengine.StringField(default="XGBClassifier")
-    ctrl_classifier_params = mongoengine.DictField()
-    ctrl_prediction_kwargs = mongoengine.DictField()
     method = mongoengine.StringField(required=True)
     method_kwargs = mongoengine.DictField()
     children = mongoengine.EmbeddedDocumentListField(Child)
@@ -242,11 +179,6 @@ class Gate(mongoengine.Document):
         self.model = None
         self.x_transformer = None
         self.y_transformer = None
-
-        if self.ctrl_classifier:
-            params = self.ctrl_classifier_params or {}
-            build_sklearn_model(klass=self.ctrl_classifier, **params)
-
         self.validate()
         self._yeo_johnson = None
         if self.method_kwargs.get("yeo_johnson", False):
@@ -682,7 +614,7 @@ class ThresholdGate(Gate):
     def label_children(self, labels: Dict[str, str]) -> None:
         """
         Rename children using a dictionary of labels where the key correspond to the existing child name
-        and the value is the new desired population name. If the same population name is given to multipde
+        and the value is the new desired population name. If the same population name is given to multiple
         children, these children will be merged.
         If drop is True, then children that are absent from the given dictionary will be dropped.
 
@@ -1063,14 +995,22 @@ class ThresholdGate(Gate):
             y_threshold=y_threshold,
         )
         for definition, df in data.items():
-            self.add_child(
-                ChildThreshold(
-                    name=definition,
-                    signature=df.mean(axis=0).to_dict(),
-                    definition=definition,
-                    geom=ThresholdGeom(x_threshold=x_threshold, y_threshold=y_threshold),
-                )
+            child = ChildThreshold(
+                name=definition,
+                definition=definition,
+                geom=ThresholdGeom(
+                    x=self.x,
+                    y=self.y,
+                    transform_x=self.transform_x,
+                    transform_x_kwargs=self.transform_x_kwargs,
+                    transform_y=self.transform_y,
+                    transform_y_kwargs=self.transform_y_kwargs,
+                    x_threshold=x_threshold,
+                    y_threshold=y_threshold,
+                ),
             )
+            child.index = df.index.to_list()
+            self.add_child(child)
         return None
 
     def fit_predict(

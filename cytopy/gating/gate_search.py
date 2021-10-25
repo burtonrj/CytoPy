@@ -3,13 +3,6 @@
 """
 This module provides functionality for hyperparameter search for autonomous gates
 
-[1] Hahne F, Khodabakhshi AH, Bashashati A, Wong CJ, Gascoyne RD,
-Weng AP, Seyfert-Margolis V, Bourcier K, Asare A, Lumley T, Gentleman R,
-Brinkman RR. Per-channel basis normalization methods for utils cytometry data.
-Cytometry A. 2010 Feb;77(2):121-31. doi: 10.1002/cyto.a.20823. PMID: 19899135; PMCID: PMC3648208.
-
-[2] Finak G, Jiang W, Krouse K, et al. High-throughput utils cytometry data normalization
-for clinical trials. Cytometry A. 2014;85(3):277-286. doi:10.1002/cyto.a.22433
 
 Copyright 2020 Ross Burton
 
