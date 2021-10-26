@@ -7,7 +7,6 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-import graphviz
 import mongoengine
 import numpy as np
 import pandas as pd
@@ -20,21 +19,16 @@ from cytopy.data.errors import GateError
 from cytopy.data.errors import InsufficientEventsError
 from cytopy.data.errors import MissingPopulationError
 from cytopy.data.fcs import copy_populations_to_controls_using_geoms
-from cytopy.feedback import add_processing_animation
+from cytopy.data.fcs import FileGroup
+from cytopy.data.population import ThresholdGeom
 from cytopy.feedback import progress_bar
-from cytopy.feedback import vprint
 from cytopy.gating.base import Gate
-from cytopy.gating.polygon import EllipseGate
-from cytopy.gating.polygon import HuberGate
-from cytopy.gating.polygon import PolygonGate
 from cytopy.gating.polygon import update_polygon
-from cytopy.gating.threshold import QuantileGate
-from cytopy.gating.threshold import ThresholdGate
 from cytopy.gating.threshold import update_threshold
+from cytopy.plotting.cyto import cyto_plot
+from cytopy.plotting.cyto import overlay
+from cytopy.plotting.cyto import plot_gate
 from cytopy.plotting.general import build_plot_grid
-from cytopy.plotting.plot import flow_plot
-from cytopy.plotting.plot import overlay
-from cytopy.plotting.plot import plot_gate
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +48,8 @@ class GatingStrategy(mongoengine.Document):
         self.filegroup = experiment.get_sample(sample_id=sample_id)
 
     def add_gate(self, gate: Gate):
-        if gate.name in [g.name for g in self.gates]:
-            raise ValueError(f"Gate {gate.name} already exists.")
+        if gate.gate_name in [g.name for g in self.gates]:
+            raise ValueError(f"Gate {gate.gate_name} already exists.")
         self.gates.append(gate)
 
     def delete_gate(self, name: str, delete_populations: bool = True):
@@ -74,6 +68,12 @@ class GatingStrategy(mongoengine.Document):
             return self.gates.get(gate_name=gate)
         except DoesNotExist:
             raise KeyError(f"Gate {gate} does not exists.")
+
+    def get_population_gate(self, population_name: str):
+        gate = [g for g in self.gates if population_name in [c.name for c in g.children]]
+        if len(gate) == 0:
+            raise DoesNotExist(f"No corresponding gate found for population '{population_name}'")
+        return gate[0]
 
     def list_populations(self, **kwargs):
         return self.filegroup.list_populations(**kwargs)
@@ -138,7 +138,7 @@ class GatingStrategy(mongoengine.Document):
         transform_y: str = "asinh",
         **plot_kwargs,
     ):
-        return flow_plot(
+        return cyto_plot(
             data=self._population_data(population_name=population_name),
             x=x,
             y=y,
@@ -219,7 +219,27 @@ class GatingStrategy(mongoengine.Document):
                 raise GateError("coords should be of shape (2, n) where n id the desired number of coordinates")
 
     def _edit_downstream_effects(self, population_name: str):
-        pass
+        downstream_populations = self.filegroup.list_downstream_populations(
+            population=population_name, data_source=self.data_source
+        )
+        for pop in downstream_populations:
+            gate = self.get_population_gate(population_name=pop.population_name)
+            parent = gate.preprocess(self._population_data(population_name=gate.parent), transform=True)
+            if isinstance(pop.geom, ThresholdGeom):
+                self.filegroup.update_population(
+                    update_threshold(
+                        population=pop,
+                        parent_data=parent,
+                        x_threshold=pop.geom.x_threshold,
+                        y_threshold=pop.geom.y_threshold,
+                    )
+                )
+            else:
+                self.filegroup.update_population(
+                    update_polygon(
+                        population=pop, parent_data=parent, x_values=pop.geom.x_values, y_values=pop.geom.y_values
+                    )
+                )
 
     def preview(self, gate: Union[str, Gate], **plot_kwargs):
         if isinstance(gate, str):
@@ -391,8 +411,6 @@ class GatingStrategy(mongoengine.Document):
 
     def delete(
         self,
-        delete_gates: bool = True,
-        remove_associations: bool = True,
         *args,
         **kwargs,
     ):
@@ -403,8 +421,6 @@ class GatingStrategy(mongoengine.Document):
 
         Parameters
         ----------
-        delete_gates: bool (default=True)
-        remove_associations: (default=True)
         args:
             Positional arguments for mongoengine.document.delete call
         kwargs:
@@ -417,19 +433,16 @@ class GatingStrategy(mongoengine.Document):
         super().delete(*args, **kwargs)
         populations = [[c.name for c in g.children] for g in self.gates]
         populations = list(set([x for sl in populations for x in sl]))
-        if delete_gates:
-            logger.info("Deleting gates...")
-            for g in self.gates:
-                g.delete()
-        if remove_associations:
-            logger.info("Deleting associated populations in FileGroups...")
-            for f in progress_bar(FileGroup.objects(), verbose=self.verbose):
-                try:
-                    if self.name in f.gating_strategy:
-                        f.gating_strategy = [gs for gs in f.gating_strategy if gs != self.name]
-                        f.delete_populations(populations=populations)
-                        f.save()
-                except ValueError as e:
-                    logger.warning(f"Could not delete associations in {f.primary_id}: {e}")
-
+        logger.info("Deleting associated gates...")
+        for g in self.gates:
+            g.delete()
+        logger.info("Deleting associated populations in FileGroups...")
+        for f in FileGroup.objects():
+            try:
+                if self.name in f.gating_strategy:
+                    f.gating_strategy = [gs for gs in f.gating_strategy if gs != self.name]
+                    f.delete_populations(populations=populations)
+                    f.save()
+            except ValueError as e:
+                logger.warning(f"Could not delete associations in {f.primary_id}: {e}")
         logger.info(f"{self.name} successfully deleted.")

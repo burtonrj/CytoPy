@@ -34,19 +34,14 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from typing import List
-from typing import Optional
 from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from detecta import detect_peaks
 from KDEpy import FFTKDE
-from numba import jit
 from skfda.preprocessing.registration import landmark_registration_warping
-from skfda.preprocessing.registration import landmark_shift_deltas
 from skfda.representation.grid import FDataGrid
-from sklearn.cluster import KMeans
 
 
 def merge_peaks(p, threshold: float = 0.1):

@@ -15,10 +15,8 @@ from mongoengine import DoesNotExist
 
 from cytopy.data import FileGroup
 from cytopy.data import Population
-from cytopy.gating import ThresholdGate
 from cytopy.gating.base import Child
 from cytopy.gating.base import Gate
-from cytopy.gating.threshold import QuantileGate
 from cytopy.gating.threshold import ThresholdBase
 from cytopy.utils import transform
 from cytopy.utils.transform import TRANSFORMERS
@@ -105,7 +103,7 @@ def hist2d(
     ax.hist2d(data[x].values, data[y].values, bins=[xbins, ybins], norm=LogNorm(), cmap=cmap, **kwargs)
 
 
-def flow_plot(
+def cyto_plot(
     data: pd.DataFrame,
     x: str,
     y: Optional[str] = None,
@@ -215,7 +213,7 @@ def overlay(
     colours = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#bcbd22", "#17becf"]
     if len(overlay_data) > len(colours):
         raise ValueError(f"Maximum of {len(colours)} overlaid populations.")
-    ax = flow_plot(
+    ax = cyto_plot(
         data=background_data,
         x=x,
         y=y,
@@ -226,7 +224,7 @@ def overlay(
     )
     legend_kwargs = legend_kwargs or {}
     for label, df in overlay_data.items():
-        flow_plot(data=df, x=x, y=y, transform_x=transform_x, transform_y=transform_y, ax=ax, **plot_kwargs)
+        cyto_plot(data=df, x=x, y=y, transform_x=transform_x, transform_y=transform_y, ax=ax, **plot_kwargs)
     _default_legend(ax=ax, **legend_kwargs)
     return ax
 
@@ -332,7 +330,7 @@ def plot_gate(
         else:
             data = gate.reference
             geom_objs = gate.children
-        ax = flow_plot(
+        ax = cyto_plot(
             data=data,
             x=gate.x,
             y=gate.y,
