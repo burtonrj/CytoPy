@@ -11,6 +11,7 @@ import mongoengine
 import numpy as np
 import pandas as pd
 from detecta import detect_peaks
+from dtw import dtw
 from KDEpy import FFTKDE
 from scipy.signal import savgol_filter
 from sklearn.model_selection import ParameterGrid
@@ -504,6 +505,55 @@ class ThresholdGate(ThresholdBase):
                 thresholds.append(find_threshold(x=data[d].values, **kwargs))
             else:
                 thresholds.append(None)
+        return thresholds
+
+
+def differential(x):
+    idx = np.arange(1, len(x) - 1)
+    return (x[idx] - x[idx - 1]) + ((x[idx + 1] - x[idx - 1]) / 2) / 2
+
+
+class DDTW(ThresholdBase):
+    kernel = mongoengine.StringField(required=True, default="gaussian")
+    bw = mongoengine.StringField(required=True, default="silverman")
+    grid_n = mongoengine.IntField(required=True, default=1000)
+    x_threshold = mongoengine.FloatField(required=True)
+    y_threshold = mongoengine.FloatField(required=False)
+
+    def __init__(self, *args, **kwargs):
+        kwargs.pop("method", None)
+        super().__init__(*args, **kwargs)
+        if self.y:
+            if not self.y_threshold:
+                raise AttributeError("No value provided for Y-axis threshold")
+        if self.reference_alignment:
+            raise AttributeError("Reference alignment is not supported for DDTW gate. See docs.")
+
+    def _fit(self, data: pd.DataFrame, **overwrite_kwargs) -> Tuple[float, Union[float, None]]:
+        overwrite_kwargs = overwrite_kwargs or {}
+        kernel = overwrite_kwargs.get("kernel", self.kernel)
+        grid_n = overwrite_kwargs.get("grid_n", self.grid_n)
+
+        try:
+            bw = overwrite_kwargs.get("bw", float(self.bw))
+        except ValueError:
+            bw = overwrite_kwargs.get("bw", self.bw)
+
+        thresholds = []
+        for d, t in zip([self.x, self.y], [self.x_threshold, self.y_threshold]):
+            if not d:
+                thresholds.append(None)
+            else:
+                ref = self.reference[d].values
+                target = data[d].values
+                xgrid = np.linspace(
+                    np.min([np.min(ref), np.min(target)]) - 0.01, np.max([np.max(ref), np.max(target)]) + 0.01, grid_n
+                )
+                ref = FFTKDE(kernel=kernel, bw=bw).fit(ref).evaluate(xgrid)
+                target = FFTKDE(kernel=kernel, bw=bw).fit(target).evaluate(xgrid)
+                alignment = dtw(differential(ref), differential(target))
+                nearest_threshold_idx = np.where(abs(xgrid - t) == np.min(abs(xgrid - t)))[0][0]
+                thresholds.append(np.mean(xgrid[alignment.index2[alignment.index1 == nearest_threshold_idx]]))
         return thresholds
 
 

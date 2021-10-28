@@ -301,6 +301,10 @@ class Gate(mongoengine.Document):
         return data
 
     def save(self, *args, **kwargs):
+        for child in self.children:
+            assert child.index is not None, f"Child {child.name} index is empty!"
+        for child in self.children:
+            child.write_index()
         if self._reference_cache is not None:
             if self._reference:
                 self._reference.replace(Binary(pickle.dumps(self._reference_cache, protocol=pickle.HIGHEST_PROTOCOL)))

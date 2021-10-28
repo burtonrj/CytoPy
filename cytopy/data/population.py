@@ -37,6 +37,7 @@ import pandas as pd
 from bson.binary import Binary
 from shapely.geometry import Polygon
 
+from cytopy.data.read_write import BaseIndexDocument
 from cytopy.utils import transform
 
 logger = logging.getLogger(__name__)
@@ -154,7 +155,7 @@ class PolygonGeom(PopulationGeometry):
         return x_values, y_values
 
 
-class Population(mongoengine.EmbeddedDocument):
+class Population(BaseIndexDocument):
     """
     A population of cells identified by either a gate, clustering or supervised algorithm. Stores the
     index of events corresponding to a single population, where the index relates back
@@ -202,38 +203,6 @@ class Population(mongoengine.EmbeddedDocument):
         required=True, choices=["root", "gate", "cluster", "classifier", "merger", "subtraction"]
     )
     data_source = mongoengine.StringField(default="primary")
-    _index = mongoengine.FileField(db_alias="core", collection_name="population_index")
-
-    def __init__(self, *args, **kwargs):
-        super(Population, self).__init__(*args, **kwargs)
-        self.index = self._load_index() if self._index else None
-
-    def _load_index(self):
-        try:
-            idx = pickle.loads(self._index.read())
-            self._index.seek(0)
-            return idx
-        except TypeError:
-            logger.error(f"Index is empty for population {self.population_name}")
-            return None
-
-    def write_index(self):
-        if self._index:
-            self._index.replace(Binary(pickle.dumps(list(self.index), protocol=2)))
-        else:
-            self._index.new_file()
-            self._index.write(Binary(pickle.dumps(list(self.index), protocol=2)))
-            self._index.close()
-
-    @property
-    def index(self) -> Iterable[int]:
-        return self._index_cache
-
-    @index.setter
-    def index(self, idx: Iterable[int]):
-        if isinstance(idx, np.ndarray):
-            idx = idx.tolist()
-        self._index_cache = idx
 
 
 def create_polygon(x: List[float], y: List[float]) -> Polygon:

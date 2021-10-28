@@ -56,26 +56,36 @@ logger = logging.getLogger(__name__)
 class BaseIndexDocument(mongoengine.EmbeddedDocument):
     _index = mongoengine.FileField(db_alias="core", collection_name="event_index")
 
-    @property
-    def index(self) -> Iterable[int]:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.index = self._load_index() if self._index else None
+
+    def _load_index(self):
         try:
             idx = pickle.loads(self._index.read())
             self._index.seek(0)
             return idx
         except TypeError:
-            logger.error(f"Index is None.")
-            return []
+            logger.error(f"Index is empty for child/population!")
+            return None
+
+    def write_index(self):
+        if self._index:
+            self._index.replace(Binary(pickle.dumps(list(self.index), protocol=2)))
+        else:
+            self._index.new_file()
+            self._index.write(Binary(pickle.dumps(list(self.index), protocol=2)))
+            self._index.close()
+
+    @property
+    def index(self) -> Iterable[int]:
+        return self._index_cache
 
     @index.setter
     def index(self, idx: Iterable[int]):
         if isinstance(idx, np.ndarray):
             idx = idx.tolist()
-        if self._index:
-            self._index.replace(Binary(pickle.dumps(idx, protocol=2)))
-        else:
-            self._index.new_file()
-            self._index.write(Binary(pickle.dumps(idx, protocol=2)))
-            self._index.close()
+        self._index_cache = idx
 
     meta = {"allow_inheritance": True}
 
@@ -137,8 +147,6 @@ def parse_directory_for_fcs_files(
     dict
         standard dictionary of fcs files contained in target directory
     """
-    filetree = defaultdict(defaultdict(list))
-
     file_tree = dict(primary=[], controls={})
     fcs_files = filter_fcs_files(fcs_dir, exclude_comps=ignore_comp, exclude_dir=exclude_dir)
     ctrl_files = [f for f in fcs_files if f.find(ctrl_id) != -1]
