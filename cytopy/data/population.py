@@ -204,26 +204,36 @@ class Population(mongoengine.EmbeddedDocument):
     data_source = mongoengine.StringField(default="primary")
     _index = mongoengine.FileField(db_alias="core", collection_name="population_index")
 
-    @property
-    def index(self) -> Iterable[int]:
+    def __init__(self, *args, **kwargs):
+        super(Population, self).__init__(*args, **kwargs)
+        self.index = self._load_index() if self._index else None
+
+    def _load_index(self):
         try:
             idx = pickle.loads(self._index.read())
             self._index.seek(0)
             return idx
         except TypeError:
-            logger.error(f"Index is None for population {self.population_name}")
-            return []
+            logger.error(f"Index is empty for population {self.population_name}")
+            return None
+
+    def write_index(self):
+        if self._index:
+            self._index.replace(Binary(pickle.dumps(list(self.index), protocol=2)))
+        else:
+            self._index.new_file()
+            self._index.write(Binary(pickle.dumps(list(self.index), protocol=2)))
+            self._index.close()
+
+    @property
+    def index(self) -> Iterable[int]:
+        return self._index_cache
 
     @index.setter
     def index(self, idx: Iterable[int]):
         if isinstance(idx, np.ndarray):
             idx = idx.tolist()
-        if self._index:
-            self._index.replace(Binary(pickle.dumps(idx, protocol=2)))
-        else:
-            self._index.new_file()
-            self._index.write(Binary(pickle.dumps(idx, protocol=2)))
-            self._index.close()
+        self._index_cache = idx
 
 
 def create_polygon(x: List[float], y: List[float]) -> Polygon:

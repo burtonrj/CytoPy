@@ -65,9 +65,9 @@ class GatingStrategy(mongoengine.Document):
 
     def get_gate(self, gate: str):
         try:
-            return self.gates.get(gate_name=gate)
-        except DoesNotExist:
-            raise KeyError(f"Gate {gate} does not exists.")
+            return [g for g in self.gates if g.gate_name == gate][0]
+        except IndexError:
+            raise DoesNotExist(f"Gate {gate} does not exists.")
 
     def get_population_gate(self, population_name: str):
         gate = [g for g in self.gates if population_name in [c.name for c in g.children]]

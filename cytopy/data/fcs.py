@@ -29,6 +29,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
 import os
+import pickle
 import re
 from copy import deepcopy
 from typing import Dict
@@ -46,6 +47,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from botocore.errorfactory import ClientError
+from bson import Binary
 
 from ..utils.geometry import inside_polygon
 from ..utils.sampling import sample_dataframe
@@ -160,7 +162,7 @@ class FileGroup(mongoengine.Document):
                         prop_of_parent=1.0,
                         prop_of_total=1.0,
                     )
-                    root.index = self.data(source=key)["Index"].tolist()
+                    root.index = self.data(source=key)["Index"].to_list()
                     self.populations.append(root)
                     self.save()
                 elif len(self.get_population("root", data_source=key).index) == 0:
@@ -888,6 +890,13 @@ class FileGroup(mongoengine.Document):
                 channel_names=channels,
                 opt_channel_names=markers,
             )
+
+    def save(self, *args, **kwargs):
+        for pop in self.populations:
+            assert pop.index is not None, f"Population {pop.population_name} index is empty!"
+        for pop in self.populations:
+            pop.write_index()
+        super(FileGroup, self).save(*args, **kwargs)
 
 
 def population_stats(filegroup: FileGroup) -> pl.DataFrame:

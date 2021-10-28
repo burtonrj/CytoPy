@@ -16,6 +16,7 @@ from scipy import stats
 from shapely.geometry import Polygon as ShapelyPolygon
 from sklearn.cluster import *
 from sklearn.linear_model import HuberRegressor
+from sklearn.mixture import *
 from sklearn.model_selection import ParameterGrid
 from smm import SMM
 
@@ -97,24 +98,18 @@ class PolygonGate(Gate):
             labels = self.model.predict(data[[self.x, self.y]].to_numpy())
         else:
             labels = self.model.fit_predict(data[[self.x, self.y]].to_numpy())
-        polygons = list()
-        for i in np.unique(labels):
-            try:
-                polygons.append(
-                    create_envelope(
-                        x_values=data.iloc[np.where(labels == i)][self.x].values,
-                        y_values=data.iloc[np.where(labels == i)][self.y].values,
-                        alpha=self.method_kwargs.get("envelope_alpha", 0.0),
-                    )
-                )
-            except GeometryError as e:
-                logger.warning(f"GeometryError: {e}")
+        envelope_func = partial(create_envelope, alpha=self.envelope_alpha)
+        xy = [data.iloc[np.where(labels == i)][[self.x, self.y]].values for i in np.unique(labels)]
+        with Pool(cpu_count()) as pool:
+            polygons = list(pool.map(envelope_func, xy))
         if len(polygons) == 0:
             raise GeometryError("Failed to generate Polygon geometries")
         return polygons
 
     def train(self, data: pd.DataFrame, transform: bool = True):
         data = self.preprocess(data=data, transform=transform)
+        if self.downsample_method:
+            data = self._downsample(data=data)
         if len(self.children) != 0:
             self.children.delete()
         polygons = self._fit(data=data)
@@ -134,14 +129,16 @@ class PolygonGate(Gate):
             )
             child.index = inside_polygon(data=data, x=self.x, y=self.y, poly=poly).index.tolist()
             self.children.append(child)
+        self.reference = data
         return self
 
     def predict(self, data: pd.DataFrame, transform: bool = True, **overwrite_kwargs):
         assert len(self.children) > 0, "Call 'train' before predict."
         data = self.preprocess(data=data, transform=transform)
         if self.downsample_method:
-            data = self._downsample(data=data)
-        polygons = self._fit(data=data, **overwrite_kwargs)
+            polygons = self._fit(data=self._downsample(data=data), **overwrite_kwargs)
+        else:
+            polygons = self._fit(data=data, **overwrite_kwargs)
         return self._match_to_children(self._generate_populations(data=data, polygons=polygons))
 
     def predict_with_hyperparameter_search(
@@ -149,11 +146,12 @@ class PolygonGate(Gate):
     ):
         assert len(self.children) > 0, "Call 'train' before predict."
         data = self.preprocess(data=data, transform=transform)
-        if self.downsample_method:
-            data = self._downsample(data=data)
         grid = ParameterGrid(parameter_grid)
         njobs = njobs if njobs > 0 else cpu_count()
-        fitter = partial(self._fit, data=data)
+        if self.downsample_method:
+            fitter = partial(self._fit, data=self._downsample(data=data))
+        else:
+            fitter = partial(self._fit, data=data)
         with Pool(njobs) as pool:
             polygons = list(pool.map(fitter, grid))
         populations = [

@@ -456,9 +456,8 @@ class QuantileGate(ThresholdBase):
         q = kwargs.get("q", self.q)
         if data.shape[0] <= 3:
             raise GateError("Data provided contains 3 or less observations.")
-        dims = [i for i in [self.x, self.y] if i is not None]
         thresholds = []
-        for d in dims:
+        for d in [self.x, self.y]:
             if d:
                 thresholds.append(np.quantile(data[d].values, q=q))
             else:
@@ -484,7 +483,10 @@ class ThresholdGate(ThresholdBase):
         kwargs["peak_boundary"] = kwargs.get("peak_boundary", self.peak_boundary)
         kwargs["incline"] = kwargs.get("incline", self.incline)
         kwargs["kernel"] = kwargs.get("kernel", self.kernel)
-        kwargs["bw"] = kwargs.get("bw", self.bw)
+        try:
+            kwargs["bw"] = kwargs.get("bw", float(self.bw))
+        except ValueError:
+            kwargs["bw"] = kwargs.get("bw", self.bw)
 
         if self.method == "manual":
             if self.x:
@@ -496,11 +498,10 @@ class ThresholdGate(ThresholdBase):
             raise GateError("Data provided contains 3 or less observations.")
         if self.downsample_method:
             data = self._downsample(data=data)
-        dims = [i for i in [self.x, self.y] if i is not None]
         thresholds = []
-        for d in dims:
+        for d in [self.x, self.y]:
             if d:
-                thresholds.append(find_threshold(x=data[d], **kwargs))
+                thresholds.append(find_threshold(x=data[d].values, **kwargs))
             else:
                 thresholds.append(None)
         return thresholds

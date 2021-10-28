@@ -6,9 +6,8 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
-import numpy as np
-import pandas as pd
 import seaborn as sns
+from KDEpy import FFTKDE
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from mongoengine import DoesNotExist
@@ -18,6 +17,9 @@ from cytopy.data import Population
 from cytopy.gating.base import Child
 from cytopy.gating.base import Gate
 from cytopy.gating.threshold import ThresholdBase
+from cytopy.plotting.asinh_transform import *
+from cytopy.plotting.hlog_transform import *
+from cytopy.plotting.logicle_transform import *
 from cytopy.utils import transform
 from cytopy.utils.transform import TRANSFORMERS
 
@@ -38,9 +40,7 @@ def _auto_plot_kind(
         if data.shape[0] > 1000:
             return "hist2d"
         return "scatter_kde"
-    if data.shape[0] > 500:
-        return "kde"
-    return "hist"
+    return "kde"
 
 
 def _hist2d_axis_limits(x: np.ndarray, y: np.ndarray) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -71,11 +71,30 @@ def _hist2d_bins(
             lim, transformer = transform.apply_transform(
                 data=lim, features=["Min", "Max"], method=transform_method, return_transformer=True, **transform_kwargs
             )
-            grid = pd.DataFrame({"x": np.linspace(xlim["Min"].values[0], xlim["Max"].values[0], nbins)})
+            grid = pd.DataFrame({"x": np.linspace(lim["Min"].values[0], lim["Max"].values[0], nbins)})
             bins.append(transformer.inverse_scale(grid, features=["x"]).x.to_numpy())
         else:
-            bins.append(np.linspace(xlim["Min"].values[0], xlim["Max"].values[0], nbins))
+            bins.append(np.linspace(lim["Min"].values[0], lim["Max"].values[0], nbins))
     return bins
+
+
+def kde1d(
+    data: pd.DataFrame,
+    x: str,
+    transform_method: Optional[str] = None,
+    bw: Union[str, float] = "silverman",
+    **transform_kwargs,
+):
+    transformer = None
+    if transform_method:
+        data, transformer = transform.apply_transform(
+            data=data, features=[x], method=transform_method, return_transformer=True, **transform_kwargs
+        )
+    x_grid, y = FFTKDE(kernel="gaussian", bw=bw).fit(data[x].values).evaluate()
+    data = pd.DataFrame({"x": x_grid, "y": y})
+    if transform_method:
+        data = transformer.inverse_scale(data=pd.DataFrame({"x": x_grid, "y": y}), features=["x"])
+    return data["x"].values, data["y"].values
 
 
 def hist2d(
@@ -122,12 +141,11 @@ def cyto_plot(
     **kwargs,
 ):
     try:
-        plt.xticks(rotation=90)
-        plt.tight_layout()
         ax = ax or plt.subplots(figsize=figsize)[1]
         ax.xaxis.labelpad = 20
         ax.yaxis.labelpad = 20
         kind = kind if kind != "auto" else _auto_plot_kind(data=data, y=y)
+        kwargs = kwargs or {}
         if kind == "hist2d":
             assert y, "No y-axis variable provided"
             hist2d(
@@ -144,40 +162,31 @@ def cyto_plot(
             )
         elif kind == "scatter":
             assert y, "No y-axis variable provided"
-            kwargs = kwargs or {}
             kwargs["s"] = kwargs.get("s", 10)
             kwargs["edgecolor"] = kwargs.get("edgecolor", None)
             kwargs["linewidth"] = kwargs.get("linewidth", 0)
             sns.scatterplot(data=data, x=x, y=y, **kwargs)
         elif kind == "scatter_kde":
             assert y, "No y-axis variable provided"
-            kwargs = kwargs or {}
             scatter_kwargs = kwargs.get("scatter_kwargs", {})
             kde_kwargs = kwargs.get("kde_kwargs", {})
             sns.kdeplot(data=data, x=x, y=y, **kde_kwargs)
             scatter_kwargs["s"] = scatter_kwargs.get("s", 10)
             scatter_kwargs["edgecolor"] = scatter_kwargs.get("edgecolor", None)
             scatter_kwargs["linewidth"] = scatter_kwargs.get("linewidth", 0)
-            scatter_kwargs["c"] = scatter_kwargs.get("c", "black")
+            scatter_kwargs["color"] = scatter_kwargs.get("color", "black")
             sns.scatterplot(data=data, x=x, y=y, **scatter_kwargs)
         elif kind == "kde":
-            kwargs = kwargs or {}
-            kwargs["fill"] = kwargs.get("fill", True)
-            kwargs["linewidth"] = kwargs.get("linewidth", 2)
-            kwargs["color"] = kwargs.get("color", "black")
-            kwargs["fill"] = kwargs.get("fill", "#8A8A8A")
-            kwargs["alpha"] = kwargs.get("alpha", 0.5)
-            sns.kdeplot(data[x].values, **kwargs)
-        elif kind == "hist":
-            kwargs = kwargs or {}
-            kwargs["linewidth"] = kwargs.get("linewidth", 2)
-            kwargs["color"] = kwargs.get("color", "black")
-            kwargs["fill"] = kwargs.get("fill", "#8A8A8A")
-            sns.histplot(data[x].values, **kwargs)
+            if y:
+                sns.kdeplot(data=data, x=x, y=y, **kwargs)
+            else:
+                bw = kwargs.pop("bw", "silverman")
+                transform_x_kwargs = transform_x_kwargs or {}
+                xx, pdf = kde1d(data=data, x=x, transform_method=transform_x, bw=bw, **transform_x_kwargs)
+                ax.plot(xx, pdf, linewidth=kwargs.get("linewidth", 2), color=kwargs.get("color", "black"))
+                ax.fill_between(xx, pdf, color=kwargs.get("fill", "#8A8A8A"), alpha=kwargs.get("alpha", 0.5))
         else:
-            raise KeyError(
-                "Invalid value for 'kind', must be one of: 'auto', 'hist2d', 'scatter_kde', 'kde', or " "'hist'."
-            )
+            raise KeyError("Invalid value for 'kind', must be one of: 'auto', 'hist2d', 'scatter_kde', or 'kde'.")
         ax.set_xlabel(x)
         ax.set_ylabel(y)
         if autoscale:
@@ -191,7 +200,9 @@ def cyto_plot(
             ax.set_xscale(transform_x, **transform_x_kwargs)
         if y and transform_y:
             transform_y_kwargs = transform_y_kwargs or {}
-            ax.set_xscale(transform_y, **transform_y_kwargs)
+            ax.set_yscale(transform_y, **transform_y_kwargs)
+        plt.xticks(rotation=90)
+        plt.tight_layout()
         return ax
     except AssertionError as e:
         raise PlotError(e)
@@ -219,7 +230,8 @@ def overlay(
         y=y,
         transform_x=transform_x,
         transform_y=transform_y,
-        c=background_colour,
+        color=background_colour,
+        kind="scatter",
         **plot_kwargs,
     )
     legend_kwargs = legend_kwargs or {}
@@ -247,8 +259,8 @@ def _1dthreshold_annot(labels: Dict, ax: plt.Axes):
         legend_labels = {"A": labels["-"], "B": labels["+"]}
     except KeyError:
         raise KeyError(f"Definitions for 1D threshold gate must be either '-' or '+', not: {labels.keys()}")
-    _threshold_annotation(0.05, 0.95, "A")
-    _threshold_annotation(0.95, 0.95, "B")
+    _threshold_annotation(0.05, 0.92, "A", ax=ax)
+    _threshold_annotation(0.95, 0.92, "B", ax=ax)
     ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=ax.transAxes)
     ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=ax.transAxes)
 
@@ -268,10 +280,10 @@ def _2dthreshold_annot(labels: Dict, ax: plt.Axes):
                 legend_labels["D"] = label
             else:
                 raise KeyError(f"Definition {d} is invalid for a 2D threshold gate.")
-    _threshold_annotation(0.05, 0.95, "A")
-    _threshold_annotation(0.95, 0.95, "B")
-    _threshold_annotation(0.05, 0.05, "C")
-    _threshold_annotation(0.95, 0.05, "D")
+    _threshold_annotation(0.05, 0.92, "A", ax=ax)
+    _threshold_annotation(0.95, 0.92, "B", ax=ax)
+    _threshold_annotation(0.05, 0.08, "C", ax=ax)
+    _threshold_annotation(0.95, 0.08, "D", ax=ax)
     ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=ax.transAxes)
     ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=ax.transAxes)
     ax.text(1.15, 0.75, f"C: {legend_labels.get('C')}", transform=ax.transAxes)
@@ -280,11 +292,16 @@ def _2dthreshold_annot(labels: Dict, ax: plt.Axes):
 
 def _plot_thresholds(geom_objs: Union[List[Population], List[Child]], ax: plt.Axes):
     x, y = geom_objs[0].geom.transform_to_linear()
-    labels = {getattr(x, "population_name", getattr(x, "name")): x.definition for x in geom_objs}
+    labels = {}
+    for g in geom_objs:
+        if isinstance(g, Population):
+            labels[g.population_name] = g.definition
+        else:
+            labels[g.name] = g.definition
     ax.axvline(x, lw=2.5, c="#c92c2c")
     if y:
-        ax.axhline(x, lw=2.5, c="#c92c2c")
-        _2dthreshold_annot(labels=labels, axes=ax)
+        ax.axhline(y, lw=2.5, c="#c92c2c")
+        _2dthreshold_annot(labels=labels, ax=ax)
     else:
         _1dthreshold_annot(labels=labels, ax=ax)
 
@@ -302,9 +319,23 @@ def _default_legend(ax: plt.Axes, **legend_kwargs):
 def _plot_polygons(geom_objs: Union[List[Population], List[Child]], ax: plt.Axes, **legend_kwargs):
     colours = cycle(["#c92c2c", "#2df74e", "#e0d572", "#000000", "#64b9c4", "#9e3657"])
     for g in geom_objs:
-        name = getattr(g, "population_name", getattr(g, "name"))
-        ax.plot(g.geom.x_values, g.geom.y_values, "-k", c=next(colours), lw=2.5, label=name)
+        x_values, y_values = g.geom.transform_to_linear()
+        if isinstance(g, Population):
+            name = g.population_name
+        else:
+            name = g.name
+        ax.plot(x_values, y_values, "-k", c=next(colours), lw=2.5, label=name)
     _default_legend(ax=ax, **legend_kwargs)
+
+
+def _inverse_gate_transform(gate: Gate, data: pd.DataFrame):
+    if gate.transform_x:
+        x_transformer = TRANSFORMERS.get(gate.transform_x)(**gate.transform_x_kwargs or {})
+        data = x_transformer.inverse_scale(data=data, features=[gate.x])
+    if gate.transform_y:
+        y_transformer = TRANSFORMERS.get(gate.transform_y)(**gate.transform_y_kwargs or {})
+        data = y_transformer.inverse_scale(data=data, features=[gate.y])
+    return data
 
 
 def plot_gate(
@@ -322,13 +353,9 @@ def plot_gate(
             data = filegroup.load_population_df(population=gate.parent, transform=None, data_source=data_source)
             geom_objs = [filegroup.populations.get(population_name=c.name) for c in gate.children]
             if gate.reference_alignment:
-                data = gate.preprocess(data=data, transform=True)
-                x_transformer = TRANSFORMERS.get(gate.transform_x)(**gate.transform_x_kwargs or {})
-                y_transformer = TRANSFORMERS.get(gate.transform_y)(**gate.transform_y_kwargs or {})
-                data = x_transformer.inverse_scale(data=data, features=[gate.x])
-                data = y_transformer.inverse_scale(data=data, features=[gate.y])
+                data = _inverse_gate_transform(gate, gate.preprocess(data=data, transform=True))
         else:
-            data = gate.reference
+            data = _inverse_gate_transform(gate, gate.reference)
             geom_objs = gate.children
         ax = cyto_plot(
             data=data,
@@ -344,7 +371,8 @@ def plot_gate(
         if isinstance(gate, ThresholdBase):
             _plot_thresholds(geom_objs=geom_objs, ax=ax)
         else:
-            _plot_polygons(geom_obs=geom_objs, ax=ax, **legend_kwargs)
-
+            legend_kwargs = legend_kwargs or {}
+            _plot_polygons(geom_objs=geom_objs, ax=ax, **legend_kwargs)
+        return ax
     except DoesNotExist:
         raise PlotError("One or more populations generated from this Gate are not present in the given FileGroup.")

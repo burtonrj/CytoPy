@@ -120,7 +120,7 @@ def inside_ellipse(
     data: numpy.ndarray
         two dimensional matrix (x,y)
     center: tuple
-        x,y coordinate corresponding to center of elipse
+        x,y coordinate corresponding to center of ellipse
     width: int or float
         semi-major axis of eplipse
     height: int or float
@@ -184,7 +184,7 @@ def probabilistic_ellipse(covariances: np.ndarray, conf: float):
     return eigen_val[0], eigen_val[1], (180.0 + angle)
 
 
-def create_envelope(x_values: np.array, y_values: np.array, alpha: float or None = 0.0) -> Polygon:
+def create_envelope(xy: np.ndarray, alpha: float or None = 0.0) -> Polygon:
     """
     Given the x and y coordinates of a cloud of data points generate an envelope (alpha shape)
     that encapsulates these data points.
@@ -208,14 +208,13 @@ def create_envelope(x_values: np.array, y_values: np.array, alpha: float or None
     GeometryError
         Failed to generate alpha shape; likely due to insufficient data or alpha being too large.
     """
-    xy = np.array([[i[0], i[1]] for i in zip(x_values, y_values)])
     try:
         poly = alphashape.alphashape(points=xy, alpha=alpha)
         assert isinstance(poly, Polygon)
         return poly
     except AssertionError:
         raise GeometryError(
-            "Failed to generate alpha shape. Check for insufficient data or whether alpha is too large"
+            "Failed to generate alpha shape. Check for insufficient data or whether alpha is too large."
         )
 
 

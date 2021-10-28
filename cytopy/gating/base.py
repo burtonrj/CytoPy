@@ -87,8 +87,8 @@ class ChildThreshold(Child):
     def match_definition(self, definition: str) -> bool:
         """
         Given a definition, return True or False as to whether it matches this ChildThreshold's
-        definition. If definition contains multipdes separated by a comma, or the ChildThreshold's
-        definition contains multipde, first split and then compare. Return True if matches any.
+        definition. If definition contains multiples separated by a comma, or the ChildThreshold's
+        definition contains multiple, first split and then compare. Return True if matches any.
 
         Parameters
         ----------
@@ -146,11 +146,14 @@ class Gate(mongoengine.Document):
         self.x_transformer = None
         self.y_transformer = None
         self.validate()
+        self._reference_cache = None
 
     @property
     def reference(self) -> pd.DataFrame:
+        if self._reference_cache is not None:
+            return self._reference_cache
         try:
-            data = pd.read_pickle(self._reference.read())
+            data = pickle.loads(self._reference.read())
             self._reference.seek(0)
             return data
         except TypeError:
@@ -159,12 +162,7 @@ class Gate(mongoengine.Document):
 
     @reference.setter
     def reference(self, data: pd.DataFrame):
-        if self._reference:
-            self._reference.replace(Binary(pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)))
-        else:
-            self._reference.new_file()
-            self._reference.write(Binary(pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)))
-            self._reference.close()
+        self._reference_cache = data
 
     def _xy_in_dataframe(self, data: pd.DataFrame):
         """
@@ -301,6 +299,16 @@ class Gate(mongoengine.Document):
         if self.reference_alignment:
             data = self._align_to_reference(data=data)
         return data
+
+    def save(self, *args, **kwargs):
+        if self._reference_cache is not None:
+            if self._reference:
+                self._reference.replace(Binary(pickle.dumps(self._reference_cache, protocol=pickle.HIGHEST_PROTOCOL)))
+            else:
+                self._reference.new_file()
+                self._reference.write(Binary(pickle.dumps(self._reference_cache, protocol=pickle.HIGHEST_PROTOCOL)))
+                self._reference.close()
+        super(Gate, self).save()
 
 
 def merge_children(children: List) -> Union[Child, ChildThreshold, ChildPolygon]:
