@@ -121,15 +121,17 @@ def filter_fcs_files(fcs_dir: str, exclude_files: Optional[str] = None, exclude_
     return fcs_files
 
 
-def parse_directory_for_fcs_files(
+def parse_directory_for_cytometry_files(
     fcs_dir: str,
-    control_names: list,
-    ctrl_id: str,
-    ignore_comp: bool = True,
-    exclude_dir: str = "DUPLICATE",
+    control_id: Optional[str] = None,
+    control_names: Optional[List[str]] = None,
+    exclude_files: Optional[str] = None,
+    exclude_dir: Optional[str] = None,
+    compensation_file: Optional[str] = None,
 ) -> dict:
     """
     Generate a standard dictionary object of fcs files in given directory
+
     Parameters
     -----------
     fcs_dir: str
@@ -138,8 +140,7 @@ def parse_directory_for_fcs_files(
         names of expected control files (names must appear in filenames)
     ctrl_id: str
         global identifier for control file e.g. 'FMO' (must appear in filenames)
-    ignore_comp: bool, (default=True)
-        If True, files with 'compensation' in their name will be ignored (default = True)
+    exclude_files
     exclude_dir: str (default = 'DUPLICATES')
         Will ignore any directories with this name
     Returns
@@ -148,20 +149,19 @@ def parse_directory_for_fcs_files(
         standard dictionary of fcs files contained in target directory
     """
     file_tree = dict(primary=[], controls={})
-    fcs_files = filter_fcs_files(fcs_dir, exclude_comps=ignore_comp, exclude_dir=exclude_dir)
+    fcs_files = filter_fcs_files(fcs_dir, exclude_files=exclude_files, exclude_dir=exclude_dir)
     ctrl_files = [f for f in fcs_files if f.find(ctrl_id) != -1]
     primary = [f for f in fcs_files if f.find(ctrl_id) == -1]
     for c_name in control_names:
         matched_controls = list(filter(lambda x: x.find(c_name) != -1, ctrl_files))
         if not matched_controls:
-            print(f"Warning: no file found for {c_name} control")
-            continue
+            raise ValueError(f"No file found for {c_name} control")
         if len(matched_controls) > 1:
-            print(f"Warning: multiple files found for {c_name} control")
+            raise ValueError(f"Multiple files found for {c_name} control")
         file_tree["controls"][c_name] = matched_controls
 
     if len(primary) > 1:
-        print("Warning! Multiple non-control (primary) files found in directory. Check before proceeding.")
+        raise ValueError("Multiple non-control (primary) files found in directory. Check before proceeding.")
     file_tree["primary"] = primary
     return file_tree
 

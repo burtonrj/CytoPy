@@ -84,10 +84,9 @@ class GatingStrategy(mongoengine.Document):
     def print_population_tree(self, **kwargs):
         return self.filegroup.print_population_tree(data_source=self.data_source, **kwargs)
 
-    def _population_data(self, population_name: str):
-        return self.filegroup.load_population_df(
-            population=population_name, transform=None, data_source=self.data_source
-        )
+    def _population_data(self, population_name: str, data_source: Optional[str] = None):
+        data_source = data_source or self.data_source
+        return self.filegroup.load_population_df(population=population_name, transform=None, data_source=data_source)
 
     def propagate_to_control(self, ctrl: str, flag: float = 0.25):
         return copy_populations_to_controls_using_geoms(filegroup=self.filegroup, ctrl=ctrl, flag=flag)
@@ -136,10 +135,11 @@ class GatingStrategy(mongoengine.Document):
         y: Optional[str] = None,
         transform_x: str = "asinh",
         transform_y: str = "asinh",
+        data_source: Optional[str] = None,
         **plot_kwargs,
     ):
         return cyto_plot(
-            data=self._population_data(population_name=population_name),
+            data=self._population_data(population_name=population_name, data_source=data_source),
             x=x,
             y=y,
             transform_x=transform_x,

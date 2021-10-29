@@ -32,16 +32,31 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import datetime
+import os
+from collections import defaultdict
 from copy import deepcopy
+from typing import Dict
 from typing import List
+from typing import Optional
 
 import mongoengine
+import numpy as np
+import pandas as pd
 
+from ..feedback import progress_bar
 from .errors import *
 from .experiment import Experiment
+from .read_write import parse_directory_for_fcs_files
 from .subject import Subject
 
 logger = logging.getLogger(__name__)
+
+
+def _build_subject_records(data: Dict[str, pd.DataFrame]) -> Dict[str, List[Dict]]:
+    records = defaultdict(list)
+    for parent_key, df in data.items():
+        records[parent_key] = [row.to_dict() for _, row in df.iterrows()]
+    return records
 
 
 class Project(mongoengine.Document):
@@ -170,6 +185,78 @@ class Project(mongoengine.Document):
         self.subjects.append(new_subject)
         self.save()
         return new_subject
+
+    def add_subjects_with_metadata(
+        self,
+        target_dir: str,
+        id_column: str,
+        verbose: bool = True,
+        exclude_columns: Optional[Dict[str, List[str]]] = None,
+    ):
+        targets = {
+            os.path.splitext(os.path.basename(x))[0]: os.path.join(target_dir, x)
+            for x in os.listdir(target_dir)
+            if os.path.splitext(os.path.basename(x))[1].lower() in [".csv", ".xlsx"]
+        }
+        targets = {
+            x: pd.read_csv(path) if path.endswith(".csv") else pd.read_excel(path) for x, path in targets.items()
+        }
+        targets = {x: df[[i for i in df.columns if i not in exclude_columns.get(x, [])]] for x, df in targets.items()}
+        unique_ids = np.unique(np.array([x[id_column].values for x in targets.values()]).flatten())
+        for _id in progress_bar(unique_ids, verbose=verbose):
+            records = _build_subject_records(
+                data={x: df[df[id_column] == _id].drop(id_column) for x, df in targets.items()}
+            )
+            self.add_subject(subject_id=_id, **records)
+        self.save()
+
+    def add_cytometry_data_from_file_tree(
+        self,
+        target_directory: str,
+        control_id: Optional[str] = None,
+        controls: Optional[Dict[str, List[str]]] = None,
+        exclude_files: Optional[Dict[str, str]] = None,
+        exclude_dir: Optional[Dict[str, str]] = None,
+        compensation_file: Optional[str] = None,
+        compensate: bool = True,
+        verbose: bool = True,
+    ):
+        logger.info("Checking file tree and preparing for data entry.")
+        cyto_files = {}
+        experiment_dirs = os.listdir(target_directory)
+        for exp_id in experiment_dirs:
+            if exp_id not in self.list_experiments():
+                logger.warning(f"{exp_id} is not a recognised experiment and will be ignored.")
+                continue
+            cyto_files[exp_id] = {}
+            experiment_controls = controls.get(exp_id, [])
+            if not experiment_controls:
+                logger.warning(f"No control files provided for {exp_id}")
+            for subject_id in os.listdir(os.path.join(target_directory, exp_id)):
+                if subject_id not in self.list_subjects():
+                    logger.warning(f"{subject_id} is not a recognised subject and will be ignored.")
+                    continue
+                cyto_files[exp_id][subject_id] = parse_directory_for_fcs_files(
+                    fcs_dir=os.path.join(target_directory, exp_id, subject_id),
+                    control_id=control_id,
+                    control_names=experiment_controls,
+                    exclude_files=exclude_files,
+                    exclude_dir=exclude_dir,
+                    compensation_file=compensation_file,
+                )
+
+        for exp_id, subject_files in cyto_files.items():
+            logger.info(f"Adding cytometry data for {exp_id}")
+            experiment = self.get_experiment(experiment_id=exp_id)
+            for subject_id, files in progress_bar(subject_files.items(), verbose=verbose):
+                compensation_matrix_path = files.get("compensation_file", None)
+                experiment.add_filegroup(
+                    sample_id=f"{subject_id}_{exp_id}",
+                    paths={x: path for x, path in files.items() if x != "compensation_file"},
+                    compensate=compensate,
+                    compensation_matrix=compensation_matrix_path,
+                    subject_id=subject_id,
+                )
 
     def list_subjects(self) -> list:
         """
