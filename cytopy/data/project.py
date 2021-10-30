@@ -46,7 +46,7 @@ import pandas as pd
 from ..feedback import progress_bar
 from .errors import *
 from .experiment import Experiment
-from .read_write import parse_directory_for_fcs_files
+from .read_write import parse_directory_for_cytometry_files
 from .subject import Subject
 
 logger = logging.getLogger(__name__)
@@ -193,6 +193,7 @@ class Project(mongoengine.Document):
         verbose: bool = True,
         exclude_columns: Optional[Dict[str, List[str]]] = None,
     ):
+        exclude_columns = exclude_columns or {}
         targets = {
             os.path.splitext(os.path.basename(x))[0]: os.path.join(target_dir, x)
             for x in os.listdir(target_dir)
@@ -202,21 +203,22 @@ class Project(mongoengine.Document):
             x: pd.read_csv(path) if path.endswith(".csv") else pd.read_excel(path) for x, path in targets.items()
         }
         targets = {x: df[[i for i in df.columns if i not in exclude_columns.get(x, [])]] for x, df in targets.items()}
-        unique_ids = np.unique(np.array([x[id_column].values for x in targets.values()]).flatten())
+        unique_ids = set(np.concatenate([x[id_column].unique() for x in targets.values()], axis=0).tolist())
         for _id in progress_bar(unique_ids, verbose=verbose):
             records = _build_subject_records(
-                data={x: df[df[id_column] == _id].drop(id_column) for x, df in targets.items()}
+                data={x: df[df[id_column] == _id].drop(id_column, axis=1) for x, df in targets.items()}
             )
             self.add_subject(subject_id=_id, **records)
         self.save()
+        return self
 
     def add_cytometry_data_from_file_tree(
         self,
         target_directory: str,
         control_id: Optional[str] = None,
         controls: Optional[Dict[str, List[str]]] = None,
-        exclude_files: Optional[Dict[str, str]] = None,
-        exclude_dir: Optional[Dict[str, str]] = None,
+        exclude_files: Optional[str] = None,
+        exclude_dir: Optional[str] = None,
         compensation_file: Optional[str] = None,
         compensate: bool = True,
         verbose: bool = True,
@@ -236,7 +238,7 @@ class Project(mongoengine.Document):
                 if subject_id not in self.list_subjects():
                     logger.warning(f"{subject_id} is not a recognised subject and will be ignored.")
                     continue
-                cyto_files[exp_id][subject_id] = parse_directory_for_fcs_files(
+                cyto_files[exp_id][subject_id] = parse_directory_for_cytometry_files(
                     fcs_dir=os.path.join(target_directory, exp_id, subject_id),
                     control_id=control_id,
                     control_names=experiment_controls,
@@ -244,7 +246,6 @@ class Project(mongoengine.Document):
                     exclude_dir=exclude_dir,
                     compensation_file=compensation_file,
                 )
-
         for exp_id, subject_files in cyto_files.items():
             logger.info(f"Adding cytometry data for {exp_id}")
             experiment = self.get_experiment(experiment_id=exp_id)

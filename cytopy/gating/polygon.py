@@ -1,11 +1,14 @@
 import logging
 from functools import partial
 from multiprocessing import cpu_count
+from multiprocessing import Manager
 from multiprocessing import Pool
+from multiprocessing import Process
 from string import ascii_uppercase
 from typing import Dict
 from typing import Iterable
 from typing import List
+from typing import Optional
 from typing import Union
 
 import mongoengine
@@ -141,23 +144,24 @@ class PolygonGate(Gate):
             polygons = self._fit(data=data, **overwrite_kwargs)
         return self._match_to_children(self._generate_populations(data=data, polygons=polygons))
 
-    def predict_with_hyperparameter_search(
-        self, data: pd.DataFrame, parameter_grid: Dict, transform: bool = True, njobs: int = -1
-    ):
+    def predict_with_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict, transform: bool = True):
         assert len(self.children) > 0, "Call 'train' before predict."
         data = self.preprocess(data=data, transform=transform)
         grid = ParameterGrid(parameter_grid)
-        njobs = njobs if njobs > 0 else cpu_count()
-        if self.downsample_method:
-            fitter = partial(self._fit, data=self._downsample(data=data))
-        else:
-            fitter = partial(self._fit, data=data)
-        with Pool(njobs) as pool:
-            polygons = list(pool.map(fitter, grid))
+        df = data if self.downsample_method is None else self._downsample(data=data)
+        manager = Manager()
+        polygons = manager.list()
+        processes = [
+            Process(target=self._fit_multiprocess_wrap, args=[df, polygons], kwargs=kwargs) for kwargs in grid
+        ]
+        for p in processes:
+            p.start()
+        for p in processes:
+            p.join()
         populations = [
             self._match_to_children(self._generate_populations(data=data, polygons=polys)) for polys in polygons
         ]
-        return polygon_gate_hyperparam_search(gate=self, populations=[p for sl in populations for p in sl])
+        return polygon_gate_hyperparam_search(gate=self, populations=populations)
 
 
 class EllipseGate(PolygonGate):
@@ -195,8 +199,9 @@ class HuberGate(PolygonGate):
         values["method"] = "HuberRegressor"
         super().__init__(*args, **values)
 
-    def _predict_interval(self, data: pd.DataFrame):
-        conf = stats.norm.ppf(1 - self.conf)
+    def _predict_interval(self, data: pd.DataFrame, conf: Optional[float] = None):
+        conf = conf or self.conf
+        conf = stats.norm.ppf(1 - conf)
         x = np.array([data[self.x].min(), data[self.x].max()])
         y = np.array([data[self.y].min(), data[self.y].max()])
         y_pred = self.model.predict(x.reshape(-1, 1))
@@ -211,12 +216,14 @@ class HuberGate(PolygonGate):
         self.model.fit(x, y)
 
     def _fit(self, data: pd.DataFrame, **overwrite_kwargs) -> List[ShapelyPolygon]:
+        overwrite_kwargs = overwrite_kwargs or {}
+        conf = overwrite_kwargs.pop("conf", self.conf)
         if self.downsample_method:
             data = self._downsample(data=data)
         if overwrite_kwargs:
             self.model.set_params(**overwrite_kwargs)
         self._fit_model(data=data)
-        y_lower, y_upper = self._predict_interval(data=data)
+        y_lower, y_upper = self._predict_interval(data=data, conf=conf)
         return [
             create_polygon(
                 [

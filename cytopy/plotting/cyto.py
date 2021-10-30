@@ -295,9 +295,9 @@ def _plot_thresholds(geom_objs: Union[List[Population], List[Child]], ax: plt.Ax
     labels = {}
     for g in geom_objs:
         if isinstance(g, Population):
-            labels[g.population_name] = g.definition
+            labels[g.definition] = g.population_name
         else:
-            labels[g.name] = g.definition
+            labels[g.definition] = g.name
     ax.axvline(x, lw=2.5, c="#c92c2c")
     if y:
         ax.axhline(y, lw=2.5, c="#c92c2c")
@@ -349,6 +349,10 @@ def plot_gate(
 ):
     try:
         ax = ax or plt.subplots(figsize=figsize)[1]
+        kwargs = kwargs or {}
+        y = kwargs.pop("y", gate.y)
+        transform_y = kwargs.pop("transform_y", gate.transform_y)
+        transform_y_kwargs = kwargs.pop("transform_y_kwargs", gate.transform_y_kwargs)
         if filegroup is not None:
             data = filegroup.load_population_df(population=gate.parent, transform=None, data_source=data_source)
             geom_objs = [filegroup.populations.get(population_name=c.name) for c in gate.children]
@@ -360,11 +364,11 @@ def plot_gate(
         ax = cyto_plot(
             data=data,
             x=gate.x,
-            y=gate.y,
+            y=y,
             transform_x=gate.transform_x,
-            transform_y=gate.transform_y,
+            transform_y=transform_y,
             transform_x_kwargs=gate.transform_x_kwargs,
-            transform_y_kwargs=gate.transform_y_kwargs,
+            transform_y_kwargs=transform_y_kwargs,
             ax=ax,
             **kwargs,
         )

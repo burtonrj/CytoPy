@@ -113,7 +113,7 @@ def filter_fcs_files(fcs_dir: str, exclude_files: Optional[str] = None, exclude_
             if re.match(exclude_dir, os.path.basename(root)):
                 continue
         if exclude_files:
-            fcs = [f for f in files if f.lower().endswith(".fcs") and not re.match(exclude_files, f)]
+            fcs = [f for f in files if f.lower().endswith(".fcs") and not re.search(exclude_files, f)]
         else:
             fcs = [f for f in files if f.lower().endswith(".fcs")]
         fcs = [os.path.join(root, f) for f in fcs]
@@ -148,21 +148,31 @@ def parse_directory_for_cytometry_files(
     dict
         standard dictionary of fcs files contained in target directory
     """
-    file_tree = dict(primary=[], controls={})
+    file_tree = dict()
     fcs_files = filter_fcs_files(fcs_dir, exclude_files=exclude_files, exclude_dir=exclude_dir)
-    ctrl_files = [f for f in fcs_files if f.find(ctrl_id) != -1]
-    primary = [f for f in fcs_files if f.find(ctrl_id) == -1]
+    ctrl_files = [f for f in fcs_files if f.find(control_id) != -1]
+    primary = [f for f in fcs_files if f.find(control_id) == -1]
     for c_name in control_names:
         matched_controls = list(filter(lambda x: x.find(c_name) != -1, ctrl_files))
         if not matched_controls:
-            raise ValueError(f"No file found for {c_name} control")
+            logger.warning(f"No file found for {c_name} control in {fcs_dir}")
+            continue
         if len(matched_controls) > 1:
-            raise ValueError(f"Multiple files found for {c_name} control")
-        file_tree["controls"][c_name] = matched_controls
+            raise ValueError(f"Multiple files found for {c_name} control in {fcs_dir}: {matched_controls}")
+        file_tree[c_name] = matched_controls[0]
 
     if len(primary) > 1:
-        raise ValueError("Multiple non-control (primary) files found in directory. Check before proceeding.")
-    file_tree["primary"] = primary
+        raise ValueError(f"Multiple non-control (primary) files found in directory {fcs_dir}: {primary}.")
+    file_tree["primary"] = primary[0]
+
+    compensation_file = [x for x in os.listdir(fcs_dir) if x == compensation_file]
+    if len(compensation_file) > 1:
+        raise ValueError(f"Multiple compensation files identified in {fcs_dir}: {compensation_file}")
+
+    file_tree["compensation_file"] = None
+    if compensation_file:
+        file_tree["compensation_file"] = os.path.join(fcs_dir, compensation_file[0])
+
     return file_tree
 
 

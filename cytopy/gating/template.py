@@ -48,7 +48,7 @@ class GatingStrategy(mongoengine.Document):
         self.filegroup = experiment.get_sample(sample_id=sample_id)
 
     def add_gate(self, gate: Gate):
-        if gate.gate_name in [g.name for g in self.gates]:
+        if gate.gate_name in [g.gate_name for g in self.gates]:
             raise ValueError(f"Gate {gate.gate_name} already exists.")
         self.gates.append(gate)
 
@@ -251,7 +251,6 @@ class GatingStrategy(mongoengine.Document):
         self,
         gate: Union[str, Gate],
         plot: bool = True,
-        njobs: int = -1,
         overwrite_kwargs: Optional[Dict] = None,
         print_stats: bool = True,
         **plot_kwargs,
@@ -264,7 +263,6 @@ class GatingStrategy(mongoengine.Document):
                 data=self._population_data(population_name=gate.parent),
                 parameter_grid=self.hyperparameter_search[gate.gate_name],
                 transform=True,
-                njobs=njobs,
             )
         else:
             populations = gate.predict(

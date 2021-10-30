@@ -268,8 +268,8 @@ class Gate(mongoengine.Document):
             raise GateError(f"No such child ")
         return children
 
-    def _duplicate_children(self, name: str):
-        child_counts = Counter(self.get_children(name=name))
+    def _duplicate_children(self):
+        child_counts = Counter([c.name for c in self.children])
         if all([i == 1 for i in child_counts.values()]):
             return
         updated_children = []
@@ -299,6 +299,12 @@ class Gate(mongoengine.Document):
         if self.reference_alignment:
             data = self._align_to_reference(data=data)
         return data
+
+    def _fit_multiprocess_wrap(self, data: pd.DataFrame, results: List, **kwargs):
+        results.append(self._fit(data=data, **kwargs))
+
+    def _fit(self, data: pd.DataFrame, **kwargs):
+        return None
 
     def save(self, *args, **kwargs):
         for child in self.children:

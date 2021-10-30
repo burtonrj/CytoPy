@@ -1,6 +1,8 @@
 from functools import partial
 from multiprocessing import cpu_count
+from multiprocessing import Manager
 from multiprocessing import Pool
+from multiprocessing import Process
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -415,21 +417,26 @@ class ThresholdBase(Gate):
             y_threshold=thresholds[1],
         )
         pops = self._generate_populations(data=partitioned_data, x_threshold=thresholds[0], y_threshold=thresholds[1])
-        return self._match_to_children(new_populations=pops), data
+        return self._match_to_children(new_populations=pops)
 
     def predict_with_hyperparameter_search(
         self, data: pd.DataFrame, parameter_grid: Dict, transform: bool = True, njobs: int = -1
     ):
         assert len(self.children) > 0, "Call 'train' before predict."
         data = self.preprocess(data=data, transform=transform)
-        if self.downsample_method:
-            data = self._downsample(data=data)
+        df = data if self.downsample_method is None else self._downsample(data=data)
         grid = ParameterGrid(parameter_grid)
-        njobs = njobs if njobs > 0 else cpu_count()
-        fitter = partial(self._fit, data=data)
+        manager = Manager()
+        thresholds = manager.list()
+        processes = [
+            Process(target=self._fit_multiprocess_wrap, args=[df, thresholds], kwargs=kwargs) for kwargs in grid
+        ]
         partitioner = partial(apply_threshold, data=data, x=self.x, y=self.y)
+        for p in processes:
+            p.start()
+        for p in processes:
+            p.join()
         with Pool(njobs) as pool:
-            thresholds = list(pool.map(fitter, grid))
             partitioned_data = list(pool.map(partitioner, thresholds))
         populations = [
             self._match_to_children(
@@ -451,6 +458,10 @@ class ThresholdBase(Gate):
 class QuantileGate(ThresholdBase):
     children = mongoengine.EmbeddedDocumentListField(ChildThreshold)
     q = mongoengine.FloatField(required=True)
+
+    def __init__(self, *args, **values):
+        method = values.pop("method", "quantile")
+        super().__init__(*args, **values, method=method)
 
     def _fit(self, data: pd.DataFrame, **overwrite_kwargs) -> Tuple[float, Union[float, None]]:
         kwargs = overwrite_kwargs or {}
@@ -530,6 +541,17 @@ class DDTW(ThresholdBase):
             raise AttributeError("Reference alignment is not supported for DDTW gate. See docs.")
 
     def _fit(self, data: pd.DataFrame, **overwrite_kwargs) -> Tuple[float, Union[float, None]]:
+        thresholds = pd.DataFrame(
+            {k: [t] for k, t in zip([self.x, self.y], [self.x_threshold, self.y_threshold]) if t is not None}
+        )
+        thresholds = self.transform(data=thresholds)
+        x = thresholds[self.x].values[0]
+        y = None
+        if self.y:
+            y = thresholds[self.y].values[0]
+        if self.reference is None:
+            return [x, y]
+
         overwrite_kwargs = overwrite_kwargs or {}
         kernel = overwrite_kwargs.get("kernel", self.kernel)
         grid_n = overwrite_kwargs.get("grid_n", self.grid_n)
@@ -540,7 +562,7 @@ class DDTW(ThresholdBase):
             bw = overwrite_kwargs.get("bw", self.bw)
 
         thresholds = []
-        for d, t in zip([self.x, self.y], [self.x_threshold, self.y_threshold]):
+        for d, t in zip([self.x, self.y], [x, y]):
             if not d:
                 thresholds.append(None)
             else:

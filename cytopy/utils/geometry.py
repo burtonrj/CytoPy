@@ -28,6 +28,8 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 from functools import partial
+from multiprocessing import cpu_count
+from multiprocessing import Pool
 from typing import Tuple
 from typing import Union
 
@@ -54,7 +56,7 @@ def point_in_poly(coords: Tuple[float], poly: Polygon) -> pl.Series:
     return poly.contains(Point(coords))
 
 
-def inside_polygon(data: Union[pl.DataFrame, pd.DataFrame], x: str, y: str, poly: Polygon) -> pl.DataFrame:
+def inside_polygon(data: pd.DataFrame, x: str, y: str, poly: Polygon) -> pl.DataFrame:
     """
     Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
 
@@ -74,10 +76,9 @@ def inside_polygon(data: Union[pl.DataFrame, pd.DataFrame], x: str, y: str, poly
     polars.DataFrame
         Masked DataFrame containing only those rows that fall within the Polygon
     """
-    data = data if isinstance(data, pl.DataFrame) else pandas_to_polars(data=data)
-    point_inside_polygon = partial(point_in_poly, poly=poly)
-    mask = data[[x, y]].apply(point_inside_polygon, return_dtype=pl.Boolean)
-    return polars_to_pandas(data=data[mask, :])
+    with Pool(cpu_count()) as pool:
+        mask = pool.map(partial(point_in_poly, poly=poly), data[[x, y]].values)
+    return data.iloc[mask, :]
 
 
 def polygon_overlap(poly1: Polygon, poly2: Polygon, threshold: float = 0.0):
