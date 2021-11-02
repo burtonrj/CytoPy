@@ -1,7 +1,6 @@
 import logging
 from functools import partial
 from multiprocessing import cpu_count
-from multiprocessing import Pool
 from string import ascii_uppercase
 from typing import Dict
 from typing import Iterable
@@ -124,10 +123,14 @@ class PolygonGate(Gate):
         return matched_populations
 
     def _generate_polygons(self, labels: np.ndarray, data: pd.DataFrame):
-        envelope_func = partial(create_envelope, alpha=self.envelope_alpha)
-        xy = [data.iloc[np.where(labels == i)][[self.x, self.y]].values for i in np.unique(labels)]
-        with Pool(cpu_count()) as pool:
-            polygons = list(pool.map(envelope_func, xy))
+        with Parallel(cpu_count()) as parallel:
+            polygons = parallel(
+                delayed(create_envelope)(
+                    xy,
+                    alpha=self.envelope_alpha,
+                )
+                for xy in [data.iloc[np.where(labels == i)][[self.x, self.y]].values for i in np.unique(labels)]
+            )
         if len(polygons) == 0:
             raise GeometryError("Failed to generate Polygon geometries")
         return polygons

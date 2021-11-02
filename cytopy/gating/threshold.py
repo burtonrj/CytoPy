@@ -1,7 +1,6 @@
 import logging
 from functools import partial
 from multiprocessing import cpu_count
-from multiprocessing import Pool
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -432,10 +431,9 @@ class ThresholdBase(Gate):
         if self.reference_alignment:
             data = self._align_to_reference(data=data)
         df = data if self.downsample_method is None else self._downsample(data=data)
-        partitioner = partial(apply_threshold, data=data, x=self.x, y=self.y)
         thresholds = self._fit_hyperparameter_search(data=df, parameter_grid=parameter_grid)
-        with Pool(cpu_count()) as pool:
-            partitioned_data = list(pool.map(partitioner, thresholds))
+        with Parallel(n_jobs=cpu_count()) as parallel:
+            partitioned_data = parallel(delayed(apply_threshold)(t, data=data, x=self.x, y=self.y) for t in thresholds)
         populations = [
             self._match_to_children(
                 new_populations=self._generate_populations(data=d, x_threshold=t[0], y_threshold=t[1])

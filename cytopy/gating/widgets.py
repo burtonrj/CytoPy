@@ -17,10 +17,6 @@ from shapely.geometry import Polygon
 
 from ..data.population import Population
 from ..utils.dim_reduction import dimension_reduction_with_sampling
-from .gate import PolygonGate
-from .gate import ThresholdGate
-from .gating_strategy import FileGroup
-from .gating_strategy import GatingStrategy
 from cytopy.utils.geometry import inside_polygon
 
 logger = logging.getLogger(__name__)
