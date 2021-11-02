@@ -423,32 +423,55 @@ class ThresholdBase(Gate):
         pops = self._generate_populations(data=partitioned_data, x_threshold=thresholds[0], y_threshold=thresholds[1])
         return self._match_to_children(new_populations=pops)
 
-    def predict_with_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict, transform: bool = True):
-        assert len(self.children) > 0, "Call 'train' before predict."
-        if data.shape[0] <= 3:
-            raise GateError("Data provided contains 3 or less observations.")
-        data = self.preprocess(data=data, transform=transform)
-        if self.reference_alignment:
-            data = self._align_to_reference(data=data)
-        df = data if self.downsample_method is None else self._downsample(data=data)
-        thresholds = self._fit_hyperparameter_search(data=df, parameter_grid=parameter_grid)
-        with Parallel(n_jobs=cpu_count()) as parallel:
-            partitioned_data = parallel(delayed(apply_threshold)(t, data=data, x=self.x, y=self.y) for t in thresholds)
-        populations = [
-            self._match_to_children(
-                new_populations=self._generate_populations(data=d, x_threshold=t[0], y_threshold=t[1])
-            )
-            for d, t in zip(partitioned_data, thresholds)
-        ]
-        optimal_populations = np.inf
+    def _calc_optimal_populations(self, data: pd.DataFrame, populations: List[List[Population]]) -> List[Population]:
+        features = [x for x in data.columns if "time" not in x.lower()]
+        ref = self.reference[features]
+        optimal_populations = None
+        optimal_dist = np.inf
         for pops in populations:
             child_pop_data = [
-                (self.reference.loc[self.children.get(name=p.name).index], data.loc[p.index]) for p in pops
+                (
+                    ref.loc[self.children.get(name=p.population_name).index]
+                    .sample(n=len(p.index), replace=True)
+                    .values,
+                    data.loc[p.index].values,
+                )
+                for p in pops
             ]
             distance = np.sum([np.linalg.norm(x[0] - x[1]) for x in child_pop_data])
-            if distance < optimal_populations:
+            if distance < optimal_dist:
                 optimal_populations = pops
+                optimal_dist = distance
+        if optimal_populations is None:
+            raise ValueError("Failed to compute minimal distance between reference and new populations.")
         return optimal_populations
+
+    def predict_with_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict, transform: bool = True):
+        try:
+            assert len(self.children) > 0, "Call 'train' before predict."
+            if data.shape[0] <= 3:
+                raise GateError("Data provided contains 3 or less observations.")
+            data = self.preprocess(data=data, transform=transform)
+            if self.reference_alignment:
+                data = self._align_to_reference(data=data)
+            df = data if self.downsample_method is None else self._downsample(data=data)
+            thresholds = self._fit_hyperparameter_search(data=df, parameter_grid=parameter_grid)
+            with Parallel(n_jobs=cpu_count()) as parallel:
+                partitioned_data = parallel(
+                    delayed(apply_threshold)(data=data, x=self.x, x_threshold=t[0], y=self.y, y_threshold=t[1])
+                    for t in thresholds
+                )
+            populations = [
+                self._match_to_children(
+                    new_populations=self._generate_populations(data=d, x_threshold=t[0], y_threshold=t[1])
+                )
+                for d, t in zip(partitioned_data, thresholds)
+            ]
+            return self._calc_optimal_populations(data=data, populations=populations)
+        except Exception as e:
+            logger.exception(e)
+            logger.error(f"Failed to perform hyperparameter search, falling back to 'predict' method.")
+            return self.predict(data=data, transform=transform)
 
 
 class QuantileGate(ThresholdBase):
@@ -477,8 +500,10 @@ class QuantileGate(ThresholdBase):
         q = [x["q"] for x in grid]
         with Parallel(cpu_count()) as parallel:
             x = parallel(delayed(np.quantile)(data[self.x].value, i) for i in q)
-            y = parallel(delayed(np.quantile)(data[self.y].value, i) for i in q)
-        return [(i, j) for i, j in zip(x, y)]
+            if self.y:
+                y = parallel(delayed(np.quantile)(data[self.y].value, i) for i in q)
+                return [(i, j) for i, j in zip(x, y)]
+            return [(i, None) for i in x]
 
 
 class ThresholdGate(ThresholdBase):
@@ -537,11 +562,11 @@ class ThresholdGate(ThresholdBase):
             for k, default in [("bw_x", self.bw_x), ("bw_y", self.bw_y)]
         ]
         with Parallel(n_jobs=cpu_count()) as parallel:
-            x_thresholds = parallel(delayed(find_threshold)(x=data[self.x].values, **kwargs) for kwargs in grid[0])
+            x_thresholds = parallel(delayed(find_threshold)(data[self.x].values, *args) for args in grid[0])
             if self.y:
-                y_thresholds = parallel(delayed(find_threshold)(x=data[self.y].values, **kwargs) for kwargs in grid[0])
+                y_thresholds = parallel(delayed(find_threshold)(data[self.x].values, *args) for args in grid[1])
                 return [(i, j) for i, j in zip(x_thresholds, y_thresholds)]
-            return x_thresholds
+            return [(i, None) for i in x_thresholds]
 
 
 def differential(x):

@@ -190,16 +190,21 @@ class PolygonGate(Gate):
         return self._match_to_children(self._generate_populations(data=data, polygons=polygons))
 
     def predict_with_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict, transform: bool = True):
-        assert len(self.children) > 0, "Call 'train' before predict."
-        data = self.preprocess(data=data, transform=transform)
-        if self.reference_alignment:
-            data = self._align_to_reference(data=data)
-        df = data if self.downsample_method is None else self._downsample(data=data)
-        polygons = self._fit_hyperparameter_search(data=df, parameter_grid=parameter_grid)
-        populations = [
-            self._match_to_children(self._generate_populations(data=data, polygons=polys)) for polys in polygons
-        ]
-        return polygon_gate_hyperparam_search(gate=self, populations=populations)
+        try:
+            assert len(self.children) > 0, "Call 'train' before predict."
+            data = self.preprocess(data=data, transform=transform)
+            if self.reference_alignment:
+                data = self._align_to_reference(data=data)
+            df = data if self.downsample_method is None else self._downsample(data=data)
+            polygons = self._fit_hyperparameter_search(data=df, parameter_grid=parameter_grid)
+            populations = [
+                self._match_to_children(self._generate_populations(data=data, polygons=polys)) for polys in polygons
+            ]
+            return polygon_gate_hyperparam_search(gate=self, populations=populations)
+        except Exception as e:
+            logger.exception(e)
+            logger.error(f"Failed to perform hyperparameter search, falling back to 'predict' method.")
+            return self.predict(data=data, transform=transform)
 
 
 class EllipseGate(PolygonGate):
