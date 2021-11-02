@@ -32,7 +32,9 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 import pickle
 from collections import Counter
+from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Union
 
 import mongoengine
@@ -40,6 +42,7 @@ import numpy as np
 import pandas as pd
 from bson import Binary
 from shapely.ops import cascaded_union
+from sklearn.model_selection import ParameterGrid
 
 from cytopy.data.errors import GateError
 from cytopy.data.population import PolygonGeom
@@ -282,10 +285,13 @@ class Gate(mongoengine.Document):
 
     def _align_to_reference(self, data: pd.DataFrame) -> pd.DataFrame:
         kwargs = self.reference_kwargs or {}
-        lr = LandmarkRegistration(**kwargs)
-        for d in [self.x, self.y]:
+        bw_x = kwargs.pop("bw_x", "silverman")
+        bw_y = kwargs.pop("bw_y", "silverman")
+        ref = self.reference.sample(data.shape[0], replace=True)
+        for d, bw in zip([self.x, self.y], [bw_x, bw_y]):
             if d:
-                x = np.array([data[d].values, self.reference[d].values])
+                x = np.array([data[d].values, ref[d].values])
+                lr = LandmarkRegistration(bw=bw, **kwargs)
                 data[d] = lr.fit(data=x).transform(data[d].values)
         return data
 
@@ -296,15 +302,19 @@ class Gate(mongoengine.Document):
         self._xy_in_dataframe(data=data)
         if transform:
             data = self.transform(data=data)
-        if self.reference_alignment:
-            data = self._align_to_reference(data=data)
         return data
 
-    def _fit_multiprocess_wrap(self, data: pd.DataFrame, results: List, **kwargs):
-        results.append(self._fit(data=data, **kwargs))
-
-    def _fit(self, data: pd.DataFrame, **kwargs):
+    def _fit(self, data: pd.DataFrame, **overwrite_kwargs):
         return None
+
+    def _hyperparameter_grid(self, parameter_grid: Dict):
+        grid_with_defaults = [
+            {**default, **update}
+            for default, update in zip(
+                [self.method_kwargs for _ in range(len(ParameterGrid(parameter_grid)))], ParameterGrid(parameter_grid)
+            )
+        ]
+        return grid_with_defaults
 
     def save(self, *args, **kwargs):
         for child in self.children:

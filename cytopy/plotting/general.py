@@ -1,7 +1,5 @@
 from typing import Dict
 from typing import Optional
-from typing import Tuple
-from typing import Union
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -9,9 +7,11 @@ import seaborn as sns
 
 
 def build_plot_grid(n: int, col_wrap: int, **kwargs):
-    fig = plt.figure(**kwargs)
+    kwargs = kwargs or {}
     rows = n // col_wrap
     rows += n % col_wrap
+    figsize = kwargs.pop("figsize", (rows * 5, col_wrap * 5))
+    fig = plt.figure(figsize=figsize, **kwargs)
     axes = []
     for i in range(n):
         axes.append(fig.add_subplot(rows, col_wrap, i + 1))

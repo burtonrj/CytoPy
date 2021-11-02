@@ -1,3 +1,4 @@
+import gc
 import logging
 import os
 from collections import defaultdict
@@ -55,10 +56,14 @@ class GatingStrategy(mongoengine.Document):
     def delete_gate(self, name: str, delete_populations: bool = True):
         gate = self.get_gate(gate=name)
         if delete_populations:
-            populations = [c.name for c in gate.children]
-            self.delete_populations(populations=populations)
+            try:
+                populations = [c.name for c in gate.children]
+                self.delete_populations(populations=populations)
+            except MissingPopulationError:
+                logger.warning("Populations associated with this gate not found in FileGroup.")
         self.gates = [g for g in self.gates if g.gate_name != name]
-        gate.delete()
+        if gate.id:
+            gate.delete()
 
     def list_gates(self):
         return [g.gate_name for g in self.gates]
@@ -93,13 +98,6 @@ class GatingStrategy(mongoengine.Document):
 
     def add_hyperparameter_search(self, gate: str, params: Dict):
         gate = self.get_gate(gate)
-        for key in params.keys():
-            if gate.model is not None:
-                if key in gate.model.get_params().keys():
-                    continue
-            if key in dict(gate.to_mongo()).keys():
-                continue
-            raise KeyError(f"{key} is not a valid parameter for the requested Gate.")
         self.hyperparameter_search[gate.gate_name] = params
         return self
 
@@ -291,8 +289,7 @@ class GatingStrategy(mongoengine.Document):
         i = 0
         iteration_limit = len(gates_to_apply) * 100
         stats = defaultdict(list)
-        root_n = self.filegroup.get_population(population_name="root", data_source=self.data_source)
-        logger.info(f"Applying template to {self.filegroup.primary_id}")
+        root_n = self.filegroup.get_population(population_name="root", data_source=self.data_source).n
         while len(gates_to_apply) > 0:
             if i >= len(gates_to_apply):
                 i = 0
@@ -303,7 +300,6 @@ class GatingStrategy(mongoengine.Document):
                         population_id=gate.parent,
                         filegroup_id=self.filegroup.primary_id,
                     )
-                logger.info(f"...applying gate '{gate.gate_name}'")
                 self.apply(gate=gate, plot=False, print_stats=False)
                 for child in gate.children:
                     n = self.filegroup.get_population(population_name=child.name, data_source=self.data_source).n
@@ -376,6 +372,10 @@ class GatingStrategy(mongoengine.Document):
                 logger.error(f"{s} - {str(e)}")
             except OverflowError as e:
                 logger.error(f"{s} - {str(e)}")
+            finally:
+                del self.filegroup
+                self.filegroup = None
+                gc.collect()
         logger.info(f" -- {experiment.experiment_id} complete --")
         return pd.concat(stats).set_index("sample_id")
 

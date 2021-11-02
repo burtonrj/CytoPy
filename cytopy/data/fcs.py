@@ -27,6 +27,7 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import gc
 import logging
 import os
 import pickle
@@ -152,41 +153,25 @@ class FileGroup(mongoengine.Document):
         assert "primary" in self.file_paths.keys(), f"'primary' missing from file_paths"
         if self.id:
             for key in self.file_paths.keys():
-                if "root" not in self.list_populations(data_source=key):
-                    root = Population(
-                        population_name="root",
-                        n=self.data(source=key).shape[0],
-                        parent="root",
-                        source="root",
-                        data_source=key,
-                        prop_of_parent=1.0,
-                        prop_of_total=1.0,
-                    )
-                    root.index = self.data(source=key)["Index"].to_list()
-                    self.populations.append(root)
-                    self.save()
-                elif len(self.get_population("root", data_source=key).index) == 0:
-                    root = self.get_population("root", data_source=key)
-                    root.index = self.data(source=key)["Index"].to_list()
-                    self.save()
                 self.tree[key] = construct_tree(populations=[p for p in self.populations if p.data_source == key])
         else:
             for key in self.file_paths.keys():
                 data = self.data(source=key)
-                self.populations = [
-                    Population(
-                        population_name="root",
-                        n=data.shape[0],
-                        parent="root",
-                        source="root",
-                        data_source=key,
-                        prop_of_parent=1.0,
-                        prop_of_total=1.0,
-                    )
-                ]
-                self.populations[0].index = data.Index.to_list()
+                pop = Population(
+                    population_name="root",
+                    n=data.shape[0],
+                    parent="root",
+                    source="root",
+                    data_source=key,
+                    prop_of_parent=1.0,
+                    prop_of_total=1.0,
+                )
+                pop.index = data.Index.to_list()
+                self.populations.append(pop)
                 self.tree[key] = {"root": anytree.Node(name="root", parent=None)}
             self.save()
+            del data
+            gc.collect()
 
     def clean(self):
         if self.s3_bucket:
@@ -667,11 +652,14 @@ class FileGroup(mongoengine.Document):
                         f"{downstream_effects}"
                     )
                 populations = list(set(list(downstream_effects) + populations))
-                self.populations = [
-                    p
-                    for p in self.populations
-                    if p.population_name not in populations and p.data_source == data_source
-                ]
+                new_populations = []
+                for p in self.populations:
+                    if p.data_source != data_source:
+                        new_populations.append(p)
+                    else:
+                        if p.population_name not in populations:
+                            new_populations.append(p)
+                self.populations = new_populations
                 for name in populations:
                     self.tree[data_source][name].parent = None
                 self.tree[data_source] = {

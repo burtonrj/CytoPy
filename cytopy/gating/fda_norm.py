@@ -79,9 +79,7 @@ class LandmarkRegistration:
 
     def _compute_original_functions(self, data: np.ndarray):
         x = np.linspace(np.min(data) - 0.1, np.max(data) + 0.1, 100000)
-        functions = [
-            FFTKDE(kernel=self.kernel, bw=self.bw).fit(data[i, :].to_numpy()).evaluate(x) for i in range(data.shape[0])
-        ]
+        functions = [FFTKDE(kernel=self.kernel, bw=self.bw).fit(data[i, :]).evaluate(x) for i in range(data.shape[0])]
         landmarks = [peaks(y, x, mph=0.001 * y.max()) for y in functions]
         landmarks = [merge_peaks(p, self.merge_peak_distance) for p in landmarks]
         n = np.min([len(p) for p in landmarks])

@@ -1,26 +1,24 @@
 import logging
 from functools import partial
 from multiprocessing import cpu_count
-from multiprocessing import Manager
 from multiprocessing import Pool
-from multiprocessing import Process
 from string import ascii_uppercase
 from typing import Dict
 from typing import Iterable
 from typing import List
-from typing import Optional
 from typing import Union
 
 import mongoengine
 import numpy as np
 import pandas as pd
 from hdbscan import HDBSCAN
+from joblib import delayed
+from joblib import Parallel
 from scipy import stats
 from shapely.geometry import Polygon as ShapelyPolygon
 from sklearn.cluster import *
 from sklearn.linear_model import HuberRegressor
 from sklearn.mixture import *
-from sklearn.model_selection import ParameterGrid
 from smm import SMM
 
 from cytopy.data.errors import GateError
@@ -38,6 +36,40 @@ from cytopy.utils.geometry import probabilistic_ellipse
 logger = logging.getLogger(__name__)
 
 
+def _generic_polygon_model(
+    model,
+    data: np.ndarray,
+):
+    return model.fit_predict(data)
+
+
+def _smm(model: SMM, data: np.ndarray):
+    model.fit(data)
+    return model.predict(data)
+
+
+def _huber_regressor_gate(params: Dict, x: np.ndarray, y: np.ndarray, default_conf: float):
+    conf = params.pop("conf", default_conf)
+    model = HuberRegressor()
+    model.set_params(**params)
+    model.fit(x.reshape(-1, 1), y)
+    conf = stats.norm.ppf(1 - conf)
+    x = np.array([np.min(x), np.max(x)])
+    y = np.array([np.min(y), np.max(y)])
+    y_pred = model.predict(x.reshape(-1, 1))
+    stdev = np.sqrt(sum((y_pred - y) ** 2) / len(y) - 1)
+    y_lower = y_pred - conf * stdev
+    y_upper = y_pred + conf * stdev
+    return y_lower, y_upper
+
+
+def _covariance(model, data: np.ndarray):
+    model.fit(data)
+    if isinstance(model, SMM):
+        return model.covars_, model.means_
+    return model.covariances_, model.means_
+
+
 class PolygonGate(Gate):
     children = mongoengine.EmbeddedDocumentListField(ChildPolygon)
     envelope_alpha = mongoengine.FloatField(default=0.0)
@@ -50,8 +82,6 @@ class PolygonGate(Gate):
         if self.method != "manual":
             err = "Invalid method, must be a valid Scikit-Learn class or supported model."
             assert self.method in list(globals().keys()), err
-            params = self.method_kwargs or {}
-            self.model = globals()[self.method](**params)
 
     def label_children(self, labels: Dict[str, str], drop: bool = True):
         if len(set(labels.values())) != len(labels.values()):
@@ -93,14 +123,7 @@ class PolygonGate(Gate):
             matched_populations.append(matching_population)
         return matched_populations
 
-    def _fit(self, data: pd.DataFrame, **overwrite_kwargs):
-        if overwrite_kwargs:
-            self.model.set_params(**overwrite_kwargs)
-        if self.method == "SMM":
-            self.model.fit(data[[self.x, self.y]].to_numpy())
-            labels = self.model.predict(data[[self.x, self.y]].to_numpy())
-        else:
-            labels = self.model.fit_predict(data[[self.x, self.y]].to_numpy())
+    def _generate_polygons(self, labels: np.ndarray, data: pd.DataFrame):
         envelope_func = partial(create_envelope, alpha=self.envelope_alpha)
         xy = [data.iloc[np.where(labels == i)][[self.x, self.y]].values for i in np.unique(labels)]
         with Pool(cpu_count()) as pool:
@@ -108,6 +131,25 @@ class PolygonGate(Gate):
         if len(polygons) == 0:
             raise GeometryError("Failed to generate Polygon geometries")
         return polygons
+
+    def _fit(self, data: pd.DataFrame, **overwrite_kwargs):
+        overwrite_kwargs = overwrite_kwargs or {}
+        params = self.method_kwargs or {}
+        params.update(overwrite_kwargs)
+        model = globals()[self.method](**params)
+        if self.method == "SMM":
+            labels = _smm(model=model, data=data[[self.x, self.y]].values)
+        else:
+            labels = _generic_polygon_model(model=model, data=data[[self.x, self.y]].values)
+        return self._generate_polygons(labels=labels, data=data)
+
+    def _fit_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict):
+        grid = self._hyperparameter_grid(parameter_grid=parameter_grid)
+        _worker = partial(_smm) if self.method == "SMM" else partial(_generic_polygon_model)
+        models = [globals()[self.method](**params) for params in grid]
+        with Parallel(n_jobs=cpu_count()) as parallel:
+            labels = parallel(delayed(_worker)(m, data[[self.x, self.y]].values) for m in models)
+        return [self._generate_polygons(labels=i, data=data) for i in labels]
 
     def train(self, data: pd.DataFrame, transform: bool = True):
         data = self.preprocess(data=data, transform=transform)
@@ -138,26 +180,19 @@ class PolygonGate(Gate):
     def predict(self, data: pd.DataFrame, transform: bool = True, **overwrite_kwargs):
         assert len(self.children) > 0, "Call 'train' before predict."
         data = self.preprocess(data=data, transform=transform)
-        if self.downsample_method:
-            polygons = self._fit(data=self._downsample(data=data), **overwrite_kwargs)
-        else:
-            polygons = self._fit(data=data, **overwrite_kwargs)
+        if self.reference_alignment:
+            data = self._align_to_reference(data=data)
+        df = data if self.downsample_method is None else self._downsample(data=data)
+        polygons = self._fit(data=df, **overwrite_kwargs)
         return self._match_to_children(self._generate_populations(data=data, polygons=polygons))
 
     def predict_with_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict, transform: bool = True):
         assert len(self.children) > 0, "Call 'train' before predict."
         data = self.preprocess(data=data, transform=transform)
-        grid = ParameterGrid(parameter_grid)
+        if self.reference_alignment:
+            data = self._align_to_reference(data=data)
         df = data if self.downsample_method is None else self._downsample(data=data)
-        manager = Manager()
-        polygons = manager.list()
-        processes = [
-            Process(target=self._fit_multiprocess_wrap, args=[df, polygons], kwargs=kwargs) for kwargs in grid
-        ]
-        for p in processes:
-            p.start()
-        for p in processes:
-            p.join()
+        polygons = self._fit_hyperparameter_search(data=df, parameter_grid=parameter_grid)
         populations = [
             self._match_to_children(self._generate_populations(data=data, polygons=polys)) for polys in polygons
         ]
@@ -176,20 +211,28 @@ class EllipseGate(PolygonGate):
         valid = ["manual", "GaussianMixture", "BayesianGaussianMixture", "SMM"]
         assert self.method in valid, f"Elliptical gating method should be one of {valid}"
 
+    def _polygon_from_covar(self, covariance_matrix: np.ndarray, means: np.ndarray):
+        ellipses = [probabilistic_ellipse(c, conf=self.conf) for c in covariance_matrix]
+        polygons = [ellipse_to_polygon(centroid, *ellipse) for centroid, ellipse in zip(means, ellipses)]
+        return polygons
+
     def _fit(self, data: pd.DataFrame, **overwrite_kwargs):
         if not self.prob_ellipse:
             return super()._fit(data=data)
-        if self.downsample_method:
-            data = self._downsample(data=data)
-        if overwrite_kwargs:
-            self.model.set_params(**overwrite_kwargs)
-        self.model.fit(data[[self.x, self.y]].to_numpy())
-        if isinstance(self.model, SMM):
-            ellipses = [probabilistic_ellipse(covar, conf=self.conf) for covar in self.model.covars_]
-        else:
-            ellipses = [probabilistic_ellipse(covar, conf=self.conf) for covar in self.model.covariances_]
-        polygons = [ellipse_to_polygon(centroid, *ellipse) for centroid, ellipse in zip(self.model.means_, ellipses)]
-        return polygons
+        overwrite_kwargs = overwrite_kwargs or {}
+        params = self.method_kwargs or {}
+        params.update(overwrite_kwargs)
+        model = globals()[self.method](**params)
+        return self._polygon_from_covar(*_covariance(model=model, data=data[[self.x, self.y]].values))
+
+    def _fit_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict):
+        if not self.prob_ellipse:
+            return super()._fit(data=data)
+        grid = self._hyperparameter_grid(parameter_grid=parameter_grid)
+        models = [globals()[self.method](**params) for params in grid]
+        with Parallel(n_jobs=cpu_count()) as parallel:
+            covar_means = parallel(delayed(_covariance)(m, data[[self.x, self.y]].values) for m in models)
+        return [self._polygon_from_covar(cm[0], cm[1]) for cm in covar_means]
 
 
 class HuberGate(PolygonGate):
@@ -199,31 +242,14 @@ class HuberGate(PolygonGate):
         values["method"] = "HuberRegressor"
         super().__init__(*args, **values)
 
-    def _predict_interval(self, data: pd.DataFrame, conf: Optional[float] = None):
-        conf = conf or self.conf
-        conf = stats.norm.ppf(1 - conf)
-        x = np.array([data[self.x].min(), data[self.x].max()])
-        y = np.array([data[self.y].min(), data[self.y].max()])
-        y_pred = self.model.predict(x.reshape(-1, 1))
-        stdev = np.sqrt(sum((y_pred - y) ** 2) / len(y) - 1)
-        y_lower = y_pred - conf * stdev
-        y_upper = y_pred + conf * stdev
-        return y_lower, y_upper
-
-    def _fit_model(self, data: pd.DataFrame):
-        x = data[self.x].to_numpy().reshape(-1, 1)
-        y = data[self.y].to_numpy()
-        self.model.fit(x, y)
-
     def _fit(self, data: pd.DataFrame, **overwrite_kwargs) -> List[ShapelyPolygon]:
+        assert data is not None, "No data provided"
         overwrite_kwargs = overwrite_kwargs or {}
-        conf = overwrite_kwargs.pop("conf", self.conf)
-        if self.downsample_method:
-            data = self._downsample(data=data)
-        if overwrite_kwargs:
-            self.model.set_params(**overwrite_kwargs)
-        self._fit_model(data=data)
-        y_lower, y_upper = self._predict_interval(data=data, conf=conf)
+        kwargs = self.method_kwargs or {}
+        kwargs.update(overwrite_kwargs)
+        y_lower, y_upper = _huber_regressor_gate(
+            params=self.method_kwargs or {}, x=data[self.x].values, y=data[self.y].values, default_conf=self.conf
+        )
         return [
             create_polygon(
                 [
@@ -236,6 +262,20 @@ class HuberGate(PolygonGate):
                 [y_lower[0], y_lower[1], y_upper[1], y_upper[0], y_lower[0]],
             )
         ]
+
+    def _fit_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict):
+        grid = self._hyperparameter_grid(parameter_grid=parameter_grid)
+        _worker = partial(_huber_regressor_gate, x=data[self.x].values, y=data[self.y].values, default_conf=self.conf)
+        with Parallel(n_jobs=cpu_count()) as parallel:
+            ybounds = parallel(delayed(_worker)(params) for params in grid)
+        x = [
+            data[self.x].min(),
+            data[self.x].max(),
+            data[self.x].max(),
+            data[self.x].min(),
+            data[self.x].min(),
+        ]
+        return [[create_polygon(x, [y[0][0], y[0][1], y[1][1], y[1][0], y[0][0]])] for y in ybounds]
 
 
 def remove_null_populations(population_grid):

@@ -58,7 +58,7 @@ class BaseIndexDocument(mongoengine.EmbeddedDocument):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.index = self._load_index() if self._index else None
+        self._index_cache = None
 
     def _load_index(self):
         try:
@@ -79,6 +79,8 @@ class BaseIndexDocument(mongoengine.EmbeddedDocument):
 
     @property
     def index(self) -> Iterable[int]:
+        if self._index_cache is None:
+            return self._load_index()
         return self._index_cache
 
     @index.setter

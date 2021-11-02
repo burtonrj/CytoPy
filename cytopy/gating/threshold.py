@@ -1,8 +1,7 @@
+import logging
 from functools import partial
 from multiprocessing import cpu_count
-from multiprocessing import Manager
 from multiprocessing import Pool
-from multiprocessing import Process
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -14,15 +13,19 @@ import numpy as np
 import pandas as pd
 from detecta import detect_peaks
 from dtw import dtw
+from joblib import delayed
+from joblib import Parallel
 from KDEpy import FFTKDE
 from scipy.signal import savgol_filter
-from sklearn.model_selection import ParameterGrid
 
 from cytopy.data.errors import GateError
 from cytopy.data.population import Population
 from cytopy.data.population import ThresholdGeom
 from cytopy.gating.base import ChildThreshold
 from cytopy.gating.base import Gate
+from cytopy.utils.kde import kde_and_peak_finding
+
+logger = logging.getLogger(__name__)
 
 
 def find_inflection_point(
@@ -162,14 +165,6 @@ def find_local_minima(p: np.array, x: np.ndarray, peaks: np.ndarray) -> float:
     return float(x[np.where(p == local_min)[0][0]])
 
 
-def kde_and_peak_finding(
-    x: np.ndarray, kernel: str, bw: Union[str, float], min_peak_threshold: float, peak_boundary: float
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    x_grid, p = FFTKDE(kernel=kernel, bw=bw).fit(x).evaluate()
-    peaks = detect_peaks(p, mph=p[np.argmax(p)] * min_peak_threshold, mpd=len(p) * peak_boundary)
-    return peaks, x_grid, p
-
-
 def process_peaks(
     x: np.ndarray, p: np.ndarray, peaks: np.ndarray, x_grid: np.ndarray, incline: bool, q: Optional[float] = None
 ):
@@ -190,7 +185,7 @@ def find_threshold(
     min_peak_threshold: float,
     peak_boundary: float,
     incline: bool,
-    q: Optional[float] = None,
+    q: Optional[float],
 ) -> float:
     peaks, x_grid, p = kde_and_peak_finding(
         x=x, kernel=kernel, bw=bw, min_peak_threshold=min_peak_threshold, peak_boundary=peak_boundary
@@ -373,8 +368,13 @@ class ThresholdBase(Gate):
     def _fit(self, data: pd.DataFrame, **overwrite_kwargs):
         return None, None
 
+    def _fit_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict):
+        return []
+
     def train(self, data: pd.DataFrame, transform: bool = True) -> (Dict[str, pd.DataFrame], List[Union[float, None]]):
         data = self.preprocess(data=data, transform=transform)
+        if self.downsample_method:
+            data = self._downsample(data=data)
         if len(self.children) > 0:
             self.children.delete()
         thresholds = self._fit(data=data)
@@ -408,7 +408,12 @@ class ThresholdBase(Gate):
     def predict(self, data: pd.DataFrame, transform: bool = True, **overwrite_kwargs):
         assert len(self.children) > 0, "Call 'train' before predict."
         data = self.preprocess(data=data, transform=transform)
-        thresholds = self._fit(data=data, **overwrite_kwargs)
+        if data.shape[0] <= 3:
+            raise GateError("Data provided contains 3 or less observations.")
+        if self.reference_alignment:
+            data = self._align_to_reference(data=data)
+        df = data if self.downsample_method is None else self._downsample(data=data)
+        thresholds = self._fit(data=df, **overwrite_kwargs)
         partitioned_data = apply_threshold(
             data=data,
             x=self.x,
@@ -419,24 +424,17 @@ class ThresholdBase(Gate):
         pops = self._generate_populations(data=partitioned_data, x_threshold=thresholds[0], y_threshold=thresholds[1])
         return self._match_to_children(new_populations=pops)
 
-    def predict_with_hyperparameter_search(
-        self, data: pd.DataFrame, parameter_grid: Dict, transform: bool = True, njobs: int = -1
-    ):
+    def predict_with_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict, transform: bool = True):
         assert len(self.children) > 0, "Call 'train' before predict."
+        if data.shape[0] <= 3:
+            raise GateError("Data provided contains 3 or less observations.")
         data = self.preprocess(data=data, transform=transform)
+        if self.reference_alignment:
+            data = self._align_to_reference(data=data)
         df = data if self.downsample_method is None else self._downsample(data=data)
-        grid = ParameterGrid(parameter_grid)
-        manager = Manager()
-        thresholds = manager.list()
-        processes = [
-            Process(target=self._fit_multiprocess_wrap, args=[df, thresholds], kwargs=kwargs) for kwargs in grid
-        ]
         partitioner = partial(apply_threshold, data=data, x=self.x, y=self.y)
-        for p in processes:
-            p.start()
-        for p in processes:
-            p.join()
-        with Pool(njobs) as pool:
+        thresholds = self._fit_hyperparameter_search(data=df, parameter_grid=parameter_grid)
+        with Pool(cpu_count()) as pool:
             partitioned_data = list(pool.map(partitioner, thresholds))
         populations = [
             self._match_to_children(
@@ -464,8 +462,8 @@ class QuantileGate(ThresholdBase):
         super().__init__(*args, **values, method=method)
 
     def _fit(self, data: pd.DataFrame, **overwrite_kwargs) -> Tuple[float, Union[float, None]]:
-        kwargs = overwrite_kwargs or {}
-        q = kwargs.get("q", self.q)
+        overwrite_kwargs = overwrite_kwargs or {}
+        q = overwrite_kwargs.get("q", self.q)
         if data.shape[0] <= 3:
             raise GateError("Data provided contains 3 or less observations.")
         thresholds = []
@@ -476,11 +474,21 @@ class QuantileGate(ThresholdBase):
                 thresholds.append(None)
         return thresholds
 
+    def _fit_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict):
+        grid = self._hyperparameter_grid(parameter_grid=parameter_grid)
+        q = [x["q"] for x in grid]
+        with Parallel(cpu_count()) as parallel:
+            x = parallel(delayed(np.quantile)(data[self.x].value, i) for i in q)
+            y = parallel(delayed(np.quantile)(data[self.y].value, i) for i in q)
+        return [(i, j) for i, j in zip(x, y)]
+
 
 class ThresholdGate(ThresholdBase):
     children = mongoengine.EmbeddedDocumentListField(ChildThreshold)
     kernel = mongoengine.StringField(required=True, default="gaussian")
-    bw = mongoengine.StringField(required=True, default="silverman")
+    bw_method = mongoengine.StringField(required=True, default="silverman", choices=["ISJ", "silverman"])
+    bw_x = mongoengine.FloatField(required=False)
+    bw_y = mongoengine.FloatField(required=False)
     min_peak_threshold = mongoengine.FloatField(required=True, default=0.05)
     peak_boundary = mongoengine.FloatField(required=True, default=0.1)
     incline = mongoengine.BooleanField(required=True, default=False)
@@ -495,10 +503,8 @@ class ThresholdGate(ThresholdBase):
         kwargs["peak_boundary"] = kwargs.get("peak_boundary", self.peak_boundary)
         kwargs["incline"] = kwargs.get("incline", self.incline)
         kwargs["kernel"] = kwargs.get("kernel", self.kernel)
-        try:
-            kwargs["bw"] = kwargs.get("bw", float(self.bw))
-        except ValueError:
-            kwargs["bw"] = kwargs.get("bw", self.bw)
+        bw_x = kwargs.pop("bw_x", self.bw_method if not self.bw_x else self.bw_x)
+        bw_y = kwargs.pop("bw_y", self.bw_method if not self.bw_y else self.bw_y)
 
         if self.method == "manual":
             if self.x:
@@ -508,15 +514,36 @@ class ThresholdGate(ThresholdBase):
             return self.x_threshold, self.y_threshold
         if data.shape[0] <= 3:
             raise GateError("Data provided contains 3 or less observations.")
-        if self.downsample_method:
-            data = self._downsample(data=data)
         thresholds = []
-        for d in [self.x, self.y]:
+        for d, bw in zip([self.x, self.y], [bw_x, bw_y]):
             if d:
-                thresholds.append(find_threshold(x=data[d].values, **kwargs))
+                thresholds.append(find_threshold(x=data[d].values, bw=bw, **kwargs))
             else:
                 thresholds.append(None)
         return thresholds
+
+    def _fit_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict):
+        grid = self._hyperparameter_grid(parameter_grid=parameter_grid)
+        grid = [
+            [
+                (
+                    g.get("kernel", self.kernel),
+                    g.get(k, self.bw_method if not default else default),
+                    g.get("min_peak_threshold", self.min_peak_threshold),
+                    g.get("peak_boundary", self.peak_boundary),
+                    g.get("incline", self.incline),
+                    g.get("q", None),
+                )
+                for g in grid
+            ]
+            for k, default in [("bw_x", self.bw_x), ("bw_y", self.bw_y)]
+        ]
+        with Parallel(n_jobs=cpu_count()) as parallel:
+            x_thresholds = parallel(delayed(find_threshold)(x=data[self.x].values, **kwargs) for kwargs in grid[0])
+            if self.y:
+                y_thresholds = parallel(delayed(find_threshold)(x=data[self.y].values, **kwargs) for kwargs in grid[0])
+                return [(i, j) for i, j in zip(x_thresholds, y_thresholds)]
+            return x_thresholds
 
 
 def differential(x):
@@ -526,19 +553,23 @@ def differential(x):
 
 class DDTW(ThresholdBase):
     kernel = mongoengine.StringField(required=True, default="gaussian")
-    bw = mongoengine.StringField(required=True, default="silverman")
+    bw_method = mongoengine.StringField(required=True, default="silverman", choices=["ISJ", "silverman"])
+    bw_x = mongoengine.FloatField(required=False)
+    bw_y = mongoengine.FloatField(required=False)
     grid_n = mongoengine.IntField(required=True, default=1000)
     x_threshold = mongoengine.FloatField(required=True)
     y_threshold = mongoengine.FloatField(required=False)
 
     def __init__(self, *args, **kwargs):
         kwargs.pop("method", None)
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs, method="DDTW")
         if self.y:
             if not self.y_threshold:
                 raise AttributeError("No value provided for Y-axis threshold")
-        if self.reference_alignment:
-            raise AttributeError("Reference alignment is not supported for DDTW gate. See docs.")
+
+    def predict_with_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict, transform: bool = True):
+        logger.warning(f"DDTW does not support hyperparameter search, defaulting to 'predict'")
+        return self.predict(data=data, transform=transform)
 
     def _fit(self, data: pd.DataFrame, **overwrite_kwargs) -> Tuple[float, Union[float, None]]:
         thresholds = pd.DataFrame(
@@ -549,20 +580,16 @@ class DDTW(ThresholdBase):
         y = None
         if self.y:
             y = thresholds[self.y].values[0]
-        if self.reference is None:
+        if self._reference_cache is None:
             return [x, y]
 
-        overwrite_kwargs = overwrite_kwargs or {}
-        kernel = overwrite_kwargs.get("kernel", self.kernel)
-        grid_n = overwrite_kwargs.get("grid_n", self.grid_n)
-
-        try:
-            bw = overwrite_kwargs.get("bw", float(self.bw))
-        except ValueError:
-            bw = overwrite_kwargs.get("bw", self.bw)
-
+        kwargs = overwrite_kwargs or {}
+        kernel = kwargs.get("kernel", self.kernel)
+        grid_n = kwargs.get("grid_n", self.grid_n)
+        bw_x = kwargs.pop("bw_x", self.bw_method if not self.bw_x else self.bw_x)
+        bw_y = kwargs.pop("bw_y", self.bw_method if not self.bw_y else self.bw_y)
         thresholds = []
-        for d, t in zip([self.x, self.y], [x, y]):
+        for d, t, bw in zip([self.x, self.y], [x, y], [bw_x, bw_y]):
             if not d:
                 thresholds.append(None)
             else:
