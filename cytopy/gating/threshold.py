@@ -434,7 +434,7 @@ class ThresholdBase(Gate):
                     ref.loc[self.children.get(name=p.population_name).index]
                     .sample(n=len(p.index), replace=True)
                     .values,
-                    data.loc[p.index].values,
+                    data[features].loc[p.index].values,
                 )
                 for p in pops
             ]

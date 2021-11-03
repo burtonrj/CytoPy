@@ -7,6 +7,7 @@ from typing import Tuple
 from typing import Union
 
 import seaborn as sns
+from fast_histogram import histogram2d
 from KDEpy import FFTKDE
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
@@ -344,9 +345,11 @@ def plot_gate(
     data_source: str = "primary",
     legend_kwargs: Optional[Dict] = None,
     ax: Optional[plt.Axes] = None,
+    n_limit: Optional[int] = None,
     figsize: Tuple[float, float] = (5.0, 5.0),
     **kwargs,
 ):
+    n_limit = n_limit or np.inf
     try:
         ax = ax or plt.subplots(figsize=figsize)[1]
         kwargs = kwargs or {}
@@ -355,11 +358,16 @@ def plot_gate(
         transform_y_kwargs = kwargs.pop("transform_y_kwargs", gate.transform_y_kwargs)
         if filegroup is not None:
             data = filegroup.load_population_df(population=gate.parent, transform=None, data_source=data_source)
+            if data.shape[0] > n_limit:
+                data = data.sample(n=n_limit)
             geom_objs = [filegroup.populations.get(population_name=c.name) for c in gate.children]
             if gate.reference_alignment:
                 data = _inverse_gate_transform(gate, gate.preprocess(data=data, transform=True))
         else:
-            data = _inverse_gate_transform(gate, gate.reference)
+            data = gate.reference
+            if data.shape[0] > n_limit:
+                data = data.sample(n=n_limit)
+            data = _inverse_gate_transform(gate, data)
             geom_objs = gate.children
         ax = cyto_plot(
             data=data,

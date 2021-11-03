@@ -89,7 +89,7 @@ class GatingStrategy(mongoengine.Document):
     def print_population_tree(self, **kwargs):
         return self.filegroup.print_population_tree(data_source=self.data_source, **kwargs)
 
-    def _population_data(self, population_name: str, data_source: Optional[str] = None):
+    def population_data(self, population_name: str, data_source: Optional[str] = None):
         data_source = data_source or self.data_source
         return self.filegroup.load_population_df(population=population_name, transform=None, data_source=data_source)
 
@@ -101,9 +101,11 @@ class GatingStrategy(mongoengine.Document):
         self.hyperparameter_search[gate.gate_name] = params
         return self
 
-    def plot_gate(self, gate: str, plot_training_data: bool = False, **plot_kwargs):
-        fg = self.filegroup if plot_training_data else None
-        return plot_gate(gate=self.get_gate(gate), filegroup=fg, data_source=self.data_source, **plot_kwargs)
+    def plot_gate(self, gate: str, plot_training_data: bool = False, n_limit: Optional[int] = None, **plot_kwargs):
+        fg = None if plot_training_data else self.filegroup
+        return plot_gate(
+            gate=self.get_gate(gate), filegroup=fg, data_source=self.data_source, n_limit=n_limit, **plot_kwargs
+        )
 
     def plot_all_gates(
         self,
@@ -111,6 +113,7 @@ class GatingStrategy(mongoengine.Document):
         col_wrap: int = 2,
         figure_kwargs: Optional[Dict] = None,
         plot_kwargs: Optional[Dict] = None,
+        n_limit: Optional[int] = 25000,
     ):
         figure_kwargs = figure_kwargs or {}
         plot_kwargs = plot_kwargs or {}
@@ -120,6 +123,7 @@ class GatingStrategy(mongoengine.Document):
                 gate=gate.gate_name,
                 plot_training_data=plot_training_data,
                 ax=axes[i],
+                n_limit=n_limit,
                 **plot_kwargs.get(gate.gate_name, {}),
             )
             axes[i].set_title(gate.gate_name)
@@ -137,7 +141,7 @@ class GatingStrategy(mongoengine.Document):
         **plot_kwargs,
     ):
         return cyto_plot(
-            data=self._population_data(population_name=population_name, data_source=data_source),
+            data=self.population_data(population_name=population_name, data_source=data_source),
             x=x,
             y=y,
             transform_x=transform_x,
@@ -156,8 +160,8 @@ class GatingStrategy(mongoengine.Document):
         legend_kwargs: Optional[Dict] = None,
         **plot_kwargs,
     ):
-        background_population = self._population_data(population_name=background_population)
-        overlay_populations = {p: self._population_data(population_name=p) for p in overlay_populations}
+        background_population = self.population_data(population_name=background_population)
+        overlay_populations = {p: self.population_data(population_name=p) for p in overlay_populations}
         return overlay(
             x=x,
             y=y,
@@ -172,19 +176,22 @@ class GatingStrategy(mongoengine.Document):
     def _gate_children_exist(self, gate: Gate):
         try:
             for child in gate.children:
-                assert child.name in self.filegroup.tree.keys()
+                assert child.name in self.filegroup.tree[self.data_source].keys()
         except AssertionError:
             raise ValueError(
                 "Cannot edit a gate that has not been applied; gate children not present in population tree."
             )
         return gate
 
-    def edit_threshold_populations(self, gate: str, x_threshold: float, y_threshold: Optional[float] = None):
+    def edit_threshold_populations(
+        self, gate: str, x_threshold: float, y_threshold: Optional[float] = None, transform: bool = True
+    ):
         gate = self._gate_children_exist(gate=self.get_gate(gate=gate))
-        parent = self._population_data(population_name=gate.parent)
+        parent = self.population_data(population_name=gate.parent)
         parent = gate.preprocess(data=parent, transform=True)
         thresholds = pd.DataFrame({gate.x: [x_threshold], gate.y: [y_threshold]})
-        thresholds = gate.transform(data=thresholds)
+        if transform:
+            thresholds = gate.transform(data=thresholds)
         for child in gate.children:
             pop = self.filegroup.get_population(population_name=child.name, data_source=self.data_source)
             self.filegroup.update_population(
@@ -197,16 +204,17 @@ class GatingStrategy(mongoengine.Document):
             )
             self._edit_downstream_effects(population_name=child.name)
 
-    def edit_polygon_populations(self, gate: str, coords: Dict[str, Iterable[float]]):
+    def edit_polygon_populations(self, gate: str, coords: Dict[str, Iterable[float]], transform: bool = True):
         gate = self._gate_children_exist(gate=self.get_gate(gate=gate))
-        parent = self._population_data(population_name=gate.parent)
+        parent = self.population_data(population_name=gate.parent)
         parent = gate.preprocess(data=parent, transform=True)
         for child in gate.children:
             pop = self.filegroup.get_population(population_name=child.name, data_source=self.data_source)
             try:
                 xy = np.array(coords[pop.population_name])
                 assert xy.shape[1] == 2
-                xy = gate.transform(data=pd.DataFrame(xy, columns=[gate.x, gate.y])).values
+                if transform:
+                    xy = gate.transform(data=pd.DataFrame(xy, columns=[gate.x, gate.y])).values
                 self.filegroup.update_population(
                     update_polygon(population=pop, parent_data=parent, x_values=xy[:, 0], y_values=xy[:, 1])
                 )
@@ -221,8 +229,9 @@ class GatingStrategy(mongoengine.Document):
             population=population_name, data_source=self.data_source
         )
         for pop in downstream_populations:
+            pop = self.filegroup.get_population(population_name=pop, data_source=self.data_source)
             gate = self.get_population_gate(population_name=pop.population_name)
-            parent = gate.preprocess(self._population_data(population_name=gate.parent), transform=True)
+            parent = gate.preprocess(self.population_data(population_name=gate.parent), transform=True)
             if isinstance(pop.geom, ThresholdGeom):
                 self.filegroup.update_population(
                     update_threshold(
@@ -242,7 +251,7 @@ class GatingStrategy(mongoengine.Document):
     def preview(self, gate: Union[str, Gate], **plot_kwargs):
         if isinstance(gate, str):
             gate = self.get_gate(gate)
-        gate.train(data=self._population_data(population_name=gate.parent), transform=True)
+        gate.train(data=self.population_data(population_name=gate.parent), transform=True)
         return plot_gate(gate=gate, **plot_kwargs)
 
     def apply(
@@ -258,13 +267,13 @@ class GatingStrategy(mongoengine.Document):
             gate = self.get_gate(gate)
         if gate.gate_name in self.hyperparameter_search.keys():
             populations = gate.predict_with_hyperparameter_search(
-                data=self._population_data(population_name=gate.parent),
+                data=self.population_data(population_name=gate.parent),
                 parameter_grid=self.hyperparameter_search[gate.gate_name],
                 transform=True,
             )
         else:
             populations = gate.predict(
-                data=self._population_data(population_name=gate.parent), transform=True, **overwrite_kwargs
+                data=self.population_data(population_name=gate.parent), transform=True, **overwrite_kwargs
             )
         for pop in populations:
             self.filegroup.add_population(population=pop)
@@ -288,8 +297,6 @@ class GatingStrategy(mongoengine.Document):
         gates_to_apply = list(self.gates)
         i = 0
         iteration_limit = len(gates_to_apply) * 100
-        stats = defaultdict(list)
-        root_n = self.filegroup.get_population(population_name="root", data_source=self.data_source).n
         while len(gates_to_apply) > 0:
             if i >= len(gates_to_apply):
                 i = 0
@@ -301,15 +308,6 @@ class GatingStrategy(mongoengine.Document):
                         filegroup_id=self.filegroup.primary_id,
                     )
                 self.apply(gate=gate, plot=False, print_stats=False)
-                for child in gate.children:
-                    n = self.filegroup.get_population(population_name=child.name, data_source=self.data_source).n
-                    parent_n = self.filegroup.get_population(
-                        population_name=gate.parent, data_source=self.data_source
-                    ).n
-                    stats["Gate"].append(gate.gate_name)
-                    stats["Population"].append(child.name)
-                    stats["% of parent"].append(n / parent_n * 100)
-                    stats["% of root"].append(n / root_n * 100)
                 gates_to_apply = [g for g in gates_to_apply if g.gate_name != gate.gate_name]
             i += 1
             iteration_limit -= 1
@@ -318,7 +316,6 @@ class GatingStrategy(mongoengine.Document):
                     "Maximum number of iterations reached. This means that one or more parent "
                     "populations are not being identified."
                 )
-        return pd.DataFrame(stats)
 
     def apply_to_experiment(
         self,
@@ -347,16 +344,13 @@ class GatingStrategy(mongoengine.Document):
         None
         """
         logger.info(f" -- Gating {experiment.experiment_id} using {self.name} strategy --")
-        stats = list()
         sample_ids = sample_ids or experiment.list_samples()
         if plots_path is not None:
             assert os.path.isdir(plots_path), "Invalid plots_path, directory does not exist"
         for s in progress_bar(sample_ids, verbose=verbose):
             self.load_data(experiment=experiment, sample_id=s)
             try:
-                sample_stats = self.apply_all()
-                sample_stats["sample_id"] = s
-                stats.append(sample_stats)
+                self.apply_all()
                 self.save(save_strategy=False, save_filegroup=True)
                 if plots_path is not None:
                     fig = self.plot_all_gates()
@@ -377,7 +371,6 @@ class GatingStrategy(mongoengine.Document):
                 self.filegroup = None
                 gc.collect()
         logger.info(f" -- {experiment.experiment_id} complete --")
-        return pd.concat(stats).set_index("sample_id")
 
     def save(self, save_strategy: bool = True, save_filegroup: bool = True, *args, **kwargs):
         """

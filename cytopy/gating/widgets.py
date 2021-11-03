@@ -15,8 +15,14 @@ from matplotlib.colors import LogNorm
 from matplotlib.widgets import PolygonSelector
 from shapely.geometry import Polygon
 
+from ..data.errors import MissingPopulationError
 from ..data.population import Population
 from ..utils.dim_reduction import dimension_reduction_with_sampling
+from .base import Gate
+from .polygon import PolygonGate
+from .template import FileGroup
+from .template import GatingStrategy
+from .threshold import ThresholdBase
 from cytopy.utils.geometry import inside_polygon
 
 logger = logging.getLogger(__name__)
@@ -159,21 +165,22 @@ class InteractiveGateEditor(widgets.HBox):
             self.selector = None
         self.apply_button.disabled = False
 
-    def _load_gate(self, change: Dict):
-        self.gate = self.gs.gate_children_present_in_filegroup(self.gs.get_gate(gate=change["new"]))
-        self.progress_bar.value = 1
-        transforms, transform_kwargs = self.gate.transform_info()
-        n = self.gs.filegroup.get_population(population_name=self.gate.parent).n
-        sample_size = self.downsample if n > 10000 else None
-        self.parent_data = self.gs.filegroup.load_population_df(
-            population=self.gate.parent,
-            transform=transforms,
-            transform_kwargs=transform_kwargs,
-            sample_size=sample_size,
-            sampling_method="uniform",
-        )
-        self.progress_bar.value = 2
+    def _load_and_check_children(self, gate: str) -> Gate:
+        gate = self.gs.get_gate(gate=gate)
+        for child in gate.children:
+            if child.name not in self.gs.filegroup.list_populations():
+                raise MissingPopulationError(f"{child.name} not found in associated filegroup!")
+        return gate
 
+    def _load_gate(self, change: Dict):
+        self.gate = self._load_and_check_children(gate=change["new"])
+        self.progress_bar.value = 1
+        data = self.gs.population_data(population_name=self.gate.parent)
+        if data.shape[0] > 10000 and self.downsample is not None:
+            if self.downsample < data.shape[0]:
+                data = data.sample(n=self.downsample)
+        self.parent_data = self.gate.preprocess(data=data, transform=True)
+        self.progress_bar.value = 2
         if self.default_y not in self.parent_data.columns:
             raise ValueError(
                 f"Chosen default Y-axis variable {self.default_y} does not exist for this data. "
@@ -190,7 +197,7 @@ class InteractiveGateEditor(widgets.HBox):
         self.progress_bar.value = 5
 
     def _draw_artists(self):
-        if isinstance(self.gate, ThresholdGate):
+        if isinstance(self.gate, ThresholdBase):
             self.artists["x"] = self.ax.axvline(self.gate_geometry["x_threshold"], c="red")
             if self.gate_geometry["y_threshold"] is not None:
                 self.artists["y"] = self.ax.axhline(self.gate_geometry["y_threshold"], c="red")
@@ -220,7 +227,7 @@ class InteractiveGateEditor(widgets.HBox):
                 "#52b58c",
             ]
         )
-        if isinstance(self.gate, ThresholdGate):
+        if isinstance(self.gate, ThresholdBase):
             pop = self.gs.filegroup.get_population(population_name=self.gate.children[0].name)
             return {"x_threshold": pop.geom.x_threshold, "y_threshold": pop.geom.y_threshold}
         geom = {}
@@ -273,23 +280,24 @@ class InteractiveGateEditor(widgets.HBox):
 
     def _apply_click(self, _):
         self.progress_bar.value = 2
-        if isinstance(self.gate, ThresholdGate):
-            self.gs.edit_threshold_gate(
-                gate_name=self.gate.gate_name,
+        if isinstance(self.gate, ThresholdBase):
+            self.gs.edit_threshold_populations(
+                gate=self.gate.gate_name,
                 x_threshold=self.gate_geometry["x_threshold"],
                 y_threshold=self.gate_geometry["y_threshold"],
                 transform=False,
             )
             self.progress_bar.value = 5
         else:
-            self.gs.edit_polygon_gate(
-                gate_name=self.gate.gate_name,
+            self.gs.edit_polygon_populations(
+                gate=self.gate.gate_name,
                 coords={
                     pop_name: df[[self.gate.x, self.gate.y]].values for pop_name, df in self.gate_geometry.items()
                 },
                 transform=False,
             )
             self.progress_bar.value = 5
+        logger.info("New gate applied.")
 
     def _save_click(self, _):
         self.progress_bar.value = 1
