@@ -6,6 +6,26 @@ import pandas as pd
 import seaborn as sns
 
 
+class ColumnWrapFigure(plt.Figure):
+    def __init__(self, n: int, col_wrap: int, *args, **kwargs):
+        rows = n // col_wrap
+        rows += n % col_wrap
+        kwargs = kwargs or {}
+        figsize = kwargs.pop("figsize", (rows * 2.5, col_wrap * 2.5))
+        super().__init__(*args, **kwargs, figsize=figsize)
+        self.rows = rows
+        self._i = 1
+        self.n = n
+        self.col_wrap = col_wrap
+
+    def add_subplot(self, *args, **kwargs):
+        if self._i > self.n:
+            raise ValueError("Figure is full! Define figure with more rows to add more subplots.")
+        ax = super().add_subplot(self.rows, self.col_wrap, self._i, *args, **kwargs)
+        self._i += 1
+        return ax
+
+
 def build_plot_grid(n: int, col_wrap: int, **kwargs):
     kwargs = kwargs or {}
     rows = n // col_wrap

@@ -47,7 +47,7 @@ from cytopy.data.errors import GateError
 from cytopy.data.population import PolygonGeom
 from cytopy.data.population import ThresholdGeom
 from cytopy.data.read_write import BaseIndexDocument
-from cytopy.gating.fda_norm import LandmarkRegistration
+from cytopy.utils.fda_norm import LandmarkRegistration
 from cytopy.utils.sampling import density_dependent_downsampling
 from cytopy.utils.sampling import faithful_downsampling
 from cytopy.utils.sampling import uniform_downsampling

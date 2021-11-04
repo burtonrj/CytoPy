@@ -47,6 +47,7 @@ import pandas as pd
 from ..feedback import progress_bar
 from ..utils.sampling import sample_dataframe
 from .errors import DuplicateSampleError
+from .errors import MissingPopulationError
 from .errors import MissingSampleError
 from .errors import PanelError
 from .fcs import FileGroup
@@ -501,17 +502,20 @@ def single_cell_dataframe(
         kwargs.pop("population")
 
     for _id in progress_bar(sample_ids, verbose=verbose):
-        fg = experiment.get_sample(sample_id=_id)
-        if data_source not in fg.file_paths.keys():
-            logger.warning(f"{_id} missing data source {data_source}")
-            continue
-        logger.debug(f"Loading FileGroup data from {_id}; {fg.id}")
-        pop_data = getattr(fg, method)(**kwargs)
-        pop_data["sample_id"] = _id
-        pop_data["subject_id"] = None
-        if fg.subject:
-            pop_data["subject_id"] = fg.subject.subject_id
-        data.append(pop_data)
+        try:
+            fg = experiment.get_sample(sample_id=_id)
+            if data_source not in fg.file_paths.keys():
+                logger.warning(f"{_id} missing data source {data_source}")
+                continue
+            logger.debug(f"Loading FileGroup data from {_id}; {fg.id}")
+            pop_data = getattr(fg, method)(**kwargs)
+            pop_data["sample_id"] = _id
+            pop_data["subject_id"] = None
+            if fg.subject:
+                pop_data["subject_id"] = fg.subject.subject_id
+            data.append(pop_data)
+        except MissingPopulationError as e:
+            logger.error(f"{_id} missing population(s): {e}")
 
     data = pd.concat(data).reset_index().rename({"Index": "original_index"}, axis=1)
 

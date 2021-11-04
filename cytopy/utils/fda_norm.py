@@ -65,22 +65,28 @@ class LandmarkRegistration:
     def __init__(
         self,
         kernel: str = "gaussian",
-        bw: Union[str, float] = "silverman",
+        bw: Union[str, float] = "ISJ",
         min_peak_threshold: float = 0.001,
         merge_peak_distance: float = 0.1,
+        min_peak_distance: float = 0.1,
+        grid_n: int = 100,
     ):
         self.kernel = kernel
         self.bw = bw
         self.min_peak_threshold = min_peak_threshold
         self.merge_peak_distance = merge_peak_distance
+        self.min_peak_distance = min_peak_distance
         self.original_functions = None
         self.landmarks = None
         self.warping_functions = None
+        self.grid_n = grid_n
 
-    def _compute_original_functions(self, data: np.ndarray):
-        x = np.linspace(np.min(data) - 0.1, np.max(data) + 0.1, 100000)
-        functions = [FFTKDE(kernel=self.kernel, bw=self.bw).fit(data[i, :]).evaluate(x) for i in range(data.shape[0])]
-        landmarks = [peaks(y, x, mph=0.001 * y.max()) for y in functions]
+    def _compute_original_functions(self, data: np.ndarray, **peak_kwargs):
+        x = np.linspace(np.min([np.min(x) for x in data]) - 0.1, np.max([np.max(x) for x in data]) + 0.1, self.grid_n)
+        functions = [FFTKDE(kernel=self.kernel, bw=self.bw).fit(i).evaluate(x) for i in data]
+        peak_kwargs = peak_kwargs or {}
+        mpd = peak_kwargs.pop("mpd", self.min_peak_distance * np.max(x))
+        landmarks = [peaks(y, x, mph=self.min_peak_threshold * y.max(), mpd=mpd, **peak_kwargs) for y in functions]
         landmarks = [merge_peaks(p, self.merge_peak_distance) for p in landmarks]
         n = np.min([len(p) for p in landmarks])
         self.landmarks = np.array([sorted(filter_peaks(p, x, y, n)) for p, y in zip(landmarks, functions)])
