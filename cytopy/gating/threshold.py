@@ -594,7 +594,7 @@ class DDTW(ThresholdBase):
         logger.warning(f"DDTW does not support hyperparameter search, defaulting to 'predict'")
         return self.predict(data=data, transform=transform)
 
-    def _fit(self, data: pd.DataFrame, **overwrite_kwargs) -> Tuple[float, Union[float, None]]:
+    def _fit(self, data: pd.DataFrame, **overwrite_kwargs) -> List:
         thresholds = pd.DataFrame(
             {k: [t] for k, t in zip([self.x, self.y], [self.x_threshold, self.y_threshold]) if t is not None}
         )
