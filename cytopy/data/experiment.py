@@ -409,7 +409,7 @@ def single_cell_dataframe(
     experiment: Experiment,
     populations: Optional[Union[str, List[str]]] = "root",
     regex: Optional[str] = None,
-    transform: Union[str, Dict] = "asinh",
+    transform: Optional[Union[str, Dict]] = "asinh",
     transform_kwargs: Optional[Dict] = None,
     sample_ids: Optional[List[str]] = None,
     verbose: bool = True,
