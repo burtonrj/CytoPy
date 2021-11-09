@@ -2,7 +2,6 @@ from collections import defaultdict
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Tuple
 from typing import Type
 from typing import Union
 
@@ -20,17 +19,8 @@ from .clustering import init_cluster_method
 from .clustering import remove_null_features
 from .metrics import init_internal_metrics
 from .metrics import InternalMetric
-from .plotting import clustered_heatmap
-from .plotting import plot_cluster_membership
-from .plotting import plot_cluster_membership_sample
-from .plotting import plot_meta_clusters
 from cytopy.feedback import progress_bar
 from cytopy.utils.dim_reduction import dimension_reduction_with_sampling
-
-
-def count_to_proportion(df):
-    df["Percentage"] = (df["Count"] / df["Count"].sum()) * 100
-    return df
 
 
 class SingleClustering(Clustering):
@@ -111,7 +101,7 @@ class SingleClustering(Clustering):
     ):
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
-        method = init_cluster_method(method=method, **kwargs)
+        method = init_cluster_method(method=method, verbose=self.verbose, **kwargs)
         self.data = method.cluster(data=self.data, features=features)
         return self
 
@@ -137,7 +127,7 @@ class SingleClustering(Clustering):
         )
 
         clustering_params = clustering_params or {}
-        method = self._init_cluster_method(method=method, **clustering_params)
+        method = init_cluster_method(method=method, verbose=self.verbose, **clustering_params)
         data = method.global_clustering(data=data, features=features)
         self.data["cluster_label"] = data["cluster_label"]
         return self
@@ -153,7 +143,7 @@ class SingleClustering(Clustering):
     ):
         overwrite_features = overwrite_features or self.features
         features = remove_null_features(self.data, features=overwrite_features)
-        method = self._init_cluster_method(method=method, **kwargs)
+        method = init_cluster_method(method=method, verbose=self.verbose, **kwargs)
         data = method.meta_clustering(
             data=self.data,
             features=features,
@@ -190,68 +180,6 @@ class SingleClustering(Clustering):
         """
         self.data["meta_label"] = None
         return self
-
-    def plot(
-        self,
-        meta_clusters: bool = False,
-        sample_id: Optional[str] = None,
-        sample_size: Union[int, None] = 100000,
-        sampling_method: str = "uniform",
-        method: Union[str, Type] = "UMAP",
-        dim_reduction_kwargs: dict or None = None,
-        label: str = "cluster_label",
-        discrete: bool = True,
-        **kwargs,
-    ):
-        if meta_clusters:
-            return plot_meta_clusters(
-                data=self.data,
-                features=self.features,
-                colour_label=label,
-                discrete=discrete,
-                method=method,
-                dim_reduction_kwargs=dim_reduction_kwargs,
-                **kwargs,
-            )
-        if sample_id is None:
-            return plot_cluster_membership(
-                data=self.data,
-                features=self.features,
-                sample_size=sample_size,
-                sampling_method=sampling_method,
-                method=method,
-                dim_reduction_kwargs=dim_reduction_kwargs,
-                label=label,
-                discrete=discrete,
-                **kwargs,
-            )
-        return plot_cluster_membership_sample(
-            data=self.data,
-            features=self.features,
-            sample_id=sample_id,
-            method=method,
-            dim_reduction_kwargs=dim_reduction_kwargs,
-            label=label,
-            discrete=discrete,
-            **kwargs,
-        )
-
-    def heatmap(
-        self,
-        features: Optional[str] = None,
-        sample_id: Optional[str] = None,
-        meta_label: bool = True,
-        include_labels: Optional[List[str]] = None,
-        **kwargs,
-    ):
-        features = features or self.features
-        data = self.data.copy()
-        if include_labels:
-            if meta_label:
-                data = data[data["meta_label"].isin(include_labels)]
-            else:
-                data = data[data["cluster_label"].isin(include_labels)]
-        return clustered_heatmap(data=data, features=features, sample_id=sample_id, meta_label=meta_label, **kwargs)
 
     def performance(
         self,
@@ -290,32 +218,6 @@ class SingleClustering(Clustering):
             return results, fig
         return results
 
-    def cluster_proportions(
-        self,
-        label: str = "cluster_label",
-        x_label: Optional[str] = None,
-        y_label: Optional[str] = None,
-        filter_clusters: Optional[List] = None,
-        hue: Optional[str] = None,
-        **plot_kwargs,
-    ):
-        data = self.data.copy()
-        if filter_clusters:
-            data = data[data[label].isin(filter_clusters)]
-        x = data.groupby("sample_id")[label].value_counts()
-        x.name = "Count"
-        x = x.reset_index()
-        plot_data = x.groupby("sample_id").apply(count_to_proportion).reset_index()
-        if hue:
-            colour_mapping = self.data[["sample_id", hue]].drop_duplicates()
-            plot_data = plot_data.merge(colour_mapping, on="sample_id")
-        ax = box_swarm_plot(plot_df=plot_data, x=label, y="Percentage", hue=hue, **plot_kwargs)
-        if x_label:
-            ax.set_xlabel(x_label)
-        if y_label:
-            ax.set_ylabel(y_label)
-        return ax
-
     def choose_k(
         self,
         max_k: int,
@@ -346,7 +248,7 @@ class SingleClustering(Clustering):
         for k in progress_bar(np.arange(1, max_k + 1, 1)):
             df = data.copy()
             clustering_params[cluster_n_param] = k
-            method = self._init_cluster_method(method=method, **clustering_params)
+            method = init_cluster_method(method=method, verbose=self.verbose, **clustering_params)
             df = method.cluster(data=df, features=features, evaluate=False)
             x.append(k)
             y.append(metric(data=df, features=features, labels=df["cluster_label"]))
@@ -357,8 +259,14 @@ class SingleClustering(Clustering):
 
     def save(
         self,
+        population_prefix: Optional[str] = None,
         verbose: bool = True,
         population_var: str = "cluster_label",
         parent_populations: Optional[Dict] = None,
     ):
-        super()._save(verbose=verbose, population_var=population_var, parent_populations=parent_populations)
+        super()._save(
+            population_prefix=population_prefix,
+            verbose=verbose,
+            population_var=population_var,
+            parent_populations=parent_populations,
+        )

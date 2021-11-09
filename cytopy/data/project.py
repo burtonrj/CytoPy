@@ -53,9 +53,13 @@ logger = logging.getLogger(__name__)
 
 
 def _build_subject_records(data: Dict[str, pd.DataFrame]) -> Dict[str, List[Dict]]:
-    records = defaultdict(list)
+    records = dict()
     for parent_key, df in data.items():
-        records[parent_key] = [row.to_dict() for _, row in df.iterrows()]
+        x = [row.to_dict() for _, row in df.iterrows()]
+        if len(x) == 1:
+            records[parent_key] = x[0]
+        else:
+            records[parent_key] = x
     return records
 
 

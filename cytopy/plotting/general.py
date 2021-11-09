@@ -81,7 +81,7 @@ def box_swarm_plot(
     """
     boxplot_kwargs = boxplot_kwargs or {}
     overlay_kwargs = overlay_kwargs or {}
-    ax = ax or plt.subplots(figsize=(10, 5))[1]
+    ax = ax if ax is not None else plt.subplots(figsize=(10, 5))[1]
     sns.boxplot(
         data=plot_df,
         x=x,

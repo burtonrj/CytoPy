@@ -2,7 +2,6 @@ import logging
 import os
 from itertools import cycle
 from typing import Dict
-from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Tuple
@@ -23,6 +22,7 @@ from cytopy.data import single_cell_dataframe
 from cytopy.data import Subject
 from cytopy.data.panel import Channel
 from cytopy.feedback import progress_bar
+from cytopy.plotting import single_cell_density
 from cytopy.plotting.general import ColumnWrapFigure
 from cytopy.utils import DimensionReduction
 from cytopy.utils.transform import Scaler
@@ -70,6 +70,7 @@ class BatchCorrector:
         self.transformer = transformer
         self.scaler = scaler
         self.verbose = verbose
+        self._umap_cache = None
         if self.transformer is not None:
             self.original_data = self.transformer.scale(data=self.original_data, features=self.features)
         if self.scaler is not None:
@@ -101,6 +102,7 @@ class BatchCorrector:
         verbose: bool = True,
         **kwargs,
     ):
+        logger.info("Loading data...")
         data = single_cell_dataframe(
             experiment=experiment,
             populations=population,
@@ -137,6 +139,8 @@ class BatchCorrector:
             subject = Subject.objects(subject_id=subject).get()
             meta[subject.subject_id] = subject.lookup_var(key=key)
         self.original_data[var_name] = self.original_data.subject_id.apply(lambda x: meta.get(x, None))
+        if self._umap_cache is not None:
+            self._umap_cache[var_name] = self._umap_cache.subject_id.apply(lambda x: meta.get(x, None))
         try:
             self.corrected_data[var_name] = self.corrected_data.subject_id.apply(lambda x: meta.get(x, None))
         except ValueError:
@@ -198,34 +202,55 @@ class BatchCorrector:
             [
                 Line2D([0], [0], color="black", linestyle="-", linewidth=2),
                 Line2D([0], [0], color="black", linestyle="--", linewidth=2),
-            ]["Original", "Corrected"],
+            ],
+            ["Original", "Corrected"],
             bbox_to_anchor=(1.05, 1.0),
         )
         return fig
 
-    def umap_plot(
-        self,
-        n: int = 10000,
-        hue: str = "sample_id",
-        dim_reduction_kwargs: Optional[Dict] = None,
-        figsize: Tuple[int] = (12, 7),
-        legend: bool = False,
-        features: Optional[List[str]] = None,
-        **plot_kwargs,
-    ):
+    def _umap(self, n: int, features: List[str], **dim_reduction_kwargs):
         features = features or self.features
-        plot_kwargs["linewidth"] = plot_kwargs.get("linewidth", 0)
-        plot_kwargs["s"] = plot_kwargs.get("s", 1)
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
         reducer = DimensionReduction(method="UMAP", **dim_reduction_kwargs)
         logger.info("Performing dimension reduction on original data")
         before = reducer.fit_transform(data=self.original_data.sample(n), features=features)
         logger.info("Performing dimension reduction on batch corrected data")
         after = reducer.transform(data=self.corrected_data.iloc[before.index], features=features)
         logger.info("Plotting comparison")
+        before["Source"] = "Before"
+        after["Source"] = "After"
+        self._umap_cache = pd.concat([before, after])
+        return self._umap_cache
+
+    def umap_plot(
+        self,
+        n: int = 10000,
+        hue: str = "sample_id",
+        density: bool = False,
+        dim_reduction_kwargs: Optional[Dict] = None,
+        figsize: Tuple[int] = (15, 7),
+        legend: bool = False,
+        features: Optional[List[str]] = None,
+        overwrite_cache: bool = False,
+        **plot_kwargs,
+    ):
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        if overwrite_cache or self._umap_cache is None:
+            data = self._umap(n=n, features=features, **dim_reduction_kwargs)
+        else:
+            data = self._umap_cache
         fig, axes = plt.subplots(1, 2, figsize=figsize)
-        sns.scatterplot(data=before, x="UMAP1", y="UMAP2", ax=axes[0], hue=hue, **plot_kwargs)
-        sns.scatterplot(data=after, x="UMAP1", y="UMAP2", ax=axes[1], hue=hue, **plot_kwargs)
+        if density:
+            single_cell_density(data=data[data.Source == "Before"], x="UMAP1", y="UMAP2", ax=axes[0], **plot_kwargs)
+            single_cell_density(data=data[data.Source == "After"], x="UMAP1", y="UMAP2", ax=axes[1], **plot_kwargs)
+        else:
+            plot_kwargs["linewidth"] = plot_kwargs.get("linewidth", 0)
+            plot_kwargs["s"] = plot_kwargs.get("s", 1)
+            sns.scatterplot(
+                data=data[data.Source == "Before"], x="UMAP1", y="UMAP2", ax=axes[0], hue=hue, **plot_kwargs
+            )
+            sns.scatterplot(
+                data=data[data.Source == "After"], x="UMAP1", y="UMAP2", ax=axes[1], hue=hue, **plot_kwargs
+            )
         axes[0].set_title("Before")
         axes[1].set_title("After")
         if not legend:
@@ -248,7 +273,6 @@ class BatchCorrector:
         project.experiments.append(exp)
         project.save()
 
-        logger.info("Inferring subject mappings from data attribute")
         subject_mappings = self.original_data[["sample_id", "subject_id"]]
         subject_mappings = dict(zip(subject_mappings.sample_id, subject_mappings.subject_id))
 

@@ -62,10 +62,17 @@ import numpy as np
 import pandas as pd
 import phenograph
 
+from ..feature_selection.hypothesis_testing import multiple_groups
+from ..feature_selection.hypothesis_testing import two_groups
+from ..plotting import single_cell_density
+from ..plotting import single_cell_plot
+from ..plotting.general import box_swarm_plot
 from .consensus_k import KConsensusClustering
 from .flowgrid import FlowGrid
 from .flowsom import FlowSOM
 from .latent import LatentClustering
+from .plotting import clustered_heatmap
+from .plotting import plot_meta_clusters
 from .spade import CytoSPADE
 from cytopy.data.experiment import Experiment
 from cytopy.data.experiment import single_cell_dataframe
@@ -267,15 +274,14 @@ def init_cluster_method(
 class Clustering:
     def __init__(
         self,
+        data: pd.DataFrame,
         experiment: Union[Experiment, List[Experiment]],
         features: list,
-        population_prefix: str,
         sample_ids: list or None = None,
         root_population: str = "root",
         transform: str = "asinh",
         transform_kwargs: dict or None = None,
         verbose: bool = True,
-        data: Optional[pd.DataFrame] = None,
         random_state: int = 42,
     ):
         np.random.seed(random_state)
@@ -286,22 +292,72 @@ class Clustering:
         self.transform_kwargs = transform_kwargs
         self.root_population = root_population
         self.sample_ids = sample_ids
-        self.population_prefix = population_prefix
+        self.data = data
+        self._embedding_cache = None
+        logger.info("Ready to cluster!")
 
-        if data is None:
-            logger.info(f"Obtaining data for clustering for population {root_population}")
-            self.data = single_cell_dataframe(
-                experiment=experiment,
-                sample_ids=sample_ids,
-                transform=transform,
-                transform_kwargs=transform_kwargs,
-                populations=root_population,
-            )
-            self.data["meta_label"] = None
-            self.data["cluster_label"] = None
-            logger.info("Ready to cluster!")
-        else:
-            self.data = data
+    @classmethod
+    def from_experiment(
+        cls,
+        experiment: Experiment,
+        features: list,
+        sample_ids: list or None = None,
+        root_population: str = "root",
+        transform: str = "asinh",
+        transform_kwargs: dict or None = None,
+        verbose: bool = True,
+        random_state: int = 42,
+    ):
+        logger.info(f"Obtaining data for clustering for population {root_population}")
+        data = single_cell_dataframe(
+            experiment=experiment,
+            sample_ids=sample_ids,
+            transform=transform,
+            transform_kwargs=transform_kwargs,
+            populations=root_population,
+        )
+        data["meta_label"] = None
+        data["cluster_label"] = None
+        return cls(
+            data=data,
+            experiment=experiment,
+            features=features,
+            sample_ids=sample_ids,
+            root_population=root_population,
+            transform=transform,
+            transform_kwargs=transform_kwargs,
+            verbose=verbose,
+            random_state=random_state,
+        )
+
+    @classmethod
+    def from_data(
+        cls,
+        data: pd.DataFrame,
+        experiment: Experiment,
+        features: list,
+        sample_ids: list or None = None,
+        root_population: str = "root",
+        transform: str = "asinh",
+        transform_kwargs: dict or None = None,
+        verbose: bool = True,
+        random_state: int = 42,
+    ):
+        if "meta_label" not in data.columns:
+            data["meta_label"] = None
+        if "cluster_label" not in data.columns:
+            data["cluster_label"] = None
+        return cls(
+            data=data,
+            experiment=experiment,
+            features=features,
+            sample_ids=sample_ids,
+            root_population=root_population,
+            transform=transform,
+            transform_kwargs=transform_kwargs,
+            verbose=verbose,
+            random_state=random_state,
+        )
 
     def scale_data(self, features: List[str], scale_method: Optional[str] = None, scale_kwargs: Optional[Dict] = None):
         scale_kwargs = scale_kwargs or {}
@@ -400,10 +456,20 @@ class Clustering:
         for _id in progress_bar(self.data.subject_id.unique(), verbose=verbose):
             if _id is None:
                 continue
-            p = Subject.objects(subject_id=_id).get()
-            self.data.loc[self.data.subject_id == _id, variable_name] = p.lookup_var(key=key)
+            try:
+                p = Subject.objects(subject_id=_id).get()
+                self.data.loc[self.data.subject_id == _id, variable_name] = p.lookup_var(key=key)
+            except ValueError as e:
+                logger.error(f"Failed to load meta variable for {_id}")
+                logger.exception(e)
 
-    def _create_parent_populations(self, population_var: str, parent_populations: Dict, verbose: bool = True):
+    def _create_parent_populations(
+        self,
+        population_var: str,
+        parent_populations: Dict,
+        population_prefix: Optional[str] = None,
+        verbose: bool = True,
+    ):
         """
         Form parent populations from existing clusters
 
@@ -437,9 +503,7 @@ class Clustering:
                 if cluster_data.shape[0] == 0:
                     logger.warning(f"No clusters found for {sample_id} to generate requested parent {parent}")
                     continue
-                parent_population_name = (
-                    parent if self.population_prefix is None else f"{self.population_prefix}_{parent}"
-                )
+                parent_population_name = parent if population_prefix is None else f"{population_prefix}_{parent}"
                 pop = Population(
                     population_name=parent_population_name,
                     n=cluster_data.shape[0],
@@ -450,10 +514,190 @@ class Clustering:
                 fg.add_population(population=pop)
             fg.save()
 
+    def dimension_reduction(
+        self,
+        n: int = 100000,
+        sample_id: Optional[str] = None,
+        overwrite_cache: bool = False,
+        method: str = "UMAP",
+        **dim_reduction_kwargs,
+    ):
+        if sample_id and self._embedding_cache is not None:
+            if self.data.sample_id.nunique() > 1:
+                overwrite_cache = True
+            elif self.data.sample_id.unique()[0] != sample_id:
+                overwrite_cache = True
+        if self._embedding_cache is not None:
+            if f"{method}1" not in self._embedding_cache.columns:
+                overwrite_cache = True
+        if overwrite_cache or self._embedding_cache is None:
+            reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
+            if self.data.shape[0] < n:
+                data = self.data.copy()
+            else:
+                data = self.data.sample(n)
+            if sample_id:
+                data = data[data.sample_id == sample_id]
+            self._embedding_cache = reducer.fit_transform(data=data, features=self.features)
+        if sample_id:
+            self._embedding_cache["cluster_label"] = self.data[self.data.sample_id == sample_id]["cluster_label"]
+            self._embedding_cache["meta_label"] = self.data[self.data.sample_id == sample_id]["meta_label"]
+        else:
+            self._embedding_cache["cluster_label"] = self.data["cluster_label"]
+            self._embedding_cache["meta_label"] = self.data["meta_label"]
+        return self._embedding_cache
+
+    def plot_density(
+        self,
+        n: int = 100000,
+        sample_id: Optional[str] = None,
+        overwrite_cache: bool = False,
+        method: str = "UMAP",
+        dim_reduction_kwargs: Optional[Dict] = None,
+        **plot_kwargs,
+    ):
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        data = self.dimension_reduction(
+            n=n, sample_id=sample_id, overwrite_cache=overwrite_cache, method=method, **dim_reduction_kwargs
+        )
+        return single_cell_density(data=data, x=f"{method}1", y=f"{method}2", **plot_kwargs)
+
+    def plot(
+        self,
+        label: str,
+        discrete: bool = True,
+        n: int = 100000,
+        sample_id: Optional[str] = None,
+        overwrite_cache: bool = False,
+        method: str = "UMAP",
+        dim_reduction_kwargs: Optional[Dict] = None,
+        **plot_kwargs,
+    ):
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        data = self.dimension_reduction(
+            n=n, sample_id=sample_id, overwrite_cache=overwrite_cache, method=method, **dim_reduction_kwargs
+        )
+        return single_cell_plot(
+            data=data, x=f"{method}1", y=f"{method}2", label=label, discrete=discrete, **plot_kwargs
+        )
+
+    def plot_cluster_membership(
+        self,
+        n: int = 100000,
+        sample_id: Optional[str] = None,
+        overwrite_cache: bool = False,
+        method: str = "UMAP",
+        dim_reduction_kwargs: Optional[Dict] = None,
+        **plot_kwargs,
+    ):
+        dim_reduction_kwargs = dim_reduction_kwargs or {}
+        data = self.dimension_reduction(
+            n=n, sample_id=sample_id, overwrite_cache=overwrite_cache, method=method, **dim_reduction_kwargs
+        )
+        return single_cell_plot(
+            data=data, x=f"{method}1", y=f"{method}2", label="cluster_label", discrete=True, **plot_kwargs
+        )
+
+    def plot_meta_cluster_centroids(
+        self,
+        label: str = "meta_label",
+        discrete: bool = True,
+        method: str = "UMAP",
+        dim_reduction_kwargs: Optional[Dict] = None,
+        **kwargs,
+    ):
+        if "meta_label" not in self.data.columns:
+            raise KeyError("Meta-clustering has not been performed")
+        return plot_meta_clusters(
+            data=self.data,
+            features=self.features,
+            colour_label=label,
+            discrete=discrete,
+            method=method,
+            dim_reduction_kwargs=dim_reduction_kwargs,
+            **kwargs,
+        )
+
+    def heatmap(
+        self,
+        features: Optional[str] = None,
+        sample_id: Optional[str] = None,
+        meta_label: bool = True,
+        include_labels: Optional[List[str]] = None,
+        **kwargs,
+    ):
+        features = features or self.features
+        data = self.data.copy()
+        if include_labels:
+            if meta_label:
+                data = data[data["meta_label"].isin(include_labels)]
+            else:
+                data = data[data["cluster_label"].isin(include_labels)]
+        return clustered_heatmap(data=data, features=features, sample_id=sample_id, meta_label=meta_label, **kwargs)
+
+    @staticmethod
+    def _count_to_proportion(df):
+        df["Percentage"] = (df["Count"] / df["Count"].sum()) * 100
+        return df
+
+    def cluster_proportions(
+        self,
+        label: str = "cluster_label",
+        x_label: Optional[str] = None,
+        y_label: Optional[str] = None,
+        filter_clusters: Optional[List] = None,
+        hue: Optional[str] = None,
+        **plot_kwargs,
+    ):
+        data = self.data.copy()
+        if filter_clusters:
+            data = data[data[label].isin(filter_clusters)]
+        x = data.groupby("sample_id")[label].value_counts()
+        x.name = "Count"
+        x = x.reset_index()
+        plot_data = x.groupby("sample_id").apply(self._count_to_proportion).reset_index()
+        if hue:
+            colour_mapping = self.data[["sample_id", hue]].drop_duplicates()
+            plot_data = plot_data.merge(colour_mapping, on="sample_id")
+        ax = box_swarm_plot(plot_df=plot_data, x=label, y="Percentage", hue=hue, **plot_kwargs)
+        if x_label:
+            ax.set_xlabel(x_label)
+        if y_label:
+            ax.set_ylabel(y_label)
+        return ax
+
+    def cluster_proportion_stats(self, group: str, label: str = "cluster_label", **kwargs):
+        for c in [group, label]:
+            if c not in self.data.columns:
+                raise KeyError(f"No such column {c}")
+        data = self.data[~self.data[group].isnull()]
+        x = data.groupby("sample_id")[label].value_counts()
+        x.name = "Count"
+        x = x.reset_index()
+        data = x.groupby("sample_id").apply(self._count_to_proportion).reset_index()
+        group_mapping = self.data[["sample_id", group]].dropna().drop_duplicates()
+        data = data.merge(group_mapping, on="sample_id")
+        results = []
+        if data[group].nunique() > 2:
+            for cluster, df in data.groupby(label):
+                cluster_results = multiple_groups(data=df, dv="Percentage", group=group, **kwargs)
+                cluster_results["Cluster"] = cluster
+                results.append(cluster_results)
+        else:
+            groups = data[group].unique()
+            for cluster, df in data.groupby(label):
+                x, y = df[df[group] == groups[0]].Percentage.values, df[df[group] == groups[1]].Percentage.values
+                cluster_results = two_groups(x=x, y=y, **kwargs)
+                cluster_results["Cluster"] = cluster
+                results.append(cluster_results)
+        results = pd.concat(results).reset_index(drop=True)
+        return results[["Cluster"] + [x for x in results.columns if x != "Cluster"]]
+
     def _save(
         self,
+        population_prefix: Optional[str] = None,
         verbose: bool = True,
-        population_var: str = "meta_label",
+        population_var: str = "cluster_label",
         parent_populations: Optional[Dict] = None,
     ):
         """
@@ -486,7 +730,11 @@ class Clustering:
         if parent_populations is not None:
             err = f"One or more cluster_labels are missing a parent definition"
             assert all([x in parent_populations.keys() for x in self.data.cluster_label.unique()]), err
-            self._create_parent_populations(population_var=population_var, parent_populations=parent_populations)
+            self._create_parent_populations(
+                population_prefix=population_prefix,
+                population_var=population_var,
+                parent_populations=parent_populations,
+            )
         parent_populations = parent_populations or {}
 
         for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
@@ -495,15 +743,13 @@ class Clustering:
 
             for cluster_label, cluster in sample_data.groupby(population_var):
                 population_name = (
-                    str(cluster_label)
-                    if self.population_prefix is None
-                    else f"{self.population_prefix}_{cluster_label}"
+                    str(cluster_label) if population_prefix is None else f"{population_prefix}_{cluster_label}"
                 )
                 parent = parent_populations.get(cluster_label, self.root_population)
                 parent = (
                     parent
-                    if self.population_prefix is None or parent == self.root_population
-                    else f"{self.population_prefix}_{parent}"
+                    if population_prefix is None or parent == self.root_population
+                    else f"{population_prefix}_{parent}"
                 )
                 pop = Population(
                     population_name=population_name,

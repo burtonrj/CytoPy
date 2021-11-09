@@ -35,10 +35,13 @@ from typing import Set
 from typing import Union
 
 import mongoengine
+import numpy as np
 import pandas as pd
 import polars as pl
+from mongoengine.base import BaseList
+from scipy.stats import kurtosis
+from scipy.stats import skew
 
-from .read_write import pandas_to_polars
 from .read_write import polars_to_pandas
 
 logger = logging.getLogger(__name__)
@@ -89,15 +92,42 @@ class Subject(mongoengine.DynamicDocument):
                 .rename({"index": field}, axis=1)
             )
 
-    def lookup_var(self, key: Union[str, List[str]]):
+    @staticmethod
+    def _list_node(node: BaseList, keys: List[str], summary: str):
+        for k in keys:
+            node = [n[k] for n in node]
+        if any([isinstance(x, str) for x in node]):
+            return ",".join([str(x) for x in node])
+        if summary == "mean":
+            return np.mean([float(x) for x in node])
+        if summary == "median":
+            return np.median([float(x) for x in node])
+        if summary == "std":
+            return np.std([float(x) for x in node])
+        if summary == "kurtosis":
+            return kurtosis([float(x) for x in node])
+        if summary == "skew":
+            return skew([float(x) for x in node])
+        raise ValueError("Invalid value fo summary method, should be one of: mean, median, std, kurtosis, or skew")
+
+    def lookup_var(self, key: Union[str, List[str]], summary: str = "mean"):
         try:
-            if len(key) == 1:
-                key = key[0]
+            if isinstance(key, list) and len(key) == 1:
+                return self[key[0]]
             if isinstance(key, str):
                 return self[key]
             node = self[key[0]]
-            for k in key[1:]:
-                node = node[k]
+            for i, k in enumerate(key[1:]):
+                if isinstance(node, BaseList):
+                    if len(node) == 0:
+                        return None
+                    if len(node) == 1:
+                        node = node[0]
+                        node = node[k]
+                    else:
+                        return self._list_node(node=node, keys=key[i:], summary=summary)
+                else:
+                    node = node[k]
             return node
         except KeyError:
             return None

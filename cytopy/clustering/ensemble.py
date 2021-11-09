@@ -368,28 +368,19 @@ class EnsembleClustering(Clustering):
         fig.tight_layout()
         return fig
 
-    def heatmap(
+    def save(
         self,
         cluster_name: str,
-        features: Optional[str] = None,
-        sample_id: Optional[str] = None,
-        meta_label: bool = True,
-        **kwargs,
+        verbose: bool = True,
+        population_prefix: Optional[str] = None,
+        parent_populations: Optional[Dict] = None,
     ):
-        plot_data = self.data.copy()
-        plot_data["cluster_label"] = self.clustering_permutations[cluster_name]["labels"]
-        plot_data = self.data.groupby("cluster_label")[self.features].median()
-        features = features or self.features
-        kwargs["col_cluster"] = kwargs.get("col_cluster", True)
-        kwargs["figsize"] = kwargs.get("figsize", (10, 15))
-        kwargs["standard_scale"] = kwargs.get("standard_scale", 1)
-        kwargs["cmap"] = kwargs.get("cmap", "viridis")
-        return clustered_heatmap(
-            data=plot_data, features=features, sample_id=sample_id, meta_label=meta_label ** kwargs
-        )
-
-    def save(self, cluster_name: str, verbose: bool = True, parent_populations: Optional[Dict] = None):
         self.data["cluster_label"] = self.clustering_permutations[cluster_name]["labels"]
-        super()._save(verbose=verbose, population_var="cluster_label", parent_populations=parent_populations)
+        super()._save(
+            verbose=verbose,
+            population_prefix=population_prefix,
+            population_var="cluster_label",
+            parent_populations=parent_populations,
+        )
         self.data.drop("cluster_label", axis=1, inplace=True)
         return self

@@ -11,6 +11,7 @@ import pandas as pd
 from dtw import dtw
 from ipywidgets import widgets
 from KDEpy import FFTKDE
+from matplotlib import ticker
 from skfda import FDataGrid
 from skfda.preprocessing.registration import landmark_registration_warping
 
@@ -26,20 +27,19 @@ logger = logging.getLogger(__name__)
 class LandmarkEditor(widgets.HBox):
     def __init__(self, x: np.ndarray, y: np.ndarray, landmarks: Optional[List] = None):
         super().__init__()
+        self._x, self._y = x, y
         self.landmarks = landmarks or []
         output = widgets.Output()
         with output:
-            self.fig, self.ax = plt.subplots(constrained_layout=True, figsize=(4, 2.5))
+            self.fig, self.ax = plt.subplots(constrained_layout=True, figsize=(5, 3))
         self.fig.canvas.toolbar_position = "bottom"
-        self.ax.plot(x, y, color="black")
-        self._plot_landmarks()
 
-        self.landmark_text = widgets.Text(disabled=True)
+        self.landmark_text = widgets.Text()
         self.add_landmark_button = widgets.Button(description="Add landmark", button_style="info")
         self.add_landmark_button.on_click(self._add_landmark)
         self.landmark_dropbox = widgets.Dropdown(description="Select landmark", options=self.landmarks)
         self.remove_landmark_button = widgets.Button(description="Remove landmark", button_style="warning")
-        self.remove_landmark_button.on_click(self._removed_landmark)
+        self.remove_landmark_button.on_click(self._remove_landmark)
 
         self.close_button = widgets.Button(description="Close", button_style="warning")
         self.close_button.on_click(lambda _: self.close())
@@ -60,21 +60,27 @@ class LandmarkEditor(widgets.HBox):
         output.layout = widgets.Layout(border="solid 1px black", margin="0px 10px 10px 0px", padding="5px 5px 5px 5px")
 
         self.children = [controls, output]
+        self._update_plot()
 
-    def _plot_landmarks(self):
+    def _update_plot(self):
+        self.ax.cla()
+        self.ax.plot(self._x, self._y, color="black")
         for lm in self.landmarks:
             self.ax.axvline(lm, ls="--", color="black")
+        self.ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+        self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(5))
 
     def _add_landmark(self, _):
-        self.landmarks.append(self.landmark_text.value)
+        self.landmarks.append(float(self.landmark_text.value))
         self.landmarks = list(set(self.landmarks))
-        self._plot_landmarks()
+        self._update_plot()
         self.landmark_dropbox.options = self.landmarks
         self.landmark_dropbox.value = self.landmarks[0]
 
     def _remove_landmark(self, _):
         self.landmarks = [x for x in self.landmarks if x != self.landmark_dropbox.value]
-        self._plot_landmarks()
+        self.landmark_dropbox.options = self.landmarks
+        self._update_plot()
 
 
 def kde(data: List[np.ndarray], grid_size: int, kernel: str, bw: Union[str, float]):
@@ -105,6 +111,7 @@ class FunctionalBatchCorrection(BatchCorrector):
         self.bw = bw
         self._feature_data = {}
         self._landmark_editor = None
+        logger.info("Computing KDE for each feature")
         for f in progress_bar(features, verbose=self.verbose):
             self._feature_data[f] = {}
             labelled_data = [(i, x.values) for i, x in self.original_data[["sample_id", f]].groupby("sample_id")[f]]
@@ -123,18 +130,21 @@ class FunctionalBatchCorrection(BatchCorrector):
     def prepare_reference(self, feature: str):
         original = self._feature_data[feature]["df"]
         dtw_distances = np.zeros((original.shape[1], original.shape[1]))
+        logger.info(f"Selecting optimal reference for {feature}")
         for i, x in progress_bar(enumerate(original.columns), total=original.shape[1], verbose=self.verbose):
             for j, y in enumerate(original.columns):
                 dtw_distances[i, j] = dtw(differential(original[x].values), differential(original[y].values)).distance
         dtw_distances = pd.DataFrame(dtw_distances, index=original.columns, columns=original.columns)
         ref = dtw_distances.mean().sort_values().index[0]
+        logger.info(f"Reference={ref}")
         self._feature_data[feature]["reference"] = ref
         self._landmark_editor = LandmarkEditor(
             x=self._feature_data[feature]["kde"].grid_points[0], y=original[ref].values
         )
+        logger.info(f"Select landmarks with editor")
         return self._landmark_editor
 
-    def collect_landmarks(self, feature: str):
+    def collect_landmarks(self, feature: str, **kwargs):
         ref = self._feature_data[feature]["reference"]
         if ref is None:
             raise ValueError("Call 'prepare reference' first")
@@ -145,13 +155,15 @@ class FunctionalBatchCorrection(BatchCorrector):
             if _id == ref:
                 landmarks.append(ref_landmarks)
                 continue
-            alignment = dtw(differential(ref_data), differential(self._feature_data[feature]["df"][_id].values))
+            alignment = dtw(
+                differential(ref_data), differential(self._feature_data[feature]["df"][_id].values), **kwargs
+            )
             xgrid = self._feature_data[feature]["kde"].grid_points[0]
+            tmp = []
             for lm in ref_landmarks:
-                tmp = []
                 idx = np.where(abs(xgrid - lm) == np.min(abs(xgrid - lm)))[0][0]
                 tmp.append(np.mean(xgrid[alignment.index2[alignment.index1 == idx]]))
-                landmarks.append(tmp)
+            landmarks.append(tmp)
         self._feature_data[feature]["landmarks"] = landmarks
         return self
 
@@ -160,7 +172,7 @@ class FunctionalBatchCorrection(BatchCorrector):
         if landmarks is None:
             raise ValueError("Call 'collect_landmarks' first")
         original = self._feature_data[feature]["df"]
-        fig = ColumnWrapFigure(n=original.shape[1], col_wrap=1, figsize=(5, original.shape[1] * 1))
+        fig = ColumnWrapFigure(n=original.shape[1], col_wrap=1, figsize=(5, original.shape[1] * 2.5))
         x = self._feature_data[feature]["kde"].grid_points[0]
         for i, y_col in progress_bar(enumerate(original.columns), total=original.shape[1], verbose=self.verbose):
             ax = fig.add_subplot()
@@ -177,7 +189,7 @@ class FunctionalBatchCorrection(BatchCorrector):
             raise ValueError("Call 'collect_landmarks' first")
         original = self._feature_data[feature]["df"]
         landmarks = pd.DataFrame(landmarks, index=self._feature_data[feature]["index"])
-        landmarks = landmarks.loc[sample_id].values
+        landmarks = landmarks.loc[sample_id].values.tolist()
         self._landmark_editor = LandmarkEditor(
             x=self._feature_data[feature]["kde"].grid_points[0], y=original[sample_id].values, landmarks=landmarks
         )
