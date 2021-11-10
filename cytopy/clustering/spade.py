@@ -1,10 +1,12 @@
 import logging
 from typing import Dict
 from typing import Optional
+from typing import Type
 from typing import Union
 
 import numpy as np
 import pandas as pd
+from sklearn.base import ClusterMixin
 from sklearn.cluster import AgglomerativeClustering
 
 from cytopy.clustering.consensus_k import KConsensusClustering
@@ -25,6 +27,8 @@ class CytoSPADE:
         sampling_tree_size: int = 1000,
         outlier_dens: int = 1,
         target_dens: int = 5,
+        density_dependent_sampling: bool = True,
+        clustering_method: Optional[Type] = None,
         consensus_clustering: bool = True,
         cluster_params: Optional[Dict] = None,
         consensus_params: Optional[Dict] = None,
@@ -32,7 +36,10 @@ class CytoSPADE:
     ):
         cluster_params = cluster_params or {}
         consensus_params = consensus_params or {}
-        _model = AgglomerativeClustering(**cluster_params)
+        if clustering_method is None:
+            _model = AgglomerativeClustering(**cluster_params)
+        else:
+            _model = clustering_method(**cluster_params)
         if consensus_clustering:
             self.model = KConsensusClustering(
                 cluster=_model, smallest_cluster_n=min_k, largest_cluster_n=max_k, **consensus_params
@@ -47,20 +54,27 @@ class CytoSPADE:
         self.outlier_dens = outlier_dens
         self.target_dens = target_dens
         self.upsampling_kwargs = upsampling_kwargs or {}
+        self.density_dependent_sampling = density_dependent_sampling
 
     def fit_predict(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         if isinstance(data, np.ndarray):
             data = pd.DataFrame(data)
-        logger.info(f"Density dependent down-sampling of input data to {self.sample_size} events")
-        sample = density_dependent_downsampling(
-            data=data,
-            sample_size=self.sample_size,
-            alpha=self.sampling_alpha,
-            distance_metric=self.sampling_distance_metric,
-            tree_sample=self.sampling_tree_size,
-            outlier_dens=self.outlier_dens,
-            target_dens=self.target_dens,
-        )
+        if self.density_dependent_sampling:
+            logger.info(f"Density dependent down-sampling of input data to {self.sample_size} events")
+            sample = density_dependent_downsampling(
+                data=data,
+                sample_size=self.sample_size,
+                alpha=self.sampling_alpha,
+                distance_metric=self.sampling_distance_metric,
+                tree_sample=self.sampling_tree_size,
+                outlier_dens=self.outlier_dens,
+                target_dens=self.target_dens,
+            )
+        else:
+            logger.info(f"Uniform down-sampling of input data to {self.sample_size} events")
+            if data.shape[0] <= self.sample_size:
+                raise ValueError(f"Cannot sample {self.sample_size} events from array with {data.shape[0]} rows.")
+            sample = pd.DataFrame(data).sample(n=self.sample_size).values
         logger.info(f"Clustering data")
         labels = self.model.fit_predict(sample)
         logger.info("Up-sampling clusters using KNN")
