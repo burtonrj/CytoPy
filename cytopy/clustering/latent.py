@@ -22,7 +22,7 @@ class LatentClustering:
         self,
         dim_reduction_method: str = "PHATE",
         dim_reduction_kwargs: Optional[Dict] = None,
-        sample_size: int = 100000,
+        sample_size: int = 10000,
         density_dependent_downsample: bool = False,
         density_sampling_kwargs: Optional[Dict] = None,
         upsampling_kwargs: Optional[Dict] = None,

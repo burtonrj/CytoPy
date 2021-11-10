@@ -7,7 +7,6 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
-from numba import jit
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MinMaxScaler
 
