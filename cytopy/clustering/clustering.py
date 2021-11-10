@@ -71,6 +71,7 @@ from .consensus_k import KConsensusClustering
 from .flowgrid import FlowGrid
 from .flowsom import FlowSOM
 from .latent import LatentClustering
+from .parc import PARC
 from .plotting import clustered_heatmap
 from .plotting import plot_meta_clusters
 from .spade import CytoSPADE
@@ -259,6 +260,8 @@ def init_cluster_method(
         method = ClusterMethod(klass=CytoSPADE, params=kwargs, verbose=verbose)
     elif method == "latent":
         method = ClusterMethod(klass=LatentClustering, params=kwargs, verbose=verbose)
+    elif method == "parc":
+        method = ClusterMethod(klass=PARC, params=kwargs, verbose=verbose)
     elif isinstance(method, str):
         raise ValueError("If a string is given must be either 'phenograph', 'consensus' or 'flowsom'")
     elif not isinstance(method, ClusterMethod):
