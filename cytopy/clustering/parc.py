@@ -233,7 +233,7 @@ class PARC:
                 parc_labels_leiden[j] = parc_labels_leiden_big[jj]
                 jj = jj + 1
             dummy, parc_labels_leiden = np.unique(list(parc_labels_leiden.flatten()), return_inverse=True)
-            print("new set of labels ", set(parc_labels_leiden))
+            logger.info(f"New set of labels {set(parc_labels_leiden)}")
             too_big = False
             set_parc_labels_leiden = set(parc_labels_leiden)
 
@@ -299,11 +299,7 @@ class PARC:
                 population = len(np.where(parc_labels_leiden == cluster)[0])
                 if population < self.small_pop:
                     small_pop_exist = True
-                    print(
-                        cluster,
-                        " has small population of",
-                        population,
-                    )
+                    logger.info(f"Cluster {cluster} is below minimum population size limit of n={self.small_pop}")
                     small_pop_list.append(np.where(parc_labels_leiden == cluster)[0])
             for small_cluster in small_pop_list:
                 for single_cell in small_cluster:
