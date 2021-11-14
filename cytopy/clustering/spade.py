@@ -74,7 +74,7 @@ class CytoSPADE:
             logger.info(f"Uniform down-sampling of input data to {self.sample_size} events")
             if data.shape[0] <= self.sample_size:
                 raise ValueError(f"Cannot sample {self.sample_size} events from array with {data.shape[0]} rows.")
-            sample = pd.DataFrame(data).sample(n=self.sample_size).values
+            sample = pd.DataFrame(data).sample(n=self.sample_size)
         logger.info(f"Clustering data")
         labels = self.model.fit_predict(sample)
         logger.info("Up-sampling clusters using KNN")

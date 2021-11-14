@@ -51,29 +51,41 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
+import math
 from collections import defaultdict
+from typing import Callable
 from typing import Dict
+from typing import Iterable
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Type
 from typing import Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import phenograph
+import seaborn as sns
+from gap_statistic import OptimalK
+from sklearn.cluster import AgglomerativeClustering
 
 from ..feature_selection.hypothesis_testing import multiple_groups
 from ..feature_selection.hypothesis_testing import two_groups
 from ..plotting import single_cell_density
 from ..plotting import single_cell_plot
 from ..plotting.general import box_swarm_plot
+from ..plotting.general import ColumnWrapFigure
 from .consensus_k import KConsensusClustering
 from .flowgrid import FlowGrid
 from .flowsom import FlowSOM
 from .latent import LatentClustering
+from .metrics import init_internal_metrics
+from .metrics import InternalMetric
 from .parc import PARC
 from .plotting import clustered_heatmap
 from .plotting import plot_meta_clusters
+from .plotting import silhouette_analysis
 from .spade import CytoSPADE
 from cytopy.data.experiment import Experiment
 from cytopy.data.experiment import single_cell_dataframe
@@ -263,7 +275,8 @@ def init_cluster_method(
     elif method == "parc":
         method = ClusterMethod(klass=PARC, params=kwargs, verbose=verbose)
     elif isinstance(method, str):
-        raise ValueError("If a string is given must be either 'phenograph', 'consensus' or 'flowsom'")
+        valid_str_methods = ["phenograph", "flowsom", "spade", "latent", "consensus", "parc"]
+        raise ValueError(f"If a string is given must be one of {valid_str_methods}")
     elif not isinstance(method, ClusterMethod):
         method = ClusterMethod(klass=method, params=kwargs, verbose=verbose)
     if not isinstance(method, ClusterMethod):
@@ -466,57 +479,6 @@ class Clustering:
                 logger.error(f"Failed to load meta variable for {_id}")
                 logger.exception(e)
 
-    def _create_parent_populations(
-        self,
-        population_var: str,
-        parent_populations: Dict,
-        population_prefix: Optional[str] = None,
-        verbose: bool = True,
-    ):
-        """
-        Form parent populations from existing clusters
-
-        Parameters
-        ----------
-        population_var: str
-            Name of the cluster population variable i.e. cluster_label or meta_label
-        parent_populations: Dict
-            Dictionary of parent associations. Parent populations will be a merger of all child populations.
-            Each child population intended to inherit from a parent that is not 'root' should be given as a
-            key with the value being the parent to associate to.
-        verbose: bool (default=True)
-            Whether to provide feedback in the form of a progress bar
-
-        Returns
-        -------
-        None
-            Parent populations are saved to the FileGroup
-        """
-        logger.info("Creating parent populations from clustering results")
-        parent_child_mappings = defaultdict(list)
-        for child, parent in parent_populations.items():
-            parent_child_mappings[parent].append(child)
-
-        for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
-            fg = self.experiment.get_sample(sample_id)
-            sample_data = self.data[self.data.sample_id == sample_id].copy()
-
-            for parent, children in parent_child_mappings.items():
-                cluster_data = sample_data[sample_data[population_var].isin(children)]
-                if cluster_data.shape[0] == 0:
-                    logger.warning(f"No clusters found for {sample_id} to generate requested parent {parent}")
-                    continue
-                parent_population_name = parent if population_prefix is None else f"{population_prefix}_{parent}"
-                pop = Population(
-                    population_name=parent_population_name,
-                    n=cluster_data.shape[0],
-                    parent=self.root_population,
-                    source="cluster",
-                )
-                pop.index = cluster_data.original_index.to_list()
-                fg.add_population(population=pop)
-            fg.save()
-
     def dimension_reduction(
         self,
         n: int = 100000,
@@ -695,6 +657,170 @@ class Clustering:
                 results.append(cluster_results)
         results = pd.concat(results).reset_index(drop=True)
         return results[["Cluster"] + [x for x in results.columns if x != "Cluster"]]
+
+    def performance(
+        self,
+        metrics: Optional[List[Union[str, InternalMetric]]] = None,
+        sample_n: int = 10000,
+        resamples: int = 10,
+        features: Optional[List[str]] = None,
+        label: str = "cluster_label",
+        plot: bool = True,
+        verbose: bool = True,
+        col_wrap: int = 2,
+        figure_kwargs: Optional[Dict] = None,
+        **plot_kwargs,
+    ):
+        if sample_n > self.data.shape[0]:
+            raise ValueError(f"sample_n is greater than the total number of events: {sample_n} > {self.data.shape[0]}")
+        features = features or self.features
+        metrics = init_internal_metrics(metrics=metrics)
+        results = defaultdict(list)
+        for _ in progress_bar(range(resamples), verbose=verbose, total=resamples):
+            df = self.data.sample(n=sample_n)
+            for m in metrics:
+                results[m.name].append(m(data=df, features=features, labels=df[label]))
+        if plot:
+            figure_kwargs = figure_kwargs or {}
+            figure_kwargs["figsize"] = figure_kwargs.get("figure_size", (10, 10))
+            fig = ColumnWrapFigure(n=len(metrics), col_wrap=col_wrap, **figure_kwargs)
+            for i, (m, data) in enumerate(results.items()):
+                box_swarm_plot(
+                    plot_df=pd.DataFrame({"Method": [m] * len(data), "Score": data}),
+                    x="Method",
+                    y="Score",
+                    ax=fig.add_subplot(),
+                    **plot_kwargs,
+                )
+            return results, fig
+        return results
+
+    def k_performance(
+        self,
+        max_k: int,
+        cluster_n_param: str,
+        method: Union[str, ClusterMethod],
+        metric: InternalMetric,
+        overwrite_features: Optional[List[str]] = None,
+        sample_id: Optional[str] = None,
+        reduce_dimensions: bool = False,
+        dim_reduction_kwargs: Optional[Dict] = None,
+        clustering_params: Optional[Dict] = None,
+    ):
+        clustering_params = clustering_params or {}
+
+        overwrite_features = overwrite_features or self.features
+        features = remove_null_features(self.data, features=overwrite_features)
+        data = (
+            self.data
+            if not reduce_dimensions
+            else dimension_reduction_with_sampling(data=self.data, features=features, **dim_reduction_kwargs)
+        )
+        if sample_id is not None:
+            data = data[data.sample_id == sample_id].copy()
+
+        ylabel = metric.name
+        x = list()
+        y = list()
+        for k in progress_bar(np.arange(1, max_k + 1, 1)):
+            df = data.copy()
+            clustering_params[cluster_n_param] = k
+            method = init_cluster_method(method=method, verbose=self.verbose, **clustering_params)
+            df = method.cluster(data=df, features=features, evaluate=False)
+            x.append(k)
+            y.append(metric(data=df, features=features, labels=df["cluster_label"]))
+        ax = sns.lineplot(x=x, y=y, markers=True)
+        ax.set_xlabel("K")
+        ax.set_ylabel(ylabel)
+        return ax
+
+    def silhouette_analysis(
+        self,
+        n: int = 5000,
+        ax: Optional[plt.Axes] = None,
+        figsize: Optional[Tuple[int, int]] = (7.5, 7.5),
+        xlim: Tuple[int, int] = (-1, 1),
+    ):
+        data = self.data.sample(n=n)
+        return silhouette_analysis(data=data, features=self.features, ax=ax, figsize=figsize, xlim=xlim)
+
+    def merge_clusters(
+        self,
+        k_range: Optional[Iterable[int]] = None,
+        summary: Union[str, Callable] = "median",
+        cluster_method: Optional[ClusterMethod] = None,
+        **kwargs,
+    ):
+        if summary == "median":
+            data = self.data.groupby(["cluster_label"])[self.features].median()
+        elif summary == "mean":
+            data = self.data.groupby(["cluster_label"])[self.features].median()
+        else:
+            data = self.data.groupby(["cluster_label"])[self.features].apply(summary)
+
+        cluster_method = cluster_method or AgglomerativeClustering()
+        if k_range is None:
+            k_range = [2, math.ceil(self.data.cluster_label.nunique() / 2)]
+        kconsensus = KConsensusClustering(
+            cluster=cluster_method, smallest_cluster_n=k_range[0], largest_cluster_n=k_range[1], **kwargs
+        )
+        data["cluster_label"] = kconsensus.fit_predict(data=data.values)
+        data.index.name = "original_cluster_label"
+        data.reset_index(drop=False, inplace=True)
+        mapping = {o: n for o, n in data[["original_cluster_label", "cluster_label"]].values}
+        self.data.cluster_label = self.data.cluster_label.replace(mapping)
+        return self
+
+    def _create_parent_populations(
+        self,
+        population_var: str,
+        parent_populations: Dict,
+        population_prefix: Optional[str] = None,
+        verbose: bool = True,
+    ):
+        """
+        Form parent populations from existing clusters
+
+        Parameters
+        ----------
+        population_var: str
+            Name of the cluster population variable i.e. cluster_label or meta_label
+        parent_populations: Dict
+            Dictionary of parent associations. Parent populations will be a merger of all child populations.
+            Each child population intended to inherit from a parent that is not 'root' should be given as a
+            key with the value being the parent to associate to.
+        verbose: bool (default=True)
+            Whether to provide feedback in the form of a progress bar
+
+        Returns
+        -------
+        None
+            Parent populations are saved to the FileGroup
+        """
+        logger.info("Creating parent populations from clustering results")
+        parent_child_mappings = defaultdict(list)
+        for child, parent in parent_populations.items():
+            parent_child_mappings[parent].append(child)
+
+        for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose):
+            fg = self.experiment.get_sample(sample_id)
+            sample_data = self.data[self.data.sample_id == sample_id].copy()
+
+            for parent, children in parent_child_mappings.items():
+                cluster_data = sample_data[sample_data[population_var].isin(children)]
+                if cluster_data.shape[0] == 0:
+                    logger.warning(f"No clusters found for {sample_id} to generate requested parent {parent}")
+                    continue
+                parent_population_name = parent if population_prefix is None else f"{population_prefix}_{parent}"
+                pop = Population(
+                    population_name=parent_population_name,
+                    n=cluster_data.shape[0],
+                    parent=self.root_population,
+                    source="cluster",
+                )
+                pop.index = cluster_data.original_index.to_list()
+                fg.add_population(population=pop)
+            fg.save()
 
     def _save(
         self,

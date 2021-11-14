@@ -12,6 +12,7 @@ from scipy.spatial import distance
 from sklearn import metrics as sklearn_metrics
 from sklearn.metrics import adjusted_mutual_info_score
 from sklearn.metrics import adjusted_rand_score
+from yellowbrick.cluster.elbow import distortion_score
 
 from cytopy.feedback import progress_bar
 
@@ -143,6 +144,21 @@ class GPlusIndex(InternalMetric):
         return (2 * sminus) / (num_pair * (num_pair - 1))
 
 
+class DistortionScore(InternalMetric):
+    def __init__(self, **kwargs):
+        super(DistortionScore, self).__init__(
+            name="Distortion score",
+            desc="The distortion is computed as the the sum of the squared distances between "
+            "each observation and its closest centroid i.e. the function minimised in K-Means "
+            "clustering.",
+            **kwargs,
+        )
+
+    def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
+        metric = self.kwargs.get("metric", "euclidean")
+        return distortion_score(data[features].values, labels, metric=metric)
+
+
 class CalinskiHarabaszScore(InternalMetric):
     def __init__(self, **kwargs):
         super().__init__(
@@ -161,6 +177,7 @@ default_internal_metrics = {
     "silhouette_coef": SilhouetteCoef,
     "davies_bouldin_index": DaviesBouldinIndex,
     "calinski_harabasz_score": CalinskiHarabaszScore,
+    "distortion_score": DistortionScore,
 }
 
 

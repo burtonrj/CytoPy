@@ -132,6 +132,7 @@ class PARC:
         ef_query = max(100, self.knn + 1)  # ef always should be >K. higher ef, more accurate query
         n_elements, num_dims = data.shape
         p = hnswlib.Index(space="l2", dim=num_dims)
+        p.set_num_threads(self.num_threads)
         p.init_index(max_elements=n_elements, ef_construction=200, M=30)
         p.add_items(data)
         p.set_ef(ef_query)  # ef should always be > k
@@ -233,9 +234,9 @@ class PARC:
                 parc_labels_leiden[j] = parc_labels_leiden_big[jj]
                 jj = jj + 1
             dummy, parc_labels_leiden = np.unique(list(parc_labels_leiden.flatten()), return_inverse=True)
-            logger.info(f"New set of labels {set(parc_labels_leiden)}")
+            logger.info(f"New set of labels {np.unique(parc_labels_leiden.flatten())}")
             too_big = False
-            set_parc_labels_leiden = set(parc_labels_leiden)
+            set_parc_labels_leiden = np.unique(parc_labels_leiden.flatten())
 
             parc_labels_leiden = np.asarray(parc_labels_leiden)
             for cluster_ii in set_parc_labels_leiden:
@@ -246,7 +247,6 @@ class PARC:
                     too_big = True
                     logger.info(f"Cluster {cluster_ii} is too big with population size {pop_ii}, it will be expanded.")
                     cluster_big_loc = cluster_ii_loc
-                    cluster_big = cluster_ii
                     big_pop = pop_ii
                     list_pop_too_big.append(big_pop)
         _, parc_labels_leiden = np.unique(list(parc_labels_leiden.flatten()), return_inverse=True)
@@ -256,7 +256,7 @@ class PARC:
         small_pop_list = []
         small_cluster_list = []
         small_pop_exist = False
-        for cluster in set(parc_labels_leiden):
+        for cluster in np.unique(parc_labels_leiden.flatten()):
             population = len(np.where(parc_labels_leiden == cluster)[0])
             if population < self.small_pop:  # 10
                 small_pop_exist = True
@@ -317,7 +317,7 @@ class PARC:
             neighbor_array = np.split(self.neighbor_graph.indices, self.neighbor_graph.indptr)[1:-1]
         else:
             if self.knn > 190:
-                logger.warning("consider using a lower K_in for KNN graph construction")
+                logger.warning("Consider using a lower k for KNN graph construction for faster computation")
             knn_struct = self._construct_knn(data=data)
             neighbor_array, distance_array = knn_struct.knn_query(data, k=self.knn)
             csr_array = self._build_csrmatrix(neighbor_array, distance_array)

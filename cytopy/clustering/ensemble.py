@@ -241,7 +241,7 @@ class EnsembleClustering(Clustering):
         }
         return self
 
-    def choose_k(
+    def k_performance(
         self,
         k_range: Tuple[int, int],
         consensus_method: str,

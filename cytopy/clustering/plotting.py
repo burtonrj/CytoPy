@@ -1,3 +1,4 @@
+import logging
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -5,10 +6,14 @@ from typing import Tuple
 from typing import Type
 from typing import Union
 
+import numpy as np
 import pandas as pd
 import polars as pl
 import seaborn as sns
 from matplotlib import pyplot as plt
+from matplotlib.cm import nipy_spectral
+from sklearn.metrics import silhouette_samples
+from sklearn.metrics import silhouette_score
 from sklearn.utils import shuffle
 
 from cytopy.data.read_write import polars_to_pandas
@@ -17,6 +22,9 @@ from cytopy.plotting.single_cell_plot import discrete_label
 from cytopy.plotting.single_cell_plot import discrete_palette
 from cytopy.utils.dim_reduction import DimensionReduction
 from cytopy.utils.sampling import sample_dataframe_uniform_groups
+
+
+logger = logging.getLogger(__name__)
 
 
 def plot_cluster_membership(
@@ -453,3 +461,51 @@ def _bubbleplot_defaults(**kwargs):
         if k not in updated_kwargs.keys():
             updated_kwargs[k] = v
     return updated_kwargs
+
+
+def silhouette_analysis(
+    data: pd.DataFrame,
+    features: List[str],
+    ax: Optional[plt.Axes] = None,
+    figsize: Optional[Tuple[int, int]] = (7.5, 7.5),
+    xlim: Tuple[int, int] = (-1, 1),
+):
+    n_clusters = data.cluster_label.nunique()
+    cluster_labels = data.cluster_label.values
+    if data.shape[0] > 10000:
+        logger.warning("For data with more than 10000 observations downsampling is suggested.")
+    ax = ax if ax is not None else plt.subplots(figsize=figsize)[1]
+    ax.set_xlim(xlim)
+    ax.set_ylim([0, data.shape[0] + (n_clusters + 1) * 10])
+    silhouette_avg = silhouette_score(data[features], cluster_labels)
+    sample_silhouette_values = silhouette_samples(data[features], cluster_labels)
+
+    y_lower = 10
+    for i in range(n_clusters):
+        ith_cluster_silhouette_values = sample_silhouette_values[cluster_labels == i]
+        ith_cluster_silhouette_values.sort()
+
+        size_cluster_i = ith_cluster_silhouette_values.shape[0]
+        y_upper = y_lower + size_cluster_i
+
+        color = nipy_spectral(float(i) / n_clusters)
+        ax.fill_betweenx(
+            np.arange(y_lower, y_upper),
+            0,
+            ith_cluster_silhouette_values,
+            facecolor=color,
+            edgecolor=color,
+            alpha=0.7,
+        )
+
+        # Label the silhouette plots with their cluster numbers at the middle
+        ax.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i))
+
+        # Compute the new y_lower for next plot
+        y_lower = y_upper + 10  # 10 for the 0 samples
+    ax.set_xlabel("The silhouette coefficient values")
+    ax.set_ylabel("Cluster label")
+    ax.axvline(x=silhouette_avg, color="red", linestyle="--")
+    ax.set_yticks([])  # Clear the yaxis labels / ticks
+    ax.set_xticks([round(i, 2) for i in np.arange(xlim[0], xlim[1] + 0.1, 0.1)])
+    return ax

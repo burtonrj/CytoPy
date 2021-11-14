@@ -167,4 +167,5 @@ def single_cell_density(
     ax = ax or plt.subplots(figsize=figsize)[1]
     norm = norm or cm.LogNorm()
     ax.autoscale(enable=True)
-    return ax.hist2d(data[x], data[y], bins=bins, cmap=palette, norm=norm, **kwargs)
+    ax.hist2d(data[x], data[y], bins=bins, cmap=palette, norm=norm, **kwargs)
+    return ax
