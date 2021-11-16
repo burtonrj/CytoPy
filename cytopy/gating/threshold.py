@@ -1,5 +1,4 @@
 import logging
-from functools import partial
 from multiprocessing import cpu_count
 from typing import Dict
 from typing import List
@@ -250,7 +249,7 @@ def threshold_2d(
     data: pd.DataFrame, x: str, y: str, x_threshold: float, y_threshold: float
 ) -> Dict[str, pd.DataFrame]:
     """
-    Appdy the given threshold (x_threshold) to the x-axis variable (x) and the given threshold (y_threshold)
+    Apply the given threshold (x_threshold) to the x-axis variable (x) and the given threshold (y_threshold)
     to the y-axis variable (y), and return the  resulting dataframes as a dictionary:
         '++': Greater than or equal to threshold for both x and y
         '+-': Greater than or equal to threshold for x but less than threshold for y
@@ -280,6 +279,7 @@ def threshold_2d(
 
 class ThresholdBase(Gate):
     children = mongoengine.EmbeddedDocumentListField(ChildThreshold)
+    ctrl = mongoengine.StringField(required=False)
 
     def label_children(self, labels: Dict[str, str]):
         for c in self.children:
@@ -370,20 +370,7 @@ class ThresholdBase(Gate):
     def _fit_hyperparameter_search(self, data: pd.DataFrame, parameter_grid: Dict):
         return []
 
-    def train(self, data: pd.DataFrame, transform: bool = True) -> (Dict[str, pd.DataFrame], List[Union[float, None]]):
-        data = self.preprocess(data=data, transform=transform)
-        if self.downsample_method:
-            data = self._downsample(data=data)
-        if len(self.children) > 0:
-            self.children.delete()
-        thresholds = self._fit(data=data)
-        partitioned_data = apply_threshold(
-            data=data,
-            x=self.x,
-            x_threshold=thresholds[0],
-            y=self.y,
-            y_threshold=thresholds[1],
-        )
+    def _generate_children(self, partitioned_data: Dict[str, pd.DataFrame], thresholds: List):
         for definition, df in partitioned_data.items():
             child = ChildThreshold(
                 name=definition,
@@ -401,20 +388,52 @@ class ThresholdBase(Gate):
             )
             child.index = df.index.to_list()
             self.children.append(child)
-        self.reference = data
+
+    def _train(self, primary_data: pd.DataFrame, control_data: Optional[pd.DataFrame], transform: bool):
+        if len(self.children) > 0:
+            self.children.delete()
+        primary_data = self.preprocess(data=primary_data, transform=transform)
+        if control_data is not None:
+            control_data = self.preprocess(data=control_data, transform=transform)
+            thresholds = self._fit(data=control_data)
+        else:
+            thresholds = self._fit(data=primary_data)
+        partitioned_data = apply_threshold(
+            data=primary_data,
+            x=self.x,
+            x_threshold=thresholds[0],
+            y=self.y,
+            y_threshold=thresholds[1],
+        )
+        self._generate_children(partitioned_data=partitioned_data, thresholds=thresholds)
+        self.reference = primary_data
         return self
 
-    def predict(self, data: pd.DataFrame, transform: bool = True, **overwrite_kwargs):
+    def train_with_control(self, primary_data: pd.DataFrame, control_data: pd.DataFrame, transform: bool = True):
+        return self._train(primary_data=primary_data, control_data=control_data, transform=transform)
+
+    def train(self, data: pd.DataFrame, transform: bool = True):
+        return self._train(primary_data=data, control_data=None, transform=transform)
+
+    def _predict(
+        self, primary_data: pd.DataFrame, control_data: Optional[pd.DataFrame], transform: bool, **overwrite_kwargs
+    ) -> List[Population]:
         assert len(self.children) > 0, "Call 'train' before predict."
-        data = self.preprocess(data=data, transform=transform)
-        if data.shape[0] <= 3:
+        if primary_data.shape[0] <= 3:
             raise GateError("Data provided contains 3 or less observations.")
-        if self.reference_alignment:
-            data = self._align_to_reference(data=data)
-        df = data if self.downsample_method is None else self._downsample(data=data)
+        primary_data = self.preprocess(data=primary_data, transform=transform)
+        if control_data is not None:
+            if control_data.shape[0] <= 3:
+                raise GateError("Control data provided contains 3 or less observations.")
+            control_data = self.preprocess(data=control_data, transform=transform)
+            df = control_data if self.downsample_method is None else self._downsample(data=control_data)
+        else:
+            if self.reference_alignment:
+                primary_data = self._align_to_reference(data=primary_data)
+            df = primary_data if self.downsample_method is None else self._downsample(data=primary_data)
         thresholds = self._fit(data=df, **overwrite_kwargs)
         partitioned_data = apply_threshold(
-            data=data,
+            data=primary_data,
             x=self.x,
             x_threshold=thresholds[0],
             y=self.y,
@@ -422,6 +441,16 @@ class ThresholdBase(Gate):
         )
         pops = self._generate_populations(data=partitioned_data, x_threshold=thresholds[0], y_threshold=thresholds[1])
         return self._match_to_children(new_populations=pops)
+
+    def predict_with_control(
+        self, primary_data: pd.DataFrame, control_data: pd.DataFrame, transform: bool = True, **overwrite_kwargs
+    ):
+        return self._predict(
+            primary_data=primary_data, control_data=control_data, transform=transform, **overwrite_kwargs
+        )
+
+    def predict(self, data: pd.DataFrame, transform: bool = True, **overwrite_kwargs):
+        return self._predict(primary_data=data, control_data=None, transform=transform, **overwrite_kwargs)
 
     def _calc_optimal_populations(self, data: pd.DataFrame, populations: List[List[Population]]) -> List[Population]:
         features = [x for x in data.columns if "time" not in x.lower()]
@@ -475,7 +504,6 @@ class ThresholdBase(Gate):
 
 
 class QuantileGate(ThresholdBase):
-    children = mongoengine.EmbeddedDocumentListField(ChildThreshold)
     q = mongoengine.FloatField(required=True)
 
     def __init__(self, *args, **values):
@@ -507,7 +535,6 @@ class QuantileGate(ThresholdBase):
 
 
 class ThresholdGate(ThresholdBase):
-    children = mongoengine.EmbeddedDocumentListField(ChildThreshold)
     kernel = mongoengine.StringField(required=True, default="gaussian")
     bw_method = mongoengine.StringField(required=True, default="silverman", choices=["ISJ", "silverman"])
     bw_x = mongoengine.FloatField(required=False)

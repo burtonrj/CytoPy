@@ -25,9 +25,11 @@ from cytopy.data.population import ThresholdGeom
 from cytopy.feedback import progress_bar
 from cytopy.gating.base import Gate
 from cytopy.gating.polygon import update_polygon
+from cytopy.gating.threshold import ThresholdBase
 from cytopy.gating.threshold import update_threshold
 from cytopy.plotting.cyto import cyto_plot
 from cytopy.plotting.cyto import overlay
+from cytopy.plotting.cyto import plot_ctrl_gate_1d
 from cytopy.plotting.cyto import plot_gate
 from cytopy.plotting.general import build_plot_grid
 
@@ -103,9 +105,10 @@ class GatingStrategy(mongoengine.Document):
 
     def plot_gate(self, gate: str, plot_training_data: bool = False, n_limit: Optional[int] = None, **plot_kwargs):
         fg = None if plot_training_data else self.filegroup
-        return plot_gate(
-            gate=self.get_gate(gate), filegroup=fg, data_source=self.data_source, n_limit=n_limit, **plot_kwargs
-        )
+        gate = self.get_gate(gate)
+        if isinstance(gate, ThresholdBase) and gate.ctrl and not gate.y:
+            return plot_ctrl_gate_1d(gate=gate, filegroup=self.filegroup, **plot_kwargs)
+        return plot_gate(gate=gate, filegroup=fg, data_source=self.data_source, n_limit=n_limit, **plot_kwargs)
 
     def plot_all_gates(
         self,
@@ -251,7 +254,14 @@ class GatingStrategy(mongoengine.Document):
     def preview(self, gate: Union[str, Gate], **plot_kwargs):
         if isinstance(gate, str):
             gate = self.get_gate(gate)
-        gate.train(data=self.population_data(population_name=gate.parent), transform=True)
+        data = self.population_data(population_name=gate.parent)
+        if isinstance(gate, ThresholdBase) and gate.ctrl:
+            ctrl_data = self.population_data(population_name=gate.parent, data_source=gate.ctrl)
+            gate.train_with_control(primary_data=data, control_data=ctrl_data, transform=True)
+            if gate.y is None:
+                return plot_ctrl_gate_1d(gate=gate, filegroup=self.filegroup, **plot_kwargs)
+        else:
+            gate.train(data=data, transform=True)
         return plot_gate(gate=gate, **plot_kwargs)
 
     def apply(
@@ -265,7 +275,13 @@ class GatingStrategy(mongoengine.Document):
         overwrite_kwargs = overwrite_kwargs or {}
         if isinstance(gate, str):
             gate = self.get_gate(gate)
-        if gate.gate_name in self.hyperparameter_search.keys():
+        data = self.population_data(population_name=gate.parent)
+        if isinstance(gate, ThresholdBase) and gate.ctrl:
+            ctrl_data = self.population_data(population_name=gate.parent, data_source=gate.ctrl)
+            populations = gate.predict_with_control(
+                primary_data=data, control_data=ctrl_data, transform=True, **overwrite_kwargs
+            )
+        elif gate.gate_name in self.hyperparameter_search.keys():
             populations = gate.predict_with_hyperparameter_search(
                 data=self.population_data(population_name=gate.parent),
                 parameter_grid=self.hyperparameter_search[gate.gate_name],
@@ -285,6 +301,8 @@ class GatingStrategy(mongoengine.Document):
                 print(f"...child {p.population_name} n: {p.n}; {p.n / parent_n * 100}% of parent")
             print("------------------------")
         if plot:
+            if isinstance(gate, ThresholdBase) and gate.ctrl and not gate.y:
+                return plot_ctrl_gate_1d(gate=gate, filegroup=self.filegroup, **plot_kwargs)
             return plot_gate(gate=gate, filegroup=self.filegroup, data_source=self.data_source, **plot_kwargs)
         return self
 

@@ -50,6 +50,7 @@ import polars as pl
 from botocore.errorfactory import ClientError
 from bson import Binary
 
+from ..gating.threshold import apply_threshold
 from ..utils.geometry import inside_polygon
 from ..utils.sampling import sample_dataframe
 from ..utils.transform import apply_transform
@@ -153,7 +154,26 @@ class FileGroup(mongoengine.Document):
         assert "primary" in self.file_paths.keys(), f"'primary' missing from file_paths"
         if self.id:
             for key in self.file_paths.keys():
-                self.tree[key] = construct_tree(populations=[p for p in self.populations if p.data_source == key])
+                try:
+                    self.tree[key] = construct_tree(populations=[p for p in self.populations if p.data_source == key])
+                except AssertionError:
+                    logger.error(f"({self.primary_id}) Missing root populations for {key}!")
+                    data = self.data(source=key)
+                    pop = Population(
+                        population_name="root",
+                        n=data.shape[0],
+                        parent="root",
+                        source="root",
+                        data_source=key,
+                        prop_of_parent=1.0,
+                        prop_of_total=1.0,
+                    )
+                    pop.index = data.Index.to_list()
+                    self.populations.append(pop)
+                    self.tree[key] = {"root": anytree.Node(name="root", parent=None)}
+                    self.save()
+                    del data
+                    gc.collect()
         else:
             for key in self.file_paths.keys():
                 data = self.data(source=key)
@@ -630,11 +650,9 @@ class FileGroup(mongoengine.Document):
         """
         if populations == "all":
             logger.debug(f"Deleting all populations in {self.primary_id}; {data_source}; {self.id}")
-            for p in self.populations:
-                self.tree[data_source][p.population_name].parent = None
-            self.populations = [
-                p for p in self.populations if p.population_name == "root" and p.data_source == data_source
-            ]
+            for pop_name in self.list_populations(data_source=data_source):
+                self.tree[data_source][pop_name].parent = None
+                self.populations.filter(population_name=pop_name, data_source=data_source).delete()
             self.tree[data_source] = {name: node for name, node in self.tree[data_source].items() if name == "root"}
         else:
             try:
@@ -928,28 +946,18 @@ def copy_populations_to_controls_using_geoms(filegroup: FileGroup, ctrl: str, fl
         if isinstance(pop.geom, PolygonGeom):
             data = inside_polygon(data=parent_df, x=pop.geom.x, y=pop.geom.y, poly=pop.geom.shape)
         elif isinstance(pop.geom, ThresholdGeom):
-            if pop.definition == "+":
-                data = parent_df[parent_df[pop.geom.x] >= pop.geom.x_threshold]
-            elif pop.definition == "-":
-                data = parent_df[parent_df[pop.geom.x] < pop.geom.x_threshold]
-            elif pop.definition == "--":
-                data = parent_df[
-                    (parent_df[pop.geom.x] < pop.geom.x_threshold) & (parent_df[pop.geom.y] < pop.geom.y_threshold)
-                ]
-            elif pop.definition == "-+":
-                data = parent_df[
-                    (parent_df[pop.geom.x] < pop.geom.x_threshold) & (parent_df[pop.geom.y] >= pop.geom.y_threshold)
-                ]
-            elif pop.definition == "+-":
-                data = parent_df[
-                    (parent_df[pop.geom.x] >= pop.geom.x_threshold) & (parent_df[pop.geom.y] < pop.geom.y_threshold)
-                ]
-            elif pop.definition == "++":
-                data = parent_df[
-                    (parent_df[pop.geom.x] >= pop.geom.x_threshold) & (parent_df[pop.geom.y] >= pop.geom.y_threshold)
-                ]
-            else:
-                raise ValueError("Unrecognised definition for ThresholdGeom")
+            threshold_data = apply_threshold(
+                data=parent_df,
+                x=pop.geom.x,
+                x_threshold=pop.geom.x_threshold,
+                y=pop.geom.y,
+                y_threshold=pop.geom.y_threshold,
+            )
+            data = []
+            for definition, df in threshold_data.items():
+                if definition in pop.definition.split(","):
+                    data.append(df)
+            data = pd.concat(data)
         else:
             logger.warning(f"Skipping {pop.population_name}: unrecognised geometry")
             continue

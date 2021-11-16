@@ -46,10 +46,12 @@ import pandas as pd
 
 from ..feedback import progress_bar
 from ..utils.sampling import sample_dataframe
+from .errors import DuplicatePopulationError
 from .errors import DuplicateSampleError
 from .errors import MissingPopulationError
 from .errors import MissingSampleError
 from .errors import PanelError
+from .fcs import copy_populations_to_controls_using_geoms
 from .fcs import FileGroup
 from .panel import Panel
 from .subject import Subject
@@ -387,6 +389,17 @@ class Experiment(mongoengine.Document):
                     f.save()
                 except ValueError as e:
                     logger.warning(f"Failed to merge populations for {f.primary_id}: {str(e)}")
+
+    def propagate_populations_to_control(self, ctrl: str, flag: float = 0.25):
+        stats = []
+        for fg in progress_bar(self.fcs_files):
+            try:
+                fg, st = copy_populations_to_controls_using_geoms(filegroup=fg, ctrl=ctrl, flag=flag)
+                stats.append(st)
+                fg.save()
+            except (ValueError, MissingPopulationError, DuplicatePopulationError) as e:
+                logger.error(f"Unable to generate populations for {ctrl} in {fg.primary_id}: {e}")
+        return pd.concat(stats).reset_index(drop=True)
 
     def delete(self, signal_kwargs=None, **write_concern):
         """

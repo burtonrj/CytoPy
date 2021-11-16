@@ -315,6 +315,12 @@ class Gate(mongoengine.Document):
         ]
         return grid_with_defaults
 
+    def train(self, data: pd.DataFrame, transform: bool = False):
+        return self
+
+    def predict(self, data: pd.DataFrame, transform: bool = True, **overwrite_kwargs):
+        return self
+
     def save(self, *args, **kwargs):
         for child in self.children:
             assert child.index is not None, f"Child {child.name} index is empty!"
