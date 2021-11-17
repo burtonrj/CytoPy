@@ -168,6 +168,8 @@ class Transformer:
             Chosen transform function is missing the arguments channel_indices or channels. cytopy uses
             the FlowUtils class for transformations. See FlowUtils documentation for details.
         """
+        if data.shape[0] == 0:
+            return data
         data = data if isinstance(data, pl.DataFrame) else pandas_to_polars(data=data)
         data = data.with_columns([pl.col(x).map(self.transform) for x in features])
         return polars_to_pandas(data=data)
@@ -192,6 +194,8 @@ class Transformer:
             Chosen inverse transform function is missing the arguments channel_indices or channels.
             cytopy uses the FlowUtils class for transformations. See FlowUtils documentation for details.
         """
+        if data.shape[0] == 0:
+            return data
         data = data if isinstance(data, pl.DataFrame) else pandas_to_polars(data=data)
         data = data.with_columns([pl.col(x).map(self.inverse) for x in features])
         return polars_to_pandas(data=data)

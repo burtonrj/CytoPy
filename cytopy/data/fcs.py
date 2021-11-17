@@ -943,6 +943,9 @@ def copy_populations_to_controls_using_geoms(filegroup: FileGroup, ctrl: str, fl
             },
             data_source=ctrl,
         )
+        if parent_df.shape[0] == 0:
+            logger.warning(f"Skipping {pop.population_name}: parent {pop.parent} has no events")
+            continue
         if isinstance(pop.geom, PolygonGeom):
             data = inside_polygon(data=parent_df, x=pop.geom.x, y=pop.geom.y, poly=pop.geom.shape)
         elif isinstance(pop.geom, ThresholdGeom):

@@ -28,25 +28,6 @@ def info(txt):
     return f"<p style='color:#1B5DA4;'><b>{txt}</b></p>"
 
 
-def simple_1d_control_gate(
-    experiment: Experiment,
-    x: str,
-    x_ctrl: str,
-    parent_population: str,
-    positive_population: str,
-    negative_population: str,
-    transform: str = "asinh",
-    transform_kwargs: Optional[Dict] = None,
-    kernel: str = "gaussian",
-    bw: Union[str, float] = "ISJ",
-    gate_type: str = "quantile",
-    plot_dir: Optional[str] = None,
-    plot_kwargs: Optional[Dict] = None,
-    **kwargs,
-):
-    pass
-
-
 class InteractiveControlGate1D(widgets.HBox):
     def __init__(
         self,
@@ -61,6 +42,7 @@ class InteractiveControlGate1D(widgets.HBox):
         transform_kwargs: Optional[Dict] = None,
         kernel: str = "gaussian",
         bw: Union[str, float] = "ISJ",
+        q: Optional[float] = None,
     ):
         super(InteractiveControlGate1D, self).__init__()
         self.experiment = experiment
@@ -75,6 +57,7 @@ class InteractiveControlGate1D(widgets.HBox):
         self.transform_kwargs = transform_kwargs
         self.kernel = kernel
         self.bw = bw
+        self.q = q
         self.threshold = None
         self._new_population_data = None
         self._primary_data = None
@@ -208,15 +191,18 @@ class InteractiveControlGate1D(widgets.HBox):
 
     def _apply_gate(self):
         self.progress_bar.value = 7
-        self.threshold = find_threshold(
-            x=self._ctrl_data[self.x].values,
-            bw="silverman",
-            min_peak_threshold=0.05,
-            peak_boundary=0.1,
-            incline=False,
-            kernel="gaussian",
-            q=None,
-        )
+        if self.q:
+            self.threshold = self._ctrl_data[self.x].quantile(self.q)
+        else:
+            self.threshold = find_threshold(
+                x=self._ctrl_data[self.x].values,
+                bw="silverman",
+                min_peak_threshold=0.05,
+                peak_boundary=0.1,
+                incline=False,
+                kernel="gaussian",
+                q=None,
+            )
         self.progress_bar.value = 8
         self._new_population_data = apply_threshold(
             data=self._primary_data,
@@ -226,6 +212,7 @@ class InteractiveControlGate1D(widgets.HBox):
         self.progress_bar.value = 9
         self.ax.axvline(self.threshold, linewidth=2, linestyle="-", color="black")
         self._update_labels()
+        self.x_text.value = str(round(self.threshold, 4))
 
     def _update_labels(self):
         pos, neg = self._new_population_data.get("+"), self._new_population_data.get("-")
@@ -260,7 +247,7 @@ class InteractiveControlGate1D(widgets.HBox):
             return
         self.progress_bar.value = 2
         for definition, population_name in zip(["-", "+"], [self.negative_population, self.positive_population]):
-            self.progress_bar.value = self.progress_bar.value + 2
+            self.progress_bar.value = self.progress_bar.value + 1
             try:
                 pop = Population(
                     population_name=population_name,
@@ -283,6 +270,7 @@ class InteractiveControlGate1D(widgets.HBox):
                 fg.add_population(population=pop)
             except ValueError:
                 self.warnings.value = error(f"Invalid threshold: {self.threshold} is not a valid float")
-            self.progress_bar.value = self.progress_bar.value + 2
+            self.progress_bar.value = self.progress_bar.value + 1
         fg.save()
         self.warnings.value = info(f"Changes saved to {fg.primary_id}!")
+        self.progress_bar.value = 10
