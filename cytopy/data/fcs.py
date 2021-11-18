@@ -49,6 +49,8 @@ import pandas as pd
 import polars as pl
 from botocore.errorfactory import ClientError
 from bson import Binary
+from KDEpy import FFTKDE
+from pingouin import compute_effsize
 
 from ..gating.threshold import apply_threshold
 from ..utils.geometry import inside_polygon
@@ -886,6 +888,37 @@ class FileGroup(mongoengine.Document):
                 "frac_of_parent": 0,
                 "frac_of_root": 0,
             }
+
+    @staticmethod
+    def _cles(x: np.ndarray, y: np.ndarray, n: int = 1000):
+        stat = []
+        for i in range(100):
+            xi = np.random.choice(x, size=n, replace=False)
+            yi = np.random.choice(y, size=n, replace=False)
+            stat.append(compute_effsize(xi, yi, eftype="cles"))
+        stat = np.array(stat)
+        return np.mean(stat), np.sort(stat)[5], np.sort(stat)[95]
+
+    def control_eff_size(
+        self,
+        population: str,
+        ctrl: str,
+        feature: str,
+        method: str = "cohen",
+        transform: str = "asinh",
+        transform_kwargs: Optional[Dict] = None,
+        **kwargs,
+    ):
+        transform_kwargs = transform_kwargs or {}
+        primary_data = self.load_population_df(
+            population=population, transform=transform, transform_kwargs=transform_kwargs, data_source="primary"
+        )[feature].values
+        ctrl_data = self.load_population_df(
+            population=population, transform=transform, transform_kwargs=transform_kwargs, data_source=ctrl
+        )[feature].values
+        if method == "cles":
+            return self._cles(primary_data, ctrl_data, **kwargs)
+        return compute_effsize(primary_data, ctrl_data, eftype=method, **kwargs), None, None
 
     def write_to_fcs(self, path: str, source: str = "primary"):
         with open(path, "wb") as f:

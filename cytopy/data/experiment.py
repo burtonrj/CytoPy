@@ -335,8 +335,23 @@ class Experiment(mongoengine.Document):
         ax.bar(ctrl_counts.keys(), ctrl_counts.values())
         return ax
 
+    @staticmethod
+    def _prop_of_parent(df: pd.DataFrame, parent: str):
+        frac_of_parent = []
+        parent_n = float(df[df.population_name == parent]["n"].values[0])
+        for _, row in df.iterrows():
+            if row.n == 0:
+                frac_of_parent.append(0)
+            else:
+                frac_of_parent.append(row.n / parent_n)
+        df[f"frac_of_{parent}"] = frac_of_parent
+        return df
+
     def population_statistics(
-        self, populations: Union[List, None] = None, meta_vars: Optional[Dict] = None
+        self,
+        populations: Union[List, None] = None,
+        meta_vars: Optional[Dict] = None,
+        additional_parent: Optional[str] = None,
     ) -> pd.DataFrame:
         """
         Generates a Pandas DataFrame of population statistics for all FileGroups
@@ -363,7 +378,56 @@ class Experiment(mongoengine.Document):
                         for col_name, key in meta_vars.items():
                             df[col_name] = s.lookup_var(key=key)
                 data.append(df)
-        return pd.concat(data).reset_index(drop=True)
+        data = pd.concat(data).reset_index(drop=True)
+        if additional_parent:
+            return data.groupby("sample_id").apply(lambda x: self._prop_of_parent(x, parent=additional_parent))
+        return data
+
+    def control_eff_size(
+        self,
+        population: str,
+        ctrl: str,
+        feature: str,
+        method: str = "cohen",
+        transform: str = "asinh",
+        transform_kwargs: Optional[Dict] = None,
+        verbose: bool = True,
+        **kwargs,
+    ):
+        results = []
+        for fg in progress_bar(self.fcs_files, verbose=verbose):
+            try:
+                effsize, lower, upper = fg.control_eff_size(
+                    population=population,
+                    ctrl=ctrl,
+                    feature=feature,
+                    method=method,
+                    transform=transform,
+                    transform_kwargs=transform_kwargs,
+                    **kwargs,
+                )
+                if lower is None:
+                    results.append(pd.DataFrame({"sample_id": [fg.primary_id], "effsize": [effsize]}))
+                else:
+                    results.append(
+                        pd.DataFrame(
+                            {
+                                "sample_id": [fg.primary_id],
+                                "effsize": [effsize],
+                                "lower_ci": [lower],
+                                "upper_ci": [upper],
+                            }
+                        )
+                    )
+            except MissingPopulationError:
+                logger.error(
+                    f"{fg.primary_id} missing requested population {population} either in "
+                    f"the primary staining or control. Use the 'propagate_populations_to_control' "
+                    f"method to ensure populations are present in controls."
+                )
+            except (KeyError, ValueError, TypeError) as e:
+                logger.error(f"Could not obtain control effect size for {fg.primary_id}: {e}")
+        return pd.concat(results).reset_index(drop=True)
 
     def merge_populations(self, mergers: Dict):
         """
