@@ -43,6 +43,7 @@ import matplotlib.pyplot as plt
 import mongoengine
 import numpy as np
 import pandas as pd
+from anndata import AnnData
 
 from ..feedback import progress_bar
 from ..utils.sampling import sample_dataframe
@@ -604,3 +605,49 @@ def single_cell_dataframe(
             **sampling_kwargs,
         ).reset_index(drop=True)
     return data
+
+
+def single_cell_anndata(
+    experiment: Experiment,
+    populations: Optional[Union[str, List[str]]] = "root",
+    regex: Optional[str] = None,
+    transform: Optional[Union[str, Dict]] = "asinh",
+    transform_kwargs: Optional[Dict] = None,
+    sample_ids: Optional[List[str]] = None,
+    verbose: bool = True,
+    data_source: str = "primary",
+    label_parent: bool = False,
+    frac_of: Optional[List[str]] = None,
+    sample_size: Optional[Union[int, float]] = None,
+    sampling_level: str = "file",
+    sampling_method: str = "uniform",
+    sampling_kwargs: Optional[Dict] = None,
+    meta_vars: Optional[Dict] = None,
+) -> AnnData:
+    data = single_cell_dataframe(
+        experiment=experiment,
+        populations=populations,
+        regex=regex,
+        transform=transform,
+        transform_kwargs=transform_kwargs,
+        sample_ids=sample_ids,
+        verbose=verbose,
+        data_source=data_source,
+        label_parent=label_parent,
+        frac_of=frac_of,
+        sample_size=sample_size,
+        sampling_level=sampling_level,
+        sampling_method=sampling_method,
+        sampling_kwargs=sampling_kwargs,
+        meta_vars=meta_vars,
+    )
+    channels = experiment.panel.list_channels()
+    x = data[channels].values
+    meta_vars = meta_vars or {}
+    frac_of = frac_of or []
+    add_cols = list(meta_vars.keys()) + [f"frac_of_{x}" for x in frac_of]
+    if label_parent:
+        add_cols.append("parent_label")
+    obs = data[["subject_id", "sample_id"] + add_cols]
+    var = pd.DataFrame(columns=[x for x in data.columns if x not in obs.columns])
+    return AnnData(X=x, obs=obs, var=var)

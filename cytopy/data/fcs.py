@@ -47,6 +47,7 @@ import mongoengine
 import numpy as np
 import pandas as pd
 import polars as pl
+from anndata import AnnData
 from botocore.errorfactory import ClientError
 from bson import Binary
 from KDEpy import FFTKDE
@@ -916,6 +917,10 @@ class FileGroup(mongoengine.Document):
         ctrl_data = self.load_population_df(
             population=population, transform=transform, transform_kwargs=transform_kwargs, data_source=ctrl
         )[feature].values
+        if ctrl_data.shape[0] < 3:
+            raise ValueError("Insufficient events in control")
+        if primary_data.shape[0] < 3:
+            raise ValueError("Insufficient events in primary data")
         if method == "cles":
             return self._cles(primary_data, ctrl_data, **kwargs)
         return compute_effsize(primary_data, ctrl_data, eftype=method, **kwargs), None, None
