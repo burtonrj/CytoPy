@@ -32,6 +32,7 @@ import logging
 import os
 import pickle
 import re
+from collections import defaultdict
 from copy import deepcopy
 from typing import Dict
 from typing import Generator
@@ -571,6 +572,30 @@ class FileGroup(mongoengine.Document):
                 comparison_pop = self.get_population(population_name=comparison_pop)
                 data[f"frac of {comparison_pop.population_name}"] = population.n / comparison_pop.n
 
+        return data
+
+    def population_membership(
+        self,
+        regex: Optional[str] = None,
+        population_source: Optional[str] = None,
+        data_source: str = "primary",
+        as_boolean: bool = False,
+    ):
+        populations = self.list_populations(regex=regex, source=population_source, data_source=data_source)
+        if as_boolean:
+            data = pd.DataFrame(
+                np.zeros(self.data(source=data_source).shape[0], len(populations)), columns=populations
+            )
+            for pop_name in populations:
+                pop = self.get_population(population_name=pop_name, data_source=data_source)
+                data.loc[pop.index, [pop_name]] = 1
+            data.dropna(axis=0, how="all")
+        else:
+            data = defaultdict(list)
+            for pop_name in populations:
+                pop = self.get_population(population_name=pop_name, data_source=data_source)
+                for i in pop.index:
+                    data[i].append(pop_name)
         return data
 
     def list_populations(

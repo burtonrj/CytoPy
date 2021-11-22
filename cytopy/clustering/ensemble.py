@@ -39,6 +39,14 @@ from cytopy.utils.dim_reduction import DimensionReduction
 logger = logging.getLogger(__name__)
 
 
+class EnsembleClustering(Clustering):
+    def __init__(
+        self, data: pd.DataFrame, experiment: Union[Experiment, List[Experiment]], features: List[str], *args, **kwargs
+    ):
+        super().__init__(data, experiment, features, *args, **kwargs)
+        self._cluster_membership = self._cluster_membership()
+
+
 def save_cache(func: Callable):
     def wrapper(obj, *args, **kwargs):
         output = func(obj, *args, **kwargs)
@@ -68,7 +76,7 @@ def load_cache(path: str) -> Dict:
         return pickle.load(f)
 
 
-class EnsembleClustering(Clustering):
+class EnsembleClusteringLegacy(Clustering):
     """
     The EnsembleClustering class provides a toolset for applying multiple clustering algorithms to a
     dataset, reviewing the clustering results of each algorithm, comparing their performance, and then

@@ -384,6 +384,30 @@ class Experiment(mongoengine.Document):
             return data.groupby("sample_id").apply(lambda x: self._prop_of_parent(x, parent=additional_parent))
         return data
 
+    def population_membership(
+        self,
+        regex: Optional[str] = None,
+        population_source: Optional[str] = None,
+        data_source: str = "primary",
+        as_boolean: bool = False,
+        verbose: bool = True,
+    ):
+        if as_boolean:
+            data = []
+            for fg in progress_bar(self.fcs_files, verbose=verbose):
+                df = fg.population_membership(
+                    regex=regex, population_source=population_source, data_source=data_source, as_boolean=True
+                ).reset_index(drop=False)
+                df["sample_id"] = fg.primary_id
+                data.append(df)
+            return pd.concat(data)
+        data = {}
+        for fg in progress_bar(self.fcs_files, verbose=verbose):
+            data[fg.primary_id] = fg.population_membership(
+                regex=regex, population_source=population_source, data_source=data_source, as_boolean=False
+            )
+        return data
+
     def control_eff_size(
         self,
         population: str,
