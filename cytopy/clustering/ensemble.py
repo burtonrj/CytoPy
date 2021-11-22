@@ -239,3 +239,16 @@ class EnsembleClustering(Clustering):
         if return_data:
             return g, results
         return g
+
+    def save(
+        self,
+        population_prefix: Optional[str] = "consensus",
+        verbose: bool = True,
+        parent_populations: Optional[Dict] = None,
+    ):
+        super()._save(
+            population_prefix=population_prefix,
+            verbose=verbose,
+            population_var="cluster_label",
+            parent_populations=parent_populations,
+        )
