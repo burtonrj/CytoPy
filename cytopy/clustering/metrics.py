@@ -192,6 +192,7 @@ def init_internal_metrics(metrics: Optional[List[Union[str, InternalMetric]]] = 
             else:
                 assert isinstance(x, InternalMetric)
                 metric_objs.append(x)
+        return metric_objs
     except KeyError:
         logger.error(f"Invalid metric, must be one of {default_internal_metrics.keys()}")
         raise

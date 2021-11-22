@@ -1,42 +1,65 @@
+import itertools
 import logging
-import math
-import os
-import pickle
+from collections import Counter
 from collections import defaultdict
-from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
-from typing import Type
 from typing import Union
 
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from ClusterEnsembles import ClusterEnsembles
-from matplotlib import pyplot as plt
-from matplotlib.colors import LogNorm
+from joblib import delayed
+from joblib import Parallel
 from matplotlib.ticker import MaxNLocator
-from sklearn.base import ClusterMixin
+from scipy.cluster.hierarchy import fclusterdata
+from sklearn.metrics.pairwise import pairwise_distances
 
 from .clustering import Clustering
 from .clustering import ClusteringError
-from .clustering import ClusterMethod
-from .clustering import init_cluster_method
-from .clustering import remove_null_features
 from .metrics import comparison_matrix
 from .metrics import init_internal_metrics
 from .metrics import InternalMetric
-from .plotting import clustered_heatmap
-from .plotting import plot_cluster_membership
 from cytopy.data.experiment import Experiment
-from cytopy.feedback import add_processing_animation
 from cytopy.feedback import progress_bar
-from cytopy.plotting.single_cell_plot import discrete_palette
-from cytopy.utils.dim_reduction import DimensionReduction
 
 logger = logging.getLogger(__name__)
+
+
+def distortion_score(data: pd.DataFrame, metric: str = "euclidean"):
+    if data.shape[0] == 0:
+        return None
+    center = data.mean()
+    distances = pairwise_distances(data, center, metric=metric)
+    return (distances ** 2).sum()
+
+
+def majority_vote(
+    cluster_assignments: List[str], consensus_clusters: pd.DataFrame, weights: Optional[Dict[str, float]] = None
+):
+    if weights is not None:
+        scores = []
+        consensus_clusters = consensus_clusters.loc[cluster_assignments]
+        for cc, cc_data in consensus_clusters.groupby("cluster_label"):
+            scores.append([cc, cc_data.shape[0] / sum([weights.get(i) for i in cc_data.index.values])])
+        return sorted(scores, key=lambda x: x[1])[::-1][0][0]
+
+    cluster_labels = Counter([consensus_clusters.loc[cluster, "cluster_label"] for cluster in cluster_assignments])
+    score = 0
+    winner = None
+    for label, count in cluster_labels.items():
+        if count == score:
+            logger.warning(
+                f"{label} and {winner} have equal scores, observation will be assigned to {winner}, "
+                f"to avoid this provide weights for cluster voting."
+            )
+        if count > score:
+            score = count
+            winner = label
+    return winner
 
 
 class EnsembleClustering(Clustering):
@@ -44,210 +67,135 @@ class EnsembleClustering(Clustering):
         self, data: pd.DataFrame, experiment: Union[Experiment, List[Experiment]], features: List[str], *args, **kwargs
     ):
         super().__init__(data, experiment, features, *args, **kwargs)
-        self._cluster_membership = self._cluster_membership()
-
-
-def save_cache(func: Callable):
-    def wrapper(obj, *args, **kwargs):
-        output = func(obj, *args, **kwargs)
-        # Save cache
-        cache = {
-            "experiment": obj.experiment.id,
-            "features": obj.features,
-            "sample_ids": obj.sample_ids,
-            "root_population": obj.root_population,
-            "transform": obj.transform,
-            "transform_kwargs": obj.transform_kwargs,
-            "verbose": obj.verbose,
-            "population_prefix": obj.population_prefix,
-            "data": obj.data,
-            "clustering_permutations": obj.clustering_permutations,
-        }
-        with open(obj.cache_location, "wb") as f:
-            logger.info(f"Saving results to {obj.cache_location}")
-            pickle.dump(cache, file=f)
-        return output
-
-    return wrapper
-
-
-def load_cache(path: str) -> Dict:
-    with open(path, "rb") as f:
-        return pickle.load(f)
-
-
-class EnsembleClusteringLegacy(Clustering):
-    """
-    The EnsembleClustering class provides a toolset for applying multiple clustering algorithms to a
-    dataset, reviewing the clustering results of each algorithm, comparing their performance, and then
-    forming a consensus for the clustering results that draws from the results of all the algorithms
-    combined.
-
-    Unlike the SingleClustering class, the EnsembleClustering class only supports global clustering and
-    will merge multiple FileGroups (samples) of an Experiment and treat as a single feature space. Therefore
-    it is important to address batch effects prior to applying ensemble clustering.
-
-    Clustering algorithms are applied using the 'cluster' class and like SingleClustering, require that a
-    valid method is given (either 'flowsom', 'phenograph', the name of a Scikit-Learn clustering method,
-    or a ClusterMethod class). Each clustering result will have a name and the clustering labels and meta
-    data are stored in the 'clustering_permutations' attribute. The results of the individual clustering can
-    be observed using the 'plot' and 'heatmap' methods, and the performance of all clustering algorithms
-    is accessible through the 'performance' attribute.
-
-    The outputs of clustering algorithms can also be contrasted by comparing their mutual information or rand
-    index (after adjusting for chance):
-    * Adjusted mutual information: measures the agreement between clustering results where the ground truth
-    clustering is expected to be unbalanced with possibly small clusters
-    * Adjusted rand index: a measure of similarity between clustering results where the ground truth is
-    expected to contain mostly equal sized clusters
-
-    The above are accessed using the 'comparison' method returning a clustered matrix of the pairwise
-    metrics.
-
-    To obtain a consensus multiple 'finishing' techniques can be applied. All but one use a co-occurrence matrix
-    (quantifies the number of times a pair of observations cluster together, for all observations in the dataset):
-
-    * Clustering co-occurrence: the simplest solution is that we cluster the co-occurrence matrix ensuring that
-    clusters are obtained that encapsulate data points that co-cluster robustly across methods
-    * Majority vote: using the co-occurrence matrix, cluster assignment is made by majority vote to extract
-    only consistent clusters
-    * Graph closure: by treating the co-occurrence matrix as an adjacency matrix, find the complete subgraphs within
-    the matrix bia k-cliques and percolation
-    * Mixture model: a probabilistic model of consensus using a finite mixture of multinomial distributions
-    in a space of clustering results. This method assumes that the number of clusters is predetermined and therefore
-    the methods above may be preferred.
-
-    Once multiple clustering methods have been applied, you can use the 'co_occurrence_matrix' method to generate
-    a CoMatrix object that will provide access to co-occurrence clustering, majority vote, and graph closure
-    for final label generation. Use the 'mixture_model' method to obtain a MixtureModel object to obtain final
-    labels using the multivariate mixture models.
-    """
-
-    def __init__(
-        self,
-        cache: str,
-        experiment: Experiment = None,
-        features: List[str] = None,
-        sample_ids: Optional[List[str]] = None,
-        root_population: str = "root",
-        transform: str = "asinh",
-        transform_kwargs: Optional[Dict] = None,
-        verbose: bool = True,
-        population_prefix: str = "ensemble",
-        random_state: int = 42,
-    ):
-        if os.path.isfile(cache):
-            cached_data = load_cache(path=cache)
-            logger.info(f"Loading EnsembleClustering from {cache}")
-            super().__init__(
-                experiment=Experiment.objects(id=cached_data["experiment"]).get(),
-                features=cached_data["features"],
-                sample_ids=cached_data["sample_ids"],
-                root_population=cached_data["root_population"],
-                transform=cached_data["transform"],
-                transform_kwargs=cached_data["transform_kwargs"],
-                verbose=cached_data["verbose"],
-                population_prefix=cached_data["population_prefix"],
-                data=cached_data["data"],
-                random_state=random_state,
-            )
-            self.clustering_permutations = cached_data["clustering_permutations"]
-        else:
-            logger.info(f"Creating new EnsembleClustering object connected to {experiment.experiment_id}")
-            super().__init__(
-                experiment=experiment,
-                features=features,
-                sample_ids=sample_ids,
-                root_population=root_population,
-                transform=transform,
-                transform_kwargs=transform_kwargs,
-                verbose=verbose,
-                population_prefix=population_prefix,
-                random_state=random_state,
-            )
-            self.clustering_permutations = dict()
-        self.cache_location = cache
-
-    @save_cache
-    def cluster(
-        self,
-        cluster_name: str,
-        method: Union[str, ClusterMethod, ClusterMixin],
-        overwrite_features: Optional[List[str]] = None,
-        scale_method: Optional[str] = None,
-        scale_kwargs: Optional[Dict] = None,
-        dim_reduction: Optional[str] = None,
-        dim_reduction_kwargs: Optional[Dict] = None,
-        clustering_params: Optional[Dict] = None,
-    ):
-        clustering_params = clustering_params or {}
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
-        overwrite_features = overwrite_features or self.features
-        features = remove_null_features(self.data, features=overwrite_features)
-        method = init_cluster_method(method=method, **clustering_params)
-        data, features = self.scale_and_reduce(
-            features=features,
-            scale_method=scale_method,
-            scale_kwargs=scale_kwargs,
-            dim_reduction=dim_reduction,
-            dim_reduction_kwargs=dim_reduction_kwargs,
+        cluster_membership = self.experiment.population_membership(
+            population_source="cluster", data_source="primary", as_boolean=True
         )
+        self.data = self.data.merge(cluster_membership, on=["sample_id", "original_index"])
+        self.clusters = list(cluster_membership.columns)
+        self.cluster_groups = defaultdict(list)
+        self.cluster_assignments = {}
+        self._labels = self._reconstruct_labels()
+        for sample_id in self.data.sample_id.unique():
+            self.cluster_assignments[sample_id] = list(
+                self.experiment.get_sample(sample_id=sample_id).list_populations(
+                    source="cluster", data_source="primary"
+                )
+            )
+        for cluster in cluster_membership.columns:
+            prefix = cluster.split("_")[0]
+            self.cluster_groups[prefix].append(cluster)
 
-        logger.info(f"Running clustering: {cluster_name}")
-        data = method.global_clustering(data=data, features=features)
-        self.clustering_permutations[cluster_name] = {
-            "labels": data["cluster_label"].values,
-            "n_clusters": data["cluster_label"].nunique(),
-            "features": features,
-            "params": clustering_params,
-            "scale_method": scale_method,
-            "scale_params": scale_kwargs,
-            "dim_reduction": dim_reduction,
-            "dim_reduction_params": dim_reduction_kwargs,
+    def _check_for_cluster_parents(self):
+        for prefix, clusters in self.cluster_groups.items():
+            if not (self.data[clusters].sum(axis=1) == 0).all():
+                logger.warning(
+                    f"Some observations are assigned to multiple clusters under the cluster prefix {prefix},"
+                    f" either ensure cluster prefixes are unique to a cluster solution or remove parent "
+                    f"populations with the 'ignore_clusters' method."
+                )
+
+    def ignore_clusters(self, clusters: List[str]):
+        if not all([x in self.data.columns for x in clusters]):
+            raise ValueError("One or more provided clusters does not exist.")
+        self.data.drop(clusters, axis=1, inplace=True)
+        self.cluster_assignments = {
+            sample_id: [x for x in c if x not in clusters] for sample_id, c in self.cluster_assignments.items()
         }
-        logger.info("Clustering complete!")
-        return self
+
+    def _compute_cluster_centroids(self, method: str = "median"):
+        centroids = {}
+        for cluster in self.clusters:
+            cluster_data = self.data[self.data[cluster] == 1][self.features]
+            if method == "median":
+                centroids[cluster] = pd.concat(cluster_data).median().values
+            else:
+                centroids[cluster] = pd.concat(cluster_data).mean().values
+        return pd.DataFrame(centroids, index=self.features).T
+
+    def cluster_centroids(
+        self,
+        t: int,
+        centroid_method: str = "median",
+        method: str = "average",
+        metric: str = "euclidean",
+        criterion: str = "maxclust",
+        plot_only: bool = True,
+        depth: Optional[int] = None,
+        weight: bool = True,
+        n_jobs: int = -1,
+        verbose: bool = True,
+        distortion_metric: str = "euclidean",
+        **kwargs,
+    ):
+        # Check for parent clusters and warn
+        self._check_for_cluster_parents()
+        # Calculate centroids
+        centroids = self._compute_cluster_centroids(method=centroid_method)
+        g = sns.clustermap(data=centroids, method=method, metric=metric, **kwargs)
+        if plot_only:
+            return g
+        # Perform clustering
+        centroids["cluster_label"] = fclusterdata(
+            X=centroids, t=t, criterion=criterion, method=method, metric=metric, depth=depth
+        )
+        with Parallel(n_jobs=n_jobs) as parallel:
+            weights = None
+            if weight:
+                sample_cluster = list(itertools.product(self.data.sample_id.unique(), self.clusters))
+                weights = parallel(
+                    delayed(distortion_score)(
+                        data=self.data[(self.data.sample_id == sample_id) & (self.data[cluster] == 1)],
+                        metric=distortion_metric,
+                    )
+                    for sample_id, cluster in sample_cluster
+                )
+            self.data["cluster_label"] = parallel(
+                delayed(majority_vote)(
+                    cluster_assignments=self.cluster_assignments[sample_id],
+                    consensus_clusters=centroids[["cluster_label"]],
+                    weights=weights,
+                )
+                for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose)
+            )
+        return g
+
+    def _reconstruct_labels(self):
+        labels = {}
+        for prefix, clusters in self.cluster_groups:
+            labels[prefix] = self.data[clusters].idxmax(axis=1)
+        return labels
+
+    def consensus_clustering(
+        self, consensus_method: str, k: int, random_state: int = 42, labels: Optional[List] = None
+    ):
+        labels = labels if labels is not None else list(self._labels.values())
+        if consensus_method == "cspa" and self.data.shape[0] > 5000:
+            logger.warning("CSPA is not recommended when n>5000, consider a different method")
+            self.data["cluster_label"] = ClusterEnsembles.cspa(labels=labels, nclass=k)
+        if consensus_method == "hgpa":
+            self.data["cluster_label"] = ClusterEnsembles.hgpa(labels=labels, nclass=k, random_state=random_state)
+        if consensus_method == "mcla":
+            self.data["cluster_label"] = ClusterEnsembles.mcla(labels=labels, nclass=k, random_state=random_state)
+        if consensus_method == "hbgf":
+            self.data["cluster_label"] = ClusterEnsembles.hbgf(labels=labels, nclass=k)
+        if consensus_method == "nmf":
+            self.data["cluster_label"] = ClusterEnsembles.nmf(labels=labels, nclass=k, random_state=random_state)
+        raise ClusteringError("Invalid consensus method, must be one of: cdpa, hgpa, mcla, hbgf, or nmf")
 
     def comparison(self, method: str = "adjusted_mutual_info", **kwargs):
         kwargs["figsize"] = kwargs.get("figsize", (10, 10))
         kwargs["cmap"] = kwargs.get("cmap", "coolwarm")
-        cluster_labels = {cluster_name: data["labels"] for cluster_name, data in self.clustering_permutations.items()}
-        data = comparison_matrix(cluster_labels=cluster_labels, method=method)
+        data = comparison_matrix(cluster_labels=self._labels, method=method)
         return sns.clustermap(
             data=data,
             **kwargs,
         )
 
-    def _consensus(self, consensus_method: str, labels: np.ndarray, k: int, random_state: int = 42):
-        if consensus_method == "cspa" and self.data.shape[0] > 5000:
-            logger.warning("CSPA is not recommended when n>5000, consider a different method")
-            return ClusterEnsembles.cspa(labels=labels, nclass=k)
-        if consensus_method == "hgpa":
-            return ClusterEnsembles.hgpa(labels=labels, nclass=k, random_state=random_state)
-        if consensus_method == "mcla":
-            return ClusterEnsembles.mcla(labels=labels, nclass=k, random_state=random_state)
-        if consensus_method == "hbgf":
-            return ClusterEnsembles.hbgf(labels=labels, nclass=k)
-        if consensus_method == "nmf":
-            return ClusterEnsembles.nmf(labels=labels, nclass=k, random_state=random_state)
-        raise ClusteringError("Invalid consensus method, must be one of: cdpa, hgpa, mcla, hbgf, or nmf")
+    def min_k(self):
+        return min([len(x) for x in self._labels.values()])
 
-    @save_cache
-    @add_processing_animation(text="Computing consensus clustering")
-    def consensus(self, key: str, consensus_method: str, k: int, random_state: int = 42):
-        labels = np.array([x["labels"] for x in self.clustering_permutations.values()])
-        self.clustering_permutations[key] = {
-            "labels": self._consensus(
-                consensus_method=consensus_method, k=k, labels=labels, random_state=random_state
-            ),
-            "n_clusters": k,
-            "params": {},
-            "scale_method": None,
-            "scale_params": {},
-            "dim_reduction": None,
-            "dim_reduction_params": {},
-        }
-        return self
+    def max_k(self):
+        return max([len(x) for x in self._labels.values()])
 
     def k_performance(
         self,
@@ -268,14 +216,16 @@ class EnsembleClusteringLegacy(Clustering):
         data = []
         for _ in progress_bar(range(resamples), total=resamples):
             idx = np.random.randint(0, self.data.shape[0], sample_size)
-            labels.append(np.array([np.array(x["labels"])[idx] for x in self.clustering_permutations.values()]))
+            labels.append(np.array([np.array(x)[idx] for x in self._labels.values()]))
             data.append(self.data.iloc[idx])
         k_range = np.arange(k_range[0], k_range[1] + 1)
         results = defaultdict(list)
         for k in k_range:
             logger.info(f"Calculating consensus with k={k}...")
             for la, df in progress_bar(zip(labels, data), total=len(data)):
-                la = self._consensus(consensus_method=consensus_method, k=k, labels=la, random_state=random_state)
+                la = self.consensus_clustering(
+                    consensus_method=consensus_method, k=k, labels=la, random_state=random_state
+                )
                 results["K"].append(k)
                 for m in metrics:
                     results[m.name].append(m(data=df, features=self.features, labels=la))
@@ -289,106 +239,3 @@ class EnsembleClusteringLegacy(Clustering):
         if return_data:
             return g, results
         return g
-
-    def plot(
-        self,
-        cluster_name: str,
-        sample_size: Union[int, None] = 100000,
-        sampling_method: str = "uniform",
-        method: Union[str, Type] = "UMAP",
-        dim_reduction_kwargs: dict or None = None,
-        label: str = "cluster_label",
-        discrete: bool = True,
-        **kwargs,
-    ):
-        plot_data = self.data.copy()
-        plot_data["cluster_label"] = self.clustering_permutations[cluster_name]["labels"]
-        return plot_cluster_membership(
-            data=plot_data,
-            features=self.features,
-            sample_size=sample_size,
-            sampling_method=sampling_method,
-            method=method,
-            dim_reduction_kwargs=dim_reduction_kwargs,
-            label=label,
-            discrete=discrete,
-            **kwargs,
-        )
-
-    def min_k(self):
-        return min([x["n_clusters"] for x in self.clustering_permutations.values()])
-
-    def max_k(self):
-        return max([x["n_clusters"] for x in self.clustering_permutations.values()])
-
-    def plot_all(
-        self,
-        sample_size: int = 100000,
-        method: Union[str, Type] = "UMAP",
-        dim_reduction_kwargs: dict or None = None,
-        label: str = "cluster_label",
-        col_wrap: int = 3,
-        figsize: Tuple[int, int] = (10, 10),
-        bins: Union[str, int] = "sqrt",
-        hist_cmap: str = "jet",
-        palette: Optional[Union[str, List[str]]] = None,
-        **kwargs,
-    ):
-
-        kwargs["s"] = kwargs.get("s", 5)
-        kwargs["edgecolors"] = kwargs.get("edgecolors", None)
-        kwargs["linewidth"] = kwargs.get("linewidth", 0)
-        palette = palette or discrete_palette(n=self.max_k())
-
-        plot_data = self.data.sample(n=sample_size)
-        dim_reduction_kwargs = dim_reduction_kwargs or {}
-        reducer = DimensionReduction(method=method, **dim_reduction_kwargs)
-        plot_data = reducer.fit_transform(data=plot_data, features=self.features)
-        fig, axes = plt.subplots(
-            math.ceil((len(self.clustering_permutations) + 1) / col_wrap), col_wrap, figsize=figsize
-        )
-        axes = axes.flatten()
-
-        bins = bins if isinstance(bins, int) else int(np.sqrt(plot_data.shape[0]))
-        axes[0].hist2d(plot_data[f"{method}1"], plot_data[f"{method}2"], bins=bins, cmap=hist_cmap, norm=LogNorm())
-        axes[0].autoscale(enable=True)
-
-        for i, (name, cluster_data) in enumerate(self.clustering_permutations.items()):
-            i += 1
-            plot_data["cluster_label"] = cluster_data["labels"][plot_data.index.values]
-            plot_data["cluster_label"] = plot_data["cluster_label"].astype(str)
-            sns.scatterplot(
-                data=plot_data,
-                x=f"{method}1",
-                y=f"{method}2",
-                hue=label,
-                ax=axes[i],
-                palette=palette,
-                **kwargs,
-            )
-            axes[i].get_legend().remove()
-            axes[i].set_title(f"{name} (n_clusters={cluster_data['n_clusters']})")
-        if (len(self.clustering_permutations) + 1) < len(axes):
-            n = len(axes)
-            while n > (len(self.clustering_permutations) + 1):
-                fig.delaxes(axes[n - 1])
-                n = n - 1
-        fig.tight_layout()
-        return fig
-
-    def save(
-        self,
-        cluster_name: str,
-        verbose: bool = True,
-        population_prefix: Optional[str] = None,
-        parent_populations: Optional[Dict] = None,
-    ):
-        self.data["cluster_label"] = self.clustering_permutations[cluster_name]["labels"]
-        super()._save(
-            verbose=verbose,
-            population_prefix=population_prefix,
-            population_var="cluster_label",
-            parent_populations=parent_populations,
-        )
-        self.data.drop("cluster_label", axis=1, inplace=True)
-        return self

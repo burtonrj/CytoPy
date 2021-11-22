@@ -1,26 +1,14 @@
-from collections import defaultdict
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Type
 from typing import Union
 
-import numpy as np
-import pandas as pd
-import seaborn as sns
 from sklearn.base import ClusterMixin
 
-from . import metrics as cluster_metrics
-from ..plotting.general import box_swarm_plot
-from ..plotting.general import build_plot_grid
 from .clustering import Clustering
 from .clustering import ClusterMethod
 from .clustering import init_cluster_method
 from .clustering import remove_null_features
-from .metrics import init_internal_metrics
-from .metrics import InternalMetric
-from cytopy.feedback import progress_bar
-from cytopy.utils.dim_reduction import dimension_reduction_with_sampling
 
 
 class SingleClustering(Clustering):
