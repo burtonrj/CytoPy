@@ -481,8 +481,8 @@ def silhouette_analysis(
     sample_silhouette_values = silhouette_samples(data[features], cluster_labels)
 
     y_lower = 10
-    for i in range(n_clusters):
-        ith_cluster_silhouette_values = sample_silhouette_values[cluster_labels == i]
+    for i, cl in enumerate(np.unique(cluster_labels)):
+        ith_cluster_silhouette_values = sample_silhouette_values[cluster_labels == cl]
         ith_cluster_silhouette_values.sort()
 
         size_cluster_i = ith_cluster_silhouette_values.shape[0]

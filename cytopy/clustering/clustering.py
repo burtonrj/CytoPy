@@ -310,7 +310,6 @@ class Clustering:
         self.sample_ids = sample_ids
         self.data = data
         self._embedding_cache = None
-        logger.info("Ready to cluster!")
 
     @classmethod
     def from_experiment(

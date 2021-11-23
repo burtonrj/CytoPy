@@ -397,10 +397,13 @@ class Experiment(mongoengine.Document):
             for fg in progress_bar(self.fcs_files, verbose=verbose):
                 df = fg.population_membership(
                     regex=regex, population_source=population_source, data_source=data_source, as_boolean=True
-                ).reset_index(drop=False)
+                )
                 df["sample_id"] = fg.primary_id
                 data.append(df)
-            return pd.concat(data)
+            data = pd.concat(data).fillna(0)
+            cluster_cols = [x for x in data.columns if x != "sample_id"]
+            data[cluster_cols] = data[cluster_cols].astype(int)
+            return data
         data = {}
         for fg in progress_bar(self.fcs_files, verbose=verbose):
             data[fg.primary_id] = fg.population_membership(

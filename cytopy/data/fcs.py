@@ -584,12 +584,13 @@ class FileGroup(mongoengine.Document):
         populations = self.list_populations(regex=regex, source=population_source, data_source=data_source)
         if as_boolean:
             data = pd.DataFrame(
-                np.zeros(self.data(source=data_source).shape[0], len(populations)), columns=populations
+                np.zeros((self.data(source=data_source).shape[0], len(populations)), dtype=np.int8),
+                columns=populations,
             )
             for pop_name in populations:
                 pop = self.get_population(population_name=pop_name, data_source=data_source)
                 data.loc[pop.index, [pop_name]] = 1
-            data.dropna(axis=0, how="all").reset_index().rename(columns={"index": "original_index"})
+            data = data.reset_index().rename(columns={"index": "original_index"})
         else:
             data = defaultdict(list)
             for pop_name in populations:

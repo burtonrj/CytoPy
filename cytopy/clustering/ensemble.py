@@ -8,6 +8,7 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -18,6 +19,7 @@ from matplotlib.ticker import MaxNLocator
 from scipy.cluster.hierarchy import fclusterdata
 from sklearn.metrics.pairwise import pairwise_distances
 
+from ..plotting.general import box_swarm_plot
 from .clustering import Clustering
 from .clustering import ClusteringError
 from .metrics import comparison_matrix
@@ -29,28 +31,38 @@ from cytopy.feedback import progress_bar
 logger = logging.getLogger(__name__)
 
 
-def distortion_score(data: pd.DataFrame, metric: str = "euclidean"):
-    if data.shape[0] == 0:
-        return None
-    center = data.mean()
-    distances = pairwise_distances(data, center, metric=metric)
-    return (distances ** 2).sum()
+def distortion_score(data: pd.DataFrame, features: List[str], clusters: List[str], metric: str = "euclidean"):
+    score = {}
+    for c in clusters:
+        df = data[data[c] == 1]
+        if df.shape[0] == 0:
+            continue
+        center = df[features].mean().values
+        distances = pairwise_distances(df[features], center.reshape(1, -1), metric=metric)
+        score[c] = (distances ** 2).sum()
+    return score
 
 
 def majority_vote(
-    cluster_assignments: List[str], consensus_clusters: pd.DataFrame, weights: Optional[Dict[str, float]] = None
+    row: pd.Series,
+    cluster_assignments: List[str],
+    consensus_clusters: pd.DataFrame,
+    weights: Optional[Dict[str, float]] = None,
 ):
+    clusters = row[cluster_assignments].replace({0: None}).dropna().index.tolist()
     if weights is not None:
-        scores = []
-        consensus_clusters = consensus_clusters.loc[cluster_assignments]
-        for cc, cc_data in consensus_clusters.groupby("cluster_label"):
-            scores.append([cc, cc_data.shape[0] / sum([weights.get(i) for i in cc_data.index.values])])
-        return sorted(scores, key=lambda x: x[1])[::-1][0][0]
+        consensus_cluster_score = []
+        for cid, cc_data in consensus_clusters.loc[clusters].groupby("cluster_label"):
+            consensus_cluster_score.append(
+                [cid, cc_data.shape[0] / sum([weights.get(i) for i in cc_data.index.values])]
+            )
+        return sorted(consensus_cluster_score, key=lambda x: x[1])[::-1][0][0]
 
-    cluster_labels = Counter([consensus_clusters.loc[cluster, "cluster_label"] for cluster in cluster_assignments])
+    consensus_cluster_labels = Counter([consensus_clusters.loc[cid, "cluster_label"] for cid in clusters])
     score = 0
     winner = None
-    for label, count in cluster_labels.items():
+    # return dataframe with columns [sample_id, original_index, cluster_label] to merge back with data
+    for label, count in consensus_cluster_labels.items():
         if count == score:
             logger.warning(
                 f"{label} and {winner} have equal scores, observation will be assigned to {winner}, "
@@ -67,27 +79,34 @@ class EnsembleClustering(Clustering):
         self, data: pd.DataFrame, experiment: Union[Experiment, List[Experiment]], features: List[str], *args, **kwargs
     ):
         super().__init__(data, experiment, features, *args, **kwargs)
+        logger.info("Obtaining data about cluster membership")
         cluster_membership = self.experiment.population_membership(
             population_source="cluster", data_source="primary", as_boolean=True
         )
         self.data = self.data.merge(cluster_membership, on=["sample_id", "original_index"])
-        self.clusters = list(cluster_membership.columns)
+        self.clusters = [x for x in cluster_membership.columns if x not in ["sample_id", "original_index"]]
         self.cluster_groups = defaultdict(list)
         self.cluster_assignments = {}
-        self._labels = self._reconstruct_labels()
+        self._cluster_weights = {}
         for sample_id in self.data.sample_id.unique():
             self.cluster_assignments[sample_id] = list(
                 self.experiment.get_sample(sample_id=sample_id).list_populations(
                     source="cluster", data_source="primary"
                 )
             )
-        for cluster in cluster_membership.columns:
+        for cluster in self.clusters:
             prefix = cluster.split("_")[0]
             self.cluster_groups[prefix].append(cluster)
 
+    def _reconstruct_labels(self):
+        labels = {}
+        for prefix, clusters in self.cluster_groups.items():
+            labels[prefix] = self.data[clusters].idxmax(axis=1)
+        return labels
+
     def _check_for_cluster_parents(self):
         for prefix, clusters in self.cluster_groups.items():
-            if not (self.data[clusters].sum(axis=1) == 0).all():
+            if not (self.data[clusters].sum(axis=1) == 1).all():
                 logger.warning(
                     f"Some observations are assigned to multiple clusters under the cluster prefix {prefix},"
                     f" either ensure cluster prefixes are unique to a cluster solution or remove parent "
@@ -95,22 +114,50 @@ class EnsembleClustering(Clustering):
                 )
 
     def ignore_clusters(self, clusters: List[str]):
-        if not all([x in self.data.columns for x in clusters]):
-            raise ValueError("One or more provided clusters does not exist.")
+        clusters = [x for x in clusters if x in self.clusters]
+        self.clusters = [x for x in self.clusters if x not in clusters]
         self.data.drop(clusters, axis=1, inplace=True)
         self.cluster_assignments = {
             sample_id: [x for x in c if x not in clusters] for sample_id, c in self.cluster_assignments.items()
         }
+        self.cluster_groups = {k: [x for x in c if x not in clusters] for k, c in self.cluster_groups.items()}
+        self._cluster_weights = {}
 
     def _compute_cluster_centroids(self, method: str = "median"):
         centroids = {}
         for cluster in self.clusters:
             cluster_data = self.data[self.data[cluster] == 1][self.features]
             if method == "median":
-                centroids[cluster] = pd.concat(cluster_data).median().values
+                centroids[cluster] = cluster_data.median().values
             else:
-                centroids[cluster] = pd.concat(cluster_data).mean().values
+                centroids[cluster] = cluster_data.mean().values
         return pd.DataFrame(centroids, index=self.features).T
+
+    def cluster_weights(
+        self, plot: bool = True, n_jobs=-1, distortion_metric: str = "euclidean", verbose: bool = True, **plot_kwargs
+    ):
+        if self._cluster_weights.get("metric", None) != distortion_metric:
+            with Parallel(n_jobs=n_jobs) as parallel:
+                sample_ids = self.data.sample_id.unique()
+                weights = parallel(
+                    delayed(distortion_score)(
+                        data=self.data[self.data.sample_id == sid],
+                        features=self.features,
+                        metric=distortion_metric,
+                        clusters=self.cluster_assignments[sid],
+                    )
+                    for sid in progress_bar(sample_ids, verbose=verbose)
+                )
+                self._cluster_weights["metric"] = distortion_metric
+                self._cluster_weights["weights"] = {sid: w for sid, w in zip(sample_ids, weights)}
+        if plot:
+            plot_kwargs = plot_kwargs or {}
+            plot_df = pd.DataFrame(self._cluster_weights["weights"]).T.melt(
+                var_name="Cluster", value_name="Distortion score"
+            )
+            ax = box_swarm_plot(plot_df=plot_df, x="Cluster", y="Distortion score", **plot_kwargs)
+            return self._cluster_weights["weights"], ax
+        return self._cluster_weights["weights"], None
 
     def cluster_centroids(
         self,
@@ -120,55 +167,53 @@ class EnsembleClustering(Clustering):
         metric: str = "euclidean",
         criterion: str = "maxclust",
         plot_only: bool = True,
-        depth: Optional[int] = None,
+        depth: int = 2,
         weight: bool = True,
         n_jobs: int = -1,
         verbose: bool = True,
         distortion_metric: str = "euclidean",
+        plot_orientation: str = "vertical",
         **kwargs,
     ):
-        # Check for parent clusters and warn
         self._check_for_cluster_parents()
-        # Calculate centroids
+        logger.info("Calculating cluster centroids")
         centroids = self._compute_cluster_centroids(method=centroid_method)
-        g = sns.clustermap(data=centroids, method=method, metric=metric, **kwargs)
+        logger.info("Generating clustered heatmap")
+        if plot_orientation == "horizontal":
+            g = sns.clustermap(data=centroids.T, method=method, metric=metric, **kwargs)
+        else:
+            g = sns.clustermap(data=centroids, method=method, metric=metric, **kwargs)
         if plot_only:
             return g
-        # Perform clustering
+        logger.info("Performing hierarchical clustering of centroids")
         centroids["cluster_label"] = fclusterdata(
             X=centroids, t=t, criterion=criterion, method=method, metric=metric, depth=depth
         )
+        logger.info(
+            f"Clustered centroids into {centroids.cluster_label.nunique()} clusters: "
+            f"{centroids.cluster_label.unique()}"
+        )
         with Parallel(n_jobs=n_jobs) as parallel:
-            weights = None
+            weights = {}
             if weight:
-                sample_cluster = list(itertools.product(self.data.sample_id.unique(), self.clusters))
-                weights = parallel(
-                    delayed(distortion_score)(
-                        data=self.data[(self.data.sample_id == sample_id) & (self.data[cluster] == 1)],
-                        metric=distortion_metric,
-                    )
-                    for sample_id, cluster in sample_cluster
-                )
+                logger.info("Computing cluster weights")
+                weights, _ = self.cluster_weights(plot=False, distortion_metric=distortion_metric, verbose=verbose)
+            logger.info("Assigning clusters by majority vote")
             self.data["cluster_label"] = parallel(
                 delayed(majority_vote)(
-                    cluster_assignments=self.cluster_assignments[sample_id],
+                    row=row,
+                    cluster_assignments=self.cluster_assignments[row.sample_id],
                     consensus_clusters=centroids[["cluster_label"]],
-                    weights=weights,
+                    weights=weights.get(row.sample_id, None),
                 )
-                for sample_id in progress_bar(self.data.sample_id.unique(), verbose=verbose)
+                for _, row in progress_bar(self.data.iterrows(), verbose=verbose, total=self.data.shape[0])
             )
         return g
-
-    def _reconstruct_labels(self):
-        labels = {}
-        for prefix, clusters in self.cluster_groups:
-            labels[prefix] = self.data[clusters].idxmax(axis=1)
-        return labels
 
     def consensus_clustering(
         self, consensus_method: str, k: int, random_state: int = 42, labels: Optional[List] = None
     ):
-        labels = labels if labels is not None else list(self._labels.values())
+        labels = labels if labels is not None else list(self._reconstruct_labels().values())
         if consensus_method == "cspa" and self.data.shape[0] > 5000:
             logger.warning("CSPA is not recommended when n>5000, consider a different method")
             self.data["cluster_label"] = ClusterEnsembles.cspa(labels=labels, nclass=k)
@@ -185,17 +230,17 @@ class EnsembleClustering(Clustering):
     def comparison(self, method: str = "adjusted_mutual_info", **kwargs):
         kwargs["figsize"] = kwargs.get("figsize", (10, 10))
         kwargs["cmap"] = kwargs.get("cmap", "coolwarm")
-        data = comparison_matrix(cluster_labels=self._labels, method=method)
+        data = comparison_matrix(cluster_labels=self._reconstruct_labels(), method=method)
         return sns.clustermap(
             data=data,
             **kwargs,
         )
 
     def min_k(self):
-        return min([len(x) for x in self._labels.values()])
+        return min([len(x) for x in self._reconstruct_labels().values()])
 
     def max_k(self):
-        return max([len(x) for x in self._labels.values()])
+        return max([len(x) for x in self._reconstruct_labels().values()])
 
     def k_performance(
         self,
@@ -216,7 +261,7 @@ class EnsembleClustering(Clustering):
         data = []
         for _ in progress_bar(range(resamples), total=resamples):
             idx = np.random.randint(0, self.data.shape[0], sample_size)
-            labels.append(np.array([np.array(x)[idx] for x in self._labels.values()]))
+            labels.append(np.array([np.array(x)[idx] for x in self._reconstruct_labels().values()]))
             data.append(self.data.iloc[idx])
         k_range = np.arange(k_range[0], k_range[1] + 1)
         results = defaultdict(list)
