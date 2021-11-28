@@ -1,4 +1,5 @@
 from .experiment import Experiment
+from .experiment import single_cell_anndata
 from .experiment import single_cell_dataframe
 from .fcs import FileGroup
 from .panel import Panel

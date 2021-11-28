@@ -49,6 +49,11 @@ class DuplicatePopulationError(Exception):
         super().__init__(f"Invalid population, {population_id} already exists!")
 
 
+class EmptyPopulationError(Exception):
+    def __init__(self, population_id: str):
+        super().__init__(f"Population {population_id} contains no events!")
+
+
 class DuplicateGateError(Exception):
     def __init__(self, gate_id: str):
         super().__init__(f"Invalid gate, {gate_id} already exists!")

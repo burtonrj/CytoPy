@@ -130,7 +130,7 @@ class Subject(mongoengine.DynamicDocument):
                     node = node[k]
             return node
         except KeyError:
-            return None
+            return np.nan
 
 
 def common_fields(subjects: List[Subject]) -> Set:

@@ -49,6 +49,7 @@ from ..feedback import progress_bar
 from ..utils.sampling import sample_dataframe
 from .errors import DuplicatePopulationError
 from .errors import DuplicateSampleError
+from .errors import EmptyPopulationError
 from .errors import MissingPopulationError
 from .errors import MissingSampleError
 from .errors import PanelError
@@ -621,6 +622,8 @@ def single_cell_dataframe(
             data.append(pop_data)
         except MissingPopulationError as e:
             logger.error(f"{_id} missing population(s): {e}")
+        except EmptyPopulationError:
+            logger.error(f"No events found in {populations} within {_id}")
 
     data = pd.concat(data).reset_index().rename({"Index": "original_index"}, axis=1)
 
@@ -675,6 +678,6 @@ def single_cell_anndata(
     add_cols = list(meta_vars.keys()) + [f"frac_of_{x}" for x in frac_of]
     if label_parent:
         add_cols.append("parent_label")
-    obs = data[["subject_id", "sample_id"] + add_cols]
-    var = pd.DataFrame(columns=[x for x in data.columns if x not in obs.columns])
-    return AnnData(X=x, obs=obs, var=var)
+    obs = data[["subject_id", "sample_id", "original_index"] + add_cols]
+    var = pd.DataFrame(index=[x for x in data.columns if x not in obs.columns])
+    return AnnData(X=x, obs=obs, var=var, obsm={"X": x})

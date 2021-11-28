@@ -48,10 +48,7 @@ import mongoengine
 import numpy as np
 import pandas as pd
 import polars as pl
-from anndata import AnnData
 from botocore.errorfactory import ClientError
-from bson import Binary
-from KDEpy import FFTKDE
 from pingouin import compute_effsize
 
 from ..gating.threshold import apply_threshold
@@ -60,6 +57,7 @@ from ..utils.sampling import sample_dataframe
 from ..utils.transform import apply_transform
 from ..utils.transform import apply_transform_map
 from .errors import DuplicatePopulationError
+from .errors import EmptyPopulationError
 from .errors import MissingPopulationError
 from .population import PolygonGeom
 from .population import Population
@@ -477,6 +475,8 @@ class FileGroup(mongoengine.Document):
                 dataframes.append(pop_data)
             except ValueError:
                 logger.warning(f"{self.primary_id} ({data_source}) does not contain population {p}")
+            except EmptyPopulationError:
+                logger.error(f"No events found in {p}")
         if sample_size is not None and not sample_at_population_level:
             return sample_dataframe(
                 data=pd.concat(dataframes), sample_size=sample_size, method=sampling_method, **sampling_kwargs
@@ -540,6 +540,8 @@ class FileGroup(mongoengine.Document):
 
         population = self.get_population(population_name=population, data_source=data_source)
         transform_kwargs = transform_kwargs or {}
+        if population.n == 0:
+            raise EmptyPopulationError(population_id=population)
         data = self.data(
             source=data_source,
             idx=population.index,
@@ -560,9 +562,12 @@ class FileGroup(mongoengine.Document):
         if label_parent:
             data["parent_label"] = population.parent
 
-        if meta_vars is not None and self.subject:
+        if meta_vars is not None:
             for col_name, key in meta_vars.items():
-                data[col_name] = self.subject.lookup_var(key=key)
+                if self.subject:
+                    data[col_name] = self.subject.lookup_var(key=key)
+                else:
+                    data[col_name] = None
 
         if frac_of is not None:
             for comparison_pop in frac_of:
