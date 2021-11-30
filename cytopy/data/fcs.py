@@ -541,7 +541,7 @@ class FileGroup(mongoengine.Document):
         population = self.get_population(population_name=population, data_source=data_source)
         transform_kwargs = transform_kwargs or {}
         if population.n == 0:
-            raise EmptyPopulationError(population_id=population)
+            raise EmptyPopulationError(population_id=population.population_name)
         data = self.data(
             source=data_source,
             idx=population.index,
@@ -1003,16 +1003,17 @@ def copy_populations_to_controls_using_geoms(filegroup: FileGroup, ctrl: str, fl
         if not pop.geom or pop.parent not in filegroup.list_populations(data_source=ctrl):
             logger.warning(f"Skipping {pop.population_name}: missing parent or no geom defined")
             continue
-        parent_df = filegroup.load_population_df(
-            population=pop.parent,
-            transform={pop.geom.x: pop.geom.transform_x, pop.geom.y: pop.geom.transform_y},
-            transform_kwargs={
-                pop.geom.x: pop.geom.transform_x_kwargs or {},
-                pop.geom.y: pop.geom.transform_y_kwargs or {},
-            },
-            data_source=ctrl,
-        )
-        if parent_df.shape[0] == 0:
+        try:
+            parent_df = filegroup.load_population_df(
+                population=pop.parent,
+                transform={pop.geom.x: pop.geom.transform_x, pop.geom.y: pop.geom.transform_y},
+                transform_kwargs={
+                    pop.geom.x: pop.geom.transform_x_kwargs or {},
+                    pop.geom.y: pop.geom.transform_y_kwargs or {},
+                },
+                data_source=ctrl,
+            )
+        except EmptyPopulationError:
             logger.warning(f"Skipping {pop.population_name}: parent {pop.parent} has no events")
             continue
         if isinstance(pop.geom, PolygonGeom):

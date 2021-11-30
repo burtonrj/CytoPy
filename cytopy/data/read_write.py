@@ -34,7 +34,6 @@ import logging
 import os
 import pickle
 import re
-from collections import defaultdict
 from multiprocessing import cpu_count
 from multiprocessing import Pool
 from typing import Iterable

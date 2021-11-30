@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -84,3 +85,36 @@ def multiple_groups(
     stats["normal"] = normal
     stats["equal_var"] = equal_var
     return stats
+
+
+def hypothesis_test(
+    data: pd.DataFrame, dv: str, between_group: str, independent_group: Optional[str] = None, **kwargs
+):
+    results = []
+    data = data[~data[between_group].isnull()]
+    if data[between_group].nunique() == 2:
+        between_grp_vars = data[between_group].unique()
+        if independent_group:
+            for i, df in data.groupby(independent_group):
+                tmp = two_groups(
+                    x=df[df[between_group] == between_grp_vars[0]][dv],
+                    y=df[df[between_group] == between_grp_vars[1]][dv],
+                    **kwargs
+                )
+                tmp[independent_group] = i
+                results.append(tmp)
+            return pd.concat(results)
+        else:
+            return two_groups(
+                x=data[data[between_group] == between_grp_vars[0]][dv],
+                y=data[data[between_group] == between_grp_vars[1]][dv],
+                **kwargs
+            )
+    if independent_group:
+        for i, df in data.groupby(independent_group):
+            tmp = multiple_groups(data=df, dv=dv, group=between_group, **kwargs)
+            tmp[independent_group] = i
+            results.append(tmp)
+        return pd.concat(results)
+    else:
+        return multiple_groups(data=data, dv=dv, group=between_group, **kwargs)

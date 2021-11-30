@@ -340,7 +340,11 @@ class Experiment(mongoengine.Document):
     @staticmethod
     def _prop_of_parent(df: pd.DataFrame, parent: str):
         frac_of_parent = []
-        parent_n = float(df[df.population_name == parent]["n"].values[0])
+        parent_df = df[df.population_name == parent]
+        if parent_df.shape[0] == 0:
+            df[f"frac_of_{parent}"] = None
+            return df
+        parent_n = float(parent_df["n"].values[0])
         for _, row in df.iterrows():
             if row.n == 0:
                 frac_of_parent.append(0)
@@ -449,13 +453,13 @@ class Experiment(mongoengine.Document):
                         )
                     )
             except MissingPopulationError:
-                logger.error(
+                logger.warning(
                     f"{fg.primary_id} missing requested population {population} either in "
                     f"the primary staining or control. Use the 'propagate_populations_to_control' "
                     f"method to ensure populations are present in controls."
                 )
-            except (KeyError, ValueError, TypeError) as e:
-                logger.error(f"Could not obtain control effect size for {fg.primary_id}: {e}")
+            except (KeyError, ValueError, TypeError, EmptyPopulationError) as e:
+                logger.warning(f"Could not obtain control effect size for {fg.primary_id}: {e}")
         return pd.concat(results).reset_index(drop=True)
 
     def merge_populations(self, mergers: Dict):
@@ -490,7 +494,7 @@ class Experiment(mongoengine.Document):
                 fg, st = copy_populations_to_controls_using_geoms(filegroup=fg, ctrl=ctrl, flag=flag)
                 stats.append(st)
                 fg.save()
-            except (ValueError, MissingPopulationError, DuplicatePopulationError) as e:
+            except (ValueError, MissingPopulationError, DuplicatePopulationError, EmptyPopulationError) as e:
                 logger.error(f"Unable to generate populations for {ctrl} in {fg.primary_id}: {e}")
         return pd.concat(stats).reset_index(drop=True)
 

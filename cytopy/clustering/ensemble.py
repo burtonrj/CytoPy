@@ -1,4 +1,3 @@
-import itertools
 import logging
 from collections import Counter
 from collections import defaultdict
@@ -8,7 +7,6 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns

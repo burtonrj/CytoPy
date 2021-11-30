@@ -1,5 +1,8 @@
+from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -46,9 +49,16 @@ def box_swarm_plot(
     hue: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
     palette: Optional[str] = None,
+    figsize: Tuple[int, int] = (5, 5),
     overlay: bool = True,
+    order: Optional[List[str]] = None,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
+    xticklabels: Optional[List[Any]] = None,
+    yticklabels: Optional[List[Any]] = None,
     boxplot_kwargs: Optional[Dict] = None,
     overlay_kwargs: Optional[Dict] = None,
+    legend_anchor: Tuple[int, int] = (1.05, 1),
 ):
     """
     Convenience function for generating a boxplot with a swarmplot/stripplot overlaid showing
@@ -81,7 +91,10 @@ def box_swarm_plot(
     """
     boxplot_kwargs = boxplot_kwargs or {}
     overlay_kwargs = overlay_kwargs or {}
-    ax = ax if ax is not None else plt.subplots(figsize=(10, 5))[1]
+    if order:
+        boxplot_kwargs["order"] = boxplot_kwargs.get("order", order)
+        overlay_kwargs["order"] = overlay_kwargs.get("order", order)
+    ax = ax if ax is not None else plt.subplots(figsize=figsize)[1]
     sns.boxplot(
         data=plot_df,
         x=x,
@@ -104,4 +117,16 @@ def box_swarm_plot(
             palette=palette,
             **overlay_kwargs,
         )
+        if hue:
+            handles, labels = ax.get_legend_handles_labels()
+            n = plot_df[hue].nunique()
+            ax.legend(handles[0:n], labels[0:n], bbox_to_anchor=legend_anchor)
+    if xlabel is not None:
+        ax.set_xlabel(xlabel=xlabel)
+    if ylabel is not None:
+        ax.set_xlabel(xlabel=ylabel)
+    if xticklabels is not None:
+        ax.set_xticklabels(xticklabels)
+    if yticklabels is not None:
+        ax.set_yticklabels(yticklabels)
     return ax

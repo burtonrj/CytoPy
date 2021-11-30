@@ -431,7 +431,9 @@ def plot_gate(
             data = filegroup.load_population_df(population=gate.parent, transform=None, data_source=data_source)
             if data.shape[0] > n_limit:
                 data = data.sample(n=n_limit)
-            geom_objs = [filegroup.populations.get(population_name=c.name) for c in gate.children]
+            geom_objs = [
+                filegroup.populations.get(population_name=c.name, data_source=data_source) for c in gate.children
+            ]
             if gate.reference_alignment:
                 data = _inverse_gate_transform(gate, gate.preprocess(data=data, transform=True))
         else:

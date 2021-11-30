@@ -31,7 +31,6 @@ from functools import partial
 from multiprocessing import cpu_count
 from multiprocessing import Pool
 from typing import Tuple
-from typing import Union
 
 import alphashape
 import numpy as np
@@ -43,9 +42,6 @@ from scipy import linalg
 from scipy import stats
 from shapely.geometry import Point
 from shapely.geometry import Polygon
-
-from cytopy.data.read_write import pandas_to_polars
-from cytopy.data.read_write import polars_to_pandas
 
 
 class GeometryError(Exception):
