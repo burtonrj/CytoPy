@@ -422,9 +422,11 @@ class Experiment(mongoengine.Document):
     def list_populations(
         self, regex: Optional[str] = None, source: Optional[str] = None, data_source: str = "primary"
     ) -> List[str]:
-        return list(
-            set([fg.list_populations(regex=regex, source=source, data_source=data_source) for fg in self.fcs_files])
-        )
+        populations = [
+            fg.list_populations(regex=regex, source=source, data_source=data_source) for fg in self.fcs_files
+        ]
+        populations = [p for sl in populations for p in sl]
+        return list(set(populations))
 
     def control_eff_size(
         self,
@@ -541,6 +543,8 @@ def single_cell_dataframe(
     sampling_method: str = "uniform",
     sampling_kwargs: Optional[Dict] = None,
     meta_vars: Optional[Dict] = None,
+    source_counts: bool = False,
+    warn_missing: bool = True,
 ) -> pd.DataFrame:
     """
     Generate a single cell DataFrame that is a concatenation of population data from many
@@ -609,6 +613,8 @@ def single_cell_dataframe(
         frac_of=frac_of,
         data_source=data_source,
         meta_vars=meta_vars,
+        source_counts=source_counts,
+        warn_missing=warn_missing,
     )
 
     if sample_size is not None and sampling_level == "file":
@@ -635,9 +641,11 @@ def single_cell_dataframe(
                 pop_data["subject_id"] = fg.subject.subject_id
             data.append(pop_data)
         except MissingPopulationError as e:
-            logger.error(f"{_id} missing population(s): {e}")
+            if warn_missing:
+                logger.warning(f"{_id} missing population(s): {e}")
         except EmptyPopulationError:
-            logger.error(f"No events found in {populations} within {_id}")
+            if warn_missing:
+                logger.warning(f"No events found in {populations} within {_id}")
 
     data = pd.concat(data).reset_index().rename({"Index": "original_index"}, axis=1)
 

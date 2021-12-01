@@ -407,6 +407,8 @@ class FileGroup(mongoengine.Document):
         sample_at_population_level: bool = True,
         data_source: str = "primary",
         meta_vars: Optional[Dict] = None,
+        source_counts: bool = False,
+        warn_missing: bool = True,
         **sampling_kwargs,
     ) -> pd.DataFrame:
         """
@@ -461,6 +463,7 @@ class FileGroup(mongoengine.Document):
             frac_of=frac_of,
             data_source=data_source,
             meta_vars=meta_vars,
+            source_counts=source_counts,
         )
         if sample_size is not None and sample_at_population_level:
             kwargs["sample_size"] = sample_size
@@ -473,10 +476,12 @@ class FileGroup(mongoengine.Document):
                 pop_data = self.load_population_df(population=p, **kwargs)
                 pop_data["population_label"] = [p for _ in range(pop_data.shape[0])]
                 dataframes.append(pop_data)
-            except ValueError:
-                logger.warning(f"{self.primary_id} ({data_source}) does not contain population {p}")
+            except MissingPopulationError:
+                if warn_missing:
+                    logger.warning(f"{self.primary_id} ({data_source}) does not contain population {p}")
             except EmptyPopulationError:
-                logger.error(f"No events found in {p}")
+                if warn_missing:
+                    logger.error(f"No events found in {p}")
         if sample_size is not None and not sample_at_population_level:
             return sample_dataframe(
                 data=pd.concat(dataframes), sample_size=sample_size, method=sampling_method, **sampling_kwargs
@@ -495,6 +500,7 @@ class FileGroup(mongoengine.Document):
         sampling_method: str = "uniform",
         data_source: str = "primary",
         meta_vars: Optional[Dict] = None,
+        source_counts: bool = False,
         label_downstream_affiliations=None,
         **sampling_kwargs,
     ) -> pd.DataFrame:
@@ -576,6 +582,9 @@ class FileGroup(mongoengine.Document):
                     continue
                 comparison_pop = self.get_population(population_name=comparison_pop)
                 data[f"frac of {comparison_pop.population_name}"] = population.n / comparison_pop.n
+
+        if source_counts:
+            data["n_sources"] = population.n_sources
 
         return data
 

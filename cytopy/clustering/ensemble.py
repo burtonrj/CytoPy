@@ -120,6 +120,9 @@ class EnsembleClustering(Clustering):
         }
         self.cluster_groups = {k: [x for x in c if x not in clusters] for k, c in self.cluster_groups.items()}
         self._cluster_weights = {}
+        prefixes = set([c.split("_")[0] for c in clusters])
+        for pf in prefixes:
+            self.data = self.data[~(self.data[self.cluster_groups[pf]].sum(axis=1) == 0)]
 
     def _compute_cluster_centroids(self, method: str = "median"):
         centroids = {}
@@ -159,7 +162,7 @@ class EnsembleClustering(Clustering):
 
     def _consensus_centroids_count_sources(self, centroids: pd.DataFrame):
         for consensus_label, clusters in centroids.groupby("cluster_label"):
-            self._n_sources[consensus_label] = clusters.index.nunique()
+            self._n_sources[consensus_label] = len(set([c.split("_")[0] for c in clusters.index.unique()]))
 
     def cluster_centroids(
         self,

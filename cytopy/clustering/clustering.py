@@ -298,6 +298,7 @@ class Clustering:
         transform_kwargs: Optional[Dict] = None,
         verbose: bool = True,
         random_state: int = 42,
+        n_sources: Optional[Dict] = None,
     ):
         np.random.seed(random_state)
         self.experiment = experiment
@@ -309,7 +310,7 @@ class Clustering:
         self.sample_ids = sample_ids
         self.data = data
         self._embedding_cache = None
-        self._n_sources = {}
+        self._n_sources = n_sources or {}
 
     @classmethod
     def from_experiment(
@@ -346,7 +347,7 @@ class Clustering:
         )
 
     @classmethod
-    def from_data(
+    def from_dataframe(
         cls,
         data: pd.DataFrame,
         experiment: Experiment,
@@ -358,10 +359,17 @@ class Clustering:
         verbose: bool = True,
         random_state: int = 42,
     ):
+        n_sources = None
         if "meta_label" not in data.columns:
             data["meta_label"] = None
         if "cluster_label" not in data.columns:
             data["cluster_label"] = None
+        else:
+            if "n_sources" in data.columns:
+                n_sources = {
+                    cluster: n
+                    for cluster, n in data[["cluster_label", "n_sources"]].drop_duplicates().itertuples(index=False)
+                }
         return cls(
             data=data,
             experiment=experiment,
@@ -372,6 +380,7 @@ class Clustering:
             transform_kwargs=transform_kwargs,
             verbose=verbose,
             random_state=random_state,
+            n_sources=n_sources,
         )
 
     def scale_data(self, features: List[str], scale_method: Optional[str] = None, scale_kwargs: Optional[Dict] = None):
@@ -616,9 +625,31 @@ class Clustering:
         return clustered_heatmap(data=data, features=features, sample_id=sample_id, meta_label=meta_label, **kwargs)
 
     @staticmethod
-    def _count_to_proportion(df):
+    def _count_to_proportion(df: pd.DataFrame):
         df["Percentage"] = (df["Count"] / df["Count"].sum()) * 100
         return df
+
+    @staticmethod
+    def _fill_null_clusters(data: pd.DataFrame, label: str):
+        labels = data[label].unique()
+        updated_data = list()
+        for sample_id, sample_df in data.groupby("sample_id"):
+            missing_labels = [i for i in labels if i not in sample_df[label].unique()]
+            updated_data.append(
+                pd.concat(
+                    [
+                        sample_df,
+                        pd.DataFrame(
+                            {
+                                "sample_id": [sample_id for _ in range(len(missing_labels))],
+                                "Count": [0 for _ in range(len(missing_labels))],
+                                label: missing_labels,
+                            }
+                        ),
+                    ]
+                )
+            )
+        return pd.concat(updated_data).reset_index(drop=True)
 
     def cluster_proportions(
         self,
@@ -635,6 +666,7 @@ class Clustering:
         x.name = "Count"
         x = x.reset_index()
         plot_data = x.groupby("sample_id").apply(self._count_to_proportion).reset_index()
+        plot_data = self._fill_null_clusters(data=plot_data, label=label)
         if hue:
             colour_mapping = self.data[["sample_id", hue]].drop_duplicates()
             plot_data = plot_data.merge(colour_mapping, on="sample_id")
