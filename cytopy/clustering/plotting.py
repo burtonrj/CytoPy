@@ -3,7 +3,6 @@ from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
-from typing import Type
 from typing import Union
 
 import numpy as np
@@ -14,119 +13,15 @@ from matplotlib import pyplot as plt
 from matplotlib.cm import nipy_spectral
 from sklearn.metrics import silhouette_samples
 from sklearn.metrics import silhouette_score
-from sklearn.utils import shuffle
 
 from cytopy.data.read_write import polars_to_pandas
-from cytopy.plotting import single_cell_plot
+from cytopy.plotting.general import box_swarm_plot
 from cytopy.plotting.single_cell_plot import discrete_label
 from cytopy.plotting.single_cell_plot import discrete_palette
 from cytopy.utils.dim_reduction import DimensionReduction
-from cytopy.utils.sampling import sample_dataframe_uniform_groups
 
 
 logger = logging.getLogger(__name__)
-
-
-def plot_cluster_membership(
-    data: pd.DataFrame,
-    features: List[str],
-    sample_size: Union[int, None] = 100000,
-    sampling_method: str = "uniform",
-    method: Union[str, Type] = "UMAP",
-    dim_reduction_kwargs: dict or None = None,
-    label: str = "cluster_label",
-    discrete: bool = True,
-    **kwargs,
-):
-    """
-    Plot the entire single cell dataframe (the data attribute). WARNING: this can be computationally
-    expensive so if you have limited resource, try specifying a sample size first.
-
-    Parameters
-    ----------
-    sample_size: int, optional (default=100000)
-    sampling_method: str (default="uniform")
-        Can either be uniform or absolute:
-        * uniform: take a uniform sample of the same size from each sample
-        * absolute: sample uniformly from the whole dataframe without accounting for individual
-        biological sample size
-    method: Union[str, Type]
-        Dimensionality reduction technique; available in-built methods are: UMAP, PCA, PHATE, KernelPCA or tSNE.
-        (see cytopy.utils.dimension_reduction)
-    dim_reduction_kwargs: dict, optional
-        Additional keyword arguments passed to dimension reduction (see cytopy.utils.dim_reduction)
-    label: str, (default='cluster_label')
-        How to colour single cells
-    discrete: bool (default=True)
-        If True, label is treated as a discrete variable. If False, continuous colourmap will be applied.
-    kwargs:
-        Additional keyword arguments passed to cytopy.utils.plotting.single_cell_plot
-
-    Returns
-    -------
-    Matplotlib.Axes
-    """
-    plot_data = shuffle(data)
-    if sample_size is not None:
-        if sample_size < plot_data.shape[0]:
-            if sampling_method == "uniform":
-                plot_data = sample_dataframe_uniform_groups(
-                    data=plot_data, group_id="sample_id", sample_size=sample_size
-                )
-            else:
-                plot_data = data.sample(sample_size)
-
-    dim_reduction_kwargs = dim_reduction_kwargs or {}
-    reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
-    df = reducer.fit_transform(data=plot_data, features=features)
-    return single_cell_plot(data=df, x=f"{method}1", y=f"{method}2", label=label, discrete=discrete, **kwargs)
-
-
-def plot_cluster_membership_sample(
-    data: pd.DataFrame,
-    features: List[str],
-    sample_id: str,
-    method: Union[str, Type] = "UMAP",
-    dim_reduction_kwargs: dict or None = None,
-    label: str = "cluster_label",
-    discrete: bool = True,
-    **kwargs,
-):
-    """
-    Generate a single cell plot (see cytopy.utils.plotting.single_cell_plot) for a single sample,
-    with cells coloured by cluster membership (default)
-
-    Parameters
-    ----------
-    sample_id: str
-    method: Union[str, Type]
-        Dimensionality reduction technique; available in-built methods are: UMAP, PCA, PHATE, KernelPCA or tSNE.
-        (see cytopy.utils.dimension_reduction)
-    dim_reduction_kwargs: dict, optional
-        Additional keyword arguments passed to dimension reduction (see cytopy.utils.dim_reduction)
-    label: str, (default='cluster_label')
-        How to colour single cells
-    discrete: bool (default=True)
-        If True, label is treated as a discrete variable. If False, continuous colourmap will be applied.
-    kwargs:
-        Additional keyword arguments passed to cytopy.utils.plotting.single_cell_plot
-
-    Returns
-    -------
-    Matplotlib.Axes
-    """
-    dim_reduction_kwargs = dim_reduction_kwargs or {}
-    df = data[data.sample_id == sample_id].copy()
-    reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
-    df = reducer.fit_transform(data=df, features=features)
-    return single_cell_plot(
-        data=df,
-        x=f"{method}1",
-        y=f"{method}2",
-        label=label,
-        discrete=discrete,
-        **kwargs,
-    )
 
 
 def clustered_heatmap(
@@ -509,3 +404,26 @@ def silhouette_analysis(
     ax.set_yticks([])  # Clear the yaxis labels / ticks
     ax.set_xticks([round(i, 2) for i in np.arange(xlim[0], xlim[1] + 0.1, 0.1)])
     return ax
+
+
+def boxswarm_and_source_count(
+    plot_data: pd.DataFrame,
+    label: str,
+    hue: Optional[str] = None,
+    figsize: Tuple[int, int] = (10, 8),
+    height_ratios: Tuple[int, int] = (3, 1),
+    **plot_kwargs,
+):
+    fig, axes = plt.subplots(2, 1, gridspec_kw={"height_ratios": height_ratios}, figsize=figsize)
+    box_swarm_plot(plot_df=plot_data, x=label, y="Percentage", hue=hue, ax=axes[0], **plot_kwargs)
+    plot_data.set_index(label, inplace=True)
+    x = axes[0].get_xticklabels()
+    y = [-1 * plot_data.loc[i].n_sources for i in x]
+    axes[1].bar(x, y, color="#A1A1A1", edgecolor="black", linewidth=1)
+    yticks = axes[1].get_yticks()
+    axes[1].set_yticklabels([int(abs(tick)) for tick in yticks])
+    axes[1].set_xticklabels([])
+    axes[1].set_xlabel("")
+    axes[1].set_ylabel("# of source's")
+    fig.tight_layout()
+    return fig

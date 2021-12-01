@@ -910,16 +910,12 @@ class FileGroup(mongoengine.Document):
                 "n": pop.n,
                 "frac_of_parent": pop.n / parent.n,
                 "frac_of_root": pop.n / root.n,
+                "n_sources": pop.n_sources,
             }
         except MissingPopulationError:
             if warn_missing:
                 logger.debug(f"{population} not present in {self.primary_id} FileGroup")
-            return {
-                "population_name": population,
-                "n": 0,
-                "frac_of_parent": 0,
-                "frac_of_root": 0,
-            }
+            return {"population_name": population, "n": 0, "frac_of_parent": 0, "frac_of_root": 0, "n_sources": None}
 
     @staticmethod
     def _cles(x: np.ndarray, y: np.ndarray, n: int = 1000):

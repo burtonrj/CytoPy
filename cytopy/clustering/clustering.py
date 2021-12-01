@@ -67,11 +67,9 @@ import numpy as np
 import pandas as pd
 import phenograph
 import seaborn as sns
-from gap_statistic import OptimalK
 from sklearn.cluster import AgglomerativeClustering
 
-from ..feature_selection.hypothesis_testing import multiple_groups
-from ..feature_selection.hypothesis_testing import two_groups
+from ..feature_selection.hypothesis_testing import hypothesis_test
 from ..plotting import single_cell_density
 from ..plotting import single_cell_plot
 from ..plotting.general import box_swarm_plot
@@ -83,6 +81,7 @@ from .latent import LatentClustering
 from .metrics import init_internal_metrics
 from .metrics import InternalMetric
 from .parc import PARC
+from .plotting import boxswarm_and_source_count
 from .plotting import clustered_heatmap
 from .plotting import plot_meta_clusters
 from .plotting import silhouette_analysis
@@ -310,6 +309,7 @@ class Clustering:
         self.sample_ids = sample_ids
         self.data = data
         self._embedding_cache = None
+        self._n_sources = {}
 
     @classmethod
     def from_experiment(
@@ -518,12 +518,15 @@ class Clustering:
         overwrite_cache: bool = False,
         method: str = "UMAP",
         dim_reduction_kwargs: Optional[Dict] = None,
+        subset: Optional[str] = None,
         **plot_kwargs,
     ):
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         data = self.dimension_reduction(
             n=n, sample_id=sample_id, overwrite_cache=overwrite_cache, method=method, **dim_reduction_kwargs
         )
+        if subset:
+            data = data.query(subset)
         return single_cell_density(data=data, x=f"{method}1", y=f"{method}2", **plot_kwargs)
 
     def plot(
@@ -535,12 +538,15 @@ class Clustering:
         overwrite_cache: bool = False,
         method: str = "UMAP",
         dim_reduction_kwargs: Optional[Dict] = None,
+        subset: Optional[str] = None,
         **plot_kwargs,
     ):
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         data = self.dimension_reduction(
             n=n, sample_id=sample_id, overwrite_cache=overwrite_cache, method=method, **dim_reduction_kwargs
         )
+        if subset:
+            data = data.query(subset)
         return single_cell_plot(
             data=data, x=f"{method}1", y=f"{method}2", label=label, discrete=discrete, **plot_kwargs
         )
@@ -552,12 +558,15 @@ class Clustering:
         overwrite_cache: bool = False,
         method: str = "UMAP",
         dim_reduction_kwargs: Optional[Dict] = None,
+        subset: Optional[str] = None,
         **plot_kwargs,
     ):
         dim_reduction_kwargs = dim_reduction_kwargs or {}
         data = self.dimension_reduction(
             n=n, sample_id=sample_id, overwrite_cache=overwrite_cache, method=method, **dim_reduction_kwargs
         )
+        if subset:
+            data = data.query(subset)
         return single_cell_plot(
             data=data, x=f"{method}1", y=f"{method}2", label="cluster_label", discrete=True, **plot_kwargs
         )
@@ -568,12 +577,16 @@ class Clustering:
         discrete: bool = True,
         method: str = "UMAP",
         dim_reduction_kwargs: Optional[Dict] = None,
+        subset: Optional[str] = None,
         **kwargs,
     ):
         if "meta_label" not in self.data.columns:
             raise KeyError("Meta-clustering has not been performed")
+        data = self.data
+        if subset:
+            data = data.query(subset)
         return plot_meta_clusters(
-            data=self.data,
+            data=data,
             features=self.features,
             colour_label=label,
             discrete=discrete,
@@ -588,10 +601,13 @@ class Clustering:
         sample_id: Optional[str] = None,
         meta_label: bool = True,
         include_labels: Optional[List[str]] = None,
+        subset: Optional[str] = None,
         **kwargs,
     ):
         features = features or self.features
         data = self.data.copy()
+        if subset:
+            data = data.query(subset)
         if include_labels:
             if meta_label:
                 data = data[data["meta_label"].isin(include_labels)]
@@ -607,10 +623,9 @@ class Clustering:
     def cluster_proportions(
         self,
         label: str = "cluster_label",
-        x_label: Optional[str] = None,
-        y_label: Optional[str] = None,
         filter_clusters: Optional[List] = None,
         hue: Optional[str] = None,
+        plot_source_count: bool = False,
         **plot_kwargs,
     ):
         data = self.data.copy()
@@ -623,39 +638,26 @@ class Clustering:
         if hue:
             colour_mapping = self.data[["sample_id", hue]].drop_duplicates()
             plot_data = plot_data.merge(colour_mapping, on="sample_id")
+        if plot_source_count:
+            plot_data["n_sources"] = plot_data[label].map(self._n_sources)
+            return boxswarm_and_source_count(plot_data=plot_data, label=label, hue=hue, **plot_kwargs)
         ax = box_swarm_plot(plot_df=plot_data, x=label, y="Percentage", hue=hue, **plot_kwargs)
-        if x_label:
-            ax.set_xlabel(x_label)
-        if y_label:
-            ax.set_ylabel(y_label)
         return ax
 
-    def cluster_proportion_stats(self, group: str, label: str = "cluster_label", **kwargs):
-        for c in [group, label]:
+    def cluster_proportion_stats(self, between_group: str, label: str = "cluster_label", **kwargs):
+        for c in [between_group, label]:
             if c not in self.data.columns:
                 raise KeyError(f"No such column {c}")
-        data = self.data[~self.data[group].isnull()]
+        data = self.data[~self.data[between_group].isnull()]
         x = data.groupby("sample_id")[label].value_counts()
         x.name = "Count"
         x = x.reset_index()
         data = x.groupby("sample_id").apply(self._count_to_proportion).reset_index()
-        group_mapping = self.data[["sample_id", group]].dropna().drop_duplicates()
+        group_mapping = self.data[["sample_id", between_group]].dropna().drop_duplicates()
         data = data.merge(group_mapping, on="sample_id")
-        results = []
-        if data[group].nunique() > 2:
-            for cluster, df in data.groupby(label):
-                cluster_results = multiple_groups(data=df, dv="Percentage", group=group, **kwargs)
-                cluster_results["Cluster"] = cluster
-                results.append(cluster_results)
-        else:
-            groups = data[group].unique()
-            for cluster, df in data.groupby(label):
-                x, y = df[df[group] == groups[0]].Percentage.values, df[df[group] == groups[1]].Percentage.values
-                cluster_results = two_groups(x=x, y=y, **kwargs)
-                cluster_results["Cluster"] = cluster
-                results.append(cluster_results)
-        results = pd.concat(results).reset_index(drop=True)
-        return results[["Cluster"] + [x for x in results.columns if x != "Cluster"]]
+        return hypothesis_test(
+            data=data, dv="Percentage", between_group=between_group, independent_group=label, **kwargs
+        )
 
     def performance(
         self,
@@ -884,7 +886,27 @@ class Clustering:
                     n=cluster.shape[0],
                     parent=parent,
                     source="cluster",
+                    n_sources=self._n_sources.get(cluster_label, 1),
                 )
                 pop.index = cluster.original_index.to_list()
                 fg.add_population(population=pop)
             fg.save()
+
+
+def clustering_statistics(
+    experiment: Experiment, prefix: str, meta_vars: Optional[Dict] = None, additional_parent: Optional[str] = None
+):
+    return experiment.population_statistics(
+        regex=f"{prefix}_.+",
+        source="cluster",
+        data_source="primary",
+        meta_vars=meta_vars,
+        additional_parent=additional_parent,
+    )
+
+
+def clustering_single_cell_data(experiment: Experiment, prefix: str, **kwargs):
+    populations = experiment.list_populations(regex=f"{prefix}_.+", source="cluster", data_source="primary")
+    return single_cell_dataframe(experiment=experiment, populations=populations, **kwargs).rename(
+        columns={"population_label": "cluster_label"}
+    )

@@ -199,10 +199,11 @@ class Population(BaseIndexDocument):
     normalised = mongoengine.BooleanField()
     geom = mongoengine.EmbeddedDocumentField(PopulationGeometry)
     definition = mongoengine.StringField()
+    data_source = mongoengine.StringField(default="primary")
+    n_sources = mongoengine.IntField(default=1)
     source = mongoengine.StringField(
         required=True, choices=["root", "gate", "cluster", "classifier", "merger", "subtraction"]
     )
-    data_source = mongoengine.StringField(default="primary")
 
 
 def create_polygon(x: List[float], y: List[float]) -> Polygon:

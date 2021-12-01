@@ -355,9 +355,12 @@ class Experiment(mongoengine.Document):
 
     def population_statistics(
         self,
-        populations: Union[List, None] = None,
+        populations: Optional[List] = None,
         meta_vars: Optional[Dict] = None,
         additional_parent: Optional[str] = None,
+        regex: Optional[str] = None,
+        source: Optional[str] = None,
+        data_source: str = "primary",
     ) -> pd.DataFrame:
         """
         Generates a Pandas DataFrame of population statistics for all FileGroups
@@ -374,7 +377,7 @@ class Experiment(mongoengine.Document):
         """
         data = list()
         for f in self.fcs_files:
-            for p in populations or f.list_populations():
+            for p in populations or self.list_populations(regex=regex, source=source, data_source=data_source):
                 df = pd.DataFrame({k: [v] for k, v in f.population_stats(population=p).items()})
                 df["sample_id"] = f.primary_id
                 s = f.subject
@@ -415,6 +418,13 @@ class Experiment(mongoengine.Document):
                 regex=regex, population_source=population_source, data_source=data_source, as_boolean=False
             )
         return data
+
+    def list_populations(
+        self, regex: Optional[str] = None, source: Optional[str] = None, data_source: str = "primary"
+    ) -> List[str]:
+        return list(
+            set([fg.list_populations(regex=regex, source=source, data_source=data_source) for fg in self.fcs_files])
+        )
 
     def control_eff_size(
         self,

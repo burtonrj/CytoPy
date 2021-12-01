@@ -37,7 +37,7 @@ def distortion_score(data: pd.DataFrame, features: List[str], clusters: List[str
             continue
         center = df[features].mean().values
         distances = pairwise_distances(df[features], center.reshape(1, -1), metric=metric)
-        score[c] = (distances ** 2).sum()
+        score[c] = (distances ** 2).sum() / df.shape[0]
     return score
 
 
@@ -157,6 +157,10 @@ class EnsembleClustering(Clustering):
             return self._cluster_weights["weights"], ax
         return self._cluster_weights["weights"], None
 
+    def _consensus_centroids_count_sources(self, centroids: pd.DataFrame):
+        for consensus_label, clusters in centroids.groupby("cluster_label"):
+            self._n_sources[consensus_label] = clusters.index.nunique()
+
     def cluster_centroids(
         self,
         t: int,
@@ -191,6 +195,7 @@ class EnsembleClustering(Clustering):
             f"Clustered centroids into {centroids.cluster_label.nunique()} clusters: "
             f"{centroids.cluster_label.unique()}"
         )
+        self._consensus_centroids_count_sources(centroids=centroids)
         with Parallel(n_jobs=n_jobs) as parallel:
             weights = {}
             if weight:
@@ -208,9 +213,17 @@ class EnsembleClustering(Clustering):
             )
         return g
 
+    def _consensus_count_sources(self, original_labels: List):
+        data = self.data.copy()
+        data["original_cluster_label"] = original_labels
+        for consensus_label, clusters in data.groupby("cluster_label"):
+            self._n_sources[consensus_label] = clusters.original_cluster_label.nunique()
+
     def consensus_clustering(
         self, consensus_method: str, k: int, random_state: int = 42, labels: Optional[List] = None
     ):
+        if consensus_method not in ["cdpa", "hgpa", "mcla", "hbgf", "nmf"]:
+            raise ClusteringError("Invalid consensus method, must be one of: cdpa, hgpa, mcla, hbgf, or nmf")
         labels = labels if labels is not None else list(self._reconstruct_labels().values())
         if consensus_method == "cspa" and self.data.shape[0] > 5000:
             logger.warning("CSPA is not recommended when n>5000, consider a different method")
@@ -223,7 +236,7 @@ class EnsembleClustering(Clustering):
             self.data["cluster_label"] = ClusterEnsembles.hbgf(labels=labels, nclass=k)
         if consensus_method == "nmf":
             self.data["cluster_label"] = ClusterEnsembles.nmf(labels=labels, nclass=k, random_state=random_state)
-        raise ClusteringError("Invalid consensus method, must be one of: cdpa, hgpa, mcla, hbgf, or nmf")
+        self._consensus_count_sources()
 
     def comparison(self, method: str = "adjusted_mutual_info", **kwargs):
         kwargs["figsize"] = kwargs.get("figsize", (10, 10))
