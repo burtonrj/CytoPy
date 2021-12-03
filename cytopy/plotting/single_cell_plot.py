@@ -113,7 +113,7 @@ def single_cell_plot(
     cbar_kwargs = cbar_kwargs or {}
     legend_kwargs = legend_kwargs or {}
 
-    data = data.dropna(axis=1, how="any")
+    data = data[~data[[x, y, label]].isnull().any(axis=1)]
     ax = ax or plt.subplots(figsize=figsize)[1]
 
     ax = sns.scatterplot(

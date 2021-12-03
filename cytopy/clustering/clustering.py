@@ -489,28 +489,38 @@ class Clustering:
 
     def dimension_reduction(
         self,
-        n: int = 100000,
+        n: int = 1000,
         sample_id: Optional[str] = None,
         overwrite_cache: bool = False,
         method: str = "UMAP",
+        replace: bool = False,
+        weights: Optional[Iterable] = None,
+        random_state: int = 42,
         **dim_reduction_kwargs,
     ):
+        reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
         if sample_id and self._embedding_cache is not None:
-            if self.data.sample_id.nunique() > 1:
+            if self._embedding_cache.sample_id.nunique() > 1:
+                # Embedding previously captures multiple samples
                 overwrite_cache = True
             elif self.data.sample_id.unique()[0] != sample_id:
+                # Embedding previously captures another sample
                 overwrite_cache = True
-        if self._embedding_cache is not None:
+        if self._embedding_cache is not None and not overwrite_cache:
             if f"{method}1" not in self._embedding_cache.columns:
-                overwrite_cache = True
-        if overwrite_cache or self._embedding_cache is None:
-            reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
-            if self.data.shape[0] < n:
-                data = self.data.copy()
+                self._embedding_cache = reducer.fit_transform(data=self._embedding_cache, features=self.features)
             else:
-                data = self.data.sample(n)
+                return self._embedding_cache
+        if overwrite_cache or self._embedding_cache is None:
+            data = self.data.copy()
             if sample_id:
                 data = data[data.sample_id == sample_id]
+                if self.data.shape[0] > n:
+                    data = self.data.sample(n)
+            else:
+                data = data.groupby("sample_id").sample(
+                    n=n, replace=replace, weights=weights, random_state=random_state
+                )
             self._embedding_cache = reducer.fit_transform(data=data, features=self.features)
         if sample_id:
             self._embedding_cache["cluster_label"] = self.data[self.data.sample_id == sample_id]["cluster_label"]
@@ -522,12 +532,13 @@ class Clustering:
 
     def plot_density(
         self,
-        n: int = 100000,
+        n: int = 1000,
         sample_id: Optional[str] = None,
         overwrite_cache: bool = False,
         method: str = "UMAP",
         dim_reduction_kwargs: Optional[Dict] = None,
         subset: Optional[str] = None,
+        plot_n: Optional[int] = None,
         **plot_kwargs,
     ):
         dim_reduction_kwargs = dim_reduction_kwargs or {}
@@ -536,13 +547,15 @@ class Clustering:
         )
         if subset:
             data = data.query(subset)
+        if plot_n and (data.shape[0] > plot_n):
+            data = data.sample(plot_n)
         return single_cell_density(data=data, x=f"{method}1", y=f"{method}2", **plot_kwargs)
 
     def plot(
         self,
         label: str,
         discrete: bool = True,
-        n: int = 100000,
+        n: int = 1000,
         sample_id: Optional[str] = None,
         overwrite_cache: bool = False,
         method: str = "UMAP",
@@ -562,7 +575,7 @@ class Clustering:
 
     def plot_cluster_membership(
         self,
-        n: int = 100000,
+        n: int = 1000,
         sample_id: Optional[str] = None,
         overwrite_cache: bool = False,
         method: str = "UMAP",
@@ -611,6 +624,7 @@ class Clustering:
         meta_label: bool = True,
         include_labels: Optional[List[str]] = None,
         subset: Optional[str] = None,
+        plot_orientation="vertical",
         **kwargs,
     ):
         features = features or self.features
@@ -622,7 +636,14 @@ class Clustering:
                 data = data[data["meta_label"].isin(include_labels)]
             else:
                 data = data[data["cluster_label"].isin(include_labels)]
-        return clustered_heatmap(data=data, features=features, sample_id=sample_id, meta_label=meta_label, **kwargs)
+        return clustered_heatmap(
+            data=data,
+            features=features,
+            sample_id=sample_id,
+            meta_label=meta_label,
+            plot_orientation=plot_orientation,
+            **kwargs,
+        )
 
     @staticmethod
     def _count_to_proportion(df: pd.DataFrame):
@@ -657,9 +678,15 @@ class Clustering:
         filter_clusters: Optional[List] = None,
         hue: Optional[str] = None,
         plot_source_count: bool = False,
+        log10_percentage: bool = False,
+        replace_null_population: float = 0.01,
+        y_label: str = "Percentage",
+        subset: Optional[str] = None,
         **plot_kwargs,
     ):
         data = self.data.copy()
+        if subset:
+            data = data.query(subset).copy()
         if filter_clusters:
             data = data[data[label].isin(filter_clusters)]
         x = data.groupby("sample_id")[label].value_counts()
@@ -667,20 +694,34 @@ class Clustering:
         x = x.reset_index()
         plot_data = x.groupby("sample_id").apply(self._count_to_proportion).reset_index()
         plot_data = self._fill_null_clusters(data=plot_data, label=label)
+        plot_data.rename(columns={"Percentage": y_label}, inplace=True)
+
         if hue:
             colour_mapping = self.data[["sample_id", hue]].drop_duplicates()
             plot_data = plot_data.merge(colour_mapping, on="sample_id")
+
+        if log10_percentage:
+            plot_data[f"log10({y_label})"] = np.log10(
+                plot_data[y_label].apply(lambda i: replace_null_population if i == 0 else i)
+            )
+            y_label = f"log10({y_label})"
+
         if plot_source_count:
             plot_data["n_sources"] = plot_data[label].map(self._n_sources)
-            return boxswarm_and_source_count(plot_data=plot_data, label=label, hue=hue, **plot_kwargs)
-        ax = box_swarm_plot(plot_df=plot_data, x=label, y="Percentage", hue=hue, **plot_kwargs)
+            return boxswarm_and_source_count(plot_data=plot_data, x=label, y=y_label, hue=hue, **plot_kwargs)
+
+        ax = box_swarm_plot(plot_df=plot_data, x=label, y=y_label, hue=hue, **plot_kwargs)
         return ax
 
-    def cluster_proportion_stats(self, between_group: str, label: str = "cluster_label", **kwargs):
+    def cluster_proportion_stats(
+        self, between_group: str, label: str = "cluster_label", subset: Optional[str] = None, **kwargs
+    ):
         for c in [between_group, label]:
             if c not in self.data.columns:
                 raise KeyError(f"No such column {c}")
         data = self.data[~self.data[between_group].isnull()]
+        if subset:
+            data = data.query(subset).copy()
         x = data.groupby("sample_id")[label].value_counts()
         x.name = "Count"
         x = x.reset_index()

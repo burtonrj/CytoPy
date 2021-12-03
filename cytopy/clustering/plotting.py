@@ -20,7 +20,6 @@ from cytopy.plotting.single_cell_plot import discrete_label
 from cytopy.plotting.single_cell_plot import discrete_palette
 from cytopy.utils.dim_reduction import DimensionReduction
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -29,6 +28,7 @@ def clustered_heatmap(
     features: List[str],
     sample_id: Optional[str] = None,
     meta_label: bool = True,
+    plot_orientation="vertical",
     **kwargs,
 ):
     """
@@ -72,7 +72,9 @@ def clustered_heatmap(
     kwargs["figsize"] = kwargs.get("figsize", (10, 15))
     kwargs["standard_scale"] = kwargs.get("standard_scale", 1)
     kwargs["cmap"] = kwargs.get("cmap", "viridis")
-    return sns.clustermap(data[features], **kwargs)
+    if plot_orientation == "vertical":
+        return sns.clustermap(data[features], **kwargs)
+    return sns.clustermap(data[features].T, **kwargs)
 
 
 def plot_meta_clusters(
@@ -408,22 +410,37 @@ def silhouette_analysis(
 
 def boxswarm_and_source_count(
     plot_data: pd.DataFrame,
-    label: str,
+    x: str,
+    y: str,
     hue: Optional[str] = None,
     figsize: Tuple[int, int] = (10, 8),
-    height_ratios: Tuple[int, int] = (3, 1),
     **plot_kwargs,
 ):
-    fig, axes = plt.subplots(2, 1, gridspec_kw={"height_ratios": height_ratios}, figsize=figsize)
-    box_swarm_plot(plot_df=plot_data, x=label, y="Percentage", hue=hue, ax=axes[0], **plot_kwargs)
-    plot_data.set_index(label, inplace=True)
-    x = axes[0].get_xticklabels()
-    y = [-1 * plot_data.loc[i].n_sources for i in x]
-    axes[1].bar(x, y, color="#A1A1A1", edgecolor="black", linewidth=1)
-    yticks = axes[1].get_yticks()
-    axes[1].set_yticklabels([int(abs(tick)) for tick in yticks])
-    axes[1].set_xticklabels([])
-    axes[1].set_xlabel("")
-    axes[1].set_ylabel("# of source's")
+    n_sources = plot_data[[x, "n_sources"]].drop_duplicates().sort_values("n_sources", ascending=False)
+    fig, ax = plt.subplots(figsize=figsize)
+    axes = [ax, ax.twinx()]
+    axes[0].bar(
+        n_sources[x].values, n_sources.n_sources.values, color="grey", edgecolor=None, align="center", alpha=0.3
+    )
+    plot_kwargs = plot_kwargs or {}
+    plot_kwargs["legend_anchor"] = plot_kwargs.get("legend_anchor", (1.2, 1))
+    boxplot_kwargs = plot_kwargs.pop("boxplot_kwargs", {})
+    boxplot_kwargs["order"] = n_sources[x].values
+    overlay_kwargs = plot_kwargs.pop("overlay_kwargs", {})
+    overlay_kwargs["order"] = n_sources[x].values
+    box_swarm_plot(
+        plot_df=plot_data,
+        x=x,
+        y=y,
+        hue=hue,
+        ax=axes[1],
+        boxplot_kwargs=boxplot_kwargs,
+        overlay_kwargs=overlay_kwargs,
+        **plot_kwargs,
+    )
+    axes[0].set_xticklabels(n_sources[x].values, rotation=90)
+    axes[0].set_xlabel("")
+    axes[1].set_ylabel(y)
+    axes[0].set_ylabel("# of clustering algorithms")
     fig.tight_layout()
     return fig

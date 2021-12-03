@@ -21,7 +21,7 @@ class ColumnWrapFigure(plt.Figure):
         self.n = n
         self.col_wrap = col_wrap
 
-    def add_subplot(self, *args, **kwargs):
+    def add_wrapped_subplot(self, *args, **kwargs):
         if self._i > self.n:
             raise ValueError("Figure is full! Define figure with more rows to add more subplots.")
         ax = super().add_subplot(self.rows, self.col_wrap, self._i, *args, **kwargs)
