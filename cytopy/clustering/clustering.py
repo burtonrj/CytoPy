@@ -69,7 +69,7 @@ import phenograph
 import seaborn as sns
 from sklearn.cluster import AgglomerativeClustering
 
-from ..feature_selection.hypothesis_testing import hypothesis_test
+from ..modeling.hypothesis_testing import hypothesis_test
 from ..plotting import single_cell_density
 from ..plotting import single_cell_plot
 from ..plotting.general import box_swarm_plot

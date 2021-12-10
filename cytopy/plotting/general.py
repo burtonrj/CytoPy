@@ -124,7 +124,7 @@ def box_swarm_plot(
     if xlabel is not None:
         ax.set_xlabel(xlabel=xlabel)
     if ylabel is not None:
-        ax.set_xlabel(xlabel=ylabel)
+        ax.set_ylabel(ylabel=ylabel)
     if xticklabels is not None:
         ax.set_xticklabels(xticklabels)
     if yticklabels is not None:
