@@ -614,7 +614,6 @@ def single_cell_dataframe(
         data_source=data_source,
         meta_vars=meta_vars,
         source_counts=source_counts,
-        warn_missing=warn_missing,
     )
 
     if sample_size is not None and sampling_level == "file":
@@ -625,6 +624,7 @@ def single_cell_dataframe(
         kwargs["sample_at_population_level"] = sampling_level == "population"
         kwargs["regex"] = regex
         kwargs["populations"] = populations
+        kwargs["warn_missing"] = warn_missing
         kwargs.pop("population")
 
     for _id in progress_bar(sample_ids, verbose=verbose):

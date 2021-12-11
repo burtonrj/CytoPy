@@ -99,11 +99,13 @@ class BatchCorrector:
         sample_size: Optional[int] = None,
         sampling_method: str = "uniform",
         sampling_level: str = "file",
+        sample_ids: Optional[List[str]] = None,
         verbose: bool = True,
         **kwargs,
     ):
         logger.info("Loading data...")
         data = single_cell_dataframe(
+            sample_ids=sample_ids,
             experiment=experiment,
             populations=population,
             sample_size=sample_size,
