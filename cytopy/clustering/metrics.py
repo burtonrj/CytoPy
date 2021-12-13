@@ -12,6 +12,8 @@ from scipy.spatial import distance
 from sklearn import metrics as sklearn_metrics
 from sklearn.metrics import adjusted_mutual_info_score
 from sklearn.metrics import adjusted_rand_score
+from sklearn.metrics import pairwise_distances
+from sklearn.preprocessing import LabelEncoder
 from yellowbrick.cluster.elbow import distortion_score
 
 from cytopy.feedback import progress_bar
@@ -156,7 +158,18 @@ class DistortionScore(InternalMetric):
 
     def __call__(self, data: pd.DataFrame, features: List[str], labels: List[int]):
         metric = self.kwargs.get("metric", "euclidean")
-        return distortion_score(data[features].values, labels, metric=metric)
+        if data.shape[0] == 0:
+            raise ValueError("Data is empty")
+        if len(labels) != data.shape[0]:
+            raise ValueError(f"{len(labels)} labels provided for {data.shape[0]} observations")
+        data = data.copy()
+        data["labels"] = labels
+        distortion = 0
+        for label, df in data.groupby("labels"):
+            center = df[features].mean().values.reshape(1, -1)
+            distances = pairwise_distances(df[features].values, center, metric=metric) ** 2
+            distortion += distances.sum()
+        return distortion
 
 
 class CalinskiHarabaszScore(InternalMetric):
@@ -173,6 +186,7 @@ class CalinskiHarabaszScore(InternalMetric):
 
 
 default_internal_metrics = {
+    "distortion_score": DistortionScore,
     "silhouette_coef": SilhouetteCoef,
     "davies_bouldin_index": DaviesBouldinIndex,
     "calinski_harabasz_score": CalinskiHarabaszScore,

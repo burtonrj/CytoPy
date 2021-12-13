@@ -16,6 +16,7 @@ import pandas as pd
 import pingouin as pg
 import seaborn as sns
 from mlxtend.evaluate import permutation_test
+from sklearn.preprocessing import StandardScaler
 
 from ..feedback import progress_bar
 from .hypothesis_testing import hypothesis_test
@@ -89,8 +90,8 @@ class FeatureSpace:
         self._data.drop(key, axis=axis, inplace=True)
         return self
 
-    def subset(self, query: str):
-        self._data = self._data.query(query).copy()
+    def subset(self, query: str, **kwargs):
+        self._data = self._data.query(query, **kwargs).copy()
 
     def to_csv(self, csv_path: str, **kwargs):
         kwargs = kwargs or {}
@@ -275,11 +276,12 @@ class FeatureSpace:
         kwargs = kwargs or {}
         kwargs["remove_na"] = kwargs.get("remove_na", True)
         vif = []
+        data = pd.DataFrame(StandardScaler().fit_transform(self.data[features]), columns=features)
         for f in features:
-            x = self.data[[i for i in features if i != f]].values
-            y = self.data[f].values
+            x = data[[i for i in features if i != f]].values
+            y = data[f].values
             lr = pg.linear_regression(x, y, **kwargs)
-            vif.append({"feature": f, "VIF": 1 / (1 - lr.loc[1]["r2"])})
+            vif.append({"feature": f, "VIF": 1 / (1 - lr.loc[1]["adj_r2"])})
         return pd.DataFrame(vif)
 
     def high_correlates(
@@ -311,9 +313,12 @@ class FeatureSpace:
         ylabel: Optional[str] = None,
         ax: Optional[plt.Axes] = None,
         lr_kwargs: Optional[Dict] = None,
+        standard_scale: bool = False,
         **kwargs,
     ):
-        data = self.data[~(self.data[x].isnull() | self.data[y].isnull())]
+        data = self.data[~(self.data[x].isnull() | self.data[y].isnull())].copy()
+        if standard_scale:
+            data[[x, y]] = StandardScaler().fit_transform(data[[x, y]])
         legend_kwargs = legend_kwargs or {}
         lr_kwargs = lr_kwargs or {}
         ax = ax if ax is not None else plt.subplots(figsize=(5, 5))[1]
@@ -345,5 +350,5 @@ class FeatureSpace:
 
     def missing_drop_above_threshold(self, threshold: float):
         missing = self.percentage_missing_data()
-        drop = missing[missing["% missing"] > threshold]["features"].values
+        drop = missing[missing["% missing"] > threshold]["feature"].values
         return self.drop(key=drop, axis=1)

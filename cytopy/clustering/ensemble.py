@@ -202,6 +202,7 @@ class EnsembleClustering(Clustering):
     ):
         centroids = self._compute_cluster_centroids(method=centroid_method)
         results = []
+        external_metrics = external_metrics or ["distortion_score"]
         metrics = init_internal_metrics(metrics=external_metrics)
         for k in range(min_k, max_k + 1):
             if verbose:
@@ -258,7 +259,7 @@ class EnsembleClustering(Clustering):
         self,
         t: int,
         centroid_method: str = "median",
-        method: str = "average",
+        method: str = "ward",
         metric: str = "euclidean",
         criterion: str = "maxclust",
         depth: int = 2,

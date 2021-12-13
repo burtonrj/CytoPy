@@ -751,13 +751,14 @@ class Clustering:
         features = features or self.features
         metrics = init_internal_metrics(metrics=metrics)
         results = defaultdict(list)
-        if isinstance(labels, list):
+        if isinstance(labels, list) or isinstance(labels, np.ndarray):
             self.data["tmp"] = labels
             labels = "tmp"
+
         for _ in progress_bar(range(resamples), verbose=verbose, total=resamples):
             df = self.data.sample(n=sample_n)
             for m in metrics:
-                results[m.name].append(m(data=df, features=features, labels=df[labels]))
+                results[m.name].append(m(data=df, features=features, labels=df[labels].values))
         if "tmp" in self.data.columns.values:
             self.data.drop("tmp", axis=1, inplace=True)
         if plot:
