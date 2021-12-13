@@ -452,7 +452,7 @@ class FileGroup(mongoengine.Document):
         ValueError
             Must provide list of populations or a regex pattern
         """
-        dataframes = list()
+        dataframes = []
         if regex is None and populations is None:
             raise ValueError("Must provide list of populations or a regex pattern")
         kwargs = dict(

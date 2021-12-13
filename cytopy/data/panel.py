@@ -93,7 +93,7 @@ class Panel(mongoengine.EmbeddedDocument):
                     columns = read_headers(path=path, s3_bucket=s3_bucket)
                 else:
                     assert set(columns) == set(read_headers(path=path, s3_bucket=s3_bucket))
-            mappings = dict()
+            mappings = {}
             for col in [x for x in columns if x != "Index"]:
                 mappings[col] = self.query_channel(channel=col)
             return mappings

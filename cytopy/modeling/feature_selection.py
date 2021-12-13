@@ -483,7 +483,7 @@ class L1Selection:
         self
         """
         search_space = np.logspace(*search_space)
-        coefs = list()
+        coefs = []
         for r in search_space:
             self.model.set_params(**{self._reg_param: r})
             self.model.fit(self.x, self.y, **kwargs)
@@ -746,7 +746,7 @@ class DecisionTree:
             depth = np.arange(depth[0], len(self.x.shape[1]), 1)
         else:
             depth = np.arange(depth[0], depth[1], 1)
-        depth_performance = list()
+        depth_performance = []
         for d in progress_bar(depth, verbose=verbose):
             performance = self.validate_tree(
                 validation_frac=validation_frac,

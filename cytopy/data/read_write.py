@@ -149,7 +149,7 @@ def parse_directory_for_cytometry_files(
     dict
         standard dictionary of fcs files contained in target directory
     """
-    file_tree = dict()
+    file_tree = {}
     fcs_files = filter_fcs_files(fcs_dir, exclude_files=exclude_files, exclude_dir=exclude_dir)
     ctrl_files = [f for f in fcs_files if f.find(control_id) != -1]
     primary = [f for f in fcs_files if f.find(control_id) == -1]

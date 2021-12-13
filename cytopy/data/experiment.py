@@ -221,7 +221,7 @@ class Experiment(mongoengine.Document):
         List
         """
         logger.debug(f"Fetching list of FileGroups associated to Subject on query {query}")
-        matches = list()
+        matches = []
         for f in self.fcs_files:
             try:
                 Subject.objects(id=f.subject.id).filter(query).get()
@@ -375,7 +375,7 @@ class Experiment(mongoengine.Document):
         -------
         Pandas.DataFrame
         """
-        data = list()
+        data = []
         for f in self.fcs_files:
             for p in populations or self.list_populations(regex=regex, source=source, data_source=data_source):
                 df = pd.DataFrame({k: [v] for k, v in f.population_stats(population=p).items()})
@@ -602,7 +602,7 @@ def single_cell_dataframe(
     logger.debug(f"Loading data from {experiment.experiment_id}")
     sample_ids = sample_ids or list(experiment.list_samples())
     sampling_kwargs = sampling_kwargs or {}
-    data = list()
+    data = []
 
     method = "load_population_df"
     kwargs = dict(

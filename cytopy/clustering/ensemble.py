@@ -18,6 +18,7 @@ from scipy.cluster.hierarchy import fclusterdata
 from sklearn.metrics.pairwise import pairwise_distances
 
 from ..plotting.general import box_swarm_plot
+from ..plotting.general import ColumnWrapFigure
 from .clustering import Clustering
 from .clustering import ClusteringError
 from .metrics import comparison_matrix
@@ -59,7 +60,7 @@ def majority_vote(
     consensus_cluster_labels = Counter([consensus_clusters.loc[cid, "cluster_label"] for cid in clusters])
     score = 0
     winner = None
-    # return dataframe with columns [sample_id, original_index, cluster_label] to merge back with data
+
     for label, count in consensus_cluster_labels.items():
         if count == score:
             logger.warning(
@@ -153,8 +154,10 @@ class EnsembleClustering(Clustering):
                 self._cluster_weights["weights"] = {sid: w for sid, w in zip(sample_ids, weights)}
         if plot:
             plot_kwargs = plot_kwargs or {}
-            plot_df = pd.DataFrame(self._cluster_weights["weights"]).T.melt(
-                var_name="Cluster", value_name="Distortion score"
+            plot_df = (
+                pd.DataFrame(self._cluster_weights["weights"])
+                .T.melt(var_name="Cluster", value_name="Distortion score")
+                .sort_values("Distortion score")
             )
             ax = box_swarm_plot(plot_df=plot_df, x="Cluster", y="Distortion score", **plot_kwargs)
             return self._cluster_weights["weights"], ax
@@ -164,32 +167,110 @@ class EnsembleClustering(Clustering):
         for consensus_label, clusters in centroids.groupby("cluster_label"):
             self._n_sources[consensus_label] = len(set([c.split("_")[0] for c in clusters.index.unique()]))
 
-    def cluster_centroids(
+    def centroid_clustered_heatmap(
+        self,
+        centroid_method: str = "median",
+        method: str = "ward",
+        metric: str = "euclidean",
+        plot_orientation: str = "vertical",
+        **kwargs,
+    ):
+        centroids = self._compute_cluster_centroids(method=centroid_method)
+        if plot_orientation == "horizontal":
+            g = sns.clustermap(data=centroids.T, method=method, metric=metric, **kwargs)
+        else:
+            g = sns.clustermap(data=centroids, method=method, metric=metric, **kwargs)
+        return g
+
+    def elbow_plot(
+        self,
+        min_k: int,
+        max_k: int,
+        sample_n: int = 10000,
+        resamples: int = 20,
+        method: str = "ward",
+        cluster_metric: str = "euclidean",
+        depth: int = 2,
+        weight: bool = True,
+        n_jobs: int = -1,
+        distortion_metric: str = "euclidean",
+        external_metrics: Optional[List[Union[str, InternalMetric]]] = None,
+        centroid_method: str = "median",
+        figsize: Optional[Tuple[int, int]] = None,
+        verbose: bool = True,
+        **kwargs,
+    ):
+        centroids = self._compute_cluster_centroids(method=centroid_method)
+        results = []
+        metrics = init_internal_metrics(metrics=external_metrics)
+        for k in range(min_k, max_k + 1):
+            if verbose:
+                print(f"N clusters = {k}")
+            centroids["cluster_label"] = fclusterdata(
+                X=centroids, t=k, criterion="maxclust", method=method, metric=cluster_metric, depth=depth
+            )
+            labels = self._assigning_events_to_clusters(
+                centroids=centroids, distortion_metric=distortion_metric, n_jobs=n_jobs, weight=weight, verbose=verbose
+            )
+            tmp = pd.DataFrame(
+                self.performance(
+                    metrics=metrics, sample_n=sample_n, resamples=resamples, labels=labels, plot=False, verbose=verbose
+                )
+            )
+            tmp["N clusters"] = k
+            results.append(tmp)
+        results = pd.concat(results).sort_values("N clusters")
+        metrics = [x for x in results.columns if x != "N clusters"]
+        figsize = figsize or (10, 5 * len(metrics))
+        fig = ColumnWrapFigure(n=len(metrics), figsize=figsize, col_wrap=1)
+        for i, metric in enumerate(metrics):
+            ax = fig.add_wrapped_subplot()
+            box_swarm_plot(plot_df=results, x="N clusters", y=metric, ax=ax, **kwargs)
+            if i < len(metrics) - 1:
+                ax.set_xlabel("")
+                ax.set_xticklabels([])
+        return fig
+
+    def _assigning_events_to_clusters(
+        self,
+        centroids: pd.DataFrame,
+        distortion_metric: str = "euclidean",
+        n_jobs: int = -1,
+        weight: bool = True,
+        verbose: bool = True,
+    ):
+        with Parallel(n_jobs=n_jobs) as parallel:
+            weights = {}
+            if weight:
+                weights, _ = self.cluster_weights(plot=False, distortion_metric=distortion_metric, verbose=verbose)
+            labels = parallel(
+                delayed(majority_vote)(
+                    row=row,
+                    cluster_assignments=self.cluster_assignments[row.sample_id],
+                    consensus_clusters=centroids[["cluster_label"]],
+                    weights=weights.get(row.sample_id, None),
+                )
+                for _, row in progress_bar(self.data.iterrows(), verbose=verbose, total=self.data.shape[0])
+            )
+        return labels
+
+    def consensus_centroid_clustering(
         self,
         t: int,
         centroid_method: str = "median",
         method: str = "average",
         metric: str = "euclidean",
         criterion: str = "maxclust",
-        plot_only: bool = True,
         depth: int = 2,
         weight: bool = True,
         n_jobs: int = -1,
         verbose: bool = True,
         distortion_metric: str = "euclidean",
-        plot_orientation: str = "vertical",
-        **kwargs,
+        return_labels: bool = False,
     ):
         self._check_for_cluster_parents()
         logger.info("Calculating cluster centroids")
         centroids = self._compute_cluster_centroids(method=centroid_method)
-        logger.info("Generating clustered heatmap")
-        if plot_orientation == "horizontal":
-            g = sns.clustermap(data=centroids.T, method=method, metric=metric, **kwargs)
-        else:
-            g = sns.clustermap(data=centroids, method=method, metric=metric, **kwargs)
-        if plot_only:
-            return g
         logger.info("Performing hierarchical clustering of centroids")
         centroids["cluster_label"] = fclusterdata(
             X=centroids, t=t, criterion=criterion, method=method, metric=metric, depth=depth
@@ -199,22 +280,15 @@ class EnsembleClustering(Clustering):
             f"{centroids.cluster_label.unique()}"
         )
         self._consensus_centroids_count_sources(centroids=centroids)
-        with Parallel(n_jobs=n_jobs) as parallel:
-            weights = {}
-            if weight:
-                logger.info("Computing cluster weights")
-                weights, _ = self.cluster_weights(plot=False, distortion_metric=distortion_metric, verbose=verbose)
-            logger.info("Assigning clusters by majority vote")
-            self.data["cluster_label"] = parallel(
-                delayed(majority_vote)(
-                    row=row,
-                    cluster_assignments=self.cluster_assignments[row.sample_id],
-                    consensus_clusters=centroids[["cluster_label"]],
-                    weights=weights.get(row.sample_id, None),
-                )
-                for _, row in progress_bar(self.data.iterrows(), verbose=verbose, total=self.data.shape[0])
-            )
-        return g
+
+        logger.info("Assigning clusters by majority vote")
+        labels = self._assigning_events_to_clusters(
+            centroids=centroids, distortion_metric=distortion_metric, n_jobs=n_jobs, weight=weight, verbose=verbose
+        )
+        if return_labels:
+            return labels
+        self.data["cluster_label"] = labels
+        return self
 
     def _consensus_count_sources(self, original_labels: List):
         data = self.data.copy()
@@ -239,7 +313,7 @@ class EnsembleClustering(Clustering):
             self.data["cluster_label"] = ClusterEnsembles.hbgf(labels=labels, nclass=k)
         if consensus_method == "nmf":
             self.data["cluster_label"] = ClusterEnsembles.nmf(labels=labels, nclass=k, random_state=random_state)
-        self._consensus_count_sources()
+        self._consensus_count_sources(labels)
 
     def comparison(self, method: str = "adjusted_mutual_info", **kwargs):
         kwargs["figsize"] = kwargs.get("figsize", (10, 10))

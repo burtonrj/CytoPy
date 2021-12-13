@@ -64,7 +64,7 @@ def _hist2d_bins(
 ):
     nbins = bins or int(np.sqrt(x.shape[0]))
     xlim, ylim = _hist2d_axis_limits(x, y)
-    bins = list()
+    bins = []
     for lim, transform_method, transform_kwargs in zip(
         [xlim, ylim], [transform_x, transform_y], [transform_x_kwargs, transform_y_kwargs]
     ):

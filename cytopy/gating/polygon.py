@@ -92,7 +92,7 @@ class PolygonGate(Gate):
         return self
 
     def _generate_populations(self, data: pd.DataFrame, polygons: List[ShapelyPolygon]) -> List[Population]:
-        pops = list()
+        pops = []
         for name, poly in zip(ascii_uppercase, polygons):
             pop_df = inside_polygon(data=data, x=self.x, y=self.y, poly=poly)
             geom = PolygonGeom(
@@ -111,7 +111,7 @@ class PolygonGate(Gate):
         return pops
 
     def _match_to_children(self, new_populations: List[Population]) -> List[Population]:
-        matched_populations = list()
+        matched_populations = []
         if len(new_populations) == 1 and len(self.children) == 1:
             new_populations[0].population_name = self.children[0].name
             return new_populations

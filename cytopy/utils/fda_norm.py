@@ -45,7 +45,7 @@ from skfda.representation.grid import FDataGrid
 
 
 def merge_peaks(p, threshold: float = 0.1):
-    to_merge = list()
+    to_merge = []
     for i in p:
         for j in p:
             if i != j and abs(i - j) <= threshold:

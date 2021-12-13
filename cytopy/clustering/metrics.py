@@ -173,18 +173,16 @@ class CalinskiHarabaszScore(InternalMetric):
 
 
 default_internal_metrics = {
-    "ball_hall": BallHall,
     "silhouette_coef": SilhouetteCoef,
     "davies_bouldin_index": DaviesBouldinIndex,
     "calinski_harabasz_score": CalinskiHarabaszScore,
-    "distortion_score": DistortionScore,
 }
 
 
 def init_internal_metrics(metrics: Optional[List[Union[str, InternalMetric]]] = None):
     if metrics is None:
         return [x() for x in default_internal_metrics.values()]
-    metric_objs = list()
+    metric_objs = []
     try:
         for x in metrics:
             if isinstance(x, str):

@@ -241,7 +241,7 @@ def test_upsample():
     )
     sample = g._downsample(data=data)
     sample_labels = labels[sample.index.values]
-    pops = list()
+    pops = []
     for x in np.unique(sample_labels):
         idx = sample.index.values[np.where(sample_labels == x)[0]]
         pops.append(gate.Population(population_name=f"Pop_{x}", parent="root", index=idx[:498]))

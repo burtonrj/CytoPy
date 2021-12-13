@@ -117,7 +117,7 @@ def calc_metrics(
     ValueError
         Invalid metric provided; possibly missing signatures: 'y_true', 'y_score' or 'y_pred'
     """
-    results = dict()
+    results = {}
     i = 1
     for m in metrics:
         try:

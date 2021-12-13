@@ -290,7 +290,7 @@ class Clustering:
     def __init__(
         self,
         data: pd.DataFrame,
-        experiment: Union[Experiment, List[Experiment]],
+        experiment: Optional[Experiment],
         features: List[str],
         sample_ids: Optional[List[str]] = None,
         root_population: str = "root",
@@ -350,7 +350,7 @@ class Clustering:
     def from_dataframe(
         cls,
         data: pd.DataFrame,
-        experiment: Experiment,
+        experiment: Optional[Experiment],
         features: list,
         sample_ids: list or None = None,
         root_population: str = "root",
@@ -489,7 +489,7 @@ class Clustering:
 
     def dimension_reduction(
         self,
-        n: int = 1000,
+        n: Optional[int] = 1000,
         sample_id: Optional[str] = None,
         overwrite_cache: bool = False,
         method: str = "UMAP",
@@ -517,7 +517,7 @@ class Clustering:
                 data = data[data.sample_id == sample_id]
                 if self.data.shape[0] > n:
                     data = self.data.sample(n)
-            else:
+            elif n is not None:
                 data = data.groupby("sample_id").sample(
                     n=n, replace=replace, weights=weights, random_state=random_state
                 )
@@ -546,7 +546,7 @@ class Clustering:
             n=n, sample_id=sample_id, overwrite_cache=overwrite_cache, method=method, **dim_reduction_kwargs
         )
         if subset:
-            data = data.query(subset)
+            data = data.query(subset).copy()
         if plot_n and (data.shape[0] > plot_n):
             data = data.sample(plot_n)
         return single_cell_density(data=data, x=f"{method}1", y=f"{method}2", **plot_kwargs)
@@ -568,7 +568,7 @@ class Clustering:
             n=n, sample_id=sample_id, overwrite_cache=overwrite_cache, method=method, **dim_reduction_kwargs
         )
         if subset:
-            data = data.query(subset)
+            data = data.query(subset).copy()
         return single_cell_plot(
             data=data, x=f"{method}1", y=f"{method}2", label=label, discrete=discrete, **plot_kwargs
         )
@@ -587,6 +587,7 @@ class Clustering:
         data = self.dimension_reduction(
             n=n, sample_id=sample_id, overwrite_cache=overwrite_cache, method=method, **dim_reduction_kwargs
         )
+        data["cluster_label"] = self.data["cluster_label"]
         if subset:
             data = data.query(subset)
         return single_cell_plot(
@@ -653,7 +654,7 @@ class Clustering:
     @staticmethod
     def _fill_null_clusters(data: pd.DataFrame, label: str):
         labels = data[label].unique()
-        updated_data = list()
+        updated_data = []
         for sample_id, sample_df in data.groupby("sample_id"):
             missing_labels = [i for i in labels if i not in sample_df[label].unique()]
             updated_data.append(
@@ -738,7 +739,7 @@ class Clustering:
         sample_n: int = 10000,
         resamples: int = 10,
         features: Optional[List[str]] = None,
-        label: str = "cluster_label",
+        labels: Union[Iterable, str] = "cluster_label",
         plot: bool = True,
         verbose: bool = True,
         col_wrap: int = 2,
@@ -750,10 +751,15 @@ class Clustering:
         features = features or self.features
         metrics = init_internal_metrics(metrics=metrics)
         results = defaultdict(list)
+        if isinstance(labels, list):
+            self.data["tmp"] = labels
+            labels = "tmp"
         for _ in progress_bar(range(resamples), verbose=verbose, total=resamples):
             df = self.data.sample(n=sample_n)
             for m in metrics:
-                results[m.name].append(m(data=df, features=features, labels=df[label]))
+                results[m.name].append(m(data=df, features=features, labels=df[labels]))
+        if "tmp" in self.data.columns.values:
+            self.data.drop("tmp", axis=1, inplace=True)
         if plot:
             figure_kwargs = figure_kwargs or {}
             figure_kwargs["figsize"] = figure_kwargs.get("figure_size", (10, 10))
@@ -763,7 +769,7 @@ class Clustering:
                     plot_df=pd.DataFrame({"Method": [m] * len(data), "Score": data}),
                     x="Method",
                     y="Score",
-                    ax=fig.add_subplot(),
+                    ax=fig.add_wrapped_subplot(),
                     **plot_kwargs,
                 )
             return results, fig
@@ -794,8 +800,8 @@ class Clustering:
             data = data[data.sample_id == sample_id].copy()
 
         ylabel = metric.name
-        x = list()
-        y = list()
+        x = []
+        y = []
         for k in progress_bar(np.arange(1, max_k + 1, 1)):
             df = data.copy()
             clustering_params[cluster_n_param] = k
@@ -926,6 +932,8 @@ class Clustering:
         ValueError
             If population_var is 'meta_label' and meta clustering has not been previously performed
         """
+        if self.experiment is None:
+            raise ClusteringError("No experiment associated to clustering object")
         if population_var == "meta_label":
             if self.data.meta_label.isnull().all():
                 raise ValueError("Meta clustering has not been performed")

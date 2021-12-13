@@ -1044,7 +1044,7 @@ class CalibratedCellClassifier(BaseClassifier):
         target_id = target_id or self.targets["sample_id"].unique()
         if isinstance(target_id, str):
             target_id = [target_id]
-        training_results, testing_results = list(), list()
+        training_results, testing_results = [], []
         for _id in progress_bar(target_id, verbose=verbose):
             x, y = self.load_target_data(target_id=_id, features=features)
             train, test = fit_cv(
@@ -1077,7 +1077,7 @@ class CalibratedCellClassifier(BaseClassifier):
         target_id = target_id or self.targets["sample_id"].unique()
         if isinstance(target_id, str):
             target_id = [target_id]
-        all_results, predictions = list(), dict()
+        all_results, predictions = [], dict()
         for _id in target_id:
             logger.info(f"Fitting to {_id}")
             x, y = self.load_target_data(target_id=_id, features=features)
@@ -1114,7 +1114,7 @@ class CalibratedCellClassifier(BaseClassifier):
         if isinstance(target_id, str):
             target_id = [target_id]
         logger.info("Fitting hyper-parameter optimizers")
-        optimizers = dict()
+        optimizers = {}
         results = defaultdict(list)
         for _id in progress_bar(target_id, verbose=verbose):
             x, y = self.load_target_data(target_id=_id, features=features)
@@ -1253,8 +1253,8 @@ def fit_cv(
     metrics = metrics or DEFAULT_METRICS
     split_kwargs = split_kwargs or {}
     cross_validator = cross_validator or KFold(n_splits=10, random_state=42, shuffle=True)
-    training_results = list()
-    testing_results = list()
+    training_results = []
+    testing_results = []
 
     if isinstance(x, pd.DataFrame):
         x = x.to_numpy()
@@ -1294,8 +1294,8 @@ def fit_train_test_split(
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_frac, **train_test_split_kwargs)
     logger.info("Training model")
     model.fit(x_train, y_train, **fit_kwargs)
-    results = dict()
-    y_hat = dict()
+    results = {}
+    y_hat = {}
     for key, (X, y) in zip(["train", "test"], [[x_train, y_train], [x_test, y_test]]):
         logger.info(f"Evaluating {key}ing performance....")
         y_pred, y_score = predict(model=model, x=X)

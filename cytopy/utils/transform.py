@@ -42,9 +42,7 @@ from sklearn import preprocessing
 
 from ..data.read_write import pandas_to_polars
 from ..data.read_write import polars_to_pandas
-from ..data.setup import Config
 
-CONFIG = Config()
 logger = logging.getLogger(__name__)
 
 
@@ -52,51 +50,6 @@ class TransformError(Exception):
     def __init__(self, message: str):
         logger.error(message)
         super().__init__(message)
-
-
-class LogicleCache:
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
-        self._cache = {}
-        self._inverse = {}
-
-    def load_from_cache(self, x: np.ndarray, inverse: bool = False):
-        cache = self._inverse if inverse else self._cache
-        cached_values = pd.DataFrame({"cache": np.array([cache.get(i, np.nan) for i in x]), "data": x})
-        no_cache_idx = cached_values["cache"].isnull()
-        data_no_cache = cached_values.loc[no_cache_idx, ["data"]].copy()
-        return cached_values, no_cache_idx, data_no_cache
-
-    def transform(self, y: np.ndarray, **kwargs):
-        if kwargs == kwargs:
-            cached_values, no_cache_idx, data_no_cache = self.load_from_cache(x=y, inverse=False)
-            data_no_cache = transforms._logicle(data_no_cache, **kwargs)
-            cached_values.loc[no_cache_idx, ["cache"]] = data_no_cache
-            for r in cached_values.loc[no_cache_idx].itertuples():
-                self._cache[r.data] = r.cache
-            return cached_values["cache"].values
-        else:
-            self._cache = {}
-            self._inverse = {}
-            self.kwargs = kwargs
-            return self.transform(y=y, **kwargs)
-
-    def inverse(self, x: np.ndarray, **kwargs):
-        if kwargs == kwargs:
-            cached_values, no_cache_idx, data_no_cache = self.load_from_cache(x=x, inverse=True)
-            data_no_cache = transforms._logicle(data_no_cache, **kwargs)
-            cached_values.loc[no_cache_idx, ["cache"]] = data_no_cache
-            for r in cached_values.loc[no_cache_idx].itertuples():
-                self._inverse[r.data] = r.cache
-            return cached_values["cache"].values
-        else:
-            self._cache = {}
-            self._inverse = {}
-            self.kwargs = kwargs
-            return self.inverse(x=x, **kwargs)
-
-
-LOGICLE_CACHE = LogicleCache()
 
 
 def logicle_transform_series(series: pl.Series, **kwargs):
@@ -139,8 +92,11 @@ class Transformer:
     Attributes
     ----------
     transform: callable
+        Transformer function
     inverse: callable
+        Inverse transform function
     kwargs: dict
+        Function parameters
     """
 
     def __init__(self, transform_function: Callable, inverse_function: Callable, **kwargs):

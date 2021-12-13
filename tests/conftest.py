@@ -203,7 +203,7 @@ def small_blobs():
 
 @pytest.fixture
 def small_high_dim_dataframe():
-    data = list()
+    data = []
     column_names = [f"f{i + 1}" for i in range(10)]
     for i, k in enumerate([5, 5, 6, 6, 5]):
         x = pd.DataFrame(

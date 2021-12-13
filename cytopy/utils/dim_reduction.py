@@ -101,6 +101,8 @@ class DimensionReduction:
         try:
             if isinstance(method, str):
                 self.method = self.base_methods[method](**params)
+            else:
+                self.method = method
         except KeyError:
             raise KeyError(
                 f"Invalid method, must be one of: {self.base_methods.keys()} or a valid class with "

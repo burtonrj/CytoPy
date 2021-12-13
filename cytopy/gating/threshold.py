@@ -304,7 +304,7 @@ class ThresholdBase(Gate):
         List
             List of Population objects
         """
-        pops = list()
+        pops = []
         for definition, df in data.items():
             pop = Population(
                 population_name=definition,
@@ -341,7 +341,7 @@ class ThresholdBase(Gate):
         -------
         List
         """
-        labeled = list()
+        labeled = []
         for c in self.children:
             matching_populations = [p for p in new_populations if c.match_definition(p.definition)]
             if len(matching_populations) == 0:

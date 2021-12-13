@@ -55,7 +55,9 @@ class SamplingError(Exception):
         super().__init__(message)
 
 
-def uniform_downsampling(data: Union[pl.DataFrame, pd.DataFrame], sample_size: Union[int, float], **kwargs):
+def uniform_downsampling(
+    data: Union[pl.DataFrame, pd.DataFrame], sample_size: Union[int, float], **kwargs
+) -> pd.DataFrame:
     """
     Uniform downsampling. Wraps the polars DataFrame sample method
     with some additional error handling for when the requested sample
@@ -279,7 +281,7 @@ def density_probability_assignment(
 
     Returns
     -------
-    numpy.ndarray
+    Numpy Array
     """
     data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     if njobs < 0:
@@ -472,7 +474,7 @@ def sample_dataframe(
 
 
 def sample_dataframe_uniform_groups(data: Union[pl.DataFrame, pd.DataFrame], group_id: str, sample_size: int):
-    sample_data = list()
+    sample_data = []
     data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     n = int(sample_size / data[group_id].nunique())
     for _, df in data.groupby(group_id):

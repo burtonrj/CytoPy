@@ -29,19 +29,6 @@ class ColumnWrapFigure(plt.Figure):
         return ax
 
 
-def build_plot_grid(n: int, col_wrap: int, **kwargs):
-    kwargs = kwargs or {}
-    rows = n // col_wrap
-    rows += n % col_wrap
-    figsize = kwargs.pop("figsize", (rows * 5, col_wrap * 5))
-    fig = plt.figure(figsize=figsize, **kwargs)
-    axes = []
-    for i in range(n):
-        axes.append(fig.add_subplot(rows, col_wrap, i + 1))
-    fig.tight_layout()
-    return fig, axes
-
-
 def box_swarm_plot(
     plot_df: pd.DataFrame,
     x: str,
