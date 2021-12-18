@@ -31,7 +31,7 @@ from cytopy.plotting.cyto import cyto_plot
 from cytopy.plotting.cyto import overlay
 from cytopy.plotting.cyto import plot_ctrl_gate_1d
 from cytopy.plotting.cyto import plot_gate
-from cytopy.plotting.general import build_plot_grid
+from cytopy.plotting.general import ColumnWrapFigure
 
 logger = logging.getLogger(__name__)
 
@@ -120,16 +120,17 @@ class GatingStrategy(mongoengine.Document):
     ):
         figure_kwargs = figure_kwargs or {}
         plot_kwargs = plot_kwargs or {}
-        fig, axes = build_plot_grid(n=len(self.gates), col_wrap=col_wrap, **figure_kwargs)
+        fig = ColumnWrapFigure(n=len(self.gates), col_wrap=col_wrap, **figure_kwargs)
         for i, gate in enumerate(self.gates):
+            ax = fig.add_wrapped_subplot()
             self.plot_gate(
                 gate=gate.gate_name,
                 plot_training_data=plot_training_data,
-                ax=axes[i],
+                ax=ax,
                 n_limit=n_limit,
                 **plot_kwargs.get(gate.gate_name, {}),
             )
-            axes[i].set_title(gate.gate_name)
+            ax.set_title(gate.gate_name)
         fig.tight_layout()
         return fig
 

@@ -494,7 +494,7 @@ class Experiment(mongoengine.Document):
             for f in self.fcs_files:
                 pops = [p for p in targets if p in f.list_populations()]
                 try:
-                    f.merge_non_geom_populations(populations=pops, new_population_name=new_population_name)
+                    f.merge_populations(populations=pops, new_population_name=new_population_name)
                     f.save()
                 except ValueError as e:
                     logger.warning(f"Failed to merge populations for {f.primary_id}: {str(e)}")

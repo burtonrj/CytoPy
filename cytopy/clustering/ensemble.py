@@ -16,6 +16,7 @@ from joblib import Parallel
 from matplotlib.ticker import MaxNLocator
 from scipy.cluster.hierarchy import fclusterdata
 from sklearn.metrics.pairwise import pairwise_distances
+from sklearn.preprocessing import LabelEncoder
 
 from ..plotting.general import box_swarm_plot
 from ..plotting.general import ColumnWrapFigure
@@ -97,10 +98,12 @@ class EnsembleClustering(Clustering):
             prefix = cluster.split("_")[0]
             self.cluster_groups[prefix].append(cluster)
 
-    def _reconstruct_labels(self):
+    def _reconstruct_labels(self, encoded: bool = False):
         labels = {}
         for prefix, clusters in self.cluster_groups.items():
             labels[prefix] = self.data[clusters].idxmax(axis=1)
+        if encoded:
+            return np.array([LabelEncoder().fit_transform(x) for x in labels.values()])
         return labels
 
     def _check_for_cluster_parents(self):
@@ -164,6 +167,7 @@ class EnsembleClustering(Clustering):
         return self._cluster_weights["weights"], None
 
     def _consensus_centroids_count_sources(self, centroids: pd.DataFrame):
+        self._n_sources = {}
         for consensus_label, clusters in centroids.groupby("cluster_label"):
             self._n_sources[consensus_label] = len(set([c.split("_")[0] for c in clusters.index.unique()]))
 
@@ -302,7 +306,7 @@ class EnsembleClustering(Clustering):
     ):
         if consensus_method not in ["cdpa", "hgpa", "mcla", "hbgf", "nmf"]:
             raise ClusteringError("Invalid consensus method, must be one of: cdpa, hgpa, mcla, hbgf, or nmf")
-        labels = labels if labels is not None else list(self._reconstruct_labels().values())
+        labels = labels if labels is not None else self._reconstruct_labels(encoded=True)
         if consensus_method == "cspa" and self.data.shape[0] > 5000:
             logger.warning("CSPA is not recommended when n>5000, consider a different method")
             self.data["cluster_label"] = ClusterEnsembles.cspa(labels=labels, nclass=k)
@@ -314,7 +318,7 @@ class EnsembleClustering(Clustering):
             self.data["cluster_label"] = ClusterEnsembles.hbgf(labels=labels, nclass=k)
         if consensus_method == "nmf":
             self.data["cluster_label"] = ClusterEnsembles.nmf(labels=labels, nclass=k, random_state=random_state)
-        self._consensus_count_sources(labels)
+        # self._consensus_count_sources(labels)
 
     def comparison(self, method: str = "adjusted_mutual_info", **kwargs):
         kwargs["figsize"] = kwargs.get("figsize", (10, 10))
