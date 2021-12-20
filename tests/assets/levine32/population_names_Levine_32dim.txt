@@ -1,0 +1,15 @@
+label	population
+1	Basophils
+2	CD16-_NK_cells
+3	CD16+_NK_cells
+4	CD34+CD38+CD123-_HSPCs
+5	CD34+CD38+CD123+_HSPCs
+6	CD34+CD38lo_HSCs
+7	CD4_T_cells
+8	CD8_T_cells
+9	Mature_B_cells
+10	Monocytes
+11	pDCs
+12	Plasma_B_cells
+13	Pre_B_cells
+14	Pro_B_cells
