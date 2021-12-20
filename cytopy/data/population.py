@@ -198,7 +198,8 @@ class Population(BaseIndexDocument):
     data_source = mongoengine.StringField(default="primary")
     n_sources = mongoengine.IntField(default=1)
     source = mongoengine.StringField(
-        required=True, choices=["root", "gate", "cluster", "classifier", "merger", "subtraction"]
+        required=True,
+        choices=["root", "gate", "cluster", "classifier", "merger", "subtraction"]
     )
 
 

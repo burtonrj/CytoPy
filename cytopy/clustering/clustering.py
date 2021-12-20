@@ -980,7 +980,7 @@ def clustering_statistics(
 ):
     return experiment.population_statistics(
         regex=f"{prefix}_.+",
-        source="cluster",
+        population_source="cluster",
         data_source="primary",
         meta_vars=meta_vars,
         additional_parent=additional_parent,

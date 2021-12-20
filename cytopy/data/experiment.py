@@ -4,8 +4,8 @@
 The experiment module houses the Experiment class, used to define
 cytometry based experiments that can consist of one or more biological
 specimens. An experiment should be defined for each cytometry staining
-panel used in your analysis and the single cell data (contained in
-*.fcs files) added to the experiment using the 'add_new_sample' method.
+panel used in your analysis.
+
 Experiments should be created using the Project class (see cytopy.data.projects).
 All functionality for experiments and Panels are housed within this
 module.
@@ -30,9 +30,10 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+from __future__ import annotations
+
 import gc
 import logging
-import os
 from collections import Counter
 from typing import Dict
 from typing import List
@@ -58,14 +59,6 @@ from .fcs import FileGroup
 from .panel import Panel
 from .subject import Subject
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
 logger = logging.getLogger(__name__)
 
 
@@ -73,16 +66,15 @@ class Experiment(mongoengine.Document):
     """
     Container for Cytometry experiment. The correct way to generate and load these objects is using the
     Project.add_experiment method (see cytopy.data.project.Project). This object provides access
-    to all experiment-wide functionality. New files can be added to an experiment using the
-    add_new_sample method.
+    to all experiment-wide functionality.
 
     Attributes
     -----------
     experiment_id: str, required
         Unique identifier for experiment
-    panel: ReferenceField, required
+    panel: EmbeddedDocument[Panel], required
         Panel object describing associated channel/marker pairs
-    fcs_files: ListField
+    fcs_files: List[ReferenceField]
         Reference field for associated files
     flags: str, optional
         Warnings associated to experiment
@@ -98,32 +90,7 @@ class Experiment(mongoengine.Document):
 
     meta = {"db_alias": "core", "collection": "experiments"}
 
-    @staticmethod
-    def _check_panel(panel_definition: str or None):
-        """
-        Check that parameters provided for defining a panel are valid.
-
-        Parameters
-        ----------
-        panel_definition: str or None
-            Path to a panel definition
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        ValueError
-            Given parameters are invalid
-        """
-        if not os.path.isfile(panel_definition):
-            raise PanelError(f"{panel_definition} does not exist")
-
-        if not os.path.splitext(panel_definition)[1] in [".xls", ".xlsx"]:
-            raise PanelError("Panel definition is not a valid Excel document")
-
-    def generate_panel(self, panel_definition: str) -> None:
+    def generate_panel(self, panel_definition: str) -> Experiment:
         """
         Generate a new panel using the panel definition provided (path to a valid template).
 
@@ -134,7 +101,7 @@ class Experiment(mongoengine.Document):
 
         Returns
         -------
-        None
+        Experiment
 
         Raises
         ------
@@ -144,8 +111,9 @@ class Experiment(mongoengine.Document):
         new_panel = Panel()
         new_panel.create_from_tabular(path=panel_definition)
         self.panel = new_panel
+        return self
 
-    def delete_all_populations(self, sample_id: str) -> None:
+    def delete_all_populations(self, sample_id: str) -> Experiment:
         """
         Delete population data associated to experiment. Give a value of 'all' for sample_id to remove all population
         data for every sample.
@@ -158,13 +126,15 @@ class Experiment(mongoengine.Document):
 
         Returns
         -------
-        None
+        Experiment
         """
+        logger.info(f"Deleting all populations in '{sample_id}'")
         for f in self.fcs_files:
             if sample_id == "all" or f.primary_id == sample_id:
-                logger.info(f"Deleting all populations from FileGroup {sample_id}; {f.id}")
                 f.populations = [p for p in f.populations if p.population_name == "root"]
                 f.save()
+        logger.info("Populations deleted successfully!")
+        return self
 
     def sample_exists(self, sample_id: str) -> bool:
         """
@@ -202,12 +172,11 @@ class Experiment(mongoengine.Document):
         MissingSampleError
             If requested sample is not found in the experiment
         """
-        logger.debug(f"Attempting to fetch FileGroup {sample_id}")
         if not self.sample_exists(sample_id):
             raise MissingSampleError(f"Invalid sample: {sample_id} not associated with this experiment")
         return [f for f in self.fcs_files if f.primary_id == sample_id][0]
 
-    def filter_samples_by_subject(self, query: Union[str, mongoengine.queryset.visitor.Q]) -> List:
+    def filter_samples_by_subject(self, query: Union[str, mongoengine.queryset.visitor.Q]) -> List[FileGroup]:
         """
         Filter FileGroups associated to this experiment based on some subject meta-data
 
@@ -218,7 +187,7 @@ class Experiment(mongoengine.Document):
 
         Returns
         -------
-        List
+        List[FileGroup]
         """
         logger.debug(f"Fetching list of FileGroups associated to Subject on query {query}")
         matches = []
@@ -236,7 +205,7 @@ class Experiment(mongoengine.Document):
 
     def list_samples(self, valid_only: bool = True) -> List[str]:
         """
-        Generate a list IDs of file groups associated to experiment
+        Generate a list of IDs for file groups associated to experiment
 
         Parameters
         -----------
@@ -245,17 +214,28 @@ class Experiment(mongoengine.Document):
 
         Returns
         --------
-        List
-            List of IDs of file groups associated to experiment
+        List[str]
         """
         if valid_only:
             return [f.primary_id for f in self.fcs_files if f.valid]
         return [f.primary_id for f in self.fcs_files]
 
-    def random_filegroup(self):
+    def random_filegroup(self, seed: int = 42) -> str:
+        """
+        Return a random filegroup ID
+
+        Parameters
+        ----------
+        seed: int = 42
+
+        Returns
+        -------
+        str
+        """
+        np.random.seed(seed)
         return np.random.choice(self.list_samples())
 
-    def remove_sample(self, sample_id: str):
+    def remove_sample(self, sample_id: str) -> Experiment:
         """
         Remove sample (FileGroup) from experiment.
 
@@ -266,13 +246,14 @@ class Experiment(mongoengine.Document):
 
         Returns
         --------
-        None
+        Experiment
         """
         logger.debug(f"Deleting {sample_id}")
         filegrp = self.get_sample(sample_id)
         self.fcs_files = [f for f in self.fcs_files if f.primary_id != sample_id]
         filegrp.delete()
         self.save()
+        return self
 
     def _sample_exists(self, sample_id: str):
         if self.sample_exists(sample_id):
@@ -288,7 +269,48 @@ class Experiment(mongoengine.Document):
         subject_id: Optional[str] = None,
         processing_datetime: Optional[str] = None,
         collection_datetime: Optional[str] = None,
-    ):
+    ) -> Experiment:
+        """
+        Associate a new biological specimen to this Experiment and link to some single cell data source
+        such as a CSV file, FCS file, HDF5 or Parquet file. This will generate a new FileGroup that will
+        be linked to this Experiment and labelled with a unique ID (sample_id).
+
+        A FileGroup can consist of multiple sources files, but expects a single source for the primary staining of
+        cytometry data and then multiple files for subsequent controls. The data sources should be specified using a
+        dictionary provided to 'path'. This must contain the key 'primary' whose value is the file path to the
+        primary staining. All subsequent key-value pairs are treated as control ID's and corresponding file paths. If
+        a value is provided for 's3_bucket', then the paths should be relative to this bucket.
+
+        If the data must be compensated, make sure 'compensate' is True. If providing a path to an FCS file, then
+        'compensation_matrix' can be left as None if a compensation matrix is embedded within this file. If a
+        value is provided for 'compensation_matrix' it will overwrite the embedded matrix. If the source file is
+        not an FCS file and 'compensate' is True, then a value MUST be provided for 'compensation_matrix' in the
+        form of a file path to a valid CSV file containing the spillover matrix.
+
+        NOTE: The file paths are stored within the database NOT the single cell data. Once an Experiment is
+        setup you should try to keep filepaths static. If you must migrate date, see Project.migrate method.
+
+        Parameters
+        ----------
+        sample_id: str
+            Unique sample ID (unique to this Experiment)
+        paths: Dict[str, str]
+            File ID as key and filepath as value; must contain a 'primary' key.
+        compensate: bool (default=True)
+            Should the data be compensated upon reading?
+        compensation_matrix: str, optional
+            Filepath to spillover CSV file. If provided any embedded spillover matrix will be ignored.
+        s3_bucket: str, optional
+            Parent S3 bucket containing all filepaths
+        subject_id: str, optional
+            Subject to associate this FileGroup to
+        processing_datetime: str, optional
+        collection_datetime: str, optional
+
+        Returns
+        -------
+        Experiment
+        """
         if self.panel is None:
             raise AttributeError("No panel defined.")
         if "primary" not in paths.keys():
@@ -312,15 +334,16 @@ class Experiment(mongoengine.Document):
                 s3_bucket=s3_bucket,
                 processing_datetime=processing_datetime,
                 collection_datetime=collection_datetime,
-                channel_mappings=self.panel.build_mappings(path=paths.values(), s3_bucket=s3_bucket),
+                channel_mappings=self.panel.build_mappings(path=list(paths.values()), s3_bucket=s3_bucket),
             )
         )
         self.save()
         gc.collect()
+        return self
 
     def control_counts(self, ax: Optional[plt.Axes] = None) -> plt.Axes:
         """
-        Generates a barplot of total counts of each control in Experiment FileGroup's
+        Generates a barplot of total counts of each control in Experiment FileGroups
 
         Parameters
         ----------
@@ -338,7 +361,24 @@ class Experiment(mongoengine.Document):
         return ax
 
     @staticmethod
-    def _prop_of_parent(df: pd.DataFrame, parent: str):
+    def _prop_of_parent(df: pd.DataFrame, parent: str) -> pd.DataFrame:
+        """
+        Given a DataFrame of population statistics and the name of a parent
+        population, calculate the proportion of events as a fraction of this
+        parent and return the DataFrame with the new column 'frac_of_{parent}'.
+        If the parent doesn't exist then the value in this column with be None.
+
+        Parameters
+        ----------
+        df: Pandas.DataFrame
+            Population statistics, including the number of events (n). Each row
+            should correspond to a population.
+        parent: str
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         frac_of_parent = []
         parent_df = df[df.population_name == parent]
         if parent_df.shape[0] == 0:
@@ -355,11 +395,11 @@ class Experiment(mongoengine.Document):
 
     def population_statistics(
         self,
-        populations: Optional[List] = None,
+        populations: Optional[List[str]] = None,
         meta_vars: Optional[Dict] = None,
         additional_parent: Optional[str] = None,
         regex: Optional[str] = None,
-        source: Optional[str] = None,
+        population_source: Optional[str] = None,
         data_source: str = "primary",
     ) -> pd.DataFrame:
         """
@@ -369,7 +409,32 @@ class Experiment(mongoengine.Document):
 
         Parameters
         ----------
-        populations: list, optional
+        populations: List[str], optional
+            List of populations to generate statistics for. Leave as None to generate statistics
+            for all populations
+        meta_vars: Dict[str, Union[str, List[str]]], optional
+            If a dictionary is provided, will generate additional columns of meta-variables sourced
+            from the Subjects associated to the Experiment FileGroups. Let's take a look at an example.
+            If our Experiments FileGroups had associated Subjects that contained the variable 'patient_type',
+            we could add a column to our DataFrame called 'Patient Type' by passing the following:
+
+                {'Patient Type': 'patient_type'}
+
+            If this variable was embedded in our Subjects under the field 'labels', we would provide the following:
+
+                {'Patient Type': ['labels', 'patient_type']}
+
+            The DataFrame that this method returns will now contain an additional column called 'Patient Type'
+            with values for each FileGroup derived from the Subject documents.
+        additional_parent: str, optional
+            If provided, will compute the proportion of events as a fraction of this population.
+        regex: str, optional
+            If provided and populations is None, will generate statistics for all populations matching this
+            regular expression pattern.
+        population_source: str, optional
+            The type of populations to include e.g. gated, clusters etc
+        data_source: str (default='primary')
+            The data source of interest i.e. either primary or some control ID
 
         Returns
         -------
@@ -377,7 +442,7 @@ class Experiment(mongoengine.Document):
         """
         data = []
         for f in self.fcs_files:
-            for p in populations or self.list_populations(regex=regex, source=source, data_source=data_source):
+            for p in populations or self.list_populations(regex=regex, source=population_source, data_source=data_source):
                 df = pd.DataFrame({k: [v] for k, v in f.population_stats(population=p).items()})
                 df["sample_id"] = f.primary_id
                 s = f.subject
@@ -400,6 +465,7 @@ class Experiment(mongoengine.Document):
         as_boolean: bool = False,
         verbose: bool = True,
     ):
+
         if as_boolean:
             data = []
             for fg in progress_bar(self.fcs_files, verbose=verbose):
