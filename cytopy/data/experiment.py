@@ -577,7 +577,7 @@ class Experiment(mongoengine.Document):
         methods that can be used for effect size.
 
         If eftype = "fold_change", the effect size will simply be:
-            Median(Primary) - Median(Control)/Median(Primary)
+            Median(Control) - Median(Primary)/Median(Control)
 
         Parameters
         ----------

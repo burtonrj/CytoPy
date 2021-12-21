@@ -36,7 +36,7 @@ import pickle
 import re
 from multiprocessing import cpu_count
 from multiprocessing import Pool
-from typing import Iterable
+from typing import Iterable, Union
 from typing import List
 from typing import Optional
 
@@ -77,13 +77,13 @@ class BaseIndexDocument(mongoengine.EmbeddedDocument):
             self._index.close()
 
     @property
-    def index(self) -> Iterable[int]:
+    def index(self) -> List[int]:
         if self._index_cache is None:
             return self._load_index()
         return self._index_cache
 
     @index.setter
-    def index(self, idx: Iterable[int]):
+    def index(self, idx: Union[List[int], np.ndarray]):
         if isinstance(idx, np.ndarray):
             idx = idx.tolist()
         self._index_cache = idx

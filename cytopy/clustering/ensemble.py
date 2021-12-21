@@ -91,7 +91,7 @@ class EnsembleClustering(Clustering):
         for sample_id in self.data.sample_id.unique():
             self.cluster_assignments[sample_id] = list(
                 self.experiment.get_sample(sample_id=sample_id).list_populations(
-                    source="cluster", data_source="primary"
+                    population_source="cluster", data_source="primary"
                 )
             )
         for cluster in self.clusters:

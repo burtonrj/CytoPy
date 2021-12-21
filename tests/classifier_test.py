@@ -376,7 +376,7 @@ def test_calcellclassifier_feature_importance(calibrated_cell_classifier):
     important_features, selector = calibrated_cell_classifier.feature_importance()
     assert isinstance(important_features, np.ndarray)
     assert isinstance(selector, SelectFromModel)
-    assert len(calibrated_cell_classifier.feature_columns) > len(important_features)
+    assert len(calibrated_cell_classifier._feature_columns) > len(important_features)
 
 
 def test_calcellclassifier_meta_fit_predict(calibrated_cell_classifier):
