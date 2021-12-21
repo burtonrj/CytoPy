@@ -31,11 +31,13 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-import datetime
+from __future__ import annotations
+
 import os
-from collections import defaultdict
+import logging
+import datetime
 from copy import deepcopy
-from typing import Dict
+from typing import Dict, Mapping, Union
 from typing import List
 from typing import Optional
 
@@ -44,15 +46,30 @@ import numpy as np
 import pandas as pd
 
 from ..feedback import progress_bar
-from .errors import *
 from .experiment import Experiment
 from .read_write import parse_directory_for_cytometry_files
 from .subject import Subject
+from .errors import DuplicateExperimentError
+from .errors import DuplicateSubjectError
+from .errors import MissingExperimentError
+from .errors import MissingSubjectError
 
 logger = logging.getLogger(__name__)
 
 
-def _build_subject_records(data: Dict[str, pd.DataFrame]) -> Dict[str, List[Dict]]:
+def _build_subject_records(data: Dict[str, pd.DataFrame]) -> Dict[str, Union[Mapping, List[Mapping]]]:
+    """
+    Convert subject data from one or more DataFrames into a JSON like data structure. Data should contain parent
+    key name as keys and DataFrames as the value.
+
+    Parameters
+    ----------
+    data: Dict[str, Pandas.DataFrame]
+
+    Returns
+    -------
+    Dict[str, Union[Mapping, List[Mapping]]]
+    """
     records = {}
     for parent_key, df in data.items():
         x = [row.to_dict() for _, row in df.iterrows()]
@@ -91,8 +108,6 @@ class Project(mongoengine.Document):
         user name of owner
     experiments: list
         List of references for associated fcs files
-    data_directory: str, required
-        Path to the local directory for storing HDF5 files.
     """
 
     project_id = mongoengine.StringField(required=True, unique=True)
@@ -129,7 +144,7 @@ class Project(mongoengine.Document):
 
     def add_experiment(self, experiment_id: str, panel_definition: str) -> Experiment:
         """
-        Add new experiment to project. Note you must provide either a path to an excel template for the panel
+        Add new experiment to project. Note you must provide either a path to a template for the panel
         definition (panel_definition) or the name of an existing panel (panel_name). If panel_definition is provided,
         then the panel_name will be used to name the new Panel document associated to this experiment.
         If no panel_name is provided, then the panel name will default to "{experiment_id}_panel".
@@ -196,7 +211,27 @@ class Project(mongoengine.Document):
         id_column: str,
         verbose: bool = True,
         exclude_columns: Optional[Dict[str, List[str]]] = None,
-    ):
+    ) -> Project:
+        """
+        Given a target directory containing CSV or Excel files, this function will parse these tabular files and
+        search the 'id_column' within them; must not contain duplicate entries. New subjects will be generated with
+        subject ID's according to the 'id_column'. All other columns within the tabular file(s) will populate
+        meta variables in the Subject documents. Meta-data will be nested within keys using the base name of
+        each file.
+
+        Parameters
+        ----------
+        target_dir: str
+        id_column: str
+        verbose: bool (default=True)
+        exclude_columns: Dict[str, List[str]], optional
+            If provided, key should correspond to the name of a file within 'target_dir' and values should be
+            columns to ignore inside the file.
+
+        Returns
+        -------
+        Project
+        """
         exclude_columns = exclude_columns or {}
         targets = {
             os.path.splitext(os.path.basename(x))[0]: os.path.join(target_dir, x)
@@ -207,7 +242,9 @@ class Project(mongoengine.Document):
             x: pd.read_csv(path) if path.endswith(".csv") else pd.read_excel(path) for x, path in targets.items()
         }
         targets = {x: df[[i for i in df.columns if i not in exclude_columns.get(x, [])]] for x, df in targets.items()}
-        unique_ids = set(np.concatenate([x[id_column].unique() for x in targets.values()], axis=0).tolist())
+        unique_ids = set(
+            list(np.concatenate([x[id_column].unique() for x in targets.values()], axis=0))
+        )
         for _id in progress_bar(unique_ids, verbose=verbose):
             records = _build_subject_records(
                 data={x: df[df[id_column] == _id].drop(id_column, axis=1) for x, df in targets.items()}
@@ -227,6 +264,23 @@ class Project(mongoengine.Document):
         compensate: bool = True,
         verbose: bool = True,
     ):
+        """
+        Given some target
+        Parameters
+        ----------
+        target_directory
+        control_id
+        controls
+        exclude_files
+        exclude_dir
+        compensation_file
+        compensate
+        verbose
+
+        Returns
+        -------
+
+        """
         logger.info("Checking file tree and preparing for data entry.")
         cyto_files = {}
         experiment_dirs = os.listdir(target_directory)

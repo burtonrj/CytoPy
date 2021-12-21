@@ -455,7 +455,6 @@ class FileGroup(mongoengine.Document):
         old_pop.parent = pop.parent
         old_pop.prop_of_parent = pop.prop_of_parent
         old_pop.prop_of_total = pop.prop_of_total
-        old_pop.normalised = pop.normalised
         old_pop.geom = pop.geom
         old_pop.definition = pop.definition
         old_pop.source = pop.source
