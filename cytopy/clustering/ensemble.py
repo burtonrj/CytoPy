@@ -80,8 +80,8 @@ class EnsembleClustering(Clustering):
     ):
         super().__init__(data, experiment, features, *args, **kwargs)
         logger.info("Obtaining data about cluster membership")
-        cluster_membership = self.experiment.population_membership(
-            population_source="cluster", data_source="primary", as_boolean=True
+        cluster_membership = self.experiment.population_membership_boolean_matrix(
+            population_source="cluster", data_source="primary"
         )
         self.data = self.data.merge(cluster_membership, on=["sample_id", "original_index"])
         self.clusters = [x for x in cluster_membership.columns if x not in ["sample_id", "original_index"]]

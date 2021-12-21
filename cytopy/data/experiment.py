@@ -35,7 +35,7 @@ from __future__ import annotations
 import gc
 import logging
 from collections import Counter
-from typing import Dict
+from typing import Dict, Iterable
 from typing import List
 from typing import Optional
 from typing import Union
@@ -45,6 +45,7 @@ import mongoengine
 import numpy as np
 import pandas as pd
 from anndata import AnnData
+from joblib import Parallel, delayed
 
 from ..feedback import progress_bar
 from ..utils.sampling import sample_dataframe
@@ -56,6 +57,7 @@ from .errors import MissingSampleError
 from .errors import PanelError
 from .fcs import copy_populations_to_controls_using_geoms
 from .fcs import FileGroup
+from .fcs import effect_size
 from .panel import Panel
 from .subject import Subject
 
@@ -260,15 +262,15 @@ class Experiment(mongoengine.Document):
             raise DuplicateSampleError(f"A file group with id {sample_id} already exists")
 
     def add_filegroup(
-        self,
-        sample_id: str,
-        paths: Dict[str, str],
-        compensate: bool = True,
-        compensation_matrix: Optional[str] = None,
-        s3_bucket: Optional[str] = None,
-        subject_id: Optional[str] = None,
-        processing_datetime: Optional[str] = None,
-        collection_datetime: Optional[str] = None,
+            self,
+            sample_id: str,
+            paths: Dict[str, str],
+            compensate: bool = True,
+            compensation_matrix: Optional[str] = None,
+            s3_bucket: Optional[str] = None,
+            subject_id: Optional[str] = None,
+            processing_datetime: Optional[str] = None,
+            collection_datetime: Optional[str] = None,
     ) -> Experiment:
         """
         Associate a new biological specimen to this Experiment and link to some single cell data source
@@ -394,13 +396,13 @@ class Experiment(mongoengine.Document):
         return df
 
     def population_statistics(
-        self,
-        populations: Optional[List[str]] = None,
-        meta_vars: Optional[Dict] = None,
-        additional_parent: Optional[str] = None,
-        regex: Optional[str] = None,
-        population_source: Optional[str] = None,
-        data_source: str = "primary",
+            self,
+            populations: Optional[List[str]] = None,
+            meta_vars: Optional[Dict] = None,
+            additional_parent: Optional[str] = None,
+            regex: Optional[str] = None,
+            population_source: Optional[str] = None,
+            data_source: str = "primary",
     ) -> pd.DataFrame:
         """
         Generates a Pandas DataFrame of population statistics for all FileGroups
@@ -442,7 +444,8 @@ class Experiment(mongoengine.Document):
         """
         data = []
         for f in self.fcs_files:
-            for p in populations or self.list_populations(regex=regex, source=population_source, data_source=data_source):
+            for p in populations or self.list_populations(regex=regex, population_source=population_source,
+                                                          data_source=data_source):
                 df = pd.DataFrame({k: [v] for k, v in f.population_stats(population=p).items()})
                 df["sample_id"] = f.primary_id
                 s = f.subject
@@ -457,79 +460,169 @@ class Experiment(mongoengine.Document):
             return data.groupby("sample_id").apply(lambda x: self._prop_of_parent(x, parent=additional_parent))
         return data
 
-    def population_membership(
-        self,
-        regex: Optional[str] = None,
-        population_source: Optional[str] = None,
-        data_source: str = "primary",
-        as_boolean: bool = False,
-        verbose: bool = True,
-    ):
+    def population_membership_boolean_matrix(
+            self,
+            regex: Optional[str] = None,
+            population_source: Optional[str] = None,
+            data_source: str = "primary",
+            verbose: bool = True
+    ) -> pd.DataFrame:
+        """
+        For each FileGroup in this Experiment, generate a Pandas DataFrame where each row is an event and the columns
+        are the populations contained within this FileGroup. The columns are boolean arrays that signify if an event
+        is a member of that population.
 
-        if as_boolean:
-            data = []
-            for fg in progress_bar(self.fcs_files, verbose=verbose):
-                df = fg.population_membership(
-                    regex=regex, population_source=population_source, data_source=data_source, as_boolean=True
-                )
-                df["sample_id"] = fg.primary_id
-                data.append(df)
-            data = pd.concat(data).fillna(0)
-            cluster_cols = [x for x in data.columns if x != "sample_id"]
-            data[cluster_cols] = data[cluster_cols].astype(int)
-            return data
+        Parameters
+        ----------
+        regex: str, optional
+            Only include populations that match this regular expression pattern
+        population_source: str, optional
+            Only include populations that match this population source e.g. gate or cluster
+        data_source: str (default='primary')
+            The data file of interest i.e. either primary or the name of a control file
+        verbose: bool (default=True)
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        data = []
+        for fg in progress_bar(self.fcs_files, verbose=verbose):
+            df = fg.population_membership_boolean_matrix(
+                regex=regex, population_source=population_source, data_source=data_source
+            )
+            df["sample_id"] = fg.primary_id
+            data.append(df)
+        data = pd.concat(data).fillna(0)
+        cluster_cols = [x for x in data.columns if x != "sample_id"]
+        data[cluster_cols] = data[cluster_cols].astype(int)
+        return data
+
+    def population_membership_mapping(
+            self,
+            regex: Optional[str] = None,
+            population_source: Optional[str] = None,
+            data_source: str = "primary",
+            verbose: bool = True
+    ) -> Dict[str, Dict[int, Iterable[str]]]:
+        """
+        For each FileGroup in this Experiment, search the populations and create a dictionary where each key is
+        the index of an event and the values are the list of populations that the event is a member of. The resulting
+        mappings are then embedded within a dictionary where each mapping is indexed by the FileGroup ID.
+
+        Parameters
+        ----------
+        regex: str, optional
+            Only include populations that match this regular expression pattern
+        population_source: str, optional
+            Only include populations that match this population source e.g. gate or cluster
+        data_source: str (default='primary')
+            The data file of interest i.e. either primary or the name of a control file
+        verbose: bool (default=True)
+
+        Returns
+        -------
+        Dict[int, Iterable[str]]
+        """
         data = {}
         for fg in progress_bar(self.fcs_files, verbose=verbose):
-            data[fg.primary_id] = fg.population_membership(
-                regex=regex, population_source=population_source, data_source=data_source, as_boolean=False
+            data[fg.primary_id] = fg.population_membership_mapping(
+                regex=regex, population_source=population_source, data_source=data_source
             )
         return data
 
     def list_populations(
-        self, regex: Optional[str] = None, source: Optional[str] = None, data_source: str = "primary"
+            self, regex: Optional[str] = None, population_source: Optional[str] = None, data_source: str = "primary"
     ) -> List[str]:
+        """
+        List all the populations contained within a data source
+
+        Parameters
+        ----------
+        regex: str, optional
+            Only include populations that match this regular expression pattern
+        population_source: str, optional
+            Only include populations that match this population source e.g. gate or cluster
+        data_source: str (default='primary')
+            The data file of interest i.e. either primary or the name of a control file
+
+        Returns
+        -------
+        List[str]
+        """
         populations = [
-            fg.list_populations(regex=regex, source=source, data_source=data_source) for fg in self.fcs_files
+            fg.list_populations(regex=regex, population_source=population_source, data_source=data_source) for fg in
+            self.fcs_files
         ]
         populations = [p for sl in populations for p in sl]
         return list(set(populations))
 
-    def control_eff_size(
-        self,
-        population: str,
-        ctrl: str,
-        feature: str,
-        method: str = "cohen",
-        transform: str = "asinh",
-        transform_kwargs: Optional[Dict] = None,
-        verbose: bool = True,
-        **kwargs,
-    ):
-        results = []
+    def control_effect_size(
+            self,
+            population: str,
+            ctrl: str,
+            feature: str,
+            eftype: str = "cohen",
+            transform: str = "asinh",
+            transform_kwargs: Optional[Dict] = None,
+            verbose: bool = True,
+            njobs: int = -1,
+            **kwargs,
+    ) -> pd.DataFrame:
+        """
+        For each FileGroup in this Experiment, compute the effect size for a population
+        when comparing the primary staining to some control. By default, will compute
+        Cohen's D, which is the standardised difference between the means. See
+        https://pingouin-stats.org/generated/pingouin.compute_effsize.html for valid
+        methods that can be used for effect size.
+
+        If eftype = "fold_change", the effect size will simply be:
+            Median(Primary) - Median(Control)/Median(Primary)
+
+        Parameters
+        ----------
+        population: str
+            The population of interest
+        ctrl: str
+            Name of the control for comparison
+        feature: str
+            The name of the channel to compare between the primary stain and control
+        eftype: str (default='cohen')
+            The effect size method to use. Can be any valid method according to
+            https://pingouin-stats.org/generated/pingouin.compute_effsize.html or
+            'fold_change'.
+        transform: str (default='asinh')
+        transform_kwargs: dict, optional
+            Additional keyword arguments passed to transform method
+        verbose: bool (default=True)
+        njobs: int (default=-1)
+        kwargs:
+            Additional keyword arguments passed to pingouin.compute_effsize
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        logger.info("Loading data...")
+        data = []
         for fg in progress_bar(self.fcs_files, verbose=verbose):
             try:
-                effsize, lower, upper = fg.control_eff_size(
-                    population=population,
-                    ctrl=ctrl,
-                    feature=feature,
-                    method=method,
-                    transform=transform,
-                    transform_kwargs=transform_kwargs,
-                    **kwargs,
-                )
-                if lower is None:
-                    results.append(pd.DataFrame({"sample_id": [fg.primary_id], "effsize": [effsize]}))
-                else:
-                    results.append(
-                        pd.DataFrame(
-                            {
-                                "sample_id": [fg.primary_id],
-                                "effsize": [effsize],
-                                "lower_ci": [lower],
-                                "upper_ci": [upper],
-                            }
-                        )
+                primary_data = fg.load_population_df(
+                    population=population, transform=transform, transform_kwargs=transform_kwargs, data_source="primary"
+                )[feature].values
+                ctrl_data = fg.load_population_df(
+                    population=population, transform=transform, transform_kwargs=transform_kwargs, data_source=ctrl
+                )[feature].values
+                if ctrl_data.shape[0] < 3 or primary_data.shape[0] < 3:
+                    logger.warning(
+                        f"Either primary or control data for {fg.primary_id} has < 3 events"
                     )
+                    continue
+                data.append({
+                    "id": fg.primary_id,
+                    "primary": primary_data,
+                    "ctrl": ctrl_data
+                })
             except MissingPopulationError:
                 logger.warning(
                     f"{fg.primary_id} missing requested population {population} either in "
@@ -538,9 +631,29 @@ class Experiment(mongoengine.Document):
                 )
             except (KeyError, ValueError, TypeError, EmptyPopulationError) as e:
                 logger.warning(f"Could not obtain control effect size for {fg.primary_id}: {e}")
-        return pd.concat(results).reset_index(drop=True)
+        logger.info("Computing effect size...")
+        with Parallel(n_jobs=njobs) as parallel:
+            results = parallel(
+                delayed(effect_size)(
+                    d.get("primary"),
+                    d.get("ctrl"),
+                    eftype=eftype,
+                    **kwargs
+                )
+                for d in progress_bar(data, verbose=verbose)
+            )
+        results = [
+            {
+                "sample_id": i.get("id"),
+                "effsize": j[0],
+                "lower_ci": j[1],
+                "upper_ci": j[2],
+            }
+            for i, j in zip(data, results)
+        ]
+        return pd.DataFrame(results)
 
-    def merge_populations(self, mergers: Dict):
+    def merge_populations(self, mergers: Dict[str: List[str]]) -> Experiment:
         """
         For each FileGroup in sequence, merge populations. Given dictionary should contain
         a key corresponding to the new population name and value being a list of populations
@@ -564,8 +677,25 @@ class Experiment(mongoengine.Document):
                     f.save()
                 except ValueError as e:
                     logger.warning(f"Failed to merge populations for {f.primary_id}: {str(e)}")
+        return self
 
-    def propagate_populations_to_control(self, ctrl: str, flag: float = 0.25):
+    def propagate_gates_to_control(self, ctrl: str, flag: float = 0.25) -> pd.DataFrame:
+        """
+        For each FileGroup, propagate gates in primary staining to control files, generating matching populations
+        in each control. Returns a DataFrame of statistics for the new populations, including the number of events
+        as a percentage of the parent population in the primary staining and the control. The fold difference
+        in this percentage between the primary and control is also provided, along with a 'Flag' column with a value
+        of 'True' where the absolute fold change exceeds the threshold given by 'flag'.
+
+        Parameters
+        ----------
+        ctrl: str
+        flag: float (default=0.25)
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         stats = []
         for fg in progress_bar(self.fcs_files):
             try:
@@ -594,26 +724,26 @@ class Experiment(mongoengine.Document):
 
 
 def single_cell_dataframe(
-    experiment: Experiment,
-    populations: Optional[Union[str, List[str]]] = "root",
-    regex: Optional[str] = None,
-    transform: Optional[Union[str, Dict]] = "asinh",
-    transform_kwargs: Optional[Dict] = None,
-    sample_ids: Optional[List[str]] = None,
-    verbose: bool = True,
-    data_source: str = "primary",
-    label_parent: bool = False,
-    frac_of: Optional[List[str]] = None,
-    sample_size: Optional[Union[int, float]] = None,
-    sampling_level: str = "file",
-    sampling_method: str = "uniform",
-    sampling_kwargs: Optional[Dict] = None,
-    meta_vars: Optional[Dict] = None,
-    source_counts: bool = False,
-    warn_missing: bool = True,
+        experiment: Experiment,
+        populations: Optional[Union[str, List[str]]] = "root",
+        regex: Optional[str] = None,
+        transform: Optional[Union[str, Dict]] = "asinh",
+        transform_kwargs: Optional[Dict] = None,
+        sample_ids: Optional[List[str]] = None,
+        verbose: bool = True,
+        data_source: str = "primary",
+        label_parent: bool = False,
+        frac_of: Optional[List[str]] = None,
+        sample_size: Optional[Union[int, float]] = None,
+        sampling_level: str = "file",
+        sampling_method: str = "uniform",
+        sampling_kwargs: Optional[Dict] = None,
+        meta_vars: Optional[Dict] = None,
+        source_counts: bool = False,
+        warn_missing: bool = True,
 ) -> pd.DataFrame:
     """
-    Generate a single cell DataFrame that is a concatenation of population data from many
+    Generate a single cell DataFrame (where each row is an event) that is a concatenation of population data from many
     samples from a single Experiment. Population level data is identifiable from the 'population_label'
     column, sample level data identifiable from the 'sample_id' column, and subject level information
     from the 'subject_id' column.
@@ -621,32 +751,31 @@ def single_cell_dataframe(
     Parameters
     ----------
     experiment: Experiment
-    populations: list or str, optional
+    populations: Union[List[str], str], optional
         * Single string value will load the matching population from samples in 'experiment'
         * List of strings will load the matching populations from samples in 'experiment'
         * None, to provide a regular expression (regex) for population matching
     regex: str, optional
         Match all populations matching the given pattern; if given, populations argument is ignored
-    transform: str or dict (default='logicle')
+    transform: Union[str, Dict[str, str]] (default='asinh')
         Transformation applied to the single cell data. If a string is provided, method is applied to
         all features. If a dictionary is provided, keys are interpreted as names of features and values
         the transform to be applied.
-    transform_kwargs: dict, optional
+    transform_kwargs: Dict, optional
         Additional keyword arguments passed to transform method
-    sample_ids: list, optional
+    sample_ids: List[str], optional
         List of samples to include. If None (default) then loads all available samples in experiment
     verbose: bool (default=True)
-    ctrl: str, optional
-        Loads data corresponding to the given control. NOTE: only supports loading of a single population
-        from each sample in 'experiment'
+    data_source: str (default='primary')
+        Specify the source file (i.e. primary or some control)
     label_parent: bool (default=False)
         If True, additional column appended with parent name for each population
-    frac_of: list, optional
+    frac_of: List[str], optional
         Provide a list of populations and additional columns will be appended to resulting
         DataFrame containing the fraction of the requested population compared to each population
         in this list
-    sample_size: int or float, optional
-        If given, the DataFrame will either be downsampled after aquiring data from each FileGroup
+    sample_size: Union[int, float], optional
+        If given, the DataFrame will either be down-sampled after acquiring data from each FileGroup
         or FileGroups are sampled individually - this behaviour is controlled by 'sampling_level'.
         If sampling_level = "file", then the sample_size is the number of events to obtain from each
         FileGroup. If sampling_level = "experiment", then the sampling size is the desired size of the
@@ -660,12 +789,20 @@ def single_cell_dataframe(
         The sampling method to use; see cytopy.utils.sampling
     sampling_kwargs: Dict, optional
         Additional keyword arguments passed to sampling method
+    meta_vars: Dict[str, Union[str, List[str]]], optional
+        If provided, additional columns will be appended to the resulting DataFrame (with column names matching
+        keys in provided dictionary)
+    source_counts: bool (default=False)
+        If True, an additional column is generated with an integer value of how many source methods a population
+        was generated by (this is only relevant for consensus clustering where populations are the amalgamation
+        of multiple clustering techniques)
+    warn_missing: bool (default=True)
+        Log a warning if a population is missing in a FileGroup.
 
     Returns
     -------
     Pandas.DataFrame
     """
-    logger.debug(f"Loading data from {experiment.experiment_id}")
     sample_ids = sample_ids or list(experiment.list_samples())
     sampling_kwargs = sampling_kwargs or {}
     data = []
@@ -726,22 +863,88 @@ def single_cell_dataframe(
 
 
 def single_cell_anndata(
-    experiment: Experiment,
-    populations: Optional[Union[str, List[str]]] = "root",
-    regex: Optional[str] = None,
-    transform: Optional[Union[str, Dict]] = "asinh",
-    transform_kwargs: Optional[Dict] = None,
-    sample_ids: Optional[List[str]] = None,
-    verbose: bool = True,
-    data_source: str = "primary",
-    label_parent: bool = False,
-    frac_of: Optional[List[str]] = None,
-    sample_size: Optional[Union[int, float]] = None,
-    sampling_level: str = "file",
-    sampling_method: str = "uniform",
-    sampling_kwargs: Optional[Dict] = None,
-    meta_vars: Optional[Dict] = None,
+        experiment: Experiment,
+        populations: Optional[Union[str, List[str]]] = "root",
+        regex: Optional[str] = None,
+        transform: Optional[Union[str, Dict]] = "asinh",
+        transform_kwargs: Optional[Dict] = None,
+        sample_ids: Optional[List[str]] = None,
+        verbose: bool = True,
+        data_source: str = "primary",
+        label_parent: bool = False,
+        frac_of: Optional[List[str]] = None,
+        sample_size: Optional[Union[int, float]] = None,
+        sampling_level: str = "file",
+        sampling_method: str = "uniform",
+        sampling_kwargs: Optional[Dict] = None,
+        meta_vars: Optional[Dict] = None,
+        source_counts: bool = False,
+        warn_missing: bool = True
 ) -> AnnData:
+    """
+   This function is a wrapper to the single_cell_dataframe function, but returns an annotated DataFrame compatible
+   with ScanPy.
+
+   Generate a single cell DataFrame (where each row is an event) that is a concatenation of population data from many
+   samples from a single Experiment. Population level data is identifiable from the 'population_label'
+   column, sample level data identifiable from the 'sample_id' column, and subject level information
+   from the 'subject_id' column.
+
+   Parameters
+   ----------
+   experiment: Experiment
+   populations: Union[List[str], str], optional
+       * Single string value will load the matching population from samples in 'experiment'
+       * List of strings will load the matching populations from samples in 'experiment'
+       * None, to provide a regular expression (regex) for population matching
+   regex: str, optional
+       Match all populations matching the given pattern; if given, populations argument is ignored
+   transform: Union[str, Dict[str, str]] (default='asinh')
+       Transformation applied to the single cell data. If a string is provided, method is applied to
+       all features. If a dictionary is provided, keys are interpreted as names of features and values
+       the transform to be applied.
+   transform_kwargs: Dict, optional
+       Additional keyword arguments passed to transform method
+   sample_ids: List[str], optional
+       List of samples to include. If None (default) then loads all available samples in experiment
+   verbose: bool (default=True)
+   data_source: str (default='primary')
+       Specify the source file (i.e. primary or some control)
+   label_parent: bool (default=False)
+       If True, additional column appended with parent name for each population
+   frac_of: List[str], optional
+       Provide a list of populations and additional columns will be appended to resulting
+       DataFrame containing the fraction of the requested population compared to each population
+       in this list
+   sample_size: Union[int, float], optional
+       If given, the DataFrame will either be down-sampled after acquiring data from each FileGroup
+       or FileGroups are sampled individually - this behaviour is controlled by 'sampling_level'.
+       If sampling_level = "file", then the sample_size is the number of events to obtain from each
+       FileGroup. If sampling_level = "experiment", then the sampling size is the desired size of the
+       resulting concatenated DataFrame.
+   sampling_level: str, (default="file")
+       If "file" (default) then each FileGroup is sampled before concatenating into a single DataFrame.
+       If "experiment", then data is obtained from each FileGroup first, and then the concatenated
+       data is sampled.
+       If "population" then will attempt to sample the desired number of events from each population.
+   sampling_method: str (default="uniform")
+       The sampling method to use; see cytopy.utils.sampling
+   sampling_kwargs: Dict, optional
+       Additional keyword arguments passed to sampling method
+   meta_vars: Dict[str, Union[str, List[str]]], optional
+       If provided, additional columns will be appended to the resulting DataFrame (with column names matching
+       keys in provided dictionary)
+   source_counts: bool (default=False)
+       If True, an additional column is generated with an integer value of how many source methods a population
+       was generated by (this is only relevant for consensus clustering where populations are the amalgamation
+       of multiple clustering techniques)
+   warn_missing: bool (default=True)
+       Log a warning if a population is missing in a FileGroup.
+
+   Returns
+   -------
+   Pandas.DataFrame
+   """
     data = single_cell_dataframe(
         experiment=experiment,
         populations=populations,
@@ -758,6 +961,8 @@ def single_cell_anndata(
         sampling_method=sampling_method,
         sampling_kwargs=sampling_kwargs,
         meta_vars=meta_vars,
+        source_counts=source_counts,
+        warn_missing=warn_missing
     )
     channels = experiment.panel.list_channels()
     x = data[channels].values

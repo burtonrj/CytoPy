@@ -988,7 +988,7 @@ def clustering_statistics(
 
 
 def clustering_single_cell_data(experiment: Experiment, prefix: str, **kwargs):
-    populations = experiment.list_populations(regex=f"{prefix}_.+", source="cluster", data_source="primary")
+    populations = experiment.list_populations(regex=f"{prefix}_.+", population_source="cluster", data_source="primary")
     return single_cell_dataframe(experiment=experiment, populations=populations, **kwargs).rename(
         columns={"population_label": "cluster_label"}
     )

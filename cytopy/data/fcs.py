@@ -105,6 +105,34 @@ def valid_compensation_matrix_path(path: Union[str, None]):
         raise mongoengine.errors.ValidationError("Compensation matrix should be a csv or parquet file")
 
 
+def effect_size(
+        x: np.ndarray,
+        y: np.ndarray,
+        eftype: str = "cohen",
+        bootstrap: bool = False,
+        sample_n: int = 1000,
+        n_resamples: int = 100,
+        **kwargs
+):
+    if eftype.lower() == "cles" and not bootstrap:
+        logger.warning(
+            f"CLES is computationally expensive and it is recommended to perform bootstrap sampling"
+        )
+    if bootstrap:
+        stat = []
+        for i in range(n_resamples):
+            xi = np.random.choice(x, size=sample_n, replace=True)
+            yi = np.random.choice(y, size=sample_n, replace=True)
+            if eftype == "fold_change":
+                stat.append(np.median(xi)/np.median(yi))
+            stat.append(compute_effsize(xi, yi, eftype=eftype, **kwargs))
+        stat = np.array(stat)
+        return np.mean(stat), np.sort(stat)[5], np.sort(stat)[95]
+    if eftype == "fold_change":
+        return np.median(x)/np.median(y), None, None
+    return compute_effsize(x, y, eftype=eftype, **kwargs), None, None
+
+
 class FileGroup(mongoengine.Document):
     """
     Document representation of a file group; a selection of related fcs files (e.g. a sample and it's associated
@@ -588,29 +616,70 @@ class FileGroup(mongoengine.Document):
 
         return data
 
-    def population_membership(
+    def population_membership_boolean_matrix(
+            self,
+            regex: Optional[str] = None,
+            population_source: Optional[str] = None,
+            data_source: str = "primary"
+    ) -> pd.DataFrame:
+        """
+        Generates a Pandas DataFrame where each row is an event within the single cell data and the columns
+        are the populations contained within the specified data_source.
+        The columns are boolean arrays that signify if an event is a member of that population.
+
+        Parameters
+        ----------
+        regex: str, optional
+            Only include populations that match this regular expression pattern
+        population_source: str, optional
+            Only include populations that match this population source e.g. gate or cluster
+        data_source: str (default='primary')
+            The data file of interest i.e. either primary or the name of a control file
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        populations = self.list_populations(regex=regex, source=population_source, data_source=data_source)
+        data = pd.DataFrame(
+            np.zeros((self.data(source=data_source).shape[0], len(populations)), dtype=np.int8),
+            columns=populations,
+        )
+        for pop_name in populations:
+            pop = self.get_population(population_name=pop_name, data_source=data_source)
+            data.loc[pop.index, [pop_name]] = 1
+        data = data.reset_index().rename(columns={"index": "original_index"})
+        return data
+
+    def population_membership_mapping(
         self,
         regex: Optional[str] = None,
         population_source: Optional[str] = None,
-        data_source: str = "primary",
-        as_boolean: bool = False,
-    ):
+        data_source: str = "primary"
+    ) -> Dict[int, Iterable[str]]:
+        """
+        Search the populations and create a dictionary where each key is the index of an event and the values are
+        the list of populations that the event is a member of.
+
+        Parameters
+        ----------
+        regex: str, optional
+            Only include populations that match this regular expression pattern
+        population_source: str, optional
+            Only include populations that match this population source e.g. gate or cluster
+        data_source: str (default='primary')
+            The data file of interest i.e. either primary or the name of a control file
+
+        Returns
+        -------
+        Dict[int, Iterable[str]]
+        """
         populations = self.list_populations(regex=regex, source=population_source, data_source=data_source)
-        if as_boolean:
-            data = pd.DataFrame(
-                np.zeros((self.data(source=data_source).shape[0], len(populations)), dtype=np.int8),
-                columns=populations,
-            )
-            for pop_name in populations:
-                pop = self.get_population(population_name=pop_name, data_source=data_source)
-                data.loc[pop.index, [pop_name]] = 1
-            data = data.reset_index().rename(columns={"index": "original_index"})
-        else:
-            data = defaultdict(list)
-            for pop_name in populations:
-                pop = self.get_population(population_name=pop_name, data_source=data_source)
-                for i in pop.index:
-                    data[i].append(pop_name)
+        data = defaultdict(list)
+        for pop_name in populations:
+            pop = self.get_population(population_name=pop_name, data_source=data_source)
+            for i in pop.index:
+                data[i].append(pop_name)
         return data
 
     def list_populations(
@@ -926,17 +995,7 @@ class FileGroup(mongoengine.Document):
                 logger.debug(f"{population} not present in {self.primary_id} FileGroup")
             return {"population_name": population, "n": 0, "frac_of_parent": 0, "frac_of_root": 0, "n_sources": None}
 
-    @staticmethod
-    def _cles(x: np.ndarray, y: np.ndarray, n: int = 1000):
-        stat = []
-        for i in range(100):
-            xi = np.random.choice(x, size=n, replace=False)
-            yi = np.random.choice(y, size=n, replace=False)
-            stat.append(compute_effsize(xi, yi, eftype="cles"))
-        stat = np.array(stat)
-        return np.mean(stat), np.sort(stat)[5], np.sort(stat)[95]
-
-    def control_eff_size(
+    def control_effsize(
         self,
         population: str,
         ctrl: str,
@@ -958,7 +1017,7 @@ class FileGroup(mongoengine.Document):
         if primary_data.shape[0] < 3:
             raise ValueError("Insufficient events in primary data")
         if method == "cles":
-            return self._cles(primary_data, ctrl_data, **kwargs)
+            return cles(primary_data, ctrl_data, **kwargs)
         return compute_effsize(primary_data, ctrl_data, eftype=method, **kwargs), None, None
 
     def write_to_fcs(self, path: str, source: str = "primary"):
@@ -1056,7 +1115,7 @@ def copy_populations_to_controls_using_geoms(filegroup: FileGroup, ctrl: str, fl
         stats["Population"].append(pop.population_name)
         stats["% of parent (primary)"].append(primary_prop)
         stats["% of parent (ctrl)"].append(ctrl_prop)
-        floor = np.max([0, primary_prop - (primary_prop * flag)])
-        ceil = np.min([100, primary_prop + (primary_prop * flag)])
-        stats["Flag"].append(floor > ctrl_prop > ceil)
+        fold_diff = (primary_prop - ctrl_prop)/primary_prop
+        stats["Fold difference"] = fold_diff
+        stats["Flag"] = fold_diff > flag
     return filegroup, pd.DataFrame(stats)
