@@ -54,7 +54,6 @@ from .errors import DuplicateSampleError
 from .errors import EmptyPopulationError
 from .errors import MissingPopulationError
 from .errors import MissingSampleError
-from .errors import PanelError
 from .fcs import copy_populations_to_controls_using_geoms
 from .fcs import FileGroup
 from .fcs import effect_size
@@ -91,6 +90,9 @@ class Experiment(mongoengine.Document):
     notes = mongoengine.StringField(required=False)
 
     meta = {"db_alias": "core", "collection": "experiments"}
+
+    def __repr__(self):
+        return f"Experiment(experiment_id={self.experiment_id})"
 
     def generate_panel(self, panel_definition: str) -> Experiment:
         """

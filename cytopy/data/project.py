@@ -118,6 +118,9 @@ class Project(mongoengine.Document):
 
     meta = {"db_alias": "core", "collection": "projects"}
 
+    def __repr__(self):
+        return f"Project(project_id={self.project_id})"
+
     def get_experiment(self, experiment_id: str) -> Experiment:
         """
         Load the experiment object for a given experiment ID
@@ -263,23 +266,60 @@ class Project(mongoengine.Document):
         compensation_file: Optional[str] = None,
         compensate: bool = True,
         verbose: bool = True,
-    ):
+    ) -> Project:
         """
-        Given some target
+        Given some target directory, transverse the file tree and populate the project. The structure of the
+        Project will then be modelled around the file tree. To use this method of project creation, the file
+        tree should be structured like so:
+
+        target_directory
+        |
+        --- Experiment 1
+            |
+            ---- Subject 1
+                |
+                ------ Primary.fcs
+                ------ Control_1.fcs
+                ------ Control_2.fcs
+                ------ Control_n.fcs
+                ------
+            ---- Subject 2
+            ---- Subject n
+        --- Experiment 2
+        --- Experiment n
+
+        Each sub-folder should be an Experiment and the folder name must match an existing Experiment in this
+        Project (if not, it will be skipped). Within the Experiment folder should be sub-folders named with existing
+        Subject IDs (unrecognised subjects will be skipped). Within each subject folder there should be one or more
+        FCS files; all other formats are ignored. Files that correspond to control data will be identified
+        by the file naming containing the specified 'control_id' string. Control names can be specified with
+        'controls' and should be a dictionary where the keys match experiment IDs.
+
         Parameters
         ----------
-        target_directory
-        control_id
-        controls
-        exclude_files
-        exclude_dir
-        compensation_file
-        compensate
-        verbose
+        target_directory: str
+            File path to the parent directory
+        control_id: str, optional
+            If provided, files containing this string will be marked as controls
+        controls: Dict[str, List[str]], optional
+            Required if control_id provided. Keys must be the name of experiment IDs and values the identifiers
+            for controls. Control files will be matched based on identifiers being present in the file name of
+            fcs files.
+        exclude_files: str, optional
+            If provided, any files containing this string will be ignored
+        exclude_dir: str, optional
+            If provided, any directory containing this string will be ignored
+        compensation_file: str, optional
+            If provided, will search each subject directory for this file name (including file extension) and
+            use this file as the compensation file for FCS files in this directory (Note: compensation_file can
+            be a CSV file)
+        compensate: bool (default=True)
+            Specifies whether FileGroups compensate data
+        verbose: bool (default=True)
 
         Returns
         -------
-
+        Project
         """
         logger.info("Checking file tree and preparing for data entry.")
         cyto_files = {}
@@ -316,25 +356,25 @@ class Project(mongoengine.Document):
                     compensation_matrix=compensation_matrix_path,
                     subject_id=subject_id,
                 )
+        return self
 
-    def list_subjects(self) -> list:
+    def list_subjects(self) -> List[str]:
         """
         Generate a list of subject ID for subjects associated to this project
 
         Returns
         --------
-        List
-            List of subject IDs
+        List[str]
         """
         return [s.subject_id for s in self.subjects]
 
-    def list_experiments(self) -> list:
+    def list_experiments(self) -> List[str]:
         """
         Lists experiments in project
 
         Returns
         -------
-        List
+        List[str]
         """
         return [e.experiment_id for e in self.experiments]
 
@@ -357,11 +397,10 @@ class Project(mongoengine.Document):
             If desired subject does not exist
         """
         if subject_id not in self.list_subjects():
-            logger.error(f"Invalid subject ID {subject_id}, does not exist")
             raise MissingSubjectError(f"Invalid subject ID {subject_id}, does not exist")
         return Subject.objects(subject_id=subject_id).get()
 
-    def delete_experiment(self, experiment_id: str):
+    def delete_experiment(self, experiment_id: str) -> Project:
         """
         Delete experiment
 
@@ -371,12 +410,13 @@ class Project(mongoengine.Document):
 
         Returns
         -------
-        None
+        Project
         """
         if experiment_id not in self.list_experiments():
             raise MissingExperimentError(f"No such experiment {experiment_id}")
         exp = self.get_experiment(experiment_id)
         exp.delete()
+        return self
 
     def delete(self, delete_h5_data: bool = True, *args, **kwargs) -> None:
         """
@@ -407,8 +447,26 @@ class Project(mongoengine.Document):
 
 
 def merge_experiments(
-    project: Project, experiment_left: Experiment, experiment_right: Experiment, new_experiment_id: str
+    project: Project, experiment_left: str, experiment_right: str, new_experiment_id: str
 ) -> Experiment:
+    """
+    Merge two experiments in a Project (Must have equivalent panels!)
+
+    Parameters
+    ----------
+    project: Project
+    experiment_left: str
+        Experiment ID of left experiment
+    experiment_right: str
+        Experiment ID of right experiment
+    new_experiment_id: str
+        New experiment ID
+
+    Returns
+    -------
+    Experiment
+        Newly created experiment
+    """
     assert new_experiment_id not in project.list_experiments(), f"{new_experiment_id} already exists!"
     experiment_left = project.get_experiment(experiment_id=experiment_left)
     experiment_right = project.get_experiment(experiment_id=experiment_right)

@@ -27,7 +27,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import mongoengine
 import numpy as np
@@ -68,6 +68,16 @@ class PopulationGeometry(mongoengine.EmbeddedDocument):
     transform_y_kwargs = mongoengine.DictField()
     meta = {"allow_inheritance": True}
 
+    def __repr__(self):
+        txt = f"PopulationGeometry(" \
+               f"x={self.x}," \
+               f"y={self.y}," \
+               f"transform_x={self.transform_x}," \
+               f"transform_y={self.transform_y}," \
+               f"transform_x_kwargs={self.transform_x_kwargs}," \
+               f"transform_y_kwargs={self.transform_y_kwargs})"
+        return txt
+
 
 class ThresholdGeom(PopulationGeometry):
     """
@@ -86,6 +96,11 @@ class ThresholdGeom(PopulationGeometry):
 
     x_threshold = mongoengine.FloatField()
     y_threshold = mongoengine.FloatField()
+
+    def __repr__(self,):
+        txt = super().__repr__()
+        txt = txt[:len(txt)-2]
+        return f"{txt}, x_threshold={self.x_threshold}, y_threshold={self.y_threshold})"
 
     def transform_to_linear(self) -> Tuple[float, float]:
         """
@@ -127,6 +142,11 @@ class PolygonGeom(PopulationGeometry):
 
     x_values = mongoengine.ListField()
     y_values = mongoengine.ListField()
+
+    def __repr__(self,):
+        txt = super().__repr__()
+        txt = txt[:len(txt)-2]
+        return f"{txt}, x_values={self.x_values}, y_values={self.y_values})"
 
     @property
     def shape(self):
@@ -202,6 +222,9 @@ class Population(BaseIndexDocument):
         required=True,
         choices=["root", "gate", "cluster", "classifier", "merger", "subtraction"]
     )
+
+    def __repr__(self):
+        return f"Population(population_name={self.population_name})"
 
 
 def create_polygon(x: List[float], y: List[float]) -> Polygon:

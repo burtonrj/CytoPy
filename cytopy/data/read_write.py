@@ -3,11 +3,10 @@
 """
 The read_write module contains tools for accessing *.fcs files and
 relies on the Python library FlowIO by Scott White. This is used by
-Experiment to population FileGroups.
-
-Projects also house the subjects (represented by the Subject class;
-see cytopy.data.subject) of an analysis which can contain multiple
-meta-data.
+Experiment to population FileGroups. Data can also be read from
+parquet and CSV files, and the Polars library is used for reading. This
+also provides optimised data transformations handled in the utils.transform
+module.
 
 Copyright 2020 Ross Burton
 
@@ -36,7 +35,7 @@ import pickle
 import re
 from multiprocessing import cpu_count
 from multiprocessing import Pool
-from typing import Iterable, Union
+from typing import Union
 from typing import List
 from typing import Optional
 
@@ -53,6 +52,11 @@ logger = logging.getLogger(__name__)
 
 
 class BaseIndexDocument(mongoengine.EmbeddedDocument):
+    """
+    Base class for embedded documents that store an event index, such as Populations or
+    Gate children. Indexes are stored in the MongoDB database in a FileField as a
+    pickled array.
+    """
     _index = mongoengine.FileField(db_alias="core", collection_name="event_index")
 
     def __init__(self, *args, **kwargs):
@@ -91,7 +95,7 @@ class BaseIndexDocument(mongoengine.EmbeddedDocument):
     meta = {"allow_inheritance": True}
 
 
-def filter_fcs_files(fcs_dir: str, exclude_files: Optional[str] = None, exclude_dir: Optional[str] = None) -> list:
+def filter_fcs_files(fcs_dir: str, exclude_files: Optional[str] = None, exclude_dir: Optional[str] = None) -> List[str]:
     """
     Given a directory, return file paths for all fcs files in directory and subdirectories contained within
 
@@ -105,7 +109,7 @@ def filter_fcs_files(fcs_dir: str, exclude_files: Optional[str] = None, exclude_
         Regex pattern - will ignore any matching subdirectories
     Returns
     --------
-    List
+    List[str]
         list of fcs file paths
     """
     fcs_files = []
