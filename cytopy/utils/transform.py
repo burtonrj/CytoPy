@@ -30,7 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
 from functools import partial
-from typing import Callable
+from typing import Callable, Tuple, Dict
 from typing import List
 from typing import Union
 
@@ -104,7 +104,7 @@ class Transformer:
         self.inverse = partial(inverse_function, **kwargs)
         self.kwargs = kwargs or {}
 
-    def scale(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]):
+    def scale(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]) -> pd.DataFrame:
         """
         Scale features (columns) of given dataframe
 
@@ -129,7 +129,7 @@ class Transformer:
         data = data.with_columns([pl.col(x).map(self.transform) for x in features])
         return polars_to_pandas(data=data)
 
-    def inverse_scale(self, data: Union[pd.DataFrame, pl.DataFrame], features: list):
+    def inverse_scale(self, data: Union[pd.DataFrame, pl.DataFrame], features: list) -> pd.DataFrame:
         """
         Apply inverse scale to features (columns) of given dataframe, under the assumption that
         these features have previously been transformed with this Transformer
@@ -305,14 +305,14 @@ class LogTransformer(Transformer):
         if negative_values > 0:
             raise ValueError("Cannot apply log to negative values")
 
-    def scale(self, data: Union[pd.DataFrame, pl.DataFrame], features: list):
+    def scale(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]) -> pd.DataFrame:
         """
         Scale features (columns) of given dataframe using log transform
 
         Parameters
         ----------
-        data: polars.DataFrame
-        features: list
+        data: Union[pd.DataFrame, pl.DataFrame]
+        features: List[str]
 
         Returns
         -------
@@ -321,7 +321,7 @@ class LogTransformer(Transformer):
         self._check_neg_values(data=data, features=features)
         return super().scale(data=data, features=features)
 
-    def inverse_scale(self, data: Union[pd.DataFrame, pl.DataFrame], features: list):
+    def inverse_scale(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]) -> pd.DataFrame:
         """
         Apply inverse of log transform to features (columns) of given dataframe,
         under the assumption that these features have previously been transformed with LogTransformer
@@ -329,7 +329,7 @@ class LogTransformer(Transformer):
         Parameters
         ----------
         data: polars.DataFrame
-        features: list
+        features: List[str]
 
         Returns
         -------
@@ -360,15 +360,15 @@ class Normalise:
         self._norms = None
         self._shape = None
 
-    def __call__(self, data: Union[pd.DataFrame, pl.DataFrame], features: list):
+    def __call__(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]) -> pd.DataFrame:
         """
         Normalise columns (features) for given dataframe. Returns copy of DataFrame
         with chosen columns normalised
 
         Parameters
         ----------
-        data: polars.DataFrame
-        features: List
+        data: Union[pd.DataFrame, pl.DataFrame]
+        features: List[str]
 
         Returns
         -------
@@ -383,15 +383,15 @@ class Normalise:
         data = data[other_cols].hstack(x, columns=features)
         return polars_to_pandas(data=data)
 
-    def inverse(self, data: Union[pd.DataFrame, pl.DataFrame], features: list):
+    def inverse(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]) -> pd.DataFrame:
         """
         Perform inverse of normalisation to given dataframe. Returns copy of DataFrame
         with inverse normalisation applied to chosen columns (features)
 
         Parameters
         ----------
-        data: polars.DataFrame
-        features: List
+        data: Union[pd.DataFrame, pl.DataFrame]
+        features: List[str]
 
         Returns
         -------
@@ -476,7 +476,7 @@ class Scaler:
             kwargs["method"] = "box_cox"
         self._scaler = SCALERS.get(method)(**kwargs)
 
-    def fit_transform(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]):
+    def fit_transform(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]) -> pd.DataFrame:
         """
         Using a given dataframe and a list of columns (features) to transform,
         call 'fit_transform' on Scikit-Learn transformer. Returns copy of
@@ -485,7 +485,7 @@ class Scaler:
         Parameters
         ----------
         data: polars.DataFrame
-        features: list
+        features: List[str]
 
         Returns
         -------
@@ -495,12 +495,24 @@ class Scaler:
         data[features] = self._scaler.fit_transform(data[features].values)
         return data
 
-    def transform(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]):
+    def transform(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]) -> pd.DataFrame:
+        """
+        Transform DataFrame using fitted scaler.
+
+        Parameters
+        ----------
+        data: Union[Pandas.DataFrame, Polars.DataFrame]
+        features: List[str]
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
         data = data.copy() if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
         data[features] = self._scaler.transform(data[features].values)
         return data
 
-    def inverse(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]):
+    def inverse(self, data: Union[pd.DataFrame, pl.DataFrame], features: List[str]) -> pd.DataFrame:
         """
         Given dataframe and a list of columns (features) that has been previously
         transformed, apply inverse transform. Returns copy of DataFrame with
@@ -557,7 +569,7 @@ def apply_transform(
     method: str = "asinh",
     return_transformer: bool = False,
     **kwargs,
-):
+) -> Union[pd.DataFrame, Tuple[pd.DataFrame, None], Tuple[pd.DataFrame, Transformer]]:
     """
     Apply a transformation to the given DataFrame and the chosen
     columns (features). Transformation method is specified using the
@@ -582,7 +594,7 @@ def apply_transform(
 
     Returns
     -------
-    Pandas.DataFrame or (Pandas.DataFrame and Transformer)
+    Union[pd.DataFrame, Tuple[pd.DataFrame, None], Tuple[pd.DataFrame, Transformer]]
         Copy of the DataFrame with chosen features transformed and Transformer object if return_transformer is True
 
     Raises
@@ -603,7 +615,11 @@ def apply_transform(
     return method.scale(data=data, features=features)
 
 
-def apply_transform_map(data: Union[pd.DataFrame, pl.DataFrame], feature_method: dict, kwargs: dict or None = None):
+def apply_transform_map(
+        data: Union[pd.DataFrame, pl.DataFrame],
+        feature_method: Dict[str, str],
+        **kwargs
+) -> pd.DataFrame:
     """
     Wrapper function to cytopy.utils.transform.apply_transform; takes a dictionary (feature_method) where
     each key is the name of a feature and the value the transform to be applied to that feature.
@@ -611,8 +627,8 @@ def apply_transform_map(data: Union[pd.DataFrame, pl.DataFrame], feature_method:
     Parameters
     ----------
     data: polars.DataFrame
-    feature_method: dict
-    kwargs: dict
+    feature_method: Dict[str, str]
+    kwargs:
         Additional keyword arguments passed to apply_transform
 
     Returns

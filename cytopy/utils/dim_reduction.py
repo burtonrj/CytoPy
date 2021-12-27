@@ -26,7 +26,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import logging
-from typing import Dict
+from typing import Dict, Tuple
 from typing import List
 from typing import Optional
 from typing import Type
@@ -64,8 +64,8 @@ class DimensionReduction:
 
     You can provide your own custom method by providing a class to the 'method' parameter, so long as that
     class has a 'fit_transform' function defined, with optionally 'fit' and 'transform' also defined. These methods
-    should accept a polars DataFrame and a list of columns (features). The 'transform' and 'fit_transform' functions
-    must return a polars DataFrame with embeddings as new columns.
+    should accept a Pandas DataFrame and a list of columns (features). The 'transform' and 'fit_transform' functions
+    must return a Pandas DataFrame with embeddings as new columns.
 
     Parameters
     -----------
@@ -118,20 +118,20 @@ class DimensionReduction:
         self.embeddings = None
         self._method_name = type(self.method).__name__
 
-    def fit(self, data: Union[pl.DataFrame, pd.DataFrame], features: List[str]) -> Union[None, pl.DataFrame]:
+    def fit(self, data: pd.DataFrame, features: List[str]) -> Union[None, pd.DataFrame]:
         """
         Fit the underlying method. Will call 'fit_transform' if fit is not supported.
 
         Parameters
         ----------
-        data: polars.DataFrame or pandas.DataFrame
+        data: Pandas.DataFrame
         features: List[str]
             List of features (columns) to use
 
         Returns
         -------
         None or Pandas.DataFrame
-            If fit is not supported, will returns a DataFrame.
+            If fit is not supported, will return a DataFrame.
         """
         data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
         if not hasattr(self.method, "fit"):
@@ -139,14 +139,14 @@ class DimensionReduction:
             return self.fit_transform(data=data, features=features)
         self.method.fit(data[features].values)
 
-    def fit_transform(self, data: Union[pl.DataFrame, pd.DataFrame], features: List[str]) -> pl.DataFrame:
+    def fit_transform(self, data: pd.DataFrame, features: List[str]) -> pd.DataFrame:
         """
         Fit the underlying method and generate transformed embeddings. Transformed embeddings are
-        stored as new columns in the polars DataFrame. DataFrame is copied and not mutated.
+        stored as new columns in the Pandas DataFrame. DataFrame is copied and not mutated.
 
         Parameters
         ----------
-        data: polars.DataFrame or pandas.DataFrame
+        data: Pandas.DataFrame
         features: List[str]
             List of features (columns) to use
 
@@ -161,16 +161,16 @@ class DimensionReduction:
             data[f"{self._method_name}{i + 1}"] = e
         return data
 
-    def transform(self, data: Union[pl.DataFrame, pd.DataFrame], features: List[str]) -> pl.DataFrame:
+    def transform(self, data: pd.DataFrame, features: List[str]) -> pd.DataFrame:
         """
         Generate embeddings for the given DataFrame using the current fitted method. Transformed embeddings are
-        stored as new columns in the polars DataFrame. DataFrame is copied and not mutated.
+        stored as new columns in the Pandas DataFrame. DataFrame is copied and not mutated.
 
         Will call 'fit_transform' if fit is not supported.
 
         Parameters
         ----------
-        data: polars.DataFrame or pandas.DataFrame
+        data: Pandas.DataFrame
         features: List[str]
             List of features (columns) to use
 
@@ -190,15 +190,42 @@ class DimensionReduction:
 
 
 def dimension_reduction_with_sampling(
-    data: Union[pd.DataFrame, pl.DataFrame],
+    data: pd.DataFrame,
     features: List[str],
-    method: str,
+    method: Union[str, Type],
     sampling_size: Union[int, float],
     sampling_method: str = "uniform",
     sampling_kwargs: Optional[Dict] = None,
     verbose: bool = True,
     **kwargs,
-) -> Union[pd.DataFrame, DimensionReduction]:
+) -> Tuple[pd.DataFrame, DimensionReduction]:
+    """
+    Perform dimension reduction on a Pandas DataFrame using a sample of this data to train the reduction algorithm.
+    WARNING: sampling the feature space rather than performing dimension reduction directly on all available data
+    can help scale to large datasets, but will reduce the performance of your chosen algorithm and may generate
+    misleading results!
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    features: List[str]
+        List of columns to include in dimension reduction step
+    method: str
+        Method to use for dimension reduction (see DimensionReduction)
+    sampling_size: Union[int, float]
+        Either the number of rows to use for training or the fraction of data to use
+    sampling_method: str (default='uniform')
+        How to down-sample the feature space
+    sampling_kwargs: Dict, optional
+        Additional keywords passed to cytopy.utils.sampling.sample_dataframe
+    verbose: bool (default=True)
+    kwargs:
+        Additional keyword arguments passed to DimensionReduction
+
+    Returns
+    -------
+    Tuple[Pandas.DataFrame, DimensionReduction]
+    """
     sampling_kwargs = sampling_kwargs or {}
     sample = sample_dataframe(data=data, sample_size=sampling_size, method=sampling_method, **sampling_kwargs)
     reducer = DimensionReduction(method=method, **kwargs)

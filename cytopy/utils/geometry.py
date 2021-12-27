@@ -30,7 +30,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 from functools import partial
 from multiprocessing import cpu_count
 from multiprocessing import Pool
-from typing import Tuple
+from typing import Tuple, Union, List, Optional
 
 import alphashape
 import numpy as np
@@ -52,7 +52,7 @@ def point_in_poly(coords: Tuple[float], poly: Polygon) -> pl.Series:
     return poly.contains(Point(coords))
 
 
-def inside_polygon(data: pd.DataFrame, x: str, y: str, poly: Polygon) -> pl.DataFrame:
+def inside_polygon(data: pd.DataFrame, x: str, y: str, poly: Polygon) -> pd.DataFrame:
     """
     Return rows in dataframe who's values for x and y are contained in some polygon coordinate shape
 
@@ -69,7 +69,7 @@ def inside_polygon(data: pd.DataFrame, x: str, y: str, poly: Polygon) -> pl.Data
 
     Returns
     --------
-    polars.DataFrame
+    Pandas.DataFrame
         Masked DataFrame containing only those rows that fall within the Polygon
     """
     with Pool(cpu_count()) as pool:
@@ -77,7 +77,7 @@ def inside_polygon(data: pd.DataFrame, x: str, y: str, poly: Polygon) -> pl.Data
     return data.iloc[mask, :]
 
 
-def polygon_overlap(poly1: Polygon, poly2: Polygon, threshold: float = 0.0):
+def polygon_overlap(poly1: Polygon, poly2: Polygon, threshold: float = 0.0) -> float:
     """
     Compare the area of two polygons and give the fraction overlap.
     If fraction overlap does not exceed given threshold or the polygon's do not overlap,
@@ -103,19 +103,19 @@ def polygon_overlap(poly1: Polygon, poly2: Polygon, threshold: float = 0.0):
 @jit(nopython=True)
 def inside_ellipse(
     data: np.array,
-    center: tuple,
-    width: int or float,
-    height: int or float,
-    angle: int or float,
-) -> np.ndarray:
+    center: Tuple[float, float],
+    width: Union[int, float],
+    height: Union[int, float],
+    angle: Union[int, float],
+) -> List[bool]:
     """
-    Return mask of two dimensional matrix specifying if a data point (row) falls
+    Return mask of two-dimensional matrix specifying if a data point (row) falls
     within an ellipse
 
     Parameters
     -----------
     data: numpy.ndarray
-        two dimensional matrix (x,y)
+        two-dimensional matrix (x,y)
     center: tuple
         x,y coordinate corresponding to center of ellipse
     width: int or float
@@ -127,8 +127,7 @@ def inside_ellipse(
 
     Returns
     --------
-    Numpy.Array
-        numpy array of indices for values inside specified ellipse
+    List[bool]
     """
     cos_angle = np.cos(np.radians(180.0 - angle))
     sin_angle = np.sin(np.radians(180.0 - angle))
@@ -156,7 +155,7 @@ def inside_ellipse(
     return in_ellipse
 
 
-def probabilistic_ellipse(covariances: np.ndarray, conf: float):
+def probabilistic_ellipse(covariances: np.ndarray, conf: float) -> Tuple[float, float, float]:
     """
     Given the covariance matrix of a mixture component, calculate a elliptical shape that
     represents a probabilistic confidence interval.
@@ -170,7 +169,7 @@ def probabilistic_ellipse(covariances: np.ndarray, conf: float):
 
     Returns
     -------
-    float and float and float
+    Tuple[float, float, float]
         Width, Height and Angle of ellipse
     """
     eigen_val, eigen_vec = linalg.eigh(covariances)
@@ -181,16 +180,16 @@ def probabilistic_ellipse(covariances: np.ndarray, conf: float):
     return eigen_val[0], eigen_val[1], (180.0 + angle)
 
 
-def create_envelope(xy: np.ndarray, alpha: float or None = 0.0) -> Polygon:
+def create_envelope(xy: np.ndarray, alpha: Optional[float] = 0.0) -> Polygon:
     """
     Given the x and y coordinates of a cloud of data points generate an envelope (alpha shape)
     that encapsulates these data points.
 
     Parameters
     ----------
-    x_values: Numpy.Array
-    y_values: Numpy.Array
-    alpha: float or None (default = 0.0)
+    xy: Numpy.Array
+        X and Y coordinates of a cloud of data points
+    alpha: float, optional (default = 0.0)
         By default alpha is 0, generating a convex hull (can be thought of as if wrapping an elastic band
         around the data points). Increase alpha to create a concave envelope. Warning, as alpha increases,
         more data points will fall outside the range of the envelope.
@@ -216,22 +215,22 @@ def create_envelope(xy: np.ndarray, alpha: float or None = 0.0) -> Polygon:
 
 
 def ellipse_to_polygon(
-    centroid: (float, float),
+    centroid: Tuple[float, float],
     width: float,
     height: float,
     angle: float,
-    ellipse: Ellipse or None = None,
+    ellipse: Optional[Ellipse] = None,
 ) -> Polygon:
     """
     Convert an ellipse to a shapely Polygon object.
 
     Parameters
     ----------
-    centroid: (float, float)
+    centroid: Tuple[float, float]
     width: float
     height: float
     angle: float
-    ellipse: Ellipse (optional)
+    ellipse: Ellipse, optional
 
     Returns
     -------

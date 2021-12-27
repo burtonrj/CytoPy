@@ -25,7 +25,7 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from typing import Union
+from typing import Union, Tuple, List
 
 import numpy as np
 import pandas as pd
@@ -38,21 +38,22 @@ from sklearn.neighbors import KNeighborsClassifier
 from ..data.read_write import polars_to_pandas
 
 
-def calculate_optimal_neighbours(x: Union[pl.DataFrame, pd.DataFrame], y: np.array, scoring: str, **kwargs):
+def calculate_optimal_neighbours(x: pd.DataFrame, y: np.array, scoring: str, **kwargs) -> Tuple[int, float]:
     """
     Calculate the optimal n_neighbours parameter for KNeighborsClassifier using GridSearchCV.
     Returns optimal n and highest score
 
     Parameters
     ----------
-    x: polars.DataFrame
-    y: np.array
+    x: Pandas.DataFrame
+    y: Numpy.Array
     scoring: str
     kwargs: dict
 
     Returns
     -------
     int, float
+        Optimal number of neighbours and best cross-validation score
 
     Raises
     ------
@@ -72,15 +73,15 @@ def calculate_optimal_neighbours(x: Union[pl.DataFrame, pd.DataFrame], y: np.arr
 
 
 def knn(
-    data: Union[pl.DataFrame, pd.DataFrame],
+    data: pd.DataFrame,
     labels: np.array,
-    features: list,
+    features: List[str],
     n_neighbours: int,
     holdout_size: float = 0.2,
     random_state: int = 42,
     return_model: bool = False,
     **kwargs
-):
+) -> Union[Tuple[float, float], Tuple[float, float, KNeighborsClassifier]]:
     """
     Train a nearest neighbours classifier (scikit-learn implementation) and return
     the balanced accuracy score for both training and validation.
@@ -99,7 +100,7 @@ def knn(
 
     Returns
     -------
-    (float, float) or (float, float, object)
+    Union[Tuple[float, float], Tuple[float, float, KNeighborsClassifier]]
         Training balanced accuracy score, Validation balanced accuracy score,
         Classifier (if return_model is True)
     """

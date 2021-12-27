@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 For manageable analysis sampling is unavoidable. This module contains all
-the functionality for downsampling and subsequent upsampling in cytopy.
+the functionality for down-sampling and subsequent up-sampling in cytopy.
 cytopy supports uniform sampling that wraps the polars DataFrame sample
-method. In addition we provide support for density dependent downsampling
+method. In addition, we provide support for density dependent down-sampling
 (adapted from SPADE; https://www.nature.com/articles/nbt.1991) and faithful
 downsampling (adapted from SamSPECTRAL; https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-11-403).
 
@@ -65,8 +65,8 @@ def uniform_downsampling(
 
     Parameters
     ----------
-    data: polars.DataFrame
-    sample_size: int or float
+    data: Union[pl.DataFrame, pd.DataFrame]
+    sample_size: Union[int, float]
         Size of sample required. If a float is given will return a sample
         of this proportion.
     kwargs:
@@ -74,7 +74,7 @@ def uniform_downsampling(
 
     Returns
     -------
-    Polars.DataFrame or Pandas.DataFrame
+    Pandas.DataFrame
         Returns sample data type as given
 
     Raises
@@ -96,9 +96,9 @@ def uniform_downsampling(
     raise SamplingError("sample_size should be an int or float value")
 
 
-def faithful_downsampling(data: np.array, h: float = 0.1):
+def faithful_downsampling(data: np.array, h: float = 0.1) -> np.ndarray:
     """
-    An implementation of faithful downsampling as described in:  Zare H, Shooshtari P, Gupta A, Brinkman R.
+    An implementation of faithful down-sampling as described in:  Zare H, Shooshtari P, Gupta A, Brinkman R.
     Data reduction for spectral clustering to analyze high throughput utils cytometry data.
     BMC Bioinformatics 2010;11:403
 
@@ -130,7 +130,7 @@ def faithful_downsampling(data: np.array, h: float = 0.1):
     return communities
 
 
-def prob_downsample(local_d: int, target_d: int, outlier_d: int):
+def prob_downsample(local_d: int, target_d: int, outlier_d: int) -> float:
     """
     Given local, target and outlier density (as estimated by KNN) calculate
     the probability of retaining the event. If local density is less than or
@@ -244,7 +244,7 @@ def density_probability_assignment(
     outlier_dens: int = 1,
     target_dens: int = 5,
     njobs: int = -1,
-):
+) -> np.ndarray:
     """
     Generate an estimation of local density amongst single cell population
     using the KDTree algorithm from Scikit-Learn. Using this representation
@@ -301,16 +301,16 @@ def density_probability_assignment(
 
 def upsample_density(
     data: Union[pl.DataFrame, pd.DataFrame],
-    features: list or None = None,
+    features: Optional[List[str]] = None,
     upsample_factor: int = 2,
-    sample_size: int or None = None,
-    tree_sample: int or float = 0.1,
+    sample_size: Optional[int] = None,
+    tree_sample: Union[float, int] = 0.1,
     distance_metric: str = "manhattan",
     alpha: int = 5,
     outlier_dens: int = 1,
     target_dens: int = 5,
     njobs: int = -1,
-):
+) -> pd.DataFrame:
     """
     Perform upsampling in a density dependent manner; neighbourhoods of cells of low
     density will have a high probability of being upsampled versus dense neighbourhoods.
@@ -377,11 +377,11 @@ def upsample_density(
 def upsample_knn(
     sample: Union[pl.DataFrame, pd.DataFrame],
     original_data: Union[pl.DataFrame, pd.DataFrame],
-    labels: list,
-    features: list,
+    labels: List,
+    features: List[str],
     scoring: str = "balanced_accuracy",
     **kwargs,
-):
+) -> pd.DataFrame:
     """
     Given some sampled dataframe and the original dataframe from which it was derived, use the
     given labels (which should correspond to the sampled dataframe row index) to fit a nearest
@@ -473,7 +473,23 @@ def sample_dataframe(
         raise SamplingError(f"Invalid method, must be one of {valid}")
 
 
-def sample_dataframe_uniform_groups(data: Union[pl.DataFrame, pd.DataFrame], group_id: str, sample_size: int):
+def stratified_sampling(data: Union[pl.DataFrame, pd.DataFrame], group_id: str, sample_size: int):
+    """
+    Stratified sampling with equal number of observations obtained from each group
+
+    Parameters
+    ----------
+    data: Union[pl.DataFrame, pd.DataFrame]
+    group_id: str
+        Name of the column to group on
+    sample_size: int
+        Number of observations to sample from each group. If sample_size > n for n observations within a group, all
+        observations within that group are included (Does not sample with replacement!)
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
     sample_data = []
     data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     n = int(sample_size / data[group_id].nunique())

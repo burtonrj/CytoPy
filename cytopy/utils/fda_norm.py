@@ -33,7 +33,9 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from typing import List
+from __future__ import annotations
+
+from typing import List, Optional
 from typing import Union
 
 import matplotlib.pyplot as plt
@@ -44,7 +46,21 @@ from skfda.preprocessing.registration import landmark_registration_warping
 from skfda.representation.grid import FDataGrid
 
 
-def merge_peaks(p, threshold: float = 0.1):
+def merge_peaks(p: List, threshold: float = 0.1) -> List:
+    """
+    Merge peaks if values are within a certain distance to each other (controlled by threshold)
+
+    Parameters
+    ----------
+    p: List
+        Peaks for merging
+    threshold: float (default=0.1)
+        Maximum distance between peaks to prevent merger
+
+    Returns
+    -------
+    List
+    """
     to_merge = []
     for i in p:
         for j in p:
@@ -62,6 +78,33 @@ def filter_peaks(x, grid, y, n):
 
 
 class LandmarkRegistration:
+    """
+    Align peaks of one or more distributions using landmark registration
+
+    Parameters
+    ----------
+    kernel: str (default='gaussian')
+        Kernel to use for kernel density estimation; see KDEpy.FFTKDE
+    bw: Union[str, float], (default='ISJ')
+        Kernel bandwidth; see KDEpy.FFTKDE
+    min_peak_threshold: float (default=0.001)
+        Peaks below this fraction of the maximum peak size will be ignored
+    merge_peak_distance: float (default=0.1)
+        Peaks within this distance will be merged
+    min_peak_distance: float (default=0.1)
+        Minimum peak distance passed to detecta.detect_peaks call
+    grid_n: int (default=100)
+        Grid size for kernel density estimate
+
+    Attributes
+    ----------
+    landmarks: List[int]
+        List of index for landmarks (peaks) in grid
+    original_functions: FDataGrid
+        Original data and grid space that landmark registration is performed on
+    warping_functions: FDataGrid
+        Results of landmark registration
+    """
     def __init__(
         self,
         kernel: str = "gaussian",
@@ -81,7 +124,22 @@ class LandmarkRegistration:
         self.warping_functions = None
         self.grid_n = grid_n
 
-    def _compute_original_functions(self, data: np.ndarray, **peak_kwargs):
+    def _compute_original_functions(self, data: List[np.ndarray], **peak_kwargs):
+        """
+        Fit kernel density estimate to data, calculate landmarks (peaks) and populate
+        'original_functions' and 'landmarks'.
+
+        Parameters
+        ----------
+        data: List[Numpy.Array]
+            Two or more arrays to align
+        peak_kwargs:
+            Additional keyword arguments passed to detecta.detect_peaks call
+
+        Returns
+        -------
+        None
+        """
         x = np.linspace(np.min([np.min(x) for x in data]) - 0.1, np.max([np.max(x) for x in data]) + 0.1, self.grid_n)
         functions = [FFTKDE(kernel=self.kernel, bw=self.bw).fit(i).evaluate(x) for i in data]
         peak_kwargs = peak_kwargs or {}
@@ -92,18 +150,41 @@ class LandmarkRegistration:
         self.landmarks = np.array([sorted(filter_peaks(p, x, y, n)) for p, y in zip(landmarks, functions)])
         self.original_functions = FDataGrid(functions, grid_points=x)
 
-    def fit(self, data: np.ndarray):
+    def fit(self, data: List[np.ndarray]) -> LandmarkRegistration:
+        """
+        Perform landmark registration and compute the warping functions for the alignment of two
+        or more arrays (arrays can be of unequal length)
+
+        Parameters
+        ----------
+        data: List[Numpy.Array]
+
+        Returns
+        -------
+        LandmarkRegistration
+        """
         self._compute_original_functions(data=data)
         self.warping_functions = landmark_registration_warping(
             self.original_functions, np.array(self.landmarks), location=np.mean(self.landmarks, axis=0)
         )
         return self
 
-    def transform(self, data: np.ndarray):
+    def transform(self, data: np.ndarray) -> np.ndarray:
+        """
+        Compute the warped data when applying landmark registration. Must call 'fit' first.
+
+        Parameters
+        ----------
+        data: Numpy.Array
+
+        Returns
+        -------
+        Numpy.Array
+        """
         assert self.warping_functions is not None, "Call fit first!"
         return self.warping_functions.evaluate(data)[1].reshape(-1)
 
-    def plot_warping(self, ax: list or None = None):
+    def plot_warping(self, ax: Optional[plt.Axes] = None) -> plt.Axes:
         """
         Generate a figure that plots the PDFs prior to landmark registration,
         the warping function, and the registered curves.
