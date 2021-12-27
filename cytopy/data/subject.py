@@ -68,6 +68,13 @@ class Subject(mongoengine.DynamicDocument):
 
     @property
     def fields(self) -> List[str]:
+        """
+        List of available first level fields
+
+        Returns
+        -------
+        List[str]
+        """
         return list(self.to_dict().keys())
 
     @fields.setter
@@ -75,9 +82,38 @@ class Subject(mongoengine.DynamicDocument):
         raise ValueError("Fields is read only, access individual fields to edit values.")
 
     def to_dict(self, *args, **kwargs) -> Dict:
+        """
+        Convert the document to a python dictionary, any additional arguments passed to mongoengine to_json function.
+
+        Returns
+        -------
+        Dict
+        """
         return json.loads(self.to_json(*args, **kwargs))
 
-    def field_to_df(self, field: str, **kwargs) -> pd.DataFrame:
+    def field_to_df(self, field: str, **kwargs) -> Union[pd.DataFrame, None]:
+        """
+        Convert a field to a Pandas DataFrame. This requires that the field be compatible
+        with the creation of a Pandas DataFrame, this is valid if:
+            * The field contains one or more keys with values as flat lists
+            * The field is a list of flat dictionaries
+
+        As an example, the following fields would create equivalent DataFrames:
+         * [{"a": 1, "b": 2}, {"a": 5, "b": 5}]
+         * {"a": [1, 5], "b": [2, 5]}
+
+        Parameters
+        ----------
+        field: str
+            Name of the field to convert
+        kwargs:
+            Additional keyword arguments passed to Pandas DataFrame constructor
+
+        Returns
+        -------
+        Union[Panda.DataFrame, None]
+            If the field is empty, will return None
+        """
         if len(self.__getitem__(field)) == 0:
             logger.warning(f"filed '{field}' is empty")
             return None
@@ -93,7 +129,23 @@ class Subject(mongoengine.DynamicDocument):
             )
 
     @staticmethod
-    def _list_node(node: BaseList, keys: List[str], summary: str):
+    def _list_node(node: BaseList, keys: List[str], summary: str) -> Union[str, np.ndarray]:
+        """
+        Summarise an iterable end-node
+
+        Parameters
+        ----------
+        node: BaseList
+        keys: List[str]
+        summary: str
+            Summary method, must be one of mean, median, std, kurtosis, or skew
+
+        Returns
+        -------
+        Union[str, np.ndarray]
+            If any of the values in this end-node are a string, will return a string of as comma-seperated values.
+            Otherwise, returns a Numpy.Array
+        """
         for k in keys:
             node = [n[k] for n in node]
         if any([isinstance(x, str) for x in node]):
@@ -107,10 +159,40 @@ class Subject(mongoengine.DynamicDocument):
         if summary == "kurtosis":
             return kurtosis([float(x) for x in node])
         if summary == "skew":
-            return skew([float(x) for x in node])
+            return skew(np.array([float(x) for x in node]))
         raise ValueError("Invalid value fo summary method, should be one of: mean, median, std, kurtosis, or skew")
 
-    def lookup_var(self, key: Union[str, List[str]], summary: str = "mean"):
+    def lookup_var(self, key: Union[str, List[str]], summary: str = "mean") -> Union[str, float, np.nan]:
+        """
+        Lookup a variable and return the value. Provide either the name of the field of interest, or
+        provide a list of keys to navigate to the required field. For example, if the Subject had the following
+        data structure and we wanted the monocyte count:
+
+        - blood_results
+        |
+        --- full_blood_count
+            |
+            --- Lymphocyte count
+            --- Neutrophil count
+            --- Monocyte count
+
+        We would provide as a key ["blood_results", "full_blood_count", "Monocyte count"].
+
+        If the end node is a list of values (continuing with the example above, say the monocyte count contains multiple
+        values) then you should provide a summary method. The summary method must be one of mean, median, std, kurtosis,
+        or skew and specifies how the returned value is calculated. If the end node contains one or more string
+        values the returned value will be a string of the values comma-seperated.
+
+        Parameters
+        ----------
+        key: Union[str, List[str]]
+        summary: str (default='mean')
+
+        Returns
+        -------
+        Union[str, float, np.nan]
+            If the key(s) is not recognised, will return None.
+        """
         try:
             if isinstance(key, list) and len(key) == 1:
                 return self[key[0]]
@@ -134,27 +216,87 @@ class Subject(mongoengine.DynamicDocument):
 
 
 def common_fields(subjects: List[Subject]) -> Set:
+    """
+    Given a list of Subjects, return the common fields.
+
+    Parameters
+    ----------
+    subjects: List[Subject]
+
+    Returns
+    -------
+    Set
+    """
     return set.intersection(*[set(s.fields) for s in subjects])
 
 
-def safe_search(subject_id: str):
+def safe_search(subject_id: str) -> Union[Subject, None]:
+    """
+    Search for a subject and return None if not found
+
+    Parameters
+    ----------
+    subject_id: str
+
+    Returns
+    -------
+    Union[Subject, None]
+    """
     try:
         return Subject.objects(subject_id=subject_id).get()
     except mongoengine.DoesNotExist:
         return None
 
 
-def lookup_variable(subject_id: str, key: Union[str, List[str]]) -> Union[None, str]:
+def lookup_variable(subject_id: str, key: Union[str, List[str]], **kwargs) -> Union[str, float, np.nan]:
+    """
+    Lookup a variable in a Subject by the subject ID. See Subject.lookup_var for details.
+
+    Parameters
+    ----------
+    subject_id: str
+    key: Union[str, List[str]]
+    kwargs:
+        Keyword arguments passed to Subject.lookup_var
+
+    Returns
+    -------
+    Union[str, float, np.nan]
+    """
     try:
         subject = safe_search(subject_id=subject_id)
         if subject is None:
-            return None
-        return subject.lookup_var(key)
+            return np.nan
+        return subject.lookup_var(key, **kwargs)
     except KeyError:
-        return None
+        return np.nan
 
 
-def add_meta_labels(data: Union[pd.DataFrame, pl.DataFrame], key: Union[str, List[str]], column_name: str):
+def add_meta_labels(
+        data: Union[pd.DataFrame, pl.DataFrame],
+        key: Union[str, List[str]],
+        column_name: str,
+        **kwargs
+) -> pd.DataFrame:
+    """
+    Given a DataFrame with the column 'subject_id', iterate over the subject identifiers, load the
+    Subject, search for a key, and then populate a new column with these values. If a subject is
+    not identified or is missing the key, the value will be NaN. For details on how subject
+    variables are obtained, see Subject.lookup_var.
+
+    Parameters
+    ----------
+    data: Pandas.DataFrame
+    key: Union[str, List[str]]
+    column_name: str
+        New column name
+    kwargs:
+        Keyword arguments passed to Subject.lookup_var
+
+    Returns
+    -------
+    Pandas.DataFrame
+    """
     data = data if isinstance(data, pd.DataFrame) else polars_to_pandas(data=data)
     if column_name in data.columns:
         logger.warning(f"Data already contains column {column_name}. Will be overwritten.")
@@ -162,7 +304,7 @@ def add_meta_labels(data: Union[pd.DataFrame, pl.DataFrame], key: Union[str, Lis
     if "subject_id" not in data.columns:
         raise ValueError(f"Data is missing 'subject_id' column")
     unique_subject_ids = data["subject_id"].unique()
-    lookup_func = partial(lookup_variable, key=key)
+    lookup_func = partial(lookup_variable, key=key, **kwargs)
     meta_var = list(map(lookup_func, unique_subject_ids))
     return data.merge(
         pd.DataFrame({"subject_id": unique_subject_ids, column_name: meta_var}), on="subject_id", how="left"

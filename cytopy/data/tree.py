@@ -1,7 +1,7 @@
 #!/usr/bin.env/python
 # -*- coding: utf-8 -*-
 """
-cytopy tracks the population "tree" of a FileGroup when a FileGroup
+CytoPy tracks the population "tree" of a FileGroup when a FileGroup
 is loaded into memory and is being analysed. This module handles the
 creation and modification of this "tree" using the anytree library.
 
@@ -25,7 +25,7 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from typing import Dict
+from typing import Dict, Union
 from typing import List
 
 import anytree
@@ -33,21 +33,20 @@ import anytree
 from .population import Population
 
 
-def _add_leaf(tree: Dict[str, anytree.Node], population: Population):
+def _add_leaf(tree: Dict[str, anytree.Node], population: Population) -> Union[Dict, None]:
     """
     Add a new 'leaf' (node) to the population tree (represented by a dictionary of
     anytree Node objects).
 
     Parameters
     ----------
-    tree: dict
+    tree: Dict[str, anytree.Node]
         {population name: anytree.Node}
     population: Population
-        Population to add to the tree
 
     Returns
     -------
-    dict
+    Union[Dict, None]
     """
 
     if population.parent not in tree.keys():
@@ -56,21 +55,21 @@ def _add_leaf(tree: Dict[str, anytree.Node], population: Population):
     return tree
 
 
-def _grow_tree(tree: Dict[str, anytree.Node], database_populations: List[Population]):
+def _grow_tree(tree: Dict[str, anytree.Node], database_populations: List[Population]) -> Dict:
     """
     Given a list of Population objects, grow the 'tree' (represented by a dictionary of
     anytree Node objects) according to the 'parent' attribute of each population.
 
     Parameters
     ----------
-    tree: dict
+    tree: Dict[str, anytree.Node]
         {population name: anytree.Node}
-    database_populations: list
+    database_populations: List[Population]
         List of Populations to add to the tree
 
     Returns
     -------
-    dict
+    Dict
     """
     i = 0
     while len(database_populations) > 0:

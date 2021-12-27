@@ -3,8 +3,8 @@
 """
 The read_write module contains tools for accessing *.fcs files and
 relies on the Python library FlowIO by Scott White. This is used by
-Experiment to population FileGroups. Data can also be read from
-parquet and CSV files, and the Polars library is used for reading. This
+Experiment to populate FileGroups. Data can also be read from
+parquet and CSV files with the Polars library is used for reading. This
 also provides optimised data transformations handled in the utils.transform
 module.
 
@@ -35,7 +35,7 @@ import pickle
 import re
 from multiprocessing import cpu_count
 from multiprocessing import Pool
-from typing import Union
+from typing import Union, Dict
 from typing import List
 from typing import Optional
 
@@ -133,25 +133,42 @@ def parse_directory_for_cytometry_files(
     exclude_files: Optional[str] = None,
     exclude_dir: Optional[str] = None,
     compensation_file: Optional[str] = None,
-) -> dict:
+) -> Dict[str, Union[str, List[str]]]:
     """
-    Generate a standard dictionary object of fcs files in given directory
+    Generate a standard dictionary object of fcs files in given directory. The resulting dictionary will contain the
+    following:
+        {
+            "primary": The file path to the primary staining file,
+            control_name: The file path to a control staining file, where control_name is a value in 'control_names',
+            ...
+            "compensation_file": Either None, if 'compensation_file' is None, otherwise the filepath to the compensation
+            file
+        }
 
     Parameters
     -----------
     fcs_dir: str
-        target directory for search
+        Target directory for search
     control_names: list
-        names of expected control files (names must appear in filenames)
-    ctrl_id: str
-        global identifier for control file e.g. 'FMO' (must appear in filenames)
-    exclude_files
+        Names of expected control files (names must appear in filenames)
+    control_id: str
+        Global identifier for control file e.g. 'FMO' (must appear in filenames)
+    exclude_files: str, optional
+        Any files containing this string in their filename will be ignored
+    compensation_file: str, optional
+        If a file is encountered with this exact filename, its filepath will be stored under the key 'compensation_file'
     exclude_dir: str (default = 'DUPLICATES')
         Will ignore any directories with this name
+
     Returns
     --------
-    dict
+    Dict[str, Union[str, List[str]]]
         standard dictionary of fcs files contained in target directory
+
+    Raises
+    ------
+    ValueError
+        Multiple files identified for either the primary staining, a control file, or the compensation file
     """
     file_tree = {}
     fcs_files = filter_fcs_files(fcs_dir, exclude_files=exclude_files, exclude_dir=exclude_dir)
@@ -181,7 +198,7 @@ def parse_directory_for_cytometry_files(
     return file_tree
 
 
-def fcs_mappings(path: str) -> list or None:
+def fcs_mappings(path: str) -> Union[List[str], None]:
     """
     Fetch channel mappings from fcs file.
 
@@ -192,7 +209,7 @@ def fcs_mappings(path: str) -> list or None:
 
     Returns
     --------
-    List or None
+    Union[List[str], None]
         List of channel mappings. Will return None if file fails to load.
     """
     try:
@@ -203,41 +220,44 @@ def fcs_mappings(path: str) -> list or None:
     return fo.channels
 
 
-def explore_channel_mappings(fcs_dir: str, exclude_comps: bool = True) -> list:
+def explore_channel_mappings(fcs_dir: str, exclude_comps: bool = True) -> List[str]:
     """
     Given a directory, explore all fcs files and find all permutations of channel/marker mappings
 
     Parameters
     ----------
     fcs_dir: str
-        root directory to search
+        Root directory to search
     exclude_comps: bool, (default=True)
-        exclude compentation files (must have 'comp' in filename)
+        Exclude compentation files (must have 'comp' in filename)
 
     Returns
     --------
-    List
+    List[str]
         list of all unique channel/marker mappings
     """
-    fcs_files = filter_fcs_files(fcs_dir, exclude_comps)
+    if exclude_comps:
+        fcs_files = filter_fcs_files(fcs_dir, exclude_files="comp")
+    else:
+        fcs_files = filter_fcs_files(fcs_dir)
     with Pool(cpu_count()) as pool:
         mappings = list(pool.map(fcs_mappings, fcs_files))
         mappings = list(pool.map(json.dumps, mappings))
     return [json.loads(x) for x in mappings]
 
 
-def _get_channel_mappings(fluoro_dict: dict) -> list:
+def _get_channel_mappings(fluoro_dict: Dict) -> List[Dict[str, str]]:
     """
     Generates a list of dictionary objects that describe the fluorochrome mappings in this FCS file
 
     Parameters
     -----------
-    fluoro_dict: dict
+    fluoro_dict: Dict
         dictionary object from the channels param of the fcs file
 
     Returns
     --------
-    List
+    List[Dict[str, str]]
         List of dict obj with keys 'channel' and 'marker'. Use to map fluorochrome channels to
     corresponding marker
     """
@@ -258,9 +278,10 @@ def match_file_ext(path: str, ext: str):
     return os.path.splitext(path)[1].lower() == ext
 
 
-def load_compensation_matrix(fcs: flowio.FlowData) -> pl.DataFrame:
+def load_compensation_matrix(fcs: flowio.FlowData) -> Union[pl.DataFrame, None]:
     """
-    Extract a compensation matrix from an FCS file using FlowIO.
+    Extract a compensation matrix from an FCS file using FlowIO and return as a polars DataFrame. If no spillover
+    matrix found in file, will return None.
 
     Parameters
     ----------
@@ -268,7 +289,7 @@ def load_compensation_matrix(fcs: flowio.FlowData) -> pl.DataFrame:
 
     Returns
     -------
-    polars.DataFrame or None
+    Union[polars.DataFrame, None]
         Returns None if no compensation matrix is found; will log warning.
     """
     spill_txt = None
@@ -315,6 +336,18 @@ def fcs_to_polars(fcs: flowio.FlowData) -> pl.DataFrame:
 
 
 def read_headers(path: str, s3_bucket: Optional[str] = None) -> List[str]:
+    """
+    Read the headers from a csv or fcs file and return as a list
+
+    Parameters
+    ----------
+    path: str
+    s3_bucket: str
+
+    Returns
+    -------
+    List[str]
+    """
     if s3_bucket is not None:
         if match_file_ext(path, ".csv"):
             data = read_from_remote(s3_bucket=s3_bucket, path=path, stop_after_n_rows=3)
