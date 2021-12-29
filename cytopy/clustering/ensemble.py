@@ -162,7 +162,7 @@ class EnsembleClustering(Clustering):
                 .T.melt(var_name="Cluster", value_name="Distortion score")
                 .sort_values("Distortion score")
             )
-            ax = box_swarm_plot(plot_df=plot_df, x="Cluster", y="Distortion score", **plot_kwargs)
+            ax = box_swarm_plot(data=plot_df, x="Cluster", y="Distortion score", **plot_kwargs)
             return self._cluster_weights["weights"], ax
         return self._cluster_weights["weights"], None
 
@@ -230,7 +230,7 @@ class EnsembleClustering(Clustering):
         fig = ColumnWrapFigure(n=len(metrics), figsize=figsize, col_wrap=1)
         for i, metric in enumerate(metrics):
             ax = fig.add_wrapped_subplot()
-            box_swarm_plot(plot_df=results, x="N clusters", y=metric, ax=ax, **kwargs)
+            box_swarm_plot(data=results, x="N clusters", y=metric, ax=ax, **kwargs)
             if i < len(metrics) - 1:
                 ax.set_xlabel("")
                 ax.set_xticklabels([])

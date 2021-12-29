@@ -22,7 +22,7 @@ from cytopy.data import single_cell_dataframe
 from cytopy.data import Subject
 from cytopy.data.panel import Channel
 from cytopy.feedback import progress_bar
-from cytopy.plotting import single_cell_density
+from cytopy.plotting import density_plot
 from cytopy.plotting.general import ColumnWrapFigure
 from cytopy.utils import DimensionReduction
 from cytopy.utils.transform import Scaler
@@ -242,8 +242,8 @@ class BatchCorrector:
             data = self._umap_cache
         fig, axes = plt.subplots(1, 2, figsize=figsize)
         if density:
-            single_cell_density(data=data[data.Source == "Before"], x="UMAP1", y="UMAP2", ax=axes[0], **plot_kwargs)
-            single_cell_density(data=data[data.Source == "After"], x="UMAP1", y="UMAP2", ax=axes[1], **plot_kwargs)
+            density_plot(data=data[data.Source == "Before"], x="UMAP1", y="UMAP2", ax=axes[0], **plot_kwargs)
+            density_plot(data=data[data.Source == "After"], x="UMAP1", y="UMAP2", ax=axes[1], **plot_kwargs)
         else:
             plot_kwargs["linewidth"] = plot_kwargs.get("linewidth", 0)
             plot_kwargs["s"] = plot_kwargs.get("s", 1)

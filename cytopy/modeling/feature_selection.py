@@ -1023,7 +1023,7 @@ class FeatureImportance:
         boxplot_kwargs["order"] = list(np.array(self.features)[perm_sorted_idx])
         overlay_kwargs["order"] = list(np.array(self.features)[perm_sorted_idx])
         return box_swarm_plot(
-            plot_df=result,
+            data=result,
             x="Permutation importance",
             y="Feature",
             boxplot_kwargs=boxplot_kwargs,

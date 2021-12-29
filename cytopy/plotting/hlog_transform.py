@@ -24,15 +24,6 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
-
 from cytopy.utils.transform import HyperlogTransformer
 from matplotlib.ticker import NullFormatter, LogFormatterMathtext
 from matplotlib.ticker import Locator

@@ -70,8 +70,7 @@ import seaborn as sns
 from sklearn.cluster import AgglomerativeClustering
 
 from ..modeling.hypothesis_testing import hypothesis_test
-from ..plotting import single_cell_density
-from ..plotting import single_cell_plot
+from ..plotting import density_plot, scatterplot
 from ..plotting.general import box_swarm_plot
 from ..plotting.general import ColumnWrapFigure
 from .consensus_k import KConsensusClustering
@@ -549,7 +548,7 @@ class Clustering:
             data = data.query(subset).copy()
         if plot_n and (data.shape[0] > plot_n):
             data = data.sample(plot_n)
-        return single_cell_density(data=data, x=f"{method}1", y=f"{method}2", **plot_kwargs)
+        return density_plot(data=data, x=f"{method}1", y=f"{method}2", **plot_kwargs)
 
     def plot(
         self,
@@ -569,7 +568,7 @@ class Clustering:
         )
         if subset:
             data = data.query(subset).copy()
-        return single_cell_plot(
+        return scatterplot(
             data=data, x=f"{method}1", y=f"{method}2", label=label, discrete=discrete, **plot_kwargs
         )
 
@@ -590,7 +589,7 @@ class Clustering:
         data["cluster_label"] = self.data["cluster_label"]
         if subset:
             data = data.query(subset)
-        return single_cell_plot(
+        return scatterplot(
             data=data, x=f"{method}1", y=f"{method}2", label="cluster_label", discrete=True, **plot_kwargs
         )
 
@@ -711,7 +710,7 @@ class Clustering:
             plot_data["n_sources"] = plot_data[label].map(self._n_sources)
             return boxswarm_and_source_count(plot_data=plot_data, x=label, y=y_label, hue=hue, **plot_kwargs)
 
-        ax = box_swarm_plot(plot_df=plot_data, x=label, y=y_label, hue=hue, **plot_kwargs)
+        ax = box_swarm_plot(data=plot_data, x=label, y=y_label, hue=hue, **plot_kwargs)
         return ax
 
     def cluster_proportion_stats(
@@ -767,7 +766,7 @@ class Clustering:
             fig = ColumnWrapFigure(n=len(metrics), col_wrap=col_wrap, **figure_kwargs)
             for i, (m, data) in enumerate(results.items()):
                 box_swarm_plot(
-                    plot_df=pd.DataFrame({"Method": [m] * len(data), "Score": data}),
+                    data=pd.DataFrame({"Method": [m] * len(data), "Score": data}),
                     x="Method",
                     y="Score",
                     ax=fig.add_wrapped_subplot(),

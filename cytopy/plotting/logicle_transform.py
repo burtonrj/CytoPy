@@ -34,16 +34,6 @@ from matplotlib.ticker import NullFormatter
 from cytopy.utils.transform import LogicleTransformer
 
 
-__author__ = "Ross Burton"
-__copyright__ = "Copyright 2020, cytopy"
-__credits__ = ["Ross Burton", "Simone Cuff", "Andreas Artemiou", "Matthias Eberl"]
-__license__ = "MIT"
-__version__ = "2.0.0"
-__maintainer__ = "Ross Burton"
-__email__ = "burtonrj@cardiff.ac.uk"
-__status__ = "Production"
-
-
 class LogicleScale(mscale.ScaleBase):
     name = "logicle"
 

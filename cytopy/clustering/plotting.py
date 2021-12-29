@@ -15,9 +15,7 @@ from sklearn.metrics import silhouette_samples
 from sklearn.metrics import silhouette_score
 
 from cytopy.data.read_write import polars_to_pandas
-from cytopy.plotting.general import box_swarm_plot
-from cytopy.plotting.single_cell_plot import discrete_label
-from cytopy.plotting.single_cell_plot import discrete_palette
+from cytopy.plotting.general import box_swarm_plot, discrete_palette, discrete_label
 from cytopy.utils.dim_reduction import DimensionReduction
 
 logger = logging.getLogger(__name__)
@@ -429,7 +427,7 @@ def boxswarm_and_source_count(
     overlay_kwargs = plot_kwargs.pop("overlay_kwargs", {})
     overlay_kwargs["order"] = n_sources[x].values
     box_swarm_plot(
-        plot_df=plot_data,
+        data=plot_data,
         x=x,
         y=y,
         hue=hue,
