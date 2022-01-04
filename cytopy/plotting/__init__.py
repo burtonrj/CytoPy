@@ -36,4 +36,4 @@ __maintainer__ = "Ross Burton"
 __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
-from .general import scatterplot, density_plot
+from .general import scatterplot, density_plot, ColumnWrapFigure
