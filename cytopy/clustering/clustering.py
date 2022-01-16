@@ -70,7 +70,8 @@ import seaborn as sns
 from sklearn.cluster import AgglomerativeClustering
 
 from ..modeling.hypothesis_testing import hypothesis_test
-from ..plotting import density_plot, scatterplot
+from ..plotting import density_plot
+from ..plotting import scatterplot
 from ..plotting.general import box_swarm_plot
 from ..plotting.general import ColumnWrapFigure
 from .consensus_k import KConsensusClustering
@@ -101,6 +102,12 @@ class ClusteringError(Exception):
     def __init__(self, message: str):
         logger.error(message)
         super().__init__(message)
+
+
+def simpson_di(cluster_counts: Dict[str, int]):
+    N = sum(cluster_counts.values())
+    cluster_counts = {k: v for k, v in cluster_counts.items() if v != 0}
+    return sum((float(n) / N) ** 2 for n in cluster_counts.values())
 
 
 def remove_null_features(data: pd.DataFrame, features: Optional[List[str]] = None) -> List[str]:
@@ -568,9 +575,7 @@ class Clustering:
         )
         if subset:
             data = data.query(subset).copy()
-        return scatterplot(
-            data=data, x=f"{method}1", y=f"{method}2", label=label, discrete=discrete, **plot_kwargs
-        )
+        return scatterplot(data=data, x=f"{method}1", y=f"{method}2", label=label, discrete=discrete, **plot_kwargs)
 
     def plot_cluster_membership(
         self,
@@ -672,6 +677,30 @@ class Clustering:
             )
         return pd.concat(updated_data).reset_index(drop=True)
 
+    def simpsons_diversity_index(
+        self, groupby: str = "cluster_label", cell_identifier: str = "sample_id"
+    ) -> pd.DataFrame:
+        sdi = {}
+        for cid, df in self.data.groupby(groupby):
+            sdi[cid] = simpson_di(df[cell_identifier].value_counts().to_dict())
+        return (
+            pd.DataFrame(sdi, index=["Simpson's Diversity Index"]).T.reset_index().rename(columns={"index": "Cluster"})
+        )
+
+    def plot_simpsons_diversity_index(
+        self, groupby: str = "cluster_label", cell_identifier: str = "sample_id", **bar_plot_kwargs
+    ):
+        sdi = self.simpsons_diversity_index(groupby, cell_identifier)
+        sdi = sdi.sort_values("Simpson's Diversity Index")
+
+        bar_plot_kwargs = bar_plot_kwargs or {}
+        bar_plot_kwargs["color"] = bar_plot_kwargs.get("color", "royalblue")
+        bar_plot_kwargs["order"] = bar_plot_kwargs.get("order", sdi.Cluster.values)
+
+        ax = sns.barplot(data=sdi, x="Cluster", y="Simpson's Diversity Index", **bar_plot_kwargs)
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
+        return ax
+
     def cluster_proportions(
         self,
         label: str = "cluster_label",
@@ -682,19 +711,21 @@ class Clustering:
         replace_null_population: float = 0.01,
         y_label: str = "Percentage",
         subset: Optional[str] = None,
+        return_data: bool = False,
         **plot_kwargs,
     ):
         data = self.data.copy()
         if subset:
             data = data.query(subset).copy()
-        if filter_clusters:
-            data = data[data[label].isin(filter_clusters)]
         x = data.groupby("sample_id")[label].value_counts()
         x.name = "Count"
         x = x.reset_index()
         plot_data = x.groupby("sample_id").apply(self._count_to_proportion).reset_index()
         plot_data = self._fill_null_clusters(data=plot_data, label=label)
         plot_data.rename(columns={"Percentage": y_label}, inplace=True)
+
+        if filter_clusters:
+            plot_data = plot_data[plot_data[label].isin(filter_clusters)]
 
         if hue:
             colour_mapping = self.data[["sample_id", hue]].drop_duplicates()
@@ -708,9 +739,14 @@ class Clustering:
 
         if plot_source_count:
             plot_data["n_sources"] = plot_data[label].map(self._n_sources)
-            return boxswarm_and_source_count(plot_data=plot_data, x=label, y=y_label, hue=hue, **plot_kwargs)
+            ax = boxswarm_and_source_count(plot_data=plot_data, x=label, y=y_label, hue=hue, **plot_kwargs)
+            if return_data:
+                return ax, plot_data
+            return ax
 
         ax = box_swarm_plot(data=plot_data, x=label, y=y_label, hue=hue, **plot_kwargs)
+        if return_data:
+            return ax, plot_data
         return ax
 
     def cluster_proportion_stats(

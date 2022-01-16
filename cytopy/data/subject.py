@@ -162,7 +162,7 @@ class Subject(mongoengine.DynamicDocument):
             return skew(np.array([float(x) for x in node]))
         raise ValueError("Invalid value fo summary method, should be one of: mean, median, std, kurtosis, or skew")
 
-    def lookup_var(self, key: Union[str, List[str]], summary: str = "mean") -> Union[str, float, np.nan]:
+    def lookup_var(self, key: Union[str, List[str]], summary: str = "mean") -> Union[str, float, None]:
         """
         Lookup a variable and return the value. Provide either the name of the field of interest, or
         provide a list of keys to navigate to the required field. For example, if the Subject had the following
@@ -248,7 +248,7 @@ def safe_search(subject_id: str) -> Union[Subject, None]:
         return None
 
 
-def lookup_variable(subject_id: str, key: Union[str, List[str]], **kwargs) -> Union[str, float, np.nan]:
+def lookup_variable(subject_id: str, key: Union[str, List[str]], **kwargs) -> Union[str, float, None]:
     """
     Lookup a variable in a Subject by the subject ID. See Subject.lookup_var for details.
 
@@ -273,10 +273,7 @@ def lookup_variable(subject_id: str, key: Union[str, List[str]], **kwargs) -> Un
 
 
 def add_meta_labels(
-        data: Union[pd.DataFrame, pl.DataFrame],
-        key: Union[str, List[str]],
-        column_name: str,
-        **kwargs
+    data: Union[pd.DataFrame, pl.DataFrame], key: Union[str, List[str]], column_name: str, **kwargs
 ) -> pd.DataFrame:
     """
     Given a DataFrame with the column 'subject_id', iterate over the subject identifiers, load the

@@ -24,8 +24,11 @@ import numpy as np
 import pandas as pd
 import pingouin as pg
 import seaborn as sns
+import skrebate
 from mlxtend.evaluate import permutation_test
+from rfpimp import feature_dependence_matrix
 from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import StandardScaler
 
 from ..feedback import progress_bar
@@ -178,6 +181,7 @@ class FeatureSpace:
         dataset: str = "original",
         subset: Optional[str] = None,
         subset_features: Optional[List[str]] = None,
+        drop_subset_features: bool = True,
         **kwargs,
     ) -> Union[pd.DataFrame, List[pd.DataFrame]]:
         if isinstance(features, str):
@@ -191,7 +195,7 @@ class FeatureSpace:
         if subset:
             if subset_features is None:
                 raise ValueError("Must provide a list of features to subset on")
-            features = features + subset_features
+            features = list(set(features + subset_features))
         if sheets:
             data = [df.copy() for sheet_name, df in self.data.items() if sheet_name in sheets]
             features = [x for x in features if not any([x in self.sheet_features[s] for s in sheets])]
@@ -211,7 +215,8 @@ class FeatureSpace:
             data = data[0]
         if subset:
             data = data.query(subset, **kwargs).copy()
-            data.drop(subset_features, axis=1, inplace=True)
+            if drop_subset_features:
+                data.drop(subset_features, axis=1, inplace=True)
         if dataset == "original":
             return data
         if dataset == "train":
@@ -450,6 +455,18 @@ class FeatureSpace:
         data["corrected_pval"] = pg.multicomp(pvals=data["pval"], method=multicomp_method, alpha=multicomp_alpha)[1]
         return data
 
+    @staticmethod
+    def _matrix_plot_defaults(**kwargs):
+        kwargs = kwargs or {}
+        kwargs["vmin"] = kwargs.get("vmin", -1)
+        kwargs["vmax"] = kwargs.get("vmax", 1)
+        kwargs["figsize"] = kwargs.get("figsize", (8.5, 8.5))
+        kwargs["cmap"] = kwargs.get("cmap", "RdBu_r")
+        kwargs["cbar_pos"] = kwargs.get("cbar_pos", (0.85, 1, 0.1, 0.025))
+        kwargs["cbar_kws"] = kwargs.get("cbar_kws", {"orientation": "horizontal"})
+        kwargs["dendrogram_ratio"] = kwargs.get("dendrogram_ratio", 0.05)
+        return kwargs
+
     def correlation_matrix(
         self,
         features: List[str],
@@ -459,14 +476,7 @@ class FeatureSpace:
         **kwargs,
     ) -> sns.FacetGrid:
         data = self.as_dataframe(features=features, subset=subset, subset_features=subset_features)
-        kwargs = kwargs or {}
-        kwargs["vmin"] = kwargs.get("vmin", -1)
-        kwargs["vmax"] = kwargs.get("vmax", 1)
-        kwargs["figsize"] = kwargs.get("figsize", (8.5, 8.5))
-        kwargs["cmap"] = kwargs.get("cmap", "RdBu_r")
-        kwargs["cbar_pos"] = kwargs.get("cbar_pos", (0.85, 1, 0.1, 0.025))
-        kwargs["cbar_kws"] = kwargs.get("cbar_kws", {"orientation": "horizontal"})
-        kwargs["dendrogram_ratio"] = kwargs.get("dendrogram_ratio", 0.05)
+        kwargs = self._matrix_plot_defaults(**kwargs)
         return sns.clustermap(data.corr(method=method), **kwargs)
 
     def vif(
@@ -483,6 +493,22 @@ class FeatureSpace:
             lr = pg.linear_regression(x, y, **kwargs)
             vif.append({"feature": f, "VIF": 1 / (1 - lr.loc[1]["adj_r2"])})
         return pd.DataFrame(vif)
+
+    def rf_feature_dependence_matrix(
+        self,
+        features: List[str],
+        n_samples: int = -1,
+        plot_kwargs: Optional[Dict] = None,
+        subset: Optional[str] = None,
+        subset_features: Optional[List[str]] = None,
+        **kwargs,
+    ) -> sns.FacetGrid:
+        plot_kwargs = plot_kwargs or {}
+        plot_kwargs["vmin"] = plot_kwargs.get("vmin", 0)
+        plot_kwargs["vmax"] = plot_kwargs.get("vmin", 1)
+        plot_kwargs = self._matrix_plot_defaults(**plot_kwargs)
+        data = self.as_dataframe(features=features, subset=subset, subset_features=subset_features)
+        return sns.clustermap(feature_dependence_matrix(data, n_samples=n_samples, **kwargs), **plot_kwargs)
 
     def high_correlates(
         self,
@@ -568,19 +594,81 @@ class FeatureSpace:
     ):
         missing = self.percentage_missing_data(features=features, subset=subset, subset_features=subset_features)
         drop = missing[missing["% missing"] > threshold]["feature"].values
-        return self.drop(key=drop, axis=1)
+        for x in drop:
+            sheet_name = self.lookup_sheet_name(x)
+            self.drop(sheet_name=sheet_name, key=x, axis=1)
+        return self
 
-    def stratified_kfold(self, target: str, n_splits: int = 5, random_state: int = 42):
-        self.train_idx, self.test_idx, self.target = [], [], target
-        if target not in self.all_features:
-            raise KeyError(f"{target} is not a valid column")
-        target_sheet = self.lookup_sheet_name(column_name=target)
-        y = self.data[target_sheet][target].values
-        x = self.data[target_sheet]
-        skf = StratifiedKFold(n_splits=n_splits, random_state=random_state)
-        for train_idx, test_idx in skf.split(x, y):
-            self.train_idx.append(train_idx)
-            self.test_idx.append(test_idx)
+    def relief(
+        self,
+        target: str,
+        n_features_to_select: int,
+        discrete_threshold: int = 20,
+        n_jobs: int = -1,
+        method: str = "ReliefF",
+        features: Optional[List[str]] = None,
+        subset: Optional[str] = None,
+        subset_features: Optional[List[str]] = None,
+        return_relief_obj: bool = False,
+        **kwargs,
+    ) -> Union[Tuple[pd.DataFrame, np.ndarray, skrebate.ReliefF], Tuple[pd.DataFrame, np.ndarray]]:
+        if features is None:
+            features = [x for x in self.all_features if x != target]
+
+        drop_subset_features = target not in subset_features
+        data = self.as_dataframe(
+            features=features + [target],
+            subset=subset,
+            subset_features=subset_features,
+            drop_subset_features=drop_subset_features,
+        )
+        # Select non-numeric columns and encode
+        numeric_columns = data.select_dtypes(include=np.number).columns
+        non_numeric_columns = [x for x in features if x not in numeric_columns]
+        for col in non_numeric_columns:
+            data[col] = data[col].astype("category")
+            data[col] = data[col].cat.codes
+
+        x, y = data[features], data[target]
+        relief = {
+            "ReliefF": skrebate.ReliefF,
+            "SURF": skrebate.SURF,
+            "SURF*": skrebate.SURFstar,
+            "MultiSURF": skrebate.MultiSURF,
+            "MultiSURF*": skrebate.MultiSURFstar,
+            "TuRF": skrebate.TuRF,
+        }
+        try:
+            relief = relief[method](
+                n_features_to_select=n_features_to_select,
+                discrete_threshold=discrete_threshold,
+                n_jobs=n_jobs,
+                **kwargs,
+            )
+        except KeyError:
+            logger.error(f"Unrecognised method, must be one of {relief.keys()}, defaulting to ReliefF")
+            relief = relief["ReliefF"](
+                n_features_to_select=n_features_to_select,
+                discrete_threshold=discrete_threshold,
+                n_jobs=n_jobs,
+                **kwargs,
+            )
+        relief.fit(x.values, y.values)
+        top_features = x.columns[[relief.top_features_]].values
+        if return_relief_obj:
+            return (
+                pd.DataFrame({"Features": x.columns.tolist(), "Score": relief.feature_importances_}).sort_values(
+                    "Score", ascending=False
+                ),
+                top_features,
+                relief,
+            )
+        return (
+            pd.DataFrame({"Features": x.columns.tolist(), "Score": relief.feature_importances_}).sort_values(
+                "Score", ascending=False
+            ),
+            top_features,
+        )
 
 
 class ImputedFeatureSpace:

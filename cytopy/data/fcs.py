@@ -35,11 +35,12 @@ import os
 import re
 from collections import defaultdict
 from copy import deepcopy
-from typing import Dict, Tuple
+from typing import Dict
 from typing import Generator
 from typing import Iterable
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
 import anytree
@@ -51,6 +52,7 @@ import pandas as pd
 import polars as pl
 from botocore.errorfactory import ClientError
 from pingouin import compute_effsize
+from sklearn.preprocessing import MinMaxScaler
 
 from ..gating.threshold import apply_threshold
 from ..utils.geometry import inside_polygon
@@ -107,12 +109,7 @@ def _valid_compensation_matrix_path(path: Union[str, None]):
 
 
 def effect_size(
-        x: np.ndarray,
-        y: np.ndarray,
-        eftype: str = "cohen",
-        bootstrap: bool = False,
-        sample_n: int = 1000,
-        **kwargs
+    x: np.ndarray, y: np.ndarray, eftype: str = "cohen", bootstrap: bool = False, sample_n: int = 1000, **kwargs
 ) -> Tuple[float, Union[None, float], Union[None, float]]:
     """
     Compute the effect size of 'x' relative to 'y' (assumes that 'x' is primary data and 'y' is a control).
@@ -122,9 +119,7 @@ def effect_size(
     x: Numpy.Array
     y: Numpy.Array
     eftype: str (default='cohen')
-        A valid effect size according to https://pingouin-stats.org/generated/pingouin.compute_effsize.html or
-        'fold_change' which will return:
-            Median(y)-Median(x)/Median(y)
+        A valid effect size according to https://pingouin-stats.org/generated/pingouin.compute_effsize.html
     bootstrap: bool (default=False)
         If True, estimate the effect size across n samples and return the bootstraped 95% confidence intervals
     sample_n: int (default=1000)
@@ -137,22 +132,15 @@ def effect_size(
 
     """
     if eftype.lower() == "cles" and not bootstrap:
-        logger.warning(
-            f"CLES is computationally expensive and it is recommended to perform bootstrap sampling"
-        )
+        logger.warning(f"CLES is computationally expensive and it is recommended to perform bootstrap sampling")
     if bootstrap:
         stat = []
         for i in range(100):
             xi = np.random.choice(x, size=sample_n, replace=True)
             yi = np.random.choice(y, size=sample_n, replace=True)
-            if eftype == "fold_change":
-                stat.append(np.median(yi)-np.median(xi)/np.median(yi))
-            else:
-                stat.append(compute_effsize(xi, yi, eftype=eftype, **kwargs))
+            stat.append(compute_effsize(xi, yi, eftype=eftype, **kwargs))
         stat = np.array(stat)
         return float(np.mean(stat)), np.sort(stat)[5], np.sort(stat)[95]
-    if eftype == "fold_change":
-        return np.median(y)-np.median(x)/np.median(y), None, None
     return compute_effsize(x, y, eftype=eftype, **kwargs), None, None
 
 
@@ -683,10 +671,7 @@ class FileGroup(mongoengine.Document):
         return data
 
     def population_membership_boolean_matrix(
-            self,
-            regex: Optional[str] = None,
-            population_source: Optional[str] = None,
-            data_source: str = "primary"
+        self, regex: Optional[str] = None, population_source: Optional[str] = None, data_source: str = "primary"
     ) -> pd.DataFrame:
         """
         Generates a Pandas DataFrame where each row is an event within the single cell data and the columns
@@ -718,10 +703,7 @@ class FileGroup(mongoengine.Document):
         return data
 
     def population_membership_mapping(
-        self,
-        regex: Optional[str] = None,
-        population_source: Optional[str] = None,
-        data_source: str = "primary"
+        self, regex: Optional[str] = None, population_source: Optional[str] = None, data_source: str = "primary"
     ) -> Dict[int, Iterable[str]]:
         """
         Search the populations and create a dictionary where each key is the index of an event and the values are
@@ -859,9 +841,7 @@ class FileGroup(mongoengine.Document):
             logger.debug(f"Deleting population(s) {populations} in {self.primary_id}; {data_source}; {self.id}")
             assert isinstance(populations, list), "Provide a list of population names for removal"
             assert "root" not in populations, "Cannot delete root population"
-            downstream_effects = [
-                self.list_downstream_populations(p, data_source=data_source) for p in populations
-            ]
+            downstream_effects = [self.list_downstream_populations(p, data_source=data_source) for p in populations]
             downstream_effects = set([x for sl in downstream_effects for x in sl])
             if len(downstream_effects) > 0:
                 logger.warning(
@@ -1091,6 +1071,78 @@ class FileGroup(mongoengine.Document):
                 logger.debug(f"{population} not present in {self.primary_id} FileGroup")
             return {"population_name": population, "n": 0, "frac_of_parent": 0, "frac_of_root": 0, "n_sources": None}
 
+    def control_fold_change(
+        self,
+        population: List[str],
+        ctrl: List[str],
+        feature: List[str],
+        transform: str = "asinh",
+        transform_kwargs: Optional[Dict] = None,
+    ) -> pd.DataFrame:
+        """
+        Compute the fold change between the MFI of a channel in the primary staining
+        compared to some control for a chosen population. Population, control, and feature
+        to use should be provided as lists of equal length, these lists are then paired.
+        Returns a Pandas DataFrame with the columns: population, feature, ctrl, fold_change
+        and sample_id.
+
+        Parameters
+        ----------
+        population: List[str]
+            List of populations to compute fold change for, must be present in both
+            primary and control, and contain more than 3 events for both. Will log error
+            and exclude pairing if not.
+        ctrl: List[str]
+            List of control data to compute fold change for
+        feature: List[str]
+            List of channels to compute fold change for
+        transform: str (default='asinh')
+            How to transform data prior to computation. Values will be additionally scaled
+            between 0 and 1 prior to computing fold change to handle negative values
+        transform_kwargs: Optional[Dict]
+            Additional keyword arguments passed to transform
+
+        Returns
+        -------
+        Pandas.DataFrame
+        """
+        if len(population) != len(ctrl) != len(feature):
+            raise ValueError("'population', 'ctrl' and 'feature' must contain equal number of elements")
+        transform_kwargs = transform_kwargs or {}
+        results = {"population": [], "feature": [], "ctrl": [], "fold_change": []}
+        for pop, ct, f in zip(population, ctrl, feature):
+            try:
+                primary_data = self.load_population_df(
+                    population=pop, transform=transform, transform_kwargs=transform_kwargs, data_source="primary"
+                )[f].values
+                ctrl_data = self.load_population_df(
+                    population=pop, transform=transform, transform_kwargs=transform_kwargs, data_source=ct
+                )[f].values
+            except EmptyPopulationError:
+                logger.error(f"Insufficient events for population {pop} when comparing to control {ct}")
+                continue
+            except MissingPopulationError:
+                logger.error(f"{pop} does not exist for {self.primary_id}")
+                continue
+            except KeyError:
+                logger.error(f"{ct} control does not exist for {self.primary_id}")
+                continue
+
+            if len(primary_data) < 3 or len(ctrl_data) < 3:
+                logger.error(f"Insufficient events for population {pop} when comparing to control {ct}")
+                continue
+
+            # Scale data between 0 and 1 to handle negative values
+            scaled = MinMaxScaler().fit_transform(np.concatenate([primary_data, ctrl_data]).reshape(-1, 1)).reshape(-1)
+            primary_data, ctrl_data = (scaled[: len(primary_data)], scaled[len(primary_data) :])
+            results["population"].append(pop)
+            results["feature"].append(f)
+            results["ctrl"].append(ct)
+            results["fold_change"].append((np.median(primary_data) - np.median(ctrl_data)) / np.median(ctrl_data))
+        results = pd.DataFrame(results)
+        results["sample_id"] = self.primary_id
+        return results
+
     def control_effsize(
         self,
         population: str,
@@ -1107,9 +1159,6 @@ class FileGroup(mongoengine.Document):
         See https://pingouin-stats.org/generated/pingouin.compute_effsize.html for valid methods that can be used for
         effect size.
 
-        If eftype = "fold_change", the effect size will simply be:
-            Median(Control) - Median(Primary)/Median(Control)
-
         Parameters
         ----------
         population: str
@@ -1120,8 +1169,7 @@ class FileGroup(mongoengine.Document):
             The name of the channel to compare between the primary stain and control
         eftype: str (default='cohen')
             The effect size method to use. Can be any valid method according to
-            https://pingouin-stats.org/generated/pingouin.compute_effsize.html or
-            'fold_change'.
+            https://pingouin-stats.org/generated/pingouin.compute_effsize.html
         transform: str (default='asinh')
         transform_kwargs: dict, optional
             Additional keyword arguments passed to transform method
@@ -1278,7 +1326,7 @@ def copy_populations_to_controls_using_geoms(filegroup: FileGroup, ctrl: str, fl
         stats["Population"].append(pop.population_name)
         stats["% of parent (primary)"].append(primary_prop)
         stats["% of parent (ctrl)"].append(ctrl_prop)
-        fold_diff = (primary_prop - ctrl_prop)/primary_prop
+        fold_diff = (primary_prop - ctrl_prop) / primary_prop
         stats["Fold difference"] = fold_diff
         stats["Flag"] = fold_diff > flag
     return filegroup, pd.DataFrame(stats)

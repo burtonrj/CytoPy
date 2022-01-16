@@ -24,20 +24,20 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
-from typing import Any, Optional, Dict, Union, Tuple
+import logging
+from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
+from typing import Union
 
-import matplotlib.pyplot as plt
-import logging
 import numpy as np
 import pandas as pd
 import polars as pl
 import seaborn as sns
-from matplotlib import pyplot as plt, colors as cm
+from matplotlib import colors as cm
+from matplotlib import pyplot as plt
 from matplotlib.cm import ScalarMappable
 
 from cytopy.data.read_write import polars_to_pandas
@@ -66,6 +66,7 @@ class ColumnWrapFigure(plt.Figure):
     kwargs: optional
         Additional keyword arguments passed to Matplotlib.Figure
     """
+
     def __init__(self, n: int, col_wrap: int, figsize: Optional[Tuple[float, float]] = None, *args, **kwargs):
         rows = n // col_wrap
         rows += n % col_wrap
