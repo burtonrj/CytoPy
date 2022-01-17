@@ -81,6 +81,10 @@ class Subject(mongoengine.DynamicDocument):
     def fields(self, _):
         raise ValueError("Fields is read only, access individual fields to edit values.")
 
+    def __repr__(self):
+        txt = "\n".join([f"Subject(subject_id={self.subject_id}) with the fields:"] + [f"- {x}" for x in self.fields])
+        return txt
+
     def to_dict(self, *args, **kwargs) -> Dict:
         """
         Convert the document to a python dictionary, any additional arguments passed to mongoengine to_json function.
@@ -202,7 +206,7 @@ class Subject(mongoengine.DynamicDocument):
             for i, k in enumerate(key[1:]):
                 if isinstance(node, BaseList):
                     if len(node) == 0:
-                        return None
+                        return np.nan
                     if len(node) == 1:
                         node = node[0]
                         node = node[k]
