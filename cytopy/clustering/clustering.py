@@ -53,6 +53,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import logging
 import math
 from collections import defaultdict
+from functools import partial
 from typing import Callable
 from typing import Dict
 from typing import Iterable
@@ -78,6 +79,8 @@ from .consensus_k import KConsensusClustering
 from .flowgrid import FlowGrid
 from .flowsom import FlowSOM
 from .latent import LatentClustering
+from .latent import UMAPClustering
+from .leiden import Leiden
 from .metrics import init_internal_metrics
 from .metrics import InternalMetric
 from .parc import PARC
@@ -102,6 +105,10 @@ class ClusteringError(Exception):
     def __init__(self, message: str):
         logger.error(message)
         super().__init__(message)
+
+
+class NoCache(Exception):
+    pass
 
 
 def simpson_di(cluster_counts: Dict[str, int]):
@@ -277,8 +284,12 @@ def init_cluster_method(
         method = ClusterMethod(klass=CytoSPADE, params=kwargs, verbose=verbose)
     elif method == "latent":
         method = ClusterMethod(klass=LatentClustering, params=kwargs, verbose=verbose)
+    elif method == "umap":
+        method = ClusterMethod(klass=UMAPClustering, params=kwargs, verbose=verbose)
     elif method == "parc":
         method = ClusterMethod(klass=PARC, params=kwargs, verbose=verbose)
+    elif method == "leiden":
+        method = ClusterMethod(klass=Leiden, params=kwargs, verbose=verbose)
     elif isinstance(method, str):
         valid_str_methods = ["phenograph", "flowsom", "spade", "latent", "consensus", "parc"]
         raise ValueError(f"If a string is given must be one of {valid_str_methods}")
@@ -307,16 +318,30 @@ class Clustering:
         n_sources: Optional[Dict] = None,
     ):
         np.random.seed(random_state)
-        self.experiment = experiment
-        self.verbose = verbose
-        self.features = features
-        self.transform = transform
-        self.transform_kwargs = transform_kwargs
-        self.root_population = root_population
-        self.sample_ids = sample_ids
-        self.data = data
-        self._embedding_cache = None
-        self._n_sources = n_sources or {}
+        self.experiment: Experiment = experiment
+        self.verbose: bool = verbose
+        self.features: List[str] = features
+        self.transform: str = transform
+        self.transform_kwargs: Dict = transform_kwargs
+        self.root_population: str = root_population
+        self.sample_ids: Optional[List[str]] = sample_ids
+        self.data: pd.DataFrame = data
+        self._n_sources: Dict = n_sources or {}
+        self.__embedding_cache: Union[pd.DataFrame, None] = None
+
+    @property
+    def embedding_cache(self):
+        if self.__embedding_cache is None:
+            raise NoCache
+        self.__embedding_cache.drop(["cluster_label", "meta_label"], axis=1, inplace=True)
+        self.__embedding_cache = self.__embedding_cache.merge(
+            self.data[["sample_id", "cluster_label", "meta_label"]].drop_duplicates(), on="sample_id", how="left"
+        )
+        return self.__embedding_cache
+
+    @embedding_cache.setter
+    def embedding_cache(self, data: pd.DataFrame):
+        self.__embedding_cache = data
 
     @classmethod
     def from_experiment(
@@ -493,6 +518,82 @@ class Clustering:
                 logger.error(f"Failed to load meta variable for {_id}")
                 logger.exception(e)
 
+    def _update_embedding_cache(self, method: str, **dim_reduction_kwargs):
+        reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
+        self.embedding_cache = reducer.fit_transform(data=self.embedding_cache, features=self.features)
+
+    def _downsampled_data_for_dimension_reduction(
+        self,
+        n: int,
+        sample_id: Optional[str] = None,
+        replace: bool = False,
+        weights: Optional[Iterable] = None,
+        random_state: int = 42,
+    ):
+        if sample_id:
+            data = self.data[self.data.sample_id == sample_id].copy()
+            if data.shape[0] > n:
+                data = data.sample(n)
+        else:
+            data = self.data.groupby("sample_id").sample(
+                n=n, replace=replace, weights=weights, random_state=random_state
+            )
+        return data
+
+    def _dimension_reduction_with_sample(
+        self,
+        n: int,
+        method: str,
+        sample_id: Optional[str] = None,
+        replace: bool = False,
+        weights: Optional[Iterable] = None,
+        random_state: int = 42,
+        **dim_reduction_kwargs,
+    ):
+        reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
+        data = self._downsampled_data_for_dimension_reduction(
+            n=n, sample_id=sample_id, replace=replace, weights=weights, random_state=random_state
+        )
+        self.embedding_cache = reducer.fit_transform(data=data, features=self.features)
+        return self.embedding_cache
+
+    def _dimension_reduction_all_data(
+        self,
+        method: str,
+        n: Optional[int],
+        sample_id: Optional[str] = None,
+        replace: bool = False,
+        weights: Optional[Iterable] = None,
+        random_state: int = 42,
+        **dim_reduction_kwargs,
+    ):
+        reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
+        if n is None:
+            if sample_id:
+                data = self.data[self.data.sample_id == sample_id].copy()
+            else:
+                data = self.data.copy()
+            if data.shape[0] > 500000:
+                logger.warning(
+                    "Predicting embeddings for greater than 500k data points can be computationally "
+                    "expensive and can take a long time to computer. Consider computing embeddings "
+                    "on a sample of data."
+                )
+            self.embedding_cache = reducer.fit_transform(data=data, features=self.features)
+            return self.embedding_cache
+        if method != "UMAP":
+            logger.warning(
+                "Training embeddings on sample for predictions on complete data is only "
+                "supported for UMAP and is experimental for other methods. "
+                "Interpret results with caution."
+            )
+        training_data = self._downsampled_data_for_dimension_reduction(
+            n=n, sample_id=sample_id, replace=replace, weights=weights, random_state=random_state
+        )
+        reducer.fit(data=training_data, features=self.features)
+        self.embedding_cache = reducer.transform(data=self.data, features=self.features)
+        return self.embedding_cache
+
     def dimension_reduction(
         self,
         n: Optional[int] = 1000,
@@ -502,39 +603,51 @@ class Clustering:
         replace: bool = False,
         weights: Optional[Iterable] = None,
         random_state: int = 42,
+        predict_all_data: bool = False,
         **dim_reduction_kwargs,
     ):
-        reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
-        if sample_id and self._embedding_cache is not None:
-            if self._embedding_cache.sample_id.nunique() > 1:
-                # Embedding previously captures multiple samples
-                overwrite_cache = True
-            elif self.data.sample_id.unique()[0] != sample_id:
-                # Embedding previously captures another sample
-                overwrite_cache = True
-        if self._embedding_cache is not None and not overwrite_cache:
-            if f"{method}1" not in self._embedding_cache.columns:
-                self._embedding_cache = reducer.fit_transform(data=self._embedding_cache, features=self.features)
-            else:
-                return self._embedding_cache
-        if overwrite_cache or self._embedding_cache is None:
-            data = self.data.copy()
-            if sample_id:
-                data = data[data.sample_id == sample_id]
-                if self.data.shape[0] > n:
-                    data = self.data.sample(n)
-            elif n is not None:
-                data = data.groupby("sample_id").sample(
-                    n=n, replace=replace, weights=weights, random_state=random_state
-                )
-            self._embedding_cache = reducer.fit_transform(data=data, features=self.features)
-        if sample_id:
-            self._embedding_cache["cluster_label"] = self.data[self.data.sample_id == sample_id]["cluster_label"]
-            self._embedding_cache["meta_label"] = self.data[self.data.sample_id == sample_id]["meta_label"]
+        if predict_all_data:
+            reduction_func = partial(
+                self._dimension_reduction_all_data,
+                n=n,
+                method=method,
+                sample_id=sample_id,
+                replace=replace,
+                weights=weights,
+                random_state=random_state,
+                **dim_reduction_kwargs,
+            )
         else:
-            self._embedding_cache["cluster_label"] = self.data["cluster_label"]
-            self._embedding_cache["meta_label"] = self.data["meta_label"]
-        return self._embedding_cache
+            if n is None:
+                raise ValueError("Must provide 'n' if predict_all_data is False")
+            reduction_func = partial(
+                self._dimension_reduction_with_sample,
+                n=n,
+                method=method,
+                sample_id=sample_id,
+                replace=replace,
+                weights=weights,
+                random_state=random_state,
+                **dim_reduction_kwargs,
+            )
+        try:
+            if sample_id:
+                if (self.embedding_cache.sample_id.nunique() > 1) or (
+                    self.embedding_cache.iloc[0]["sample_id"] != sample_id
+                ):
+                    return reduction_func()
+                if n:
+                    if self.embedding_cache.shape[0] != n:
+                        return reduction_func()
+            if overwrite_cache:
+                return reduction_func()
+            if n and self.embedding_cache.shape[0] != (n * self.data.sample_id.nunique()):
+                return reduction_func()
+            if predict_all_data and self.embedding_cache.shape[0] != self.data.shape[0]:
+                return reduction_func()
+            return self.embedding_cache
+        except NoCache:
+            return reduction_func()
 
     def plot_density(
         self,

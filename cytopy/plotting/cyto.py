@@ -26,7 +26,6 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
 import logging
 from itertools import cycle
 from typing import Dict
@@ -47,7 +46,8 @@ from cytopy.data import FileGroup
 from cytopy.data import Population
 from cytopy.gating.base import Child
 from cytopy.gating.base import Gate
-from cytopy.gating.threshold import ThresholdBase, ThresholdGate
+from cytopy.gating.threshold import ThresholdBase
+from cytopy.gating.threshold import ThresholdGate
 from cytopy.plotting.asinh_transform import *
 from cytopy.plotting.hlog_transform import *
 from cytopy.plotting.logicle_transform import *
@@ -117,6 +117,8 @@ def _hist2d_bins(
     transform_x_kwargs: Optional[Dict],
     transform_y: Optional[str],
     transform_y_kwargs: Optional[Dict],
+    xlim: Optional[Tuple[float, float]] = None,
+    ylim: Optional[Tuple[float, float]] = None,
 ) -> List[np.ndarray]:
     """
     Calculate bins and edges for 2D histogram
@@ -136,7 +138,18 @@ def _hist2d_bins(
     List[Numpy.Array]
     """
     nbins = bins or int(np.sqrt(x.shape[0]))
-    xlim, ylim = _hist2d_axis_limits(x, y)
+    if xlim is not None:
+        if ylim is not None:
+            xlim, ylim = (
+                pd.DataFrame({"Min": [xlim[0]], "Max": [xlim[1]]}),
+                pd.DataFrame({"Min": [ylim[0]], "Max": [ylim[1]]}),
+            )
+        else:
+            xlim, ylim = (pd.DataFrame({"Min": [xlim[0]], "Max": [xlim[1]]}), _hist2d_axis_limits(x, y)[1])
+    elif ylim is not None:
+        xlim, ylim = (_hist2d_axis_limits(x, y)[0], pd.DataFrame({"Min": [ylim[0]], "Max": [ylim[1]]}))
+    else:
+        xlim, ylim = _hist2d_axis_limits(x, y)
     bins = []
     for lim, transform_method, transform_kwargs in zip(
         [xlim, ylim], [transform_x, transform_y], [transform_x_kwargs, transform_y_kwargs]
@@ -200,6 +213,8 @@ def hist2d(
     ax: plt.Axes,
     bins: Optional[int],
     cmap: str,
+    xlim: Optional[Tuple[float, float]] = None,
+    ylim: Optional[Tuple[float, float]] = None,
     **kwargs,
 ) -> None:
     """
@@ -225,6 +240,10 @@ def hist2d(
     bins: int, optional
         Number of bins to use, if not given defaults to square root of the number of observations
     cmap: str (default='jet')
+    xlim: Tuple[float, float], optional
+        Limit the x-axis between this range
+    ylim: Tuple[float, float], optional
+        Limit the y-axis between this range
     kwargs: optional
         Additional keyword arguments passed to Matplotlib.hist2d
 
@@ -240,6 +259,8 @@ def hist2d(
         transform_y=transform_y,
         transform_x_kwargs=transform_x_kwargs,
         transform_y_kwargs=transform_y_kwargs,
+        xlim=xlim,
+        ylim=ylim,
     )
     ax.hist2d(data[x].values, data[y].values, bins=[xbins, ybins], norm=LogNorm(), cmap=cmap, **kwargs)
 
@@ -330,6 +351,8 @@ def cyto_plot(
                 ax=ax,
                 bins=bins,
                 cmap=cmap,
+                xlim=xlim,
+                ylim=ylim,
             )
         elif kind == "scatter":
             assert y, "No y-axis variable provided"
@@ -610,7 +633,7 @@ def _plot_polygons(geom_objs: Union[List[Population], List[Child]], ax: plt.Axes
             name = g.population_name
         else:
             name = g.name
-        ax.plot(x_values, y_values, "-k", c=next(colours), lw=2.5, label=name)
+        ax.plot(x_values, y_values, c=next(colours), lw=2.5, label=name)
     _default_legend(ax=ax, **legend_kwargs)
 
 
@@ -668,6 +691,14 @@ def _plot_ctrl_gate_1d(
         np.max([np.max(primary_data), np.max(ctrl_data)]) + 0.01,
         1000,
     )
+    y = FFTKDE(kernel=kwargs.get("kernel", "gaussian"), bw=kwargs.get("bw", "ISJ")).fit(ctrl_data).evaluate(x)
+    lw = kwargs.get("linewidth", 2)
+    color = kwargs.get("ctrl_linecolor", "black")
+    fill = kwargs.get("ctrl_fill", "#1F77B4")
+    alpha = kwargs.get("alpha", 0.5)
+    ax.plot(x, y, linewidth=lw, color=color)
+    ax.fill_between(x, y, color=fill, alpha=alpha)
+
     y = FFTKDE(kernel=kwargs.get("kernel", "gaussian"), bw=kwargs.get("bw", "ISJ")).fit(primary_data).evaluate(x)
     lw = kwargs.get("linewidth", 2)
     color = kwargs.get("linecolor", "black")
@@ -712,7 +743,9 @@ def plot_ctrl_gate_1d(
     Matplotlib.Axes
     """
     try:
-        assert isinstance(gate, ThresholdBase), "plot_ctrl_gate expects a threshold-like gate with 'ctrl' attribute defined."
+        assert isinstance(
+            gate, ThresholdBase
+        ), "plot_ctrl_gate expects a threshold-like gate with 'ctrl' attribute defined."
         assert gate.ctrl, "plot_ctrl_gate expects a threshold-like gate with 'ctrl' attribute defined."
         primary_data = filegroup.load_population_df(population=gate.parent, transform=None, data_source="primary")
         ctrl_data = filegroup.load_population_df(population=gate.parent, transform=None, data_source=gate.ctrl)

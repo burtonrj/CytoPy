@@ -110,6 +110,7 @@ def box_swarm_plot(
     figsize: Tuple[int, int] = (5, 5),
     overlay: bool = True,
     order: Optional[List[str]] = None,
+    hue_order: Optional[List[str]] = None,
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None,
     xticklabels: Optional[List[Any]] = None,
@@ -141,6 +142,8 @@ def box_swarm_plot(
         If True, swarmplot generated overlaying the boxplot
     order: List[str], optional
         If provided, will specify the order of the x-axis values
+    hue_order: List[str], optional
+        If provided, will specify the hue order
     xlabel: str, optional
     ylabel: str, optional
     xticklabels: List[Any], optional
@@ -161,6 +164,9 @@ def box_swarm_plot(
     if order:
         boxplot_kwargs["order"] = boxplot_kwargs.get("order", order)
         overlay_kwargs["order"] = overlay_kwargs.get("order", order)
+    if hue_order:
+        boxplot_kwargs["hue_order"] = boxplot_kwargs.get("hue_order", hue_order)
+        overlay_kwargs["hue_order"] = overlay_kwargs.get("hue_order", hue_order)
     ax = ax if ax is not None else plt.subplots(figsize=figsize)[1]
     sns.boxplot(
         data=data,

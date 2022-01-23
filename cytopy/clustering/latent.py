@@ -1,12 +1,12 @@
 import logging
 from typing import Dict
 from typing import Optional
-from typing import Union
 
 import pandas as pd
 from hdbscan import HDBSCAN
 from sklearn.base import ClusterMixin
 from sklearn.cluster import KMeans
+from sklearn.cluster import MiniBatchKMeans
 
 from cytopy.clustering.consensus_k import KConsensusClustering
 from cytopy.utils import DimensionReduction
@@ -15,6 +15,33 @@ from cytopy.utils.sampling import uniform_downsampling
 from cytopy.utils.sampling import upsample_knn
 
 logger = logging.getLogger(__name__)
+
+
+class UMAPClustering:
+    def __init__(
+        self,
+        clustering_method: Optional[type] = None,
+        train_n: int = 10000,
+        umap_params: Optional[Dict] = None,
+        **clustering_params,
+    ):
+        self.train_n = train_n
+
+        if clustering_method is None:
+            self.cluster_model = MiniBatchKMeans(**clustering_params)
+        else:
+            self.cluster_model = clustering_method(**clustering_params)
+        umap_params = umap_params or {}
+        self.umap = DimensionReduction(method="UMAP", **umap_params)
+
+    def fit_predict(self, data: pd.DataFrame):
+        logger.info("Fitting UMAP embeddings on training data")
+        self.umap.fit(data=data.sample(n=self.train_n), features=data.columns.tolist())
+        logger.info("Predicting embeddings for all data")
+        data = self.umap.transform(data=data.copy(), features=data.columns.tolist())
+        features = [x for x in data.columns if "UMAP" in x]
+        logger.info("Clustering")
+        return self.cluster_model.fit_predict(data[features].values)
 
 
 class LatentClustering:

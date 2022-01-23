@@ -118,10 +118,10 @@ class Subject(mongoengine.DynamicDocument):
         Union[Panda.DataFrame, None]
             If the field is empty, will return None
         """
-        if len(self.__getitem__(field)) == 0:
-            logger.warning(f"filed '{field}' is empty")
-            return None
         try:
+            if len(self[field]) == 0:
+                logger.warning(f"filed '{field}' is empty")
+                return None
             return pd.DataFrame(self.to_dict()[field], **kwargs)
         except KeyError:
             logger.error(f"{field} is not a recognised field")

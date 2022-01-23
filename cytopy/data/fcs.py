@@ -194,6 +194,20 @@ class FileGroup(mongoengine.Document):
         assert "primary" in self.file_paths.keys(), f"'primary' missing from file_paths"
         if self.id:
             for key in self.file_paths.keys():
+                if "root" not in self.list_populations(data_source=key):
+                    data = self.data(source=key)
+                    pop = Population(
+                        population_name="root",
+                        n=data.shape[0],
+                        parent="root",
+                        source="root",
+                        data_source=key,
+                        prop_of_parent=1.0,
+                        prop_of_total=1.0,
+                    )
+                    pop.index = data.Index.to_list()
+                    self.populations.append(pop)
+                    self.save()
                 try:
                     self.tree[key] = construct_tree(populations=[p for p in self.populations if p.data_source == key])
                 except AssertionError:
@@ -259,6 +273,17 @@ class FileGroup(mongoengine.Document):
                     )
                     logger.error(err)
                     raise ValueError(err)
+
+    @property
+    def controls(self) -> List[str]:
+        """
+        List all data sources other than the 'primary' i.e. controls
+
+        Returns
+        -------
+        List[str]
+        """
+        return list([k for k in self.file_paths.keys() if k != "primary"])
 
     def _load_data(self, source: str) -> pl.DataFrame:
         """
@@ -833,6 +858,8 @@ class FileGroup(mongoengine.Document):
         if populations == "all":
             logger.debug(f"Deleting all populations in {self.primary_id}; {data_source}; {self.id}")
             for pop_name in self.list_populations(data_source=data_source):
+                if pop_name == "root":
+                    continue
                 self.tree[data_source][pop_name].parent = None
                 self.populations.filter(population_name=pop_name, data_source=data_source).delete()
             self.tree[data_source] = {name: node for name, node in self.tree[data_source].items() if name == "root"}
@@ -1069,7 +1096,13 @@ class FileGroup(mongoengine.Document):
         except MissingPopulationError:
             if warn_missing:
                 logger.debug(f"{population} not present in {self.primary_id} FileGroup")
-            return {"population_name": population, "n": 0, "frac_of_parent": 0, "frac_of_root": 0, "n_sources": None}
+            return {
+                "population_name": population,
+                "n": None,
+                "frac_of_parent": None,
+                "frac_of_root": None,
+                "n_sources": None,
+            }
 
     def control_fold_change(
         self,
@@ -1249,7 +1282,7 @@ def population_stats(filegroup: FileGroup) -> pd.DataFrame:
     return pd.DataFrame([filegroup.population_stats(p) for p in list(filegroup.list_populations())])
 
 
-def copy_populations_to_controls_using_geoms(filegroup: FileGroup, ctrl: str, flag: float = 0.25) -> pd.DataFrame:
+def copy_populations_to_controls_using_geoms(filegroup: FileGroup, ctrl: str, flag: float = 1.5) -> pd.DataFrame:
     """
     Propagate gates in primary staining to control files, generating matching populations
     in each control. Returns a DataFrame of statistics for the new populations, including the number of events
@@ -1269,7 +1302,13 @@ def copy_populations_to_controls_using_geoms(filegroup: FileGroup, ctrl: str, fl
     """
     if ctrl not in filegroup.file_paths.keys():
         raise ValueError("Invalid ctrl, does not exist for given FileGroup")
-    stats = {"Population": [], "% of parent (primary)": [], "% of parent (ctrl)": [], "Flag": []}
+    stats = {
+        "Population": [],
+        "% of parent (primary)": [],
+        "% of parent (ctrl)": [],
+        "Fold difference": [],
+        "Flag": [],
+    }
     queue = list(filegroup.tree["primary"]["root"].children)
     while len(queue) > 0:
         next_pop = queue.pop(0)
@@ -1326,7 +1365,7 @@ def copy_populations_to_controls_using_geoms(filegroup: FileGroup, ctrl: str, fl
         stats["Population"].append(pop.population_name)
         stats["% of parent (primary)"].append(primary_prop)
         stats["% of parent (ctrl)"].append(ctrl_prop)
-        fold_diff = (primary_prop - ctrl_prop) / primary_prop
-        stats["Fold difference"] = fold_diff
-        stats["Flag"] = fold_diff > flag
+        fold_diff = (primary_prop - ctrl_prop) / ctrl_prop
+        stats["Fold difference"].append(fold_diff)
+        stats["Flag"].append(fold_diff > flag)
     return filegroup, pd.DataFrame(stats)

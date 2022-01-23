@@ -375,15 +375,16 @@ class GatingStrategy(mongoengine.Document):
                     fig = self.plot_all_gates()
                     fig.savefig(f"{plots_path}/{s}.png", facecolor="white", dpi=100)
                     plt.close(fig)
-            except DuplicatePopulationError as e:
-                logger.error(f"{s} - {str(e)}")
-            except InsufficientEventsError as e:
-                logger.error(f"{s} - {str(e)}")
-            except AssertionError as e:
-                logger.error(f"{s} - {str(e)}")
-            except ValueError as e:
-                logger.error(f"{s} - {str(e)}")
-            except OverflowError as e:
+            except (
+                AssertionError,
+                ValueError,
+                OverflowError,
+                KeyError,
+                GateError,
+                MissingPopulationError,
+                DuplicatePopulationError,
+                InsufficientEventsError,
+            ) as e:
                 logger.error(f"{s} - {str(e)}")
             finally:
                 del self.filegroup

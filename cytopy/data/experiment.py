@@ -226,19 +226,14 @@ class Experiment(mongoengine.Document):
             return [f.primary_id for f in self.fcs_files if f.valid]
         return [f.primary_id for f in self.fcs_files]
 
-    def random_filegroup(self, seed: int = 42) -> str:
+    def random_filegroup(self) -> str:
         """
         Return a random filegroup ID
-
-        Parameters
-        ----------
-        seed: int = 42
 
         Returns
         -------
         str
         """
-        np.random.seed(seed)
         return np.random.choice(self.list_samples())
 
     def remove_sample(self, sample_id: str) -> Experiment:
@@ -388,6 +383,9 @@ class Experiment(mongoengine.Document):
         frac_of_parent = []
         parent_df = df[df.population_name == parent]
         if parent_df.shape[0] == 0:
+            df[f"frac_of_{parent}"] = None
+            return df
+        if pd.isnull(parent_df["n"].values[0]):
             df[f"frac_of_{parent}"] = None
             return df
         parent_n = float(parent_df["n"].values[0])
