@@ -368,7 +368,11 @@ def scatterplot(
     cbar_kwargs = cbar_kwargs or {}
     legend_kwargs = legend_kwargs or {}
 
-    data = data[~data[[x, y, label]].isnull().any(axis=1)]
+    if label:
+        data = data[~data[[x, y, label]].isnull().any(axis=1)]
+    else:
+        data = data[~data[[x, y]].isnull().any(axis=1)]
+
     ax = ax or plt.subplots(figsize=figsize)[1]
 
     ax = sns.scatterplot(

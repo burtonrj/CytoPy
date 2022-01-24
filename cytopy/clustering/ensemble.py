@@ -97,6 +97,7 @@ class EnsembleClustering(Clustering):
         for cluster in self.clusters:
             prefix = cluster.split("_")[0]
             self.cluster_groups[prefix].append(cluster)
+        self.data = self.data[self.data[self.clusters].sum(axis=1) > 0]
 
     def _reconstruct_labels(self, encoded: bool = False):
         labels = {}
@@ -108,7 +109,7 @@ class EnsembleClustering(Clustering):
 
     def _check_for_cluster_parents(self):
         for prefix, clusters in self.cluster_groups.items():
-            if not (self.data[clusters].sum(axis=1) == 1).all():
+            if not (self.data[clusters].sum(axis=1) < 2).all():
                 logger.warning(
                     f"Some observations are assigned to multiple clusters under the cluster prefix {prefix},"
                     f" either ensure cluster prefixes are unique to a cluster solution or remove parent "

@@ -327,21 +327,17 @@ class Clustering:
         self.sample_ids: Optional[List[str]] = sample_ids
         self.data: pd.DataFrame = data
         self._n_sources: Dict = n_sources or {}
-        self.__embedding_cache: Union[pd.DataFrame, None] = None
+        self._embedding_cache: Union[pd.DataFrame, None] = None
 
     @property
     def embedding_cache(self):
-        if self.__embedding_cache is None:
+        if self._embedding_cache is None:
             raise NoCache
-        self.__embedding_cache.drop(["cluster_label", "meta_label"], axis=1, inplace=True)
-        self.__embedding_cache = self.__embedding_cache.merge(
-            self.data[["sample_id", "cluster_label", "meta_label"]].drop_duplicates(), on="sample_id", how="left"
-        )
-        return self.__embedding_cache
+        return pd.concat([self.data.loc[self._embedding_cache.index], self._embedding_cache], axis=1)
 
     @embedding_cache.setter
     def embedding_cache(self, data: pd.DataFrame):
-        self.__embedding_cache = data
+        self._embedding_cache = data[[x for x in data.columns if x not in self.data.columns]].copy()
 
     @classmethod
     def from_experiment(
@@ -538,7 +534,7 @@ class Clustering:
             data = self.data.groupby("sample_id").sample(
                 n=n, replace=replace, weights=weights, random_state=random_state
             )
-        return data
+        return data.copy()
 
     def _dimension_reduction_with_sample(
         self,
@@ -550,11 +546,13 @@ class Clustering:
         random_state: int = 42,
         **dim_reduction_kwargs,
     ):
+        logger.info(f"Computing and caching embeddings for downsampled data")
         reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
         data = self._downsampled_data_for_dimension_reduction(
             n=n, sample_id=sample_id, replace=replace, weights=weights, random_state=random_state
         )
         self.embedding_cache = reducer.fit_transform(data=data, features=self.features)
+        logger.info(f"Embeddings have been cached!")
         return self.embedding_cache
 
     def _dimension_reduction_all_data(
@@ -567,6 +565,7 @@ class Clustering:
         random_state: int = 42,
         **dim_reduction_kwargs,
     ):
+        logger.info(f"Computing and caching embeddings for all data")
         reducer = DimensionReduction(method=method, n_components=2, **dim_reduction_kwargs)
         if n is None:
             if sample_id:
@@ -579,6 +578,7 @@ class Clustering:
                     "expensive and can take a long time to computer. Consider computing embeddings "
                     "on a sample of data."
                 )
+            logger.info(f"Embeddings have been cached!")
             self.embedding_cache = reducer.fit_transform(data=data, features=self.features)
             return self.embedding_cache
         if method != "UMAP":
@@ -590,8 +590,11 @@ class Clustering:
         training_data = self._downsampled_data_for_dimension_reduction(
             n=n, sample_id=sample_id, replace=replace, weights=weights, random_state=random_state
         )
+        logger.info(f"Fitting to {training_data.shape[0]} points to learn embeddings")
         reducer.fit(data=training_data, features=self.features)
-        self.embedding_cache = reducer.transform(data=self.data, features=self.features)
+        logger.info(f"Predicting embeddings for complete data")
+        self.embedding_cache = reducer.transform(data=self.data.copy(), features=self.features)
+        logger.info(f"Embeddings have been cached!")
         return self.embedding_cache
 
     def dimension_reduction(
@@ -631,22 +634,14 @@ class Clustering:
                 **dim_reduction_kwargs,
             )
         try:
-            if sample_id:
-                if (self.embedding_cache.sample_id.nunique() > 1) or (
-                    self.embedding_cache.iloc[0]["sample_id"] != sample_id
-                ):
-                    return reduction_func()
-                if n:
-                    if self.embedding_cache.shape[0] != n:
-                        return reduction_func()
             if overwrite_cache:
+                logger.info("overwrite_cache == True, recomputing embeddings")
                 return reduction_func()
-            if n and self.embedding_cache.shape[0] != (n * self.data.sample_id.nunique()):
-                return reduction_func()
-            if predict_all_data and self.embedding_cache.shape[0] != self.data.shape[0]:
+            if f"{method}1" not in self.embedding_cache.columns.tolist():
                 return reduction_func()
             return self.embedding_cache
         except NoCache:
+            logger.info(f"No existing cached embeddings")
             return reduction_func()
 
     def plot_density(
@@ -692,7 +687,7 @@ class Clustering:
 
     def plot_cluster_membership(
         self,
-        n: int = 1000,
+        n: Optional[int] = 1000,
         sample_id: Optional[str] = None,
         overwrite_cache: bool = False,
         method: str = "UMAP",

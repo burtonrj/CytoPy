@@ -20,7 +20,7 @@ class Leiden:
 
     @staticmethod
     def _build_adata(data: pd.DataFrame) -> AnnData:
-        return AnnData(data.value, var=data.columns)
+        return AnnData(data.values, var=data.columns.tolist())
 
     def _compute_neighbourhood_graph(self, adata: AnnData):
         neighbors(adata=adata, copy=False, **self.knn_params)
@@ -30,6 +30,6 @@ class Leiden:
         adata = self._build_adata(data=data)
         logger.info("Constructing neighbourhood graph")
         self._compute_neighbourhood_graph(adata=adata)
-        logger.info("Perforing leiden clustering")
+        logger.info("Performing leiden clustering")
         leiden(adata=adata, **self.params)
         return adata.obs["leiden"].values
