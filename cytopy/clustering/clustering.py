@@ -62,6 +62,7 @@ from typing import Tuple
 from typing import Type
 from typing import Union
 
+import hdmedians as hd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -162,10 +163,10 @@ def summarise_clusters(
     features: list,
     scale: Optional[str] = None,
     scale_kwargs: Optional[Dict] = None,
-    summary_method: str = "median",
+    summary_method: str = "geomedian",
 ):
     """
-    Average cluster parameters along columns average to generated a centroid for
+    Average cluster parameters along columns average to generate a centroid for
     meta-clustering
 
     Parameters
@@ -174,8 +175,8 @@ def summarise_clusters(
         Clustering results to average
     features: list
         List of features to use when generating centroid
-    summary_method: str (default='median')
-        Average method, should be mean or median
+    summary_method: str (default='geomedian')
+        Average method, should be geomedian, mean or median
     scale: str, optional
         Perform scaling of centroids; see cytopy.transform.Scaler
     scale_kwargs: dict, optional
@@ -194,8 +195,15 @@ def summarise_clusters(
         data = data.groupby(["sample_id", "cluster_label"])[features].median().reset_index()
     elif summary_method == "mean":
         data = data.groupby(["sample_id", "cluster_label"])[features].mean().reset_index()
+    elif summary_method == "geomedian":
+        cluster_geometric_median = []
+        for cluster, cluster_data in data.groupby("cluster_label"):
+            x = np.array(hd.geomedian(cluster_data[features].T.values)).reshape(-1, 1)
+            x = pd.DataFrame(x, columns=[cluster], index=features)
+            cluster_geometric_median.append(x.T)
+        data = pd.concat(cluster_geometric_median).reset_index().rename(columns={"index": "cluster_label"})
     else:
-        raise ValueError("summary_method should be 'mean' or 'median'")
+        raise ValueError("summary_method should be 'geomedian', 'mean' or 'median'")
     scale_kwargs = scale_kwargs or {}
     if scale is not None:
         scaler = Scaler(method=scale, **scale_kwargs)
@@ -247,7 +255,7 @@ class ClusterMethod:
         self,
         data: pd.DataFrame,
         features: List[str],
-        summary_method: str = "median",
+        summary_method: str = "geomedian",
         scale_method: Optional[str] = None,
         scale_kwargs: Optional[Dict] = None,
     ):
@@ -329,6 +337,7 @@ class Clustering:
         transform_kwargs: dict or None = None,
         verbose: bool = True,
         random_state: int = 42,
+        **kwargs,
     ):
         logger.info(f"Obtaining data for clustering for population {root_population}")
         data = single_cell_dataframe(
@@ -350,6 +359,7 @@ class Clustering:
             transform_kwargs=transform_kwargs,
             verbose=verbose,
             random_state=random_state,
+            **kwargs,
         )
 
     @classmethod
@@ -364,6 +374,7 @@ class Clustering:
         transform_kwargs: dict or None = None,
         verbose: bool = True,
         random_state: int = 42,
+        **kwargs,
     ):
         n_sources = None
         if "meta_label" not in data.columns:
@@ -387,6 +398,7 @@ class Clustering:
             verbose=verbose,
             random_state=random_state,
             n_sources=n_sources,
+            **kwargs,
         )
 
     def scale_data(self, features: List[str], scale_method: Optional[str] = None, scale_kwargs: Optional[Dict] = None):
@@ -768,6 +780,56 @@ class Clustering:
             data=data, dv="Percentage", between_group=between_group, independent_group=label, **kwargs
         )
 
+    def internal_performance(
+        self,
+        sample_n: int = 10000,
+        resamples: int = 10,
+        metrics: Optional[List[Union[str, InternalMetric]]] = None,
+        features: Optional[List[str]] = None,
+        labels: Union[Iterable, str] = "cluster_label",
+        balance_samples: bool = True,
+        balance_clusters: bool = True,
+        replace: bool = False,
+        random_state: int = 42,
+        verbose: bool = True,
+    ):
+        if isinstance(labels, list) or isinstance(labels, np.ndarray):
+            self.data["tmp"] = labels
+            labels = "tmp"
+
+        features = features or self.features
+        metrics = init_internal_metrics(metrics=metrics)
+        results = defaultdict(list)
+
+        for _ in progress_bar(range(resamples), verbose=verbose, total=resamples):
+            try:
+                if balance_samples:
+                    if balance_clusters:
+                        sampled_df = self.data.groupby(["sample_id", labels]).sample(
+                            n=sample_n, replace=replace, random_state=random_state
+                        )
+                    else:
+                        sampled_df = self.data.groupby("sample_id").sample(
+                            n=sample_n, replace=replace, random_state=random_state
+                        )
+                elif balance_clusters:
+                    sampled_df = self.data.groupby(labels).sample(
+                        n=sample_n, replace=replace, random_state=random_state
+                    )
+                else:
+                    sampled_df = self.data.groupby("sample_id").sample(n=sample_n)
+            except ValueError:
+                raise ValueError(
+                    "Cannot take a sample bigger than number of events. Either set 'replace' as True, if "
+                    "grouping by sample_id/cluster_label check smallest sample/cluster size, or increase "
+                    "the sample size."
+                )
+            for m in metrics:
+                results[m.name].append(m(data=sampled_df, features=features, labels=sampled_df[labels].values))
+        if "tmp" in self.data.columns.values:
+            self.data.drop("tmp", axis=1, inplace=True)
+        return pd.DataFrame(results)
+
     def performance(
         self,
         metrics: Optional[List[Union[str, InternalMetric]]] = None,
@@ -973,6 +1035,9 @@ class Clustering:
         if population_var == "meta_label":
             if self.data.meta_label.isnull().all():
                 raise ValueError("Meta clustering has not been performed")
+        if population_prefix:
+            if "_" in population_prefix:
+                raise ValueError("Population prefix cannot contain underscores")
 
         if parent_populations is not None:
             err = f"One or more cluster_labels are missing a parent definition"

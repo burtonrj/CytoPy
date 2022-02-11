@@ -5,6 +5,7 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
+import hdmedians as hd
 import numpy as np
 import pandas as pd
 import polars as pl
@@ -15,10 +16,21 @@ from sklearn.metrics import silhouette_samples
 from sklearn.metrics import silhouette_score
 
 from cytopy.data.read_write import polars_to_pandas
-from cytopy.plotting.general import box_swarm_plot, discrete_palette, discrete_label
+from cytopy.plotting.general import box_swarm_plot
+from cytopy.plotting.general import discrete_label
+from cytopy.plotting.general import discrete_palette
 from cytopy.utils.dim_reduction import DimensionReduction
 
 logger = logging.getLogger(__name__)
+
+
+def geomedian(data: pd.DataFrame, label: str, features: List[str]):
+    cluster_geometric_median = []
+    for cluster, cluster_data in data.groupby(label):
+        x = np.array(hd.geomedian(cluster_data[features].T.values)).reshape(-1, 1)
+        x = pd.DataFrame(x, columns=[cluster], index=features)
+        cluster_geometric_median.append(x.T)
+    return pd.concat(cluster_geometric_median)
 
 
 def clustered_heatmap(
@@ -59,11 +71,11 @@ def clustered_heatmap(
     Seaborn.ClusterGrid
     """
     if sample_id is None and meta_label:
-        data = data.groupby(["meta_label"])[features].median()
+        data = geomedian(data=data, label="meta_label", features=features)
     elif sample_id is None and not meta_label:
-        data = data.groupby(["cluster_label"])[features].median()
+        data = geomedian(data=data, label="cluster_label", features=features)
     else:
-        data = data[data.sample_id == sample_id].groupby(["cluster_label"]).median()
+        data = geomedian(data=data[data.sample_id == sample_id], label="cluster_label", features=features)
     data[features] = data[features].apply(pd.to_numeric)
     kwargs = kwargs or {}
     kwargs["col_cluster"] = kwargs.get("col_cluster", True)

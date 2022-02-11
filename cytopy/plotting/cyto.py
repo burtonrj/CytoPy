@@ -5,9 +5,7 @@ This module concerns plotting functions for one or two-dimensional 'flow plots' 
 These plots support common transform methods in cytometry such as logicle (biexponential), log, hyper-log and
 inverse hyperbolic arc-sine. These plotting functions have application in traditional gating and visualising
 populations in low dimensional space.
-
 Copyright 2020 Ross Burton
-
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
 files (the "Software"), to deal in the Software without restriction,
@@ -17,7 +15,6 @@ Software, and to permit persons to whom the Software is furnished
 to do so, subject to the following conditions:
 The above copyright notice and this permission notice shall be included
 in all copies or substantial portions of the Software.
-
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -26,7 +23,6 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-
 import logging
 from itertools import cycle
 from typing import Dict
@@ -47,7 +43,8 @@ from cytopy.data import FileGroup
 from cytopy.data import Population
 from cytopy.gating.base import Child
 from cytopy.gating.base import Gate
-from cytopy.gating.threshold import ThresholdBase, ThresholdGate
+from cytopy.gating.threshold import ThresholdBase
+from cytopy.gating.threshold import ThresholdGate
 from cytopy.plotting.asinh_transform import *
 from cytopy.plotting.hlog_transform import *
 from cytopy.plotting.logicle_transform import *
@@ -70,12 +67,10 @@ def _auto_plot_kind(
     """
     Determine the best plotting method. If the number of observations is less than 1000, returns 'hist2d' otherwise
     returns 'scatter_kde'. If 'y' is None returns 'kde'.
-
     Parameters
     ----------
     data: Pandas.DataFrame
     y: str
-
     Returns
     -------
     str
@@ -91,12 +86,10 @@ def _hist2d_axis_limits(x: np.ndarray, y: np.ndarray) -> Tuple[pd.DataFrame, pd.
     """
     Generate DataFrames for axis limits. DataFrames have the columns 'Min' and 'Max', and values
     are the min and max of the provided arrays
-
     Parameters
     ----------
     x: Numpy.Array
     y: Numpy.Array
-
     Returns
     -------
     Tuple[pd.DataFrame, pd.DataFrame]
@@ -117,10 +110,11 @@ def _hist2d_bins(
     transform_x_kwargs: Optional[Dict],
     transform_y: Optional[str],
     transform_y_kwargs: Optional[Dict],
+    xlim: Optional[Tuple[float, float]] = None,
+    ylim: Optional[Tuple[float, float]] = None,
 ) -> List[np.ndarray]:
     """
     Calculate bins and edges for 2D histogram
-
     Parameters
     ----------
     x: Numpy.Array
@@ -130,13 +124,23 @@ def _hist2d_bins(
     transform_x_kwargs: Dict, optional
     transform_y: str, optional
     transform_y_kwargs: Dict, optional
-
     Returns
     -------
     List[Numpy.Array]
     """
     nbins = bins or int(np.sqrt(x.shape[0]))
-    xlim, ylim = _hist2d_axis_limits(x, y)
+    if xlim is not None:
+        if ylim is not None:
+            xlim, ylim = (
+                pd.DataFrame({"Min": [xlim[0]], "Max": [xlim[1]]}),
+                pd.DataFrame({"Min": [ylim[0]], "Max": [ylim[1]]}),
+            )
+        else:
+            xlim, ylim = (pd.DataFrame({"Min": [xlim[0]], "Max": [xlim[1]]}), _hist2d_axis_limits(x, y)[1])
+    elif ylim is not None:
+        xlim, ylim = (_hist2d_axis_limits(x, y)[0], pd.DataFrame({"Min": [ylim[0]], "Max": [ylim[1]]}))
+    else:
+        xlim, ylim = _hist2d_axis_limits(x, y)
     bins = []
     for lim, transform_method, transform_kwargs in zip(
         [xlim, ylim], [transform_x, transform_y], [transform_x_kwargs, transform_y_kwargs]
@@ -162,7 +166,6 @@ def kde1d(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute one-dimensional kernel density estimation
-
     Parameters
     ----------
     data: Pandas.DataFrame
@@ -171,7 +174,6 @@ def kde1d(
     transform_method: str, optional
     transform_kwargs: optional
         Additional keyword arguments passed to transform method
-
     Returns
     -------
     Tuple[Numpy.Array, Numpy.Array]
@@ -200,11 +202,12 @@ def hist2d(
     ax: plt.Axes,
     bins: Optional[int],
     cmap: str,
+    xlim: Optional[Tuple[float, float]] = None,
+    ylim: Optional[Tuple[float, float]] = None,
     **kwargs,
 ) -> None:
     """
     Plot two-dimensional histogram on axes
-
     Parameters
     ----------
     data: Pandas.DataFrame
@@ -225,9 +228,12 @@ def hist2d(
     bins: int, optional
         Number of bins to use, if not given defaults to square root of the number of observations
     cmap: str (default='jet')
+    xlim: Tuple[float, float], optional
+        Limit the x-axis between this range
+    ylim: Tuple[float, float], optional
+        Limit the y-axis between this range
     kwargs: optional
         Additional keyword arguments passed to Matplotlib.hist2d
-
     Returns
     -------
     None
@@ -240,6 +246,8 @@ def hist2d(
         transform_y=transform_y,
         transform_x_kwargs=transform_x_kwargs,
         transform_y_kwargs=transform_y_kwargs,
+        xlim=xlim,
+        ylim=ylim,
     )
     ax.hist2d(data[x].values, data[y].values, bins=[xbins, ybins], norm=LogNorm(), cmap=cmap, **kwargs)
 
@@ -267,7 +275,6 @@ def cyto_plot(
     cytometry software like FlowJo. These plots support common cytometry data transformations like logicle
     (biexponential), log, hyperlog, or hyperbolic arc-sine transformations, whilst translating values back
     to a linear scale on axis for improved interpretability.
-
     Parameters
     ----------
     data: Pandas.DataFrame
@@ -306,7 +313,6 @@ def cyto_plot(
             * seaborn.scatterplot for 'scatter' or 'scatter_kde'
             * matplotlib.Axes.hist2d for 'hist2d'
             * matplotlib.Axes.plot for 'kde'
-
     Returns
     -------
     Matplotlib.Axes
@@ -330,6 +336,8 @@ def cyto_plot(
                 ax=ax,
                 bins=bins,
                 cmap=cmap,
+                xlim=xlim,
+                ylim=ylim,
             )
         elif kind == "scatter":
             assert y, "No y-axis variable provided"
@@ -400,7 +408,6 @@ def overlay(
     Generates a two-dimensional scatterplot as background data and overlays a histogram, KDE, or scatterplot
     in the foreground. Can be useful for comparing populations and is commonly referred to as 'back-gating' in
     traditional cytometry analysis.
-
     Parameters
     ----------
     x: str
@@ -421,7 +428,6 @@ def overlay(
         Additional keyword arguments passed to legend
     plot_kwargs: optional
         Additional keyword arguments passed to cytopy.plotting.cyto.cyto_plot for foreground plot
-
     Returns
     -------
     Matplotlib.Axes
@@ -449,14 +455,12 @@ def overlay(
 def _threshold_annotation(x: float, y: float, text: str, ax: plt.Axes):
     """
     Annotate an Axes with the text label of a threshold gate
-
     Parameters
     ----------
     x: float
     y: float
     text: str
     ax: Matplotlib.Axes
-
     Returns
     -------
     None
@@ -476,13 +480,11 @@ def _threshold_annotation(x: float, y: float, text: str, ax: plt.Axes):
 def _1dthreshold_annot(labels: Dict, ax: plt.Axes):
     """
     Annotate an axis with the labels for a one-dimensional threshold gate
-
     Parameters
     ----------
     labels: Dict
         The population names of a one-dimensional threshold; expects the keys '-' and '+'
     ax: Matplotlib.Axes
-
     Returns
     -------
     None
@@ -500,13 +502,11 @@ def _1dthreshold_annot(labels: Dict, ax: plt.Axes):
 def _2dthreshold_annot(labels: Dict, ax: plt.Axes):
     """
     Annotate an axis with the labels for a two-dimensional threshold gate
-
     Parameters
     ----------
     labels: Dict
         The population names of a one-dimensional threshold; expects the keys '--', '++', '+-' and '-+'
     ax: Matplotlib.Axes
-
     Returns
     -------
     None
@@ -538,13 +538,11 @@ def _2dthreshold_annot(labels: Dict, ax: plt.Axes):
 def _plot_thresholds(geom_objs: Union[List[Population], List[Child]], ax: plt.Axes):
     """
     Plot threshold geoms (lines that define the boundary of a threshold gate)
-
     Parameters
     ----------
     geom_objs: List[Population] or List[Child]
         One or more Population objects or Child objects; where Child is from a Gate
     ax: Matplotlib.Axes
-
     Returns
     -------
     None
@@ -567,13 +565,11 @@ def _plot_thresholds(geom_objs: Union[List[Population], List[Child]], ax: plt.Ax
 def _default_legend(ax: plt.Axes, **legend_kwargs):
     """
     Default setting for plot legend
-
     Parameters
     ----------
     ax: Matplotlib.Axes
     legend_kwargs: optional
         User defined legend keyword arguments
-
     Returns
     -------
     None
@@ -590,7 +586,6 @@ def _default_legend(ax: plt.Axes, **legend_kwargs):
 def _plot_polygons(geom_objs: Union[List[Population], List[Child]], ax: plt.Axes, **legend_kwargs):
     """
     Plot polygon geoms
-
     Parameters
     ----------
     geom_objs: List[Population] or List[Child]
@@ -598,7 +593,6 @@ def _plot_polygons(geom_objs: Union[List[Population], List[Child]], ax: plt.Axes
     ax: Matplotlib.Axes
     legend_kwargs: optional
         User defined legend keyword arguments
-
     Returns
     -------
     None
@@ -610,19 +604,17 @@ def _plot_polygons(geom_objs: Union[List[Population], List[Child]], ax: plt.Axes
             name = g.population_name
         else:
             name = g.name
-        ax.plot(x_values, y_values, "-k", c=next(colours), lw=2.5, label=name)
+        ax.plot(x_values, y_values, c=next(colours), lw=2.5, label=name)
     _default_legend(ax=ax, **legend_kwargs)
 
 
 def _inverse_gate_transform(gate: Gate, data: pd.DataFrame) -> pd.DataFrame:
     """
     Perform an inverse transformation of the given data using the transform definition of a gate
-
     Parameters
     ----------
     gate: Gate
     data: Pandas.DataFrame
-
     Returns
     -------
     Pandas.DataFrame
@@ -645,7 +637,6 @@ def _plot_ctrl_gate_1d(
 ) -> plt.Axes:
     """
     Generate a KDE plot over a grid space that spans the primary and control data
-
     Parameters
     ----------
     primary_data: Numpy.Array
@@ -656,7 +647,6 @@ def _plot_ctrl_gate_1d(
         Ignored if 'ax' provided, otherwise new figure generated with this figure size.
     kwargs: optional
         Additional keyword arguments passed to Matplotlib.Axes.plot
-
     Returns
     -------
     Matplotlib.Axes
@@ -668,6 +658,14 @@ def _plot_ctrl_gate_1d(
         np.max([np.max(primary_data), np.max(ctrl_data)]) + 0.01,
         1000,
     )
+    y = FFTKDE(kernel=kwargs.get("kernel", "gaussian"), bw=kwargs.get("bw", "ISJ")).fit(ctrl_data).evaluate(x)
+    lw = kwargs.get("linewidth", 2)
+    color = kwargs.get("ctrl_linecolor", "black")
+    fill = kwargs.get("ctrl_fill", "#1F77B4")
+    alpha = kwargs.get("alpha", 0.5)
+    ax.plot(x, y, linewidth=lw, color=color)
+    ax.fill_between(x, y, color=fill, alpha=alpha)
+
     y = FFTKDE(kernel=kwargs.get("kernel", "gaussian"), bw=kwargs.get("bw", "ISJ")).fit(primary_data).evaluate(x)
     lw = kwargs.get("linewidth", 2)
     color = kwargs.get("linecolor", "black")
@@ -689,7 +687,6 @@ def plot_ctrl_gate_1d(
 ) -> plt.Axes:
     """
     Plot a one-dimensional control gate
-
     Parameters
     ----------
     gate: ThresholdGThresholdBaseate
@@ -706,13 +703,14 @@ def plot_ctrl_gate_1d(
         Allow matplotlib to autoscale the axis view to the data
     kwargs: optional
         Additional keyword arguments passed to Matplotlib.Axes.plot
-
     Returns
     -------
     Matplotlib.Axes
     """
     try:
-        assert isinstance(gate, ThresholdBase), "plot_ctrl_gate expects a threshold-like gate with 'ctrl' attribute defined."
+        assert isinstance(
+            gate, ThresholdBase
+        ), "plot_ctrl_gate expects a threshold-like gate with 'ctrl' attribute defined."
         assert gate.ctrl, "plot_ctrl_gate expects a threshold-like gate with 'ctrl' attribute defined."
         primary_data = filegroup.load_population_df(population=gate.parent, transform=None, data_source="primary")
         ctrl_data = filegroup.load_population_df(population=gate.parent, transform=None, data_source=gate.ctrl)
@@ -762,7 +760,6 @@ def plot_gate(
     Plot a Gate geometry on the data of a FileGroup. If the gate geometry has been defined for the FileGroup, then
     population gate geometry will be plotted, otherwise the Gate definition geometry will be plotted on the
     FileGroup data.
-
     Parameters
     ----------
     gate: Gate
@@ -778,7 +775,6 @@ def plot_gate(
         If provided, data will be down-sampled prior to plotting to not exceed this size
     kwargs: optinal
         Additional keyword arguments passed to cytopy.plotting.cyto.cyto_plot
-
     Returns
     -------
     Matplotlib.Axes

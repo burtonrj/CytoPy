@@ -471,6 +471,7 @@ class Experiment(mongoengine.Document):
         population_source: Optional[str] = None,
         data_source: str = "primary",
         verbose: bool = True,
+        ignore_clusters: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """
         For each FileGroup in this Experiment, generate a Pandas DataFrame where each row is an event and the columns
@@ -500,6 +501,10 @@ class Experiment(mongoengine.Document):
             data.append(df)
         data = pd.concat(data).fillna(0)
         cluster_cols = [x for x in data.columns if x != "sample_id"]
+        if ignore_clusters:
+            for col in [i for i in cluster_cols if i in ignore_clusters]:
+                data.drop(col, axis=1, inplace=True)
+            cluster_cols = [i for i in cluster_cols if i not in ignore_clusters]
         data[cluster_cols] = data[cluster_cols].astype(int)
         return data
 

@@ -7,17 +7,167 @@ from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from ipywidgets import widgets
 from KDEpy import FFTKDE
+from sklearn.base import BaseEstimator
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import StratifiedKFold
+from sklearn.utils import compute_sample_weight
 
+from cytopy.data import FileGroup
 from cytopy.data import Population
 from cytopy.data.errors import MissingPopulationError
 from cytopy.data.experiment import Experiment
 from cytopy.data.population import ThresholdGeom
+from cytopy.feedback import progress_bar
 from cytopy.gating.threshold import apply_threshold
 from cytopy.gating.threshold import find_threshold
+from cytopy.plotting import scatterplot
+from cytopy.utils import DimensionReduction
 
 logger = logging.getLogger(__name__)
+
+
+class ControlPopulationPrediction:
+    def __init__(
+        self,
+        filegroup: FileGroup,
+        ctrl: str,
+        populations: List[str],
+        model: Optional[BaseEstimator] = None,
+        features: Optional[List[str]] = None,
+        transform: str = "asinh",
+        transform_kwargs: Optional[Dict] = None,
+        downsample_background: Optional[int] = 10000,
+    ):
+        self.filegroup = filegroup
+        self.data = filegroup.load_population_df(
+            population="root", transform=transform, transform_kwargs=transform_kwargs
+        )
+        self.populations = populations
+        self.data["label"] = 0
+        for i, pop in enumerate(populations):
+            self.data.loc[filegroup.get_population(pop).index, "label"] = i + 1
+
+        if downsample_background:
+            tmp = self.data[self.data["label"] != 0]
+            background = self.data[self.data["label"] == 0].sample(downsample_background)
+            self.data = pd.concat([tmp, background]).reset_index(drop=True)
+
+        self.features = features or [i for i in self.data.columns if i.lower() not in ["time", "label"]]
+        self.model = (
+            model
+            if model is not None
+            else HistGradientBoostingClassifier(max_iter=100, loss="categorical_crossentropy", max_depth=6)
+        )
+        self.ctrl = ctrl
+        self.control = filegroup.load_population_df(
+            population="root", transform=transform, transform_kwargs=transform_kwargs, data_source=ctrl
+        )
+
+    def cross_val_performance(self, n_splits: int = 10, verbose: bool = True, balance: bool = True) -> pd.DataFrame:
+        performance = []
+        skf = StratifiedKFold(n_splits=n_splits)
+        for train_idx, test_idx in progress_bar(
+            skf.split(self.data[self.features], self.data["label"]), total=n_splits, verbose=verbose
+        ):
+            train_x, test_x = self.data[self.features].values[train_idx], self.data[self.features].values[test_idx]
+            train_y, test_y = self.data["label"].values[train_idx], self.data["label"].values[test_idx]
+
+            # Fit model
+            weights = None if not balance else compute_sample_weight(class_weight="balanced", y=train_y)
+            self.model.fit(train_x, train_y, sample_weight=weights)
+
+            # Log performance
+            for x, y, key in zip([train_x, test_x], [train_y, test_y], ["Training", "Testing"]):
+                yhat = self.model.predict(x)
+                yscore = self.model.predict_proba(x)
+                performance.append(
+                    {
+                        "Dataset": key,
+                        "Balance accuracy": balanced_accuracy_score(y_pred=yhat, y_true=y),
+                        "Weighted F1 score": f1_score(y_pred=yhat, y_true=y, average="weighted"),
+                        "ROC AUC Score": roc_auc_score(y_true=y, y_score=yscore, average="macro", multi_class="ovo"),
+                    }
+                )
+        performance = pd.DataFrame(performance)
+        performance = performance.melt(id_vars="Dataset", var_name="Metric", value_name="Value")
+        return performance
+
+    def fit(self, balance: bool = True):
+        weights = None if not balance else compute_sample_weight(class_weight="balanced", y=self.data["label"].values)
+        self.model.fit(self.data[self.features].values, self.data["label"].values, sample_weight=weights)
+        return self.model
+
+    def fit_predict(self, balance: bool = True):
+        self.control["label"] = self.fit(balance=balance).predict(self.control[self.features].values)
+        return self.control
+
+    def umap_comparison(self, n: int = 100000, save_path: Optional[str] = None, **plot_kwargs) -> plt.Figure:
+        if "label" not in self.control.columns:
+            logger.info("Predicting labels for control data")
+            self.fit_predict(balance=True)
+
+        logger.info("Computing UMAP embeddings for all data")
+        umap = DimensionReduction(method="UMAP", n_components=2)
+        primary_plot_all = umap.fit_transform(self.data.sample(n), features=self.features)
+        ctrl_plot_all = umap.transform(self.control.sample(n), features=self.features)
+
+        logger.info("Computing UMAP embeddings for populations only")
+        umap = DimensionReduction(method="UMAP", n_components=2)
+
+        primary_plot_pops = self.data[self.data["label"] != 0].copy()
+        if primary_plot_pops.shape[0] > n:
+            primary_plot_pops = primary_plot_pops.sample(n)
+
+        ctrl_plot_pops = self.control[self.control["label"] != 0].copy()
+        if ctrl_plot_pops.shape[0] > n:
+            ctrl_plot_pops = ctrl_plot_pops.sample(n)
+
+        primary_plot_pops = umap.fit_transform(primary_plot_pops, features=self.features)
+        ctrl_plot_pops = umap.transform(ctrl_plot_pops, features=self.features)
+
+        logger.info("Plotting data")
+        fig, axes = plt.subplots(2, 2, figsize=(12.5, 15))
+        for df, ax, title in zip(
+            [primary_plot_all, ctrl_plot_all, primary_plot_pops, ctrl_plot_pops],
+            axes.flatten(),
+            [
+                "Original data (all)",
+                "Control data (all)",
+                "Original data (populations only)",
+                "Control data (populations only)",
+            ],
+        ):
+            scatterplot(
+                data=df.sort_values("label"), x="UMAP1", y="UMAP2", label="label", discrete=True, ax=ax, **plot_kwargs
+            )
+            ax.set_title(title)
+        if save_path is not None:
+            fig.savefig(save_path, dpi=100, facecolor="white", bbox_inches="tight")
+        return fig
+
+    def save(self):
+        if "label" not in self.control.columns:
+            raise ValueError("Call 'fit_predict' first.")
+        self.control["label"] = self.control["label"].replace({i + 1: p for i, p in enumerate(self.populations)})
+        for label, df in self.control.groupby("label"):
+            if label == 0:
+                continue
+            ctrl_pop = Population(
+                population_name=label,
+                parent="root",
+                n=df.shape[0],
+                source="classifier",
+                data_source=self.ctrl,
+            )
+            ctrl_pop.index = df.index.to_list()
+            self.filegroup.add_population(population=ctrl_pop)
+        self.filegroup.save()
 
 
 def error(txt):

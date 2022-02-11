@@ -76,6 +76,7 @@ class InteractiveGateTool(widgets.HBox):
         value: Optional[Any] = None,
         func: Optional[Callable] = None,
     ) -> widgets.Dropdown:
+        options = options or []
         dropdown = widgets.Dropdown(
             description=description,
             disabled=disabled,
@@ -104,6 +105,7 @@ class InteractiveGateTool(widgets.HBox):
         txt = widgets.Text(disabled=disabled)
         if func is not None:
             txt.observe(func, "value")
+        return txt
 
     @staticmethod
     def _build_vbox(*args) -> widgets.VBox:
@@ -116,13 +118,13 @@ class InteractiveGateTool(widgets.HBox):
         apply_button = self._add_button(
             disabled=True,
             description="Apply",
-            tooltop="Apply changed to GatingStrategy",
+            tooltip="Apply changed to GatingStrategy",
             button_style="warning",
             func=self._apply_click,
         )
         # Button for saving changes to database
         save_button = self._add_button(
-            disabled=True, description="Save", tooltop="Save changes", button_style="danger", func=self._save_click
+            disabled=False, description="Save", tooltip="Save changes", button_style="danger", func=self._save_click
         )
         return apply_button, save_button
 
@@ -164,7 +166,7 @@ class InteractiveGateTool(widgets.HBox):
 
 
 class GateEditor(InteractiveGateTool):
-    def _define_children(self):
+    def _define_children(self, *args):
         self.progress_bar = widgets.IntProgress(description="Loading:", value=5, min=0, max=5)
         # Dropdown for choosing a gate
         self.gate_select = self._add_dropdown(
@@ -180,7 +182,7 @@ class GateEditor(InteractiveGateTool):
         self.update_button = self._add_button(
             disabled=True,
             description="Update",
-            tooltop="Update population geometry",
+            tooltip="Update population geometry",
             button_style="info",
             func=self._poly_update,
         )

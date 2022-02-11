@@ -74,11 +74,20 @@ class DuplicateColumnError(Exception):
 
 
 class FeatureSpace:
-    def __init__(self, project: Project, verbose: bool = True, data: Optional[Dict[str, pd.DataFrame]] = None):
+    def __init__(
+        self,
+        project: Project,
+        verbose: bool = True,
+        data: Optional[Dict[str, pd.DataFrame]] = None,
+        subjects: Optional[List[str]] = None,
+    ):
         self.data = {}
         self.project = project
         self.verbose = verbose
-        self.subjects = self.project.list_subjects()
+        if subjects:
+            if not all([x in project.list_subjects() for x in subjects]):
+                raise ValueError("One or more subjects missing from Project")
+        self.subjects = subjects or self.project.list_subjects()
         self.train_idx, self.test_idx, self.target = None, None, None
         if data is not None:
             if not all([isinstance(df, pd.DataFrame) for df in data.values()]):
@@ -93,7 +102,20 @@ class FeatureSpace:
         with pd.ExcelFile(filepath) as xls:
             for sheet_name in xls.sheet_names:
                 data[sheet_name] = pd.read_excel(xls, sheet_name=sheet_name, **kwargs)
-        return cls(project=project, data=data, verbose=verbose)
+
+        subjects = []
+        for sheet_name, df in data.items():
+            if "subject_id" not in df.columns:
+                raise KeyError(f"{sheet_name} sheet missing subject_id column")
+            subjects = subjects + df.subject_id.tolist()
+        return cls(project=project, data=data, verbose=verbose, subjects=list(set(subjects)))
+
+    @classmethod
+    def from_dataframe(cls, project: Project, sheet_name: str, data: pd.DataFrame, verbose: bool = True):
+        if "subject_id" not in data.columns:
+            raise KeyError(f"DataFrame missing subject_id column")
+        subjects = data["subject_id"].unique().tolist()
+        return cls(project=project, data={sheet_name: data}, verbose=verbose, subjects=subjects)
 
     @property
     def sheet_names(self) -> List[str]:
@@ -153,6 +175,11 @@ class FeatureSpace:
 
     def add_dataframe_as_sheet(self, sheet_name: str, data: pd.DataFrame, overwrite: bool = True):
         self._has_subject_id(data=data)
+        data.set_index("subject_id", inplace=True)
+        subjects_ids = [x for x in self.subjects if x in data.index]
+        if len(subjects_ids) == 0:
+            raise ValueError("No subject IDs in provided data match any in subjects attribute")
+        data = data.loc[subjects_ids]
         if sheet_name in self.data.keys():
             if overwrite:
                 logger.warning(f"{sheet_name} already exists, data will be overwritten")
@@ -213,6 +240,7 @@ class FeatureSpace:
             )
         else:
             data = data[0]
+        data = data.loc[self.subjects]
         if subset:
             data = data.query(subset, **kwargs).copy()
             if drop_subset_features:
@@ -238,6 +266,20 @@ class FeatureSpace:
     def drop(self, sheet_name: str, key: Union[str, List[str]], axis: int = 1):
         self._sheet_exists(sheet_name=sheet_name)
         self.data[sheet_name].drop(key, axis=axis, inplace=True)
+        return self
+
+    def remove_subjects(self, subject_ids: List[str]):
+        subject_ids = [x for x in self.subjects if x not in subject_ids]
+        self.data = {k: df.loc[subject_ids] for k, df in self.data.items()}
+        self.subjects = subject_ids
+        return self
+
+    def filter_subjects(self, query: str, features: List[str]):
+        subject_ids = self.as_dataframe(features=features).query(query).index.values
+        if len(subject_ids) == 0:
+            raise ValueError("Query returned no matching subjects")
+        self.data = {k: df.loc[subject_ids] for k, df in self.data.items()}
+        self.subjects = subject_ids
         return self
 
     def subset(self, sheet_name: str, query: str, **kwargs):
@@ -322,6 +364,7 @@ class FeatureSpace:
                 )
         data = pd.concat(data).reset_index(drop=True)
         data = data.groupby("subject_id")[column_name].mean()
+        data = data.loc[[x for x in data.index.values if x in self.subjects]]
         self.data[sheet_name] = self.data[sheet_name].merge(data, left_index=True, right_index=True, how="outer")
         return self
 
@@ -350,16 +393,17 @@ class FeatureSpace:
         self, sheet_name: str, column_name: str, key: str, id_var: str, value_var: str, overwrite: bool = False
     ):
         self._sheet_exists(sheet_name)
-        if not overwrite:
-            self._duplicate_column_check(column=column_name)
         data = []
-        for subject in self.project.subjects:
+        for subject in self.subjects:
+            subject = self.project.get_subject(subject)
             subject_data = []
             if key in subject.fields:
                 df = subject.field_to_df(key)
                 values = {}
                 for _id, value in df[[id_var, value_var]].values:
                     values[f"{_id}_{column_name}"] = value
+                    if not overwrite:
+                        self._duplicate_column_check(column=f"{_id}_{column_name}")
                 subject_data.append(values)
             subject_data = pd.DataFrame(subject_data)
             subject_data["subject_id"] = subject.subject_id

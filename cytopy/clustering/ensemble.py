@@ -7,6 +7,7 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
+import hdmedians as hd
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -22,6 +23,7 @@ from ..plotting.general import box_swarm_plot
 from ..plotting.general import ColumnWrapFigure
 from .clustering import Clustering
 from .clustering import ClusteringError
+from .clustering import simpson_di
 from .metrics import comparison_matrix
 from .metrics import init_internal_metrics
 from .metrics import InternalMetric
@@ -50,6 +52,7 @@ def majority_vote(
     weights: Optional[Dict[str, float]] = None,
 ):
     clusters = row[cluster_assignments].replace({0: None}).dropna().index.tolist()
+    clusters = [c for c in clusters if c in consensus_clusters.index.tolist()]
     if weights is not None:
         consensus_cluster_score = []
         for cid, cc_data in consensus_clusters.loc[clusters].groupby("cluster_label"):
@@ -78,10 +81,11 @@ class EnsembleClustering(Clustering):
     def __init__(
         self, data: pd.DataFrame, experiment: Union[Experiment, List[Experiment]], features: List[str], *args, **kwargs
     ):
+        ignore_clusters = kwargs.pop("ignore_clusters", None)
         super().__init__(data, experiment, features, *args, **kwargs)
         logger.info("Obtaining data about cluster membership")
         cluster_membership = self.experiment.population_membership_boolean_matrix(
-            population_source="cluster", data_source="primary"
+            population_source="cluster", data_source="primary", ignore_clusters=ignore_clusters
         )
         self.data = self.data.merge(cluster_membership, on=["sample_id", "original_index"])
         self.clusters = [x for x in cluster_membership.columns if x not in ["sample_id", "original_index"]]
@@ -128,15 +132,21 @@ class EnsembleClustering(Clustering):
         for pf in prefixes:
             self.data = self.data[~(self.data[self.cluster_groups[pf]].sum(axis=1) == 0)]
 
-    def _compute_cluster_centroids(self, method: str = "median"):
-        centroids = {}
+    def simpsons_diversity_index(self, cell_identifier: str = "sample_id", groupby=None) -> pd.DataFrame:
+        si_scores = {}
         for cluster in self.clusters:
-            cluster_data = self.data[self.data[cluster] == 1][self.features]
-            if method == "median":
-                centroids[cluster] = cluster_data.median().values
-            else:
-                centroids[cluster] = cluster_data.mean().values
-        return pd.DataFrame(centroids, index=self.features).T
+            df = self.data[self.data[cluster] == 1]
+            si_scores[cluster] = simpson_di(df[cell_identifier].value_counts().to_dict())
+        return pd.DataFrame(si_scores, index=["SimpsonIndex"]).T
+
+    def _compute_cluster_centroids(self):
+        cluster_geometric_median = []
+        for cluster in self.clusters:
+            cluster_data = self.data[self.data[cluster] == 1][self.features].T.values
+            x = np.array(hd.geomedian(cluster_data)).reshape(-1, 1)
+            x = pd.DataFrame(x, columns=[cluster], index=self.features)
+            cluster_geometric_median.append(x.T)
+        return pd.concat(cluster_geometric_median)
 
     def cluster_weights(
         self, plot: bool = True, n_jobs=-1, distortion_metric: str = "euclidean", verbose: bool = True, **plot_kwargs
@@ -173,13 +183,17 @@ class EnsembleClustering(Clustering):
 
     def centroid_clustered_heatmap(
         self,
-        centroid_method: str = "median",
         method: str = "ward",
         metric: str = "euclidean",
         plot_orientation: str = "vertical",
+        diversity_threshold: Optional[float] = None,
         **kwargs,
     ):
-        centroids = self._compute_cluster_centroids(method=centroid_method)
+        centroids = self._compute_cluster_centroids()
+        if diversity_threshold:
+            si_scores = self.simpsons_diversity_index()
+            si_scores = si_scores[si_scores.SimpsonIndex <= diversity_threshold]
+            centroids = centroids.loc[si_scores.index]
         if plot_orientation == "horizontal":
             g = sns.clustermap(data=centroids.T, method=method, metric=metric, **kwargs)
         else:
@@ -199,12 +213,11 @@ class EnsembleClustering(Clustering):
         n_jobs: int = -1,
         distortion_metric: str = "euclidean",
         external_metrics: Optional[List[Union[str, InternalMetric]]] = None,
-        centroid_method: str = "median",
         figsize: Optional[Tuple[int, int]] = None,
         verbose: bool = True,
         **kwargs,
     ):
-        centroids = self._compute_cluster_centroids(method=centroid_method)
+        centroids = self._compute_cluster_centroids()
         results = []
         external_metrics = external_metrics or ["distortion_score"]
         metrics = init_internal_metrics(metrics=external_metrics)
@@ -262,7 +275,6 @@ class EnsembleClustering(Clustering):
     def consensus_centroid_clustering(
         self,
         t: int,
-        centroid_method: str = "median",
         method: str = "ward",
         metric: str = "euclidean",
         criterion: str = "maxclust",
@@ -271,11 +283,19 @@ class EnsembleClustering(Clustering):
         n_jobs: int = -1,
         verbose: bool = True,
         distortion_metric: str = "euclidean",
+        diversity_threshold: Optional[float] = None,
         return_labels: bool = False,
     ):
         self._check_for_cluster_parents()
         logger.info("Calculating cluster centroids")
-        centroids = self._compute_cluster_centroids(method=centroid_method)
+        centroids = self._compute_cluster_centroids()
+
+        if diversity_threshold:
+            logger.info(f"Removing clusters with Simpson Index <= {diversity_threshold}")
+            si_scores = self.simpsons_diversity_index()
+            si_scores = si_scores[si_scores.SimpsonIndex <= diversity_threshold]
+            centroids = centroids.loc[si_scores.index]
+
         logger.info("Performing hierarchical clustering of centroids")
         centroids["cluster_label"] = fclusterdata(
             X=centroids, t=t, criterion=criterion, method=method, metric=metric, depth=depth
@@ -304,8 +324,8 @@ class EnsembleClustering(Clustering):
     def consensus_clustering(
         self, consensus_method: str, k: int, random_state: int = 42, labels: Optional[List] = None
     ):
-        if consensus_method not in ["cdpa", "hgpa", "mcla", "hbgf", "nmf"]:
-            raise ClusteringError("Invalid consensus method, must be one of: cdpa, hgpa, mcla, hbgf, or nmf")
+        if consensus_method not in ["cspa", "hgpa", "mcla", "hbgf", "nmf"]:
+            raise ClusteringError("Invalid consensus method, must be one of: cspa, hgpa, mcla, hbgf, or nmf")
         labels = labels if labels is not None else self._reconstruct_labels(encoded=True)
         if consensus_method == "cspa" and self.data.shape[0] > 5000:
             logger.warning("CSPA is not recommended when n>5000, consider a different method")
@@ -318,7 +338,6 @@ class EnsembleClustering(Clustering):
             self.data["cluster_label"] = ClusterEnsembles.hbgf(labels=labels, nclass=k)
         if consensus_method == "nmf":
             self.data["cluster_label"] = ClusterEnsembles.nmf(labels=labels, nclass=k, random_state=random_state)
-        # self._consensus_count_sources(labels)
 
     def comparison(self, method: str = "adjusted_mutual_info", **kwargs):
         kwargs["figsize"] = kwargs.get("figsize", (10, 10))
@@ -329,54 +348,58 @@ class EnsembleClustering(Clustering):
             **kwargs,
         )
 
+    def cluster_sizes(self):
+        la = self._reconstruct_labels()
+        return {k: x.value_counts() for k, x in la.items()}
+
+    def smallest_cluster_n(self):
+        return min([x.min() for _, x in self.cluster_sizes().items()])
+
+    def largest_cluster_n(self):
+        return max([x.max() for _, x in self.cluster_sizes().items()])
+
     def min_k(self):
-        return min([len(x) for x in self._reconstruct_labels().values()])
+        return min([len(x) for x in self.cluster_groups.values()])
 
     def max_k(self):
-        return max([len(x) for x in self._reconstruct_labels().values()])
+        return max([len(x) for x in self.cluster_groups.values()])
 
     def k_performance(
         self,
         k_range: Tuple[int, int],
         consensus_method: str,
-        sample_size: int,
+        sample_n: int,
         resamples: int,
+        balance_samples: bool = True,
+        balance_clusters: bool = True,
+        replace: bool = False,
         random_state: int = 42,
+        features: Optional[List[str]] = None,
         metrics: Optional[List[Union[InternalMetric, str]]] = None,
         return_data: bool = True,
         **kwargs,
     ):
-        if sample_size > self.data.shape[0]:
-            raise ClusteringError(f"Sample size cannot exceed size of data ({self.data.shape[0]})")
-        logger.info("Sampling...")
-        metrics = init_internal_metrics(metrics=metrics)
-        labels = []
-        data = []
-        for _ in progress_bar(range(resamples), total=resamples):
-            idx = np.random.randint(0, self.data.shape[0], sample_size)
-            labels.append(np.array([np.array(x)[idx] for x in self._reconstruct_labels().values()]))
-            data.append(self.data.iloc[idx])
-        k_range = np.arange(k_range[0], k_range[1] + 1)
-        results = defaultdict(list)
-        for k in k_range:
+        results = []
+        for k in range(*k_range):
             logger.info(f"Calculating consensus with k={k}...")
-            for la, df in progress_bar(zip(labels, data), total=len(data)):
-                la = self.consensus_clustering(
-                    consensus_method=consensus_method, k=k, labels=la, random_state=random_state
-                )
-                results["K"].append(k)
-                for m in metrics:
-                    results[m.name].append(m(data=df, features=self.features, labels=la))
+            self.consensus_clustering(consensus_method=consensus_method, k=k, random_state=random_state)
+            perf = self.internal_performance(
+                metrics=metrics,
+                sample_n=sample_n,
+                resamples=resamples,
+                features=features,
+                labels="cluster_label",
+                balance_samples=balance_samples,
+                balance_clusters=balance_clusters,
+                replace=replace,
+                random_state=random_state,
+                verbose=True,
+            )
+            perf["K"] = k
+            results.append(perf)
+        results = pd.concat(results).reset_index(drop=True)
         results = pd.DataFrame(results).melt(id_vars="K", var_name="Metric", value_name="Value")
-        facet_kws = kwargs.pop("facet_kws", {})
-        facet_kws["sharey"] = facet_kws.get("sharey", False)
-        g = sns.relplot(data=results, x="K", y="Value", kind="line", col="Metric", facet_kws=facet_kws, **kwargs)
-        g.set_titles("{col_name}")
-        for ax in g.axes:
-            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        if return_data:
-            return g, results
-        return g
+        return results
 
     def save(
         self,

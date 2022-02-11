@@ -3,9 +3,7 @@
 """
 The 'general' module contains functions for general plotting, such as scatter and density plots for tSNE,
 UMAP, PHATE plots, and functions for box and swarm plots.
-
 Copyright 2020 Ross Burton
-
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
 files (the "Software"), to deal in the Software without restriction,
@@ -15,7 +13,6 @@ Software, and to permit persons to whom the Software is furnished
 to do so, subject to the following conditions:
 The above copyright notice and this permission notice shall be included
 in all copies or substantial portions of the Software.
-
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -52,7 +49,6 @@ class ColumnWrapFigure(plt.Figure):
     the grid (i.e. the number of subplots) as 'n', the maximum number of columns as 'col_wrap' and optionally
     the figure size. Subplots are then dynamically added using the 'add_wrapped_subplot' method, returning a
     new Axes object within the constraints of the column wrapping.
-
     Parameters
     ----------
     n: int
@@ -81,14 +77,12 @@ class ColumnWrapFigure(plt.Figure):
     def add_wrapped_subplot(self, *args, **kwargs) -> plt.Axes:
         """
         Add a new column wrapped subplot to Figure
-
         Parameters
         ----------
         args: optional
             Additional positional arguments passed to Matplotlib.Figure.add_subplot
         kwargs: optional
             Additional keyword arguments passed to Matplotlib.Figure.add_subplot
-
         Returns
         -------
         Matplotlib.Axes
@@ -110,6 +104,7 @@ def box_swarm_plot(
     figsize: Tuple[int, int] = (5, 5),
     overlay: bool = True,
     order: Optional[List[str]] = None,
+    hue_order: Optional[List[str]] = None,
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None,
     xticklabels: Optional[List[Any]] = None,
@@ -121,7 +116,6 @@ def box_swarm_plot(
     """
     This is a convenience function that wraps Seaborn's boxplot and swarmplot functions. It will generate/plot a single
     axis with the boxplot in the background and swarmplot in the foreground.
-
     Parameters
     ----------
     data: Pandas.DataFrame
@@ -141,6 +135,8 @@ def box_swarm_plot(
         If True, swarmplot generated overlaying the boxplot
     order: List[str], optional
         If provided, will specify the order of the x-axis values
+    hue_order: List[str], optional
+        If provided, will specify the hue order
     xlabel: str, optional
     ylabel: str, optional
     xticklabels: List[Any], optional
@@ -151,7 +147,6 @@ def box_swarm_plot(
         Additional keyword arguments passed to seaborn.swarmplot
     legend_anchor: Tuple[int, int], (default=(1.05, 1))
         Position of the legend relative to plot axes
-
     Returns
     -------
     Matplotlib.Axes
@@ -161,6 +156,9 @@ def box_swarm_plot(
     if order:
         boxplot_kwargs["order"] = boxplot_kwargs.get("order", order)
         overlay_kwargs["order"] = overlay_kwargs.get("order", order)
+    if hue_order:
+        boxplot_kwargs["hue_order"] = boxplot_kwargs.get("hue_order", hue_order)
+        overlay_kwargs["hue_order"] = overlay_kwargs.get("hue_order", hue_order)
     ax = ax if ax is not None else plt.subplots(figsize=figsize)[1]
     sns.boxplot(
         data=data,
@@ -205,11 +203,9 @@ def discrete_palette(n: int) -> str:
     * If n <= 10 then palette is 'tab10'
     * if 10 > n >= 20 the palette is 'tab20'
     * if n > 20, then a warning will be raised and palette is 'tab20'
-
     Parameters
     ----------
     n: int
-
     Returns
     -------
     str
@@ -218,11 +214,9 @@ def discrete_palette(n: int) -> str:
         return "tab10"
     if n <= 20:
         return "tab20"
-    logger.warning(
-        "Max number of unique labels is greater than the maximum number of colours (20) provided for "
-        "scatterplot - may generate a misleading plot with colours duplicated!"
-    )
-    return "tab20"
+    logger.warning("Palette requires more than 20 unique colours, be careful interpreting results!")
+    hsv = plt.get_cmap("Spectral")
+    return hsv(np.linspace(0, 1.0, n))
 
 
 def discrete_label(data: pd.DataFrame, label: str, discrete: Optional[bool] = None) -> bool:
@@ -232,13 +226,11 @@ def discrete_label(data: pd.DataFrame, label: str, discrete: Optional[bool] = No
     and if found, the label will be treated as discrete.
     If the label has been specified to be continuous by the user or found to contain only numeric data, then
     returns False, otherwise the 'label' column is coerced to a string data type and returns True.
-
     Parameters
     ----------
     data: Pandas.DataFrame
     label: str
     discrete: bool, optional
-
     Returns
     -------
     bool
@@ -256,12 +248,10 @@ def discrete_label(data: pd.DataFrame, label: str, discrete: Optional[bool] = No
 def scatterplot_defaults(**kwargs) -> Dict:
     """
     Yields default settings for scatterplot
-
     Parameters
     ----------
     kwargs: optional
         User defined settings
-
     Returns
     -------
     Dict
@@ -296,7 +286,6 @@ def scatterplot(
     """
     General function for scatterplot. Wraps seaborn.scatterplot for convenient plotting and some default settings
     inforced.
-
     Parameters
     ----------
     data: Pandas.DataFrame or Polars.DataFrame
@@ -338,18 +327,21 @@ def scatterplot(
         Y-axis scale
     kwargs: optional
         Additional keyword arguments passed to seaborn.scatterplot
-
     Returns
     -------
     Matplotlib.Axes
     """
+    hue_order = None
     if isinstance(data, pl.DataFrame):
         data = polars_to_pandas(data=data)
     if label is not None:
         discrete = discrete_label(data=data, label=label, discrete=discrete)
+        hue_order = data[label].value_counts().sort_values(ascending=False).index.values
+        data = data.set_index(label).loc[hue_order].reset_index()
     if palette is None:
         if discrete and label is not None:
             palette = discrete_palette(n=data[label].nunique())
+            hue_norm = None
         else:
             palette = "coolwarm"
     if size is not None:
@@ -362,7 +354,8 @@ def scatterplot(
     cbar_kwargs = cbar_kwargs or {}
     legend_kwargs = legend_kwargs or {}
 
-    data = data[~data[[x, y, label]].isnull().any(axis=1)]
+    key = [x, y] if label is None else [x, y, label]
+    data = data[~data[key].isnull().any(axis=1)]
     ax = ax or plt.subplots(figsize=figsize)[1]
 
     ax = sns.scatterplot(
@@ -374,6 +367,7 @@ def scatterplot(
         style=style,
         palette=palette,
         hue_norm=hue_norm,
+        hue_order=hue_order,
         legend=include_legend,
         ax=ax,
         **kwargs,
@@ -414,7 +408,6 @@ def density_plot(
 ):
     """
     Plot a two-dimensional histogram
-
     Parameters
     ----------
     data: Pandas.DataFrame or Polars.DataFrame
@@ -433,7 +426,6 @@ def density_plot(
         If not given, defaults to LogNorm
     kwargs: optional
         Additional keyword arguments passed to Matplotlib.hist2d
-
     Returns
     -------
     Matplotlib.Axes
