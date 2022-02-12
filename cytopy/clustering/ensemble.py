@@ -11,11 +11,13 @@ import hdmedians as hd
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import setuptools
 from ClusterEnsembles import ClusterEnsembles
 from joblib import delayed
 from joblib import Parallel
-from matplotlib.ticker import MaxNLocator
+from scipy.cluster.hierarchy import dendrogram
 from scipy.cluster.hierarchy import fclusterdata
+from scipy.cluster.hierarchy import linkage
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.preprocessing import LabelEncoder
 
@@ -75,6 +77,158 @@ def majority_vote(
             score = count
             winner = label
     return winner
+
+
+def _gather_partitions(cluster_labels: List[List[int]]):
+    h = len(cluster_labels)
+    n = len(cluster_labels[0])
+    parts = np.concatenate(cluster_labels).reshape(h, n)
+    y = pd.DataFrame([parts[:, i] for i in range(n)], columns=np.arange(h))
+    y.index.name = "objs"
+    y.columns.name = "partition"
+    return y
+
+
+def _generate_kj(y: pd.DataFrame):
+    k = y.apply(lambda x: np.unique(x.dropna())).values
+    return [tuple(x) for x in k]
+
+
+def _init_alpha(n_consensus_clusters: int):
+    return np.ones(n_consensus_clusters) / n_consensus_clusters
+
+
+def _calc_v(kj_i: Tuple):
+    aux = abs(np.random.randn(len(kj_i)))
+    return aux / sum(aux)
+
+
+def _init_v(n_partitions: int, n_consensus_clusters: int, kj: List[Tuple]):
+    return [[_calc_v(kj[i]) for _ in range(n_consensus_clusters)] for i in range(n_partitions)]
+
+
+def _init_expz(n: int, n_consensus_clusters):
+    return np.zeros(n * n_consensus_clusters).reshape(n, n_consensus_clusters)
+
+
+def _init_parameters(n_consensus_clusters: int, n_obs: int, n_partitions: int, kj: List[Tuple]):
+    alpha = _init_alpha(n_consensus_clusters=n_consensus_clusters)
+    v = _init_v(n_partitions=n_partitions, n_consensus_clusters=n_consensus_clusters, kj=kj)
+    exp_z = _init_expz(n=n_obs, n_consensus_clusters=n_consensus_clusters)
+    return alpha, v, exp_z
+
+
+class MixtureModel:
+    def __init__(self, cluster_labels: List[List[int]], n_consensus_clusters: int, iterations: int = 10, verbose=True):
+        if not len(set([len(x) for x in cluster_labels])) == 1:
+            raise ValueError("Cluster solutions must be of equal length")
+        self.cluster_labels = cluster_labels
+        self.n = len(self.cluster_labels[0])
+        self.iterations = iterations
+        self.n_consensus_clusters = n_consensus_clusters
+        self.y = _gather_partitions(cluster_labels=cluster_labels)
+        self.kj = _generate_kj(y=self.y)
+        self.alpha, self.v, self.exp_z = _init_parameters(
+            n_consensus_clusters=n_consensus_clusters, n_obs=self.y.shape[0], n_partitions=self.y.shape[1], kj=self.kj
+        )
+        self.labels = []
+        self.pi_finishing = {}
+        self.verbose = verbose
+
+    @staticmethod
+    def _sigma(a, b):
+        return 1 if a == b else 0
+
+    def expectation(self):
+        """
+        Compute the Expectation (ExpZ) according to parameters.
+        Obs: y(N,H) Kj(H) alpha(M) v(H,M,K(j)) ExpZ(N,M)
+        """
+
+        n_elem = self.y.shape[0]
+        big_m = self.exp_z.shape[1]
+
+        for m in range(big_m):
+            for i in range(n_elem):
+
+                prod1 = 1
+                num = 0
+                for j in range(self.y.shape[1]):
+                    ix1 = 0
+                    for k in self.kj[j]:
+                        prod1 *= self.v[j][m][ix1] ** self._sigma(self.y.iloc[i][j], k)
+                        ix1 += 1
+                num += self.alpha[m] * prod1
+
+                den = 0
+                for n in range(big_m):
+
+                    prod2 = 1
+                    for j2 in range(self.y.shape[1]):
+                        ix2 = 0
+                        for k in self.kj[j2]:
+                            prod2 *= self.v[j2][n][ix2] ** self._sigma(self.y.iloc[i][j2], k)
+                            ix2 += 1
+                    den += self.alpha[n] * prod2
+
+                self.exp_z[i][m] = float(num) / float(den)
+
+        return self.exp_z
+
+    @staticmethod
+    def _vec_sigma(vec, k):
+        aux = []
+        for i in vec:
+            if i == k:
+                aux.append(1)
+            else:
+                aux.append(0)
+        return np.asarray(aux)
+
+    def update_alpha(self):
+        for m in range(self.alpha.shape[0]):
+            self.alpha[m] = float(sum(self.exp_z[:, m])) / float(sum(sum(self.exp_z)))
+        return self.alpha
+
+    def update_v(self):
+        for j in range(self.y.shape[1]):
+            for m in range(self.alpha.shape[0]):
+                ix = 0
+                for k in self.kj[j]:
+                    num = sum(self._vec_sigma(self.y.iloc[:, j], k) * np.array(self.exp_z[:, m]))
+                    den = 0
+                    for kx in self.kj[j]:
+                        den += sum(self._vec_sigma(self.y.iloc[:, j], kx) * np.asarray(self.exp_z[:, m]))
+                    self.v[j][m][ix] = float(num) / float(den)
+                    ix += 1
+        return self.v
+
+    def maximization(self):
+        self.alpha = self.update_alpha()
+        self.v = self.update_v()
+        return self.alpha, self.v
+
+    def _pi_consensus(self):
+        max_expz_values = {}
+        pi_finishing = {}
+        labels = []
+        for i in range(self.exp_z.shape[0]):
+            max_expz_values[i] = max(self.exp_z[i, :])
+            pi_finishing[i] = []
+
+            for j in range(self.exp_z.shape[1]):
+                if max_expz_values[i] == self.exp_z[i, j]:
+                    pi_finishing[i].append(j + 1)
+                    labels.append(j + 1)
+        return pi_finishing, np.asarray(labels)
+
+    def em_process(self):
+        for _ in progress_bar(range(self.iterations), total=self.iterations, verbose=self.verbose):
+            self.exp_z = self.expectation()
+            self.alpha, self.v = self.maximization()
+
+        self.pi_finishing, self.labels = self._pi_consensus()
+        return self.labels
 
 
 class EnsembleClustering(Clustering):
@@ -181,11 +335,31 @@ class EnsembleClustering(Clustering):
         for consensus_label, clusters in centroids.groupby("cluster_label"):
             self._n_sources[consensus_label] = len(set([c.split("_")[0] for c in clusters.index.unique()]))
 
-    def centroid_clustered_heatmap(
+    def similarity_matrix(self, diversity_threshold: Optional[float] = None):
+
+        if diversity_threshold:
+            si_scores = self.simpsons_diversity_index()
+            si_scores = si_scores[si_scores.SimpsonIndex <= diversity_threshold]
+            clusters = si_scores.index.values
+        else:
+            clusters = self.clusters
+
+        matrix = np.zeros((len(clusters), len(clusters)))
+        for i, cluster_id in enumerate(clusters):
+            cluster_i_data = set(self.data[self.data[cluster_id] == 1].index.values)
+            for j in cluster_id in enumerate(clusters):
+                cluster_j_data = set(self.data[self.data[cluster_id] == 1].index.values)
+                intersect = cluster_i_data.intersection(cluster_j_data)
+                union = cluster_i_data.union(cluster_j_data)
+                matrix[i, j] = len(intersect) / len(union)
+        return pd.DataFrame(matrix, index=clusters, columns=clusters)
+
+    def clustered_heatmap(
         self,
         method: str = "ward",
         metric: str = "euclidean",
         plot_orientation: str = "vertical",
+        similarity_metric: str = "geometric_median",
         diversity_threshold: Optional[float] = None,
         **kwargs,
     ):
@@ -194,11 +368,16 @@ class EnsembleClustering(Clustering):
             si_scores = self.simpsons_diversity_index()
             si_scores = si_scores[si_scores.SimpsonIndex <= diversity_threshold]
             centroids = centroids.loc[si_scores.index]
-        if plot_orientation == "horizontal":
-            g = sns.clustermap(data=centroids.T, method=method, metric=metric, **kwargs)
-        else:
-            g = sns.clustermap(data=centroids, method=method, metric=metric, **kwargs)
-        return g
+        if similarity_metric == "geometric_median":
+            if plot_orientation == "horizontal":
+                g = sns.clustermap(data=centroids.T, method=method, metric=metric, **kwargs)
+            else:
+                g = sns.clustermap(data=centroids, method=method, metric=metric, **kwargs)
+            return g
+        similarity_matrix = self.similarity_matrix(diversity_threshold=diversity_threshold)
+        linkage_matrix = linkage(similarity_matrix, method=method, metric=metric)
+        d = dendrogram(linkage_matrix)
+        # https://jerilkuriakose.medium.com/heat-maps-with-dendrogram-using-python-d112a34e865e
 
     def elbow_plot(
         self,
@@ -272,7 +451,17 @@ class EnsembleClustering(Clustering):
             )
         return labels
 
-    def consensus_centroid_clustering(
+    def mixture_model_consensus_clustering(
+        self, k: int, iterations: int = 10, labels: Optional[List[List]] = None, verbose: bool = True
+    ):
+        labels = labels if labels is not None else self._reconstruct_labels(encoded=True)
+        mixture_model = MixtureModel(
+            cluster_labels=labels, iterations=iterations, n_consensus_clusters=k, verbose=verbose
+        )
+        self.data["cluster_label"] = mixture_model.em_process()
+        return self
+
+    def aiv_consensus_clustering(
         self,
         t: int,
         method: str = "ward",
@@ -321,11 +510,9 @@ class EnsembleClustering(Clustering):
         for consensus_label, clusters in data.groupby("cluster_label"):
             self._n_sources[consensus_label] = clusters.original_cluster_label.nunique()
 
-    def consensus_clustering(
+    def graph_consensus_clustering(
         self, consensus_method: str, k: int, random_state: int = 42, labels: Optional[List] = None
     ):
-        if consensus_method not in ["cspa", "hgpa", "mcla", "hbgf", "nmf"]:
-            raise ClusteringError("Invalid consensus method, must be one of: cspa, hgpa, mcla, hbgf, or nmf")
         labels = labels if labels is not None else self._reconstruct_labels(encoded=True)
         if consensus_method == "cspa" and self.data.shape[0] > 5000:
             logger.warning("CSPA is not recommended when n>5000, consider a different method")
@@ -338,6 +525,7 @@ class EnsembleClustering(Clustering):
             self.data["cluster_label"] = ClusterEnsembles.hbgf(labels=labels, nclass=k)
         if consensus_method == "nmf":
             self.data["cluster_label"] = ClusterEnsembles.nmf(labels=labels, nclass=k, random_state=random_state)
+        raise ClusteringError("Invalid consensus method, must be one of: cspa, hgpa, mcla, hbgf, or nmf")
 
     def comparison(self, method: str = "adjusted_mutual_info", **kwargs):
         kwargs["figsize"] = kwargs.get("figsize", (10, 10))
@@ -382,7 +570,12 @@ class EnsembleClustering(Clustering):
         results = []
         for k in range(*k_range):
             logger.info(f"Calculating consensus with k={k}...")
-            self.consensus_clustering(consensus_method=consensus_method, k=k, random_state=random_state)
+            if consensus_method == "mixture_model":
+                self.mixture_model_consensus_clustering(k=k, **kwargs)
+            elif consensus_method == "aiv":
+                self.aiv_consensus_clustering(t=k, **kwargs)
+            else:
+                self.graph_consensus_clustering(consensus_method=consensus_method, k=k, random_state=random_state)
             perf = self.internal_performance(
                 metrics=metrics,
                 sample_n=sample_n,
