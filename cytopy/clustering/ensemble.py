@@ -15,9 +15,11 @@ import setuptools
 from ClusterEnsembles import ClusterEnsembles
 from joblib import delayed
 from joblib import Parallel
+from numba import jit
 from scipy.cluster.hierarchy import dendrogram
 from scipy.cluster.hierarchy import fclusterdata
 from scipy.cluster.hierarchy import linkage
+from scipy.spatial import distance
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.preprocessing import LabelEncoder
 
@@ -27,7 +29,6 @@ from .clustering import Clustering
 from .clustering import ClusteringError
 from .clustering import simpson_di
 from .metrics import comparison_matrix
-from .metrics import init_internal_metrics
 from .metrics import InternalMetric
 from cytopy.data.experiment import Experiment
 from cytopy.feedback import progress_bar
@@ -35,7 +36,7 @@ from cytopy.feedback import progress_bar
 logger = logging.getLogger(__name__)
 
 
-def distortion_score(data: pd.DataFrame, features: List[str], clusters: List[str], metric: str = "euclidean"):
+def distortion_score(data: pd.DataFrame, features: List[str], clusters: List[str], metric: str = "euclidean") -> Dict:
     score = {}
     for c in clusters:
         df = data[data[c] == 1]
@@ -47,22 +48,49 @@ def distortion_score(data: pd.DataFrame, features: List[str], clusters: List[str
     return score
 
 
-def majority_vote(
+def majority_vote_with_distortion_score_weighting(
     row: pd.Series,
-    cluster_assignments: List[str],
+    cluster_column_names: List[str],
     consensus_clusters: pd.DataFrame,
-    weights: Optional[Dict[str, float]] = None,
+    distortion_score_dict: Dict[str, Dict[str, float]],
 ):
-    clusters = row[cluster_assignments].replace({0: None}).dropna().index.tolist()
+    clusters = row[cluster_column_names].replace({0: None}).dropna().index.tolist()
     clusters = [c for c in clusters if c in consensus_clusters.index.tolist()]
-    if weights is not None:
-        consensus_cluster_score = []
-        for cid, cc_data in consensus_clusters.loc[clusters].groupby("cluster_label"):
-            consensus_cluster_score.append(
-                [cid, cc_data.shape[0] / sum([weights.get(i) for i in cc_data.index.values])]
-            )
-        return sorted(consensus_cluster_score, key=lambda x: x[1])[::-1][0][0]
 
+    consensus_cluster_score = []
+    for cid, cc_data in consensus_clusters.loc[clusters].groupby("cluster_label"):
+        consensus_cluster_score.append(
+            [
+                cid,
+                cc_data.shape[0]
+                / sum([distortion_score_dict.get(row["sample_id"]).get(i) for i in cc_data.index.values]),
+            ]
+        )
+    return sorted(consensus_cluster_score, key=lambda x: x[1])[::-1][0][0]
+
+
+def majority_vote_with_distance_weighting(
+    row: pd.Series,
+    cluster_column_names: List[str],
+    consensus_clusters: pd.DataFrame,
+    distance_df: pd.DataFrame,
+):
+    clusters = row[cluster_column_names].replace({0: None}).dropna().index.tolist()
+    clusters = [c for c in clusters if c in consensus_clusters.index.tolist()]
+
+    distance_df = distance_df[distance_df.cell_id == row.name].set_index("cluster")
+
+    consensus_cluster_score = []
+    for cid, cc_data in consensus_clusters.loc[clusters].groupby("cluster_label"):
+        consensus_cluster_score.append(
+            [cid, cc_data.shape[0] / sum([distance_df.loc[i]["distance"] for i in cc_data.index.values])]
+        )
+    return sorted(consensus_cluster_score, key=lambda x: x[1])[::-1][0][0]
+
+
+def majority_vote(row: pd.Series, cluster_column_names: List[str], consensus_clusters: pd.DataFrame):
+    clusters = row[cluster_column_names].replace({0: None}).dropna().index.tolist()
+    clusters = [c for c in clusters if c in consensus_clusters.index.tolist()]
     consensus_cluster_labels = Counter([consensus_clusters.loc[cid, "cluster_label"] for cid in clusters])
     score = 0
     winner = None
@@ -118,6 +146,37 @@ def _init_parameters(n_consensus_clusters: int, n_obs: int, n_partitions: int, k
     return alpha, v, exp_z
 
 
+def _compute_prod(y, kj, v, m):
+    prod_values = []
+    for i in range(y.shape[0]):
+        prod = 1
+        for j in range(y.shape[1]):
+            ix = 0
+            for k in kj[j]:
+                if y[i, j] == k:
+                    prod *= v[j][m][ix] ** 1
+                else:
+                    prod *= v[j][m][ix] ** 0
+                ix += 1
+        prod_values.append(prod)
+    return prod_values
+
+
+def _expectation(y: np.array, exp_z: np.array, kj: np.array, v: list, alpha: np.array):
+    with Parallel(n_jobs=-1) as parallel:
+        prod_values = parallel(delayed(_compute_prod)(y, kj, v, m) for m in range(exp_z.shape[1]))
+    for m in range(exp_z.shape[1]):
+        for i in range(y.shape[0]):
+            prod = prod_values[m][i]
+            num, den = 0, 0
+            num += alpha[m] * prod
+            for n in range(exp_z.shape[1]):
+                prod = prod_values[n][i]
+                den += alpha[n] * prod
+            exp_z[i][m] = float(num) / float(den)
+    return exp_z
+
+
 class MixtureModel:
     def __init__(self, cluster_labels: List[List[int]], n_consensus_clusters: int, iterations: int = 10, verbose=True):
         if not len(set([len(x) for x in cluster_labels])) == 1:
@@ -145,34 +204,9 @@ class MixtureModel:
         Obs: y(N,H) Kj(H) alpha(M) v(H,M,K(j)) ExpZ(N,M)
         """
 
-        n_elem = self.y.shape[0]
-        big_m = self.exp_z.shape[1]
-
-        for m in range(big_m):
-            for i in range(n_elem):
-
-                prod1 = 1
-                num = 0
-                for j in range(self.y.shape[1]):
-                    ix1 = 0
-                    for k in self.kj[j]:
-                        prod1 *= self.v[j][m][ix1] ** self._sigma(self.y.iloc[i][j], k)
-                        ix1 += 1
-                num += self.alpha[m] * prod1
-
-                den = 0
-                for n in range(big_m):
-
-                    prod2 = 1
-                    for j2 in range(self.y.shape[1]):
-                        ix2 = 0
-                        for k in self.kj[j2]:
-                            prod2 *= self.v[j2][n][ix2] ** self._sigma(self.y.iloc[i][j2], k)
-                            ix2 += 1
-                    den += self.alpha[n] * prod2
-
-                self.exp_z[i][m] = float(num) / float(den)
-
+        self.exp_z = _expectation(
+            y=self.y.values.astype(np.int8), exp_z=self.exp_z, kj=self.kj, v=self.v, alpha=self.alpha
+        )
         return self.exp_z
 
     @staticmethod
@@ -246,6 +280,8 @@ class EnsembleClustering(Clustering):
         self.cluster_groups = defaultdict(list)
         self.cluster_assignments = {}
         self._cluster_weights = {}
+        self._event_distance_to_cluster_center = None
+        self._event_distance_to_cluster_center_metric = None
         for sample_id in self.data.sample_id.unique():
             self.cluster_assignments[sample_id] = list(
                 self.experiment.get_sample(sample_id=sample_id).list_populations(
@@ -255,6 +291,13 @@ class EnsembleClustering(Clustering):
         for cluster in self.clusters:
             prefix = cluster.split("_")[0]
             self.cluster_groups[prefix].append(cluster)
+
+    @property
+    def cell_cluster_assignments(self) -> pd.DataFrame:
+        data = self.data[self.clusters].reset_index(drop=False).rename(columns={"index": "cell_id"})
+        data = data.melt(id_vars="cell_id", value_name="assignment", var_name="cluster")
+        data = data[data.assignment == 1]
+        return data.drop("assignment", axis=1)
 
     def _reconstruct_labels(self, encoded: bool = False):
         labels = {}
@@ -293,16 +336,44 @@ class EnsembleClustering(Clustering):
             si_scores[cluster] = simpson_di(df[cell_identifier].value_counts().to_dict())
         return pd.DataFrame(si_scores, index=["SimpsonIndex"]).T
 
-    def _compute_cluster_centroids(self):
+    def _compute_cluster_centroids(self, diversity_threshold: Optional[float] = None):
         cluster_geometric_median = []
         for cluster in self.clusters:
             cluster_data = self.data[self.data[cluster] == 1][self.features].T.values
             x = np.array(hd.geomedian(cluster_data)).reshape(-1, 1)
             x = pd.DataFrame(x, columns=[cluster], index=self.features)
             cluster_geometric_median.append(x.T)
-        return pd.concat(cluster_geometric_median)
+        centroids = pd.concat(cluster_geometric_median)
+        if diversity_threshold:
+            si_scores = self.simpsons_diversity_index()
+            si_scores = si_scores[si_scores.SimpsonIndex <= diversity_threshold]
+            centroids = centroids.loc[si_scores.index]
+        return centroids
 
-    def cluster_weights(
+    def event_distance_to_cluster_center(self, metric: str = "cityblock", n_jobs: int = -1, verbose: bool = True):
+        try:
+            if (
+                self._event_distance_to_cluster_center is not None
+                and self._event_distance_to_cluster_center_metric == metric
+            ):
+                return self._event_distance_to_cluster_center
+
+            data = self.cell_cluster_assignments
+            centers = self._compute_cluster_centroids()
+            with Parallel(n_jobs=n_jobs) as parallel:
+                distance_to_centroid = parallel(
+                    delayed(getattr(distance, metric))(
+                        data[self.features].loc[x.cell_id].values, centers.loc[x.cluster].values
+                    )
+                    for _, x in progress_bar(data.iterrows(), total=data.shape[0], verbose=verbose)
+                )
+            data["distance"] = distance_to_centroid
+            self._event_distance_to_cluster_center = data
+            return data
+        except AttributeError:
+            raise AttributeError("Invalid metric, must be a valid metric available from Scipy spatial.distance module")
+
+    def cluster_distortion_score(
         self, plot: bool = True, n_jobs=-1, distortion_metric: str = "euclidean", verbose: bool = True, **plot_kwargs
     ):
         if self._cluster_weights.get("metric", None) != distortion_metric:
@@ -330,9 +401,9 @@ class EnsembleClustering(Clustering):
             return self._cluster_weights["weights"], ax
         return self._cluster_weights["weights"], None
 
-    def _consensus_centroids_count_sources(self, centroids: pd.DataFrame):
+    def _consensus_clusters_count_sources(self, consensus_results: pd.DataFrame):
         self._n_sources = {}
-        for consensus_label, clusters in centroids.groupby("cluster_label"):
+        for consensus_label, clusters in consensus_results.groupby("cluster_label"):
             self._n_sources[consensus_label] = len(set([c.split("_")[0] for c in clusters.index.unique()]))
 
     def similarity_matrix(self, diversity_threshold: Optional[float] = None):
@@ -363,11 +434,8 @@ class EnsembleClustering(Clustering):
         diversity_threshold: Optional[float] = None,
         **kwargs,
     ):
-        centroids = self._compute_cluster_centroids()
-        if diversity_threshold:
-            si_scores = self.simpsons_diversity_index()
-            si_scores = si_scores[si_scores.SimpsonIndex <= diversity_threshold]
-            centroids = centroids.loc[si_scores.index]
+        centroids = self._compute_cluster_centroids(diversity_threshold=diversity_threshold)
+
         if similarity_metric == "geometric_median":
             if plot_orientation == "horizontal":
                 g = sns.clustermap(data=centroids.T, method=method, metric=metric, **kwargs)
@@ -379,77 +447,17 @@ class EnsembleClustering(Clustering):
         d = dendrogram(linkage_matrix)
         # https://jerilkuriakose.medium.com/heat-maps-with-dendrogram-using-python-d112a34e865e
 
-    def elbow_plot(
-        self,
-        min_k: int,
-        max_k: int,
-        sample_n: int = 10000,
-        resamples: int = 20,
-        method: str = "ward",
-        cluster_metric: str = "euclidean",
-        depth: int = 2,
-        weight: bool = True,
-        n_jobs: int = -1,
-        distortion_metric: str = "euclidean",
-        external_metrics: Optional[List[Union[str, InternalMetric]]] = None,
-        figsize: Optional[Tuple[int, int]] = None,
-        verbose: bool = True,
-        **kwargs,
-    ):
-        centroids = self._compute_cluster_centroids()
-        results = []
-        external_metrics = external_metrics or ["distortion_score"]
-        metrics = init_internal_metrics(metrics=external_metrics)
-        for k in range(min_k, max_k + 1):
-            if verbose:
-                print(f"N clusters = {k}")
-            centroids["cluster_label"] = fclusterdata(
-                X=centroids, t=k, criterion="maxclust", method=method, metric=cluster_metric, depth=depth
-            )
-            labels = self._assigning_events_to_clusters(
-                centroids=centroids, distortion_metric=distortion_metric, n_jobs=n_jobs, weight=weight, verbose=verbose
-            )
-            tmp = pd.DataFrame(
-                self.performance(
-                    metrics=metrics, sample_n=sample_n, resamples=resamples, labels=labels, plot=False, verbose=verbose
-                )
-            )
-            tmp["N clusters"] = k
-            results.append(tmp)
-        results = pd.concat(results).sort_values("N clusters")
-        metrics = [x for x in results.columns if x != "N clusters"]
-        figsize = figsize or (10, 5 * len(metrics))
-        fig = ColumnWrapFigure(n=len(metrics), figsize=figsize, col_wrap=1)
-        for i, metric in enumerate(metrics):
-            ax = fig.add_wrapped_subplot()
-            box_swarm_plot(data=results, x="N clusters", y=metric, ax=ax, **kwargs)
-            if i < len(metrics) - 1:
-                ax.set_xlabel("")
-                ax.set_xticklabels([])
-        return fig
-
-    def _assigning_events_to_clusters(
-        self,
-        centroids: pd.DataFrame,
-        distortion_metric: str = "euclidean",
-        n_jobs: int = -1,
-        weight: bool = True,
-        verbose: bool = True,
-    ):
-        with Parallel(n_jobs=n_jobs) as parallel:
-            weights = {}
-            if weight:
-                weights, _ = self.cluster_weights(plot=False, distortion_metric=distortion_metric, verbose=verbose)
-            labels = parallel(
-                delayed(majority_vote)(
-                    row=row,
-                    cluster_assignments=self.cluster_assignments[row.sample_id],
-                    consensus_clusters=centroids[["cluster_label"]],
-                    weights=weights.get(row.sample_id, None),
-                )
-                for _, row in progress_bar(self.data.iterrows(), verbose=verbose, total=self.data.shape[0])
-            )
-        return labels
+    def _vote_filter(self, consensus_results: pd.DataFrame):
+        cell_assignments = self.cell_cluster_assignments
+        cell_assignments["cluster"] = cell_assignments["cluster"].apply(
+            lambda x: consensus_results.loc[x]["cluster_label"]
+        )
+        one_consensus_label = cell_assignments.drop_duplicates()
+        one_consensus_label = one_consensus_label[one_consensus_label.cell_id.value_counts() == 1]
+        labelled = self.data.loc[one_consensus_label.cell_id.values].copy()
+        unlabelled = self.data[~self.data.index.isin(one_consensus_label.cell_id.values)].copy()
+        labelled["cluster_label"] = one_consensus_label["cluster"]
+        return labelled, unlabelled
 
     def mixture_model_consensus_clustering(
         self, k: int, iterations: int = 10, labels: Optional[List[List]] = None, verbose: bool = True
@@ -461,6 +469,57 @@ class EnsembleClustering(Clustering):
         self.data["cluster_label"] = mixture_model.em_process()
         return self
 
+    def _majority_vote(
+        self,
+        consensus_data: pd.DataFrame,
+        vote_weighting_method: str,
+        distortion_metric: str,
+        distance_to_center_metric: str,
+        verbose: bool,
+        n_jobs: int,
+    ):
+        labelled, unlabelled = self._vote_filter(consensus_results=consensus_data)
+        logger.info(f"...{unlabelled.shape[0]} events assigned to more than one consensus label, resolving by vote")
+
+        if vote_weighting_method == "distortion_score":
+            weights = self.cluster_distortion_score(plot=False, distortion_metric=distortion_metric, verbose=verbose)
+            with Parallel(n_jobs=n_jobs) as parallel:
+                labels = parallel(
+                    delayed(majority_vote_with_distortion_score_weighting)(
+                        row=row,
+                        cluster_column_names=self.clusters,
+                        consensus_clusters=consensus_data[["cluster_label"]],
+                        distortion_score_dict=weights,
+                    )
+                    for _, row in progress_bar(unlabelled.iterrows(), verbose=verbose, total=unlabelled.shape[0])
+                )
+        elif vote_weighting_method == "distance_to_center":
+            distance_df = self.event_distance_to_cluster_center(
+                metric=distance_to_center_metric, n_jobs=n_jobs, verbose=verbose
+            )
+            with Parallel(n_jobs=n_jobs) as parallel:
+                labels = parallel(
+                    delayed(majority_vote_with_distance_weighting)(
+                        row=row,
+                        cluster_column_names=self.clusters,
+                        consensus_clusters=consensus_data[["cluster_label"]],
+                        distance_df=distance_df,
+                    )
+                    for _, row in progress_bar(unlabelled.iterrows(), verbose=verbose, total=unlabelled.shape[0])
+                )
+        else:
+            with Parallel(n_jobs=n_jobs) as parallel:
+                labels = parallel(
+                    delayed(majority_vote)(
+                        row=row,
+                        cluster_column_names=self.clusters,
+                        consensus_clusters=consensus_data[["cluster_label"]],
+                    )
+                    for _, row in progress_bar(unlabelled.iterrows(), verbose=verbose, total=unlabelled.shape[0])
+                )
+        unlabelled["cluster_label"] = labels
+        return labels, labelled, unlabelled
+
     def aiv_consensus_clustering(
         self,
         t: int,
@@ -468,40 +527,46 @@ class EnsembleClustering(Clustering):
         metric: str = "euclidean",
         criterion: str = "maxclust",
         depth: int = 2,
-        weight: bool = True,
         n_jobs: int = -1,
         verbose: bool = True,
-        distortion_metric: str = "euclidean",
+        cluster_data: str = "geometric_medians",
         diversity_threshold: Optional[float] = None,
+        vote_weighting_method: Optional[str] = "distortion_score",
+        distortion_metric: str = "euclidean",
+        distance_to_center_metric: str = "cityblock",
         return_labels: bool = False,
     ):
         self._check_for_cluster_parents()
-        logger.info("Calculating cluster centroids")
-        centroids = self._compute_cluster_centroids()
+        if cluster_data == "geometric_medians":
+            logger.info("Calculating geometric median of each cluster")
+            consensus_data = self._compute_cluster_centroids(diversity_threshold=diversity_threshold)
+        elif cluster_data == "similarity":
+            consensus_data = None
+        else:
+            raise ValueError("cluster_data must be either 'geometric_medians' or 'similarity'")
 
-        if diversity_threshold:
-            logger.info(f"Removing clusters with Simpson Index <= {diversity_threshold}")
-            si_scores = self.simpsons_diversity_index()
-            si_scores = si_scores[si_scores.SimpsonIndex <= diversity_threshold]
-            centroids = centroids.loc[si_scores.index]
-
-        logger.info("Performing hierarchical clustering of centroids")
-        centroids["cluster_label"] = fclusterdata(
-            X=centroids, t=t, criterion=criterion, method=method, metric=metric, depth=depth
+        logger.info("Performing hierarchical clustering")
+        consensus_data["cluster_label"] = fclusterdata(
+            X=consensus_data, t=t, criterion=criterion, method=method, metric=metric, depth=depth
         )
         logger.info(
-            f"Clustered centroids into {centroids.cluster_label.nunique()} clusters: "
-            f"{centroids.cluster_label.unique()}"
+            f"Generated {consensus_data.cluster_label.nunique()} consensus clusters: {consensus_data.cluster_label.unique()}"
         )
-        self._consensus_centroids_count_sources(centroids=centroids)
+        self._consensus_clusters_count_sources(consensus_results=consensus_data)
 
-        logger.info("Assigning clusters by majority vote")
-        labels = self._assigning_events_to_clusters(
-            centroids=centroids, distortion_metric=distortion_metric, n_jobs=n_jobs, weight=weight, verbose=verbose
+        logger.info(f"Assigning clusters by majority vote (vote_weighting_method={vote_weighting_method})")
+        labels, labelled, unlabelled = self._majority_vote(
+            consensus_data=consensus_data,
+            vote_weighting_method=vote_weighting_method,
+            distortion_metric=distortion_metric,
+            distance_to_center_metric=distance_to_center_metric,
+            verbose=verbose,
+            n_jobs=n_jobs,
         )
+        self.data = pd.concat(labelled, unlabelled).reset_index(drop=True)
+        logger.info("Consensus clustering complete!")
         if return_labels:
             return labels
-        self.data["cluster_label"] = labels
         return self
 
     def _consensus_count_sources(self, original_labels: List):
