@@ -15,18 +15,24 @@ import setuptools
 from ClusterEnsembles import ClusterEnsembles
 from joblib import delayed
 from joblib import Parallel
+from matplotlib import pyplot as plt
 from numba import jit
 from scipy.cluster.hierarchy import dendrogram
 from scipy.cluster.hierarchy import fclusterdata
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial import distance
+from sklearn.base import ClusterMixin
 from sklearn.metrics.pairwise import pairwise_distances
 from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
 from ..plotting.general import box_swarm_plot
 from ..plotting.general import ColumnWrapFigure
 from .clustering import Clustering
 from .clustering import ClusteringError
+from .clustering import ClusterMethod
+from .clustering import init_cluster_method
 from .clustering import simpson_di
 from .metrics import comparison_matrix
 from .metrics import InternalMetric
@@ -38,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 def distortion_score(data: pd.DataFrame, features: List[str], clusters: List[str], metric: str = "euclidean") -> Dict:
     score = {}
+    clusters = [c for c in clusters if c in data.columns]
     for c in clusters:
         df = data[data[c] == 1]
         if df.shape[0] == 0:
@@ -62,8 +69,7 @@ def majority_vote_with_distortion_score_weighting(
         consensus_cluster_score.append(
             [
                 cid,
-                cc_data.shape[0]
-                / sum([distortion_score_dict.get(row["sample_id"]).get(i) for i in cc_data.index.values]),
+                cc_data.shape[0] / sum([distortion_score_dict.get(i) for i in cc_data.index.values]),
             ]
         )
     return sorted(consensus_cluster_score, key=lambda x: x[1])[::-1][0][0]
@@ -336,7 +342,7 @@ class EnsembleClustering(Clustering):
             si_scores[cluster] = simpson_di(df[cell_identifier].value_counts().to_dict())
         return pd.DataFrame(si_scores, index=["SimpsonIndex"]).T
 
-    def _compute_cluster_centroids(self, diversity_threshold: Optional[float] = None):
+    def compute_cluster_centroids(self, diversity_threshold: Optional[float] = None):
         cluster_geometric_median = []
         for cluster in self.clusters:
             cluster_data = self.data[self.data[cluster] == 1][self.features].T.values
@@ -356,19 +362,21 @@ class EnsembleClustering(Clustering):
                 self._event_distance_to_cluster_center is not None
                 and self._event_distance_to_cluster_center_metric == metric
             ):
+                logger.info(f"Loading cell distance to cluster center data from cache")
                 return self._event_distance_to_cluster_center
-
-            data = self.cell_cluster_assignments
-            centers = self._compute_cluster_centroids()
+            logger.info(f"Computing distance to cluster centers for each event")
+            data = self.cell_cluster_assignments.copy()
+            centers = self.compute_cluster_centroids()
             with Parallel(n_jobs=n_jobs) as parallel:
                 distance_to_centroid = parallel(
                     delayed(getattr(distance, metric))(
-                        data[self.features].loc[x.cell_id].values, centers.loc[x.cluster].values
+                        self.data[self.features].loc[x.cell_id].values, centers.loc[x.cluster].values
                     )
                     for _, x in progress_bar(data.iterrows(), total=data.shape[0], verbose=verbose)
                 )
             data["distance"] = distance_to_centroid
-            self._event_distance_to_cluster_center = data
+            self._event_distance_to_cluster_center = data.copy()
+            self._event_distance_to_cluster_center_metric = metric
             return data
         except AttributeError:
             raise AttributeError("Invalid metric, must be a valid metric available from Scipy spatial.distance module")
@@ -384,7 +392,7 @@ class EnsembleClustering(Clustering):
                         data=self.data[self.data.sample_id == sid],
                         features=self.features,
                         metric=distortion_metric,
-                        clusters=self.cluster_assignments[sid],
+                        clusters=self.clusters,
                     )
                     for sid in progress_bar(sample_ids, verbose=verbose)
                 )
@@ -406,7 +414,7 @@ class EnsembleClustering(Clustering):
         for consensus_label, clusters in consensus_results.groupby("cluster_label"):
             self._n_sources[consensus_label] = len(set([c.split("_")[0] for c in clusters.index.unique()]))
 
-    def similarity_matrix(self, diversity_threshold: Optional[float] = None):
+    def similarity_matrix(self, diversity_threshold: Optional[float] = None, directional: bool = True):
 
         if diversity_threshold:
             si_scores = self.simpsons_diversity_index()
@@ -416,47 +424,100 @@ class EnsembleClustering(Clustering):
             clusters = self.clusters
 
         matrix = np.zeros((len(clusters), len(clusters)))
-        for i, cluster_id in enumerate(clusters):
-            cluster_i_data = set(self.data[self.data[cluster_id] == 1].index.values)
-            for j in cluster_id in enumerate(clusters):
-                cluster_j_data = set(self.data[self.data[cluster_id] == 1].index.values)
+
+        for i, cluster_i_id in enumerate(clusters):
+            cluster_i_data = set(self.data[self.data[cluster_i_id] == 1].index.values)
+
+            for j, cluster_j_id in enumerate(clusters):
+                cluster_j_data = set(self.data[self.data[cluster_j_id] == 1].index.values)
                 intersect = cluster_i_data.intersection(cluster_j_data)
-                union = cluster_i_data.union(cluster_j_data)
-                matrix[i, j] = len(intersect) / len(union)
+
+                if directional:
+                    if len(cluster_i_data) < len(cluster_j_data):
+                        matrix[i, j] = len(intersect) / len(cluster_i_data)
+                    else:
+                        matrix[i, j] = len(intersect) / len(cluster_j_data)
+                else:
+                    union = cluster_i_data.union(cluster_j_data)
+                    matrix[i, j] = len(intersect) / len(union)
+
         return pd.DataFrame(matrix, index=clusters, columns=clusters)
 
-    def clustered_heatmap(
+    def clustered_similarity_heatmap(
+        self,
+        directional: bool = True,
+        diversity_threshold: Optional[float] = None,
+        figsize: Tuple[int, int] = (10, 12),
+        dendrogram_dimensions: Tuple[float, float, float, float] = (0.3, 0.9, 0.6, 0.2),
+        similarity_heatmap_dimensions: Tuple[float, float, float, float] = (0.3, 0.5, 0.6, 0.4),
+        centroid_heatmap_dimensions: Tuple[float, float, float, float] = (0.3, 0.08, 0.6, 0.4),
+        method: str = "average",
+        metric: str = "euclidean",
+        cmap: str = "coolwarm",
+        xticklabels: bool = False,
+        scale: Optional[str] = "minmax",
+    ):
+        similarity_matrix = self.similarity_matrix(diversity_threshold=diversity_threshold, directional=directional)
+        centroids = self.compute_cluster_centroids(diversity_threshold=diversity_threshold)
+
+        if scale == "minmax":
+            centroids[centroids.columns] = MinMaxScaler().fit_transform(centroids)
+        elif scale == "standard":
+            centroids[centroids.columns] = StandardScaler().fit_transform(centroids)
+
+        fig = plt.figure(figsize=figsize)
+
+        # Dendrogram
+        dendrogram_ax = fig.add_axes(dendrogram_dimensions)
+        linkage_matrix = linkage(similarity_matrix.values, method=method, metric=metric)
+        dendro = dendrogram(linkage_matrix, color_threshold=0, above_threshold_color="black")
+        dendrogram_ax.set_xticks([])
+        dendrogram_ax.set_yticks([])
+
+        # Similarity matrix
+        axmatrix_sim = fig.add_axes(similarity_heatmap_dimensions)
+        idx = dendro["leaves"]
+        d = similarity_matrix.values[idx, :]
+        axmatrix_sim.matshow(d[:, idx], aspect="auto", origin="lower", cmap=cmap)
+        axmatrix_sim.set_xticks([])
+        axmatrix_sim.set_yticks([])
+
+        # Centroid heatmap
+        axmatrix_centroids = fig.add_axes(centroid_heatmap_dimensions)
+        idx = dendro["leaves"]
+        d = centroids.iloc[idx].T
+        sns.heatmap(data=d, ax=axmatrix_centroids, cmap=cmap, cbar=False, xticklabels=xticklabels)
+
+        return fig
+
+    def clustered_centroid_heatmap(
         self,
         method: str = "ward",
         metric: str = "euclidean",
         plot_orientation: str = "vertical",
-        similarity_metric: str = "geometric_median",
         diversity_threshold: Optional[float] = None,
         **kwargs,
     ):
-        centroids = self._compute_cluster_centroids(diversity_threshold=diversity_threshold)
-
-        if similarity_metric == "geometric_median":
-            if plot_orientation == "horizontal":
-                g = sns.clustermap(data=centroids.T, method=method, metric=metric, **kwargs)
-            else:
-                g = sns.clustermap(data=centroids, method=method, metric=metric, **kwargs)
-            return g
-        similarity_matrix = self.similarity_matrix(diversity_threshold=diversity_threshold)
-        linkage_matrix = linkage(similarity_matrix, method=method, metric=metric)
-        d = dendrogram(linkage_matrix)
-        # https://jerilkuriakose.medium.com/heat-maps-with-dendrogram-using-python-d112a34e865e
+        centroids = self.compute_cluster_centroids(diversity_threshold=diversity_threshold)
+        if plot_orientation == "horizontal":
+            g = sns.clustermap(data=centroids.T, method=method, metric=metric, **kwargs)
+        else:
+            g = sns.clustermap(data=centroids, method=method, metric=metric, **kwargs)
+        return g
 
     def _vote_filter(self, consensus_results: pd.DataFrame):
         cell_assignments = self.cell_cluster_assignments
         cell_assignments["cluster"] = cell_assignments["cluster"].apply(
             lambda x: consensus_results.loc[x]["cluster_label"]
         )
-        one_consensus_label = cell_assignments.drop_duplicates()
-        one_consensus_label = one_consensus_label[one_consensus_label.cell_id.value_counts() == 1]
+        cell_assignments.drop_duplicates(inplace=True)
+        consensus_counts = cell_assignments.cell_id.value_counts()
+        one_consensus_label = cell_assignments[
+            cell_assignments.cell_id.isin(consensus_counts[consensus_counts == 1].index)
+        ]
         labelled = self.data.loc[one_consensus_label.cell_id.values].copy()
         unlabelled = self.data[~self.data.index.isin(one_consensus_label.cell_id.values)].copy()
-        labelled["cluster_label"] = one_consensus_label["cluster"]
+        labelled["cluster_label"] = one_consensus_label["cluster"].values
         return labelled, unlabelled
 
     def mixture_model_consensus_clustering(
@@ -479,17 +540,22 @@ class EnsembleClustering(Clustering):
         n_jobs: int,
     ):
         labelled, unlabelled = self._vote_filter(consensus_results=consensus_data)
-        logger.info(f"...{unlabelled.shape[0]} events assigned to more than one consensus label, resolving by vote")
+        logger.info(
+            f"{round(unlabelled.shape[0]/self.data.shape[0]*100, 3)}% of events assigned to more than one "
+            f"consensus label, resolving by vote"
+        )
 
         if vote_weighting_method == "distortion_score":
-            weights = self.cluster_distortion_score(plot=False, distortion_metric=distortion_metric, verbose=verbose)
+            weights = self.cluster_distortion_score(plot=False, distortion_metric=distortion_metric, verbose=verbose)[
+                0
+            ]
             with Parallel(n_jobs=n_jobs) as parallel:
                 labels = parallel(
                     delayed(majority_vote_with_distortion_score_weighting)(
                         row=row,
                         cluster_column_names=self.clusters,
                         consensus_clusters=consensus_data[["cluster_label"]],
-                        distortion_score_dict=weights,
+                        distortion_score_dict=weights[row["sample_id"]],
                     )
                     for _, row in progress_bar(unlabelled.iterrows(), verbose=verbose, total=unlabelled.shape[0])
                 )
@@ -520,35 +586,43 @@ class EnsembleClustering(Clustering):
         unlabelled["cluster_label"] = labels
         return labels, labelled, unlabelled
 
-    def aiv_consensus_clustering(
+    def consensus_vote_clustering(
         self,
-        t: int,
-        method: str = "ward",
-        metric: str = "euclidean",
-        criterion: str = "maxclust",
-        depth: int = 2,
+        method: Union[str, ClusterMethod, ClusterMixin] = "k_consensus",
+        method_kwargs: Optional[Dict] = None,
         n_jobs: int = -1,
         verbose: bool = True,
         cluster_data: str = "geometric_medians",
         diversity_threshold: Optional[float] = None,
-        vote_weighting_method: Optional[str] = "distortion_score",
-        distortion_metric: str = "euclidean",
+        vote_weighting_method: Optional[str] = "distance_to_center",
+        distortion_metric: str = "cityblock",
         distance_to_center_metric: str = "cityblock",
         return_labels: bool = False,
+        directional_similarity: bool = True,
     ):
+        method_kwargs = method_kwargs or {}
+        method = init_cluster_method(method=method, verbose=self.verbose, **method_kwargs)
         self._check_for_cluster_parents()
+
         if cluster_data == "geometric_medians":
+
             logger.info("Calculating geometric median of each cluster")
-            consensus_data = self._compute_cluster_centroids(diversity_threshold=diversity_threshold)
+            consensus_data = self.compute_cluster_centroids(diversity_threshold=diversity_threshold)
+
+            logger.info("Performing consensus clustering on geometric medians")
+            consensus_data["cluster_label"] = method.cluster(data=consensus_data, features=self.features)
+
         elif cluster_data == "similarity":
-            consensus_data = None
+
+            logger.info("Calculating similarity matrix")
+            consensus_data = self.similarity_matrix(
+                diversity_threshold=diversity_threshold, directional=directional_similarity
+            )
+
+            logger.info("Performing consensus clustering on similarity matrix")
+            consensus_data["cluster_label"] = method.cluster(data=consensus_data, features=self.clusters)
         else:
             raise ValueError("cluster_data must be either 'geometric_medians' or 'similarity'")
-
-        logger.info("Performing hierarchical clustering")
-        consensus_data["cluster_label"] = fclusterdata(
-            X=consensus_data, t=t, criterion=criterion, method=method, metric=metric, depth=depth
-        )
         logger.info(
             f"Generated {consensus_data.cluster_label.nunique()} consensus clusters: {consensus_data.cluster_label.unique()}"
         )
@@ -563,7 +637,7 @@ class EnsembleClustering(Clustering):
             verbose=verbose,
             n_jobs=n_jobs,
         )
-        self.data = pd.concat(labelled, unlabelled).reset_index(drop=True)
+        self.data = pd.concat([labelled, unlabelled])
         logger.info("Consensus clustering complete!")
         if return_labels:
             return labels
@@ -637,8 +711,8 @@ class EnsembleClustering(Clustering):
             logger.info(f"Calculating consensus with k={k}...")
             if consensus_method == "mixture_model":
                 self.mixture_model_consensus_clustering(k=k, **kwargs)
-            elif consensus_method == "aiv":
-                self.aiv_consensus_clustering(t=k, **kwargs)
+            elif consensus_method == "vote":
+                self.consensus_vote_clustering(t=k, **kwargs)
             else:
                 self.graph_consensus_clustering(consensus_method=consensus_method, k=k, random_state=random_state)
             perf = self.internal_performance(

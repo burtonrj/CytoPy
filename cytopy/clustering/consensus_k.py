@@ -98,7 +98,9 @@ class KConsensusClustering:
 
     @staticmethod
     def _internal_resample(data: np.array, proportion: float) -> (np.array, np.array):
-        """Resampling array
+        """
+        Resampling array
+
         Parameters
         ----------
         data : numpy.ndarray
@@ -114,11 +116,14 @@ class KConsensusClustering:
         return resampled_indices, data[resampled_indices, :]
 
     def fit(self, data: np.array) -> None:
-        """Fits a consensus matrix for each number of clusters
+        """
+        Fits a consensus matrix for each number of clusters
+
         Parameters
         ----------
         data : numpy.ndarray
             numpy array to fit clustering algorithm too
+
         Returns
         -------
         None

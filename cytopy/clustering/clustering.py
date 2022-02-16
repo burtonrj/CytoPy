@@ -277,7 +277,7 @@ def init_cluster_method(
         method = ClusterMethod(klass=Phenograph, params=kwargs, verbose=verbose)
     elif method == "flowsom":
         method = ClusterMethod(klass=FlowSOM, params=kwargs, verbose=verbose)
-    elif method == "consensus":
+    elif method == "k_consensus":
         method = ClusterMethod(klass=KConsensusClustering, params=kwargs, verbose=verbose)
     elif method == "flowgrid":
         method = ClusterMethod(klass=FlowGrid, params=kwargs, verbose=verbose)
@@ -288,7 +288,7 @@ def init_cluster_method(
     elif method == "parc":
         method = ClusterMethod(klass=PARC, params=kwargs, verbose=verbose)
     elif isinstance(method, str):
-        valid_str_methods = ["phenograph", "flowsom", "spade", "latent", "consensus", "parc"]
+        valid_str_methods = ["phenograph", "flowsom", "spade", "latent", "k_consensus", "parc"]
         raise ValueError(f"If a string is given must be one of {valid_str_methods}")
     elif not isinstance(method, ClusterMethod):
         method = ClusterMethod(klass=method, params=kwargs, verbose=verbose)
