@@ -3,15 +3,8 @@
   <h1 align="center">CytoPy: a cytometry analysis framework for Python</h1>
 </p>
 
-[![PyPi](https://img.shields.io/pypi/v/cytopy)](https://pypi.org/project/cytopy/)
-[![Readthedocs](https://img.shields.io/readthedocs/cytopy)](https://cytopy.readthedocs.io/en/latest/)
-[![Python](https://img.shields.io/pypi/pyversions/cytopy)](https://pypi.org/project/cytopy/)
-[![Wheel](https://img.shields.io/pypi/wheel/cytopy)](https://pypi.org/project/cytopy/)
-[![Downloads](https://img.shields.io/pypi/dm/cytopy)](https://pypi.org/project/cytopy/)
-[![License]( https://img.shields.io/pypi/l/cytopy)](https://opensource.org/licenses/MIT)
-[![LastCommit](https://img.shields.io/github/last-commit/burtonrj/CytoPy)](https://github.com/burtonrj/CytoPy)
-[![DockerPulls](https://img.shields.io/docker/pulls/burtonrj/cytopy)](https://hub.docker.com/repository/docker/burtonrj/cytopy)
-[![DockerImageSize](https://img.shields.io/docker/image-size/burtonrj/cytopy)](https://hub.docker.com/repository/docker/burtonrj/cytopy)
+> [!CAUTION]
+> I'm afraid the time has come to publically archive CytoPy. This project is no longer actively maintained and should be used solely for learning purposes. As of 2025 there are much more reliable solutions for Cytometry research, notably <a href="https://github.com/scverse/pytometry">Pytometry</a> which sits within the scverse community. 
 
 # Overview
 
