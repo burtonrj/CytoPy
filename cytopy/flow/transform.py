@@ -363,7 +363,7 @@ class LogTransformer(Transformer):
         -------
         Pandas.DataFrame
         """
-        if data.shape[0] == 1 and data[features].iloc[0] == 0:
+        if data.shape[0] == 1 and np.all(data[features].iloc[0] == 0):
             return data
         data = remove_negative_values(data, features)
         data[features] = self.inverse(data[features].values)
@@ -688,9 +688,10 @@ def remove_negative_values(data: pd.DataFrame,
                  f">=0, all values <=0 will be forced to the minimum valid values in {f}")
             valid_range = data[data[f] > 0][f].values
             if len(valid_range) == 0:
-                raise TransformError(f"All values for {f} <= 0")
-            min_ = np.min(valid_range)
-            data[f] = np.where(data[f].values <= 0, min_, data[f].values)
+                data[f] = 1e-6
+            else:
+                min_ = np.min(valid_range)
+                data[f] = np.where(data[f].values <= 0, min_, data[f].values)
     return data
 
 

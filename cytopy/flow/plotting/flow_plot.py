@@ -244,11 +244,11 @@ class FlowPlot:
             X limit, y limit
         """
         if self.transform_x == "log":
-            xlim = transform.safe_range(data, "x")
+            xlim = transform.safe_range(data, x)
         else:
             xlim = [data[x].min(), data[x].max()]
         if self.transform_y == "log":
-            ylim = transform.safe_range(data, "y")
+            ylim = transform.safe_range(data, y)
         else:
             ylim = [data[y].min(), data[y].max()]
         xlim = pd.DataFrame({"Min": [xlim[0]], "Max": [xlim[1]]})
@@ -468,13 +468,16 @@ class FlowPlot:
         if isinstance(gate, ThresholdGate):
             return self._plot_threshold(definitions={c.definition: c.name for c in gate.children},
                                         geoms=[c.geom for c in gate.children],
-                                        lw=lw)
+                                        lw=lw,
+                                        legend_kwargs=legend_kwargs
+                                       )
         # Otherwise, we assume polygon shape
         return self._plot_polygon(geoms=[c.geom for c in gate.children],
                                   labels=[c.name for c in gate.children],
                                   colours=gate_colours,
                                   lw=lw,
-                                  legend_kwargs=legend_kwargs)
+                                  legend_kwargs=legend_kwargs
+                                 )
 
     def plot_population_geoms(self,
                               parent: pd.DataFrame,
@@ -484,7 +487,9 @@ class FlowPlot:
                               transform_x: str or None = None,
                               transform_y: str or None = None,
                               plot_kwargs: dict or None = None,
-                              legend_kwargs: dict or None = None):
+                              legend_kwargs: dict or None = None,
+                              plot_stats:bool = True
+                              ):
         """
         This will plot the geometric shapes from the list of child populations generated from a single Gate,
         overlaid on the parent population upon which the Gate has been applied. The parent data should be provided
@@ -552,20 +557,42 @@ class FlowPlot:
                              **plot_kwargs)
         # If threshold, add threshold lines to plot and return axes
         if isinstance(children[0].geom, ThresholdGeom):
-            return self._plot_threshold(definitions={c.definition: c.population_name for c in children},
+            
+            #definitions={c.definition: c.population_name for c in children}
+            definitions = {}
+            for c in children:
+                label = c.population_name
+                if plot_stats: label += '\n%0.0f%% of cells'%(c.n/parent.shape[0]*100)
+                    
+                definitions[c.definition] = label
+                
+            return self._plot_threshold(definitions=definitions,
                                         geoms=[c.geom for c in children],
-                                        lw=lw)
+                                        lw=lw,
+                                        legend_kwargs=legend_kwargs,
+                                        )
         # Otherwise, we assume polygon shape
+        
+        #labels = [c.population_name for c in children]
+        labels = []
+        for c in children:
+            label = c.population_name
+            if plot_stats: label += ' (%0.0f%% of cells)'%(c.n/parent.shape[0]*100)
+            labels.append(label)
+        
         return self._plot_polygon(geoms=[c.geom for c in children],
-                                  labels=[c.population_name for c in children],
+                                  labels=labels,
                                   colours=gate_colours,
                                   lw=lw,
-                                  legend_kwargs=legend_kwargs)
+                                  legend_kwargs=legend_kwargs,
+                                  )
 
     def _plot_threshold(self,
                         definitions: Dict[str, str],
                         geoms: List[ThresholdGeom],
-                        lw: float):
+                        lw: float,
+                        legend_kwargs: dict or None = None,
+                        ):
         """
         Plot Child populations from ThresholdGate
 
@@ -587,7 +614,9 @@ class FlowPlot:
         self._add_threshold(x=x,
                             y=y,
                             labels=definitions,
-                            lw=lw)
+                            lw=lw,
+                            legend_kwargs=legend_kwargs,
+                            )
         return self._ax
 
     def _plot_polygon(self,
@@ -595,7 +624,8 @@ class FlowPlot:
                       labels: List[str],
                       colours: list or Generator,
                       lw: float,
-                      legend_kwargs: dict):
+                      legend_kwargs: dict,
+                     ):
         """
         Plot the Child populations of a Polygon or Elliptical gate.
 
@@ -656,7 +686,8 @@ class FlowPlot:
         -------
         None
         """
-        self._ax.plot(x_values, y_values, '-k', c=colour, label=label, lw=lw)
+        #self._ax.plot(x_values, y_values, '-k', c=colour, label=label, lw=lw)
+        self._ax.plot(x_values, y_values, c=colour, label=label, lw=lw) #Omer: I removed '-k' to suppress a warning
 
     def _add_ellipse(self,
                      center: (float, float),
@@ -700,7 +731,10 @@ class FlowPlot:
                                   label=label)
         self._ax.add_patch(ellipse)
 
-    def _2dthreshold_annotations(self, labels: dict or None = None):
+    def _2dthreshold_annotations(self,
+                                 labels: dict or None = None,
+                                 legend_kwargs: dict or None = None,
+                                ):
         """
         Annotate a 2D threshold plot
 
@@ -721,30 +755,38 @@ class FlowPlot:
         legend_labels = {}
         for definition, label in labels.items():
             for d in definition.split(","):
-                if "-+" == d:
-                    legend_labels["A"] = label
-                elif "++" == d:
-                    legend_labels["B"] = label
-                elif "--" == d:
-                    legend_labels["C"] = label
-                elif "+-" == d:
-                    legend_labels["D"] = label
-                else:
-                    raise KeyError(f"Definition {d} is invalid for a 2D threshold gate.")
+                if "-+" == d: legend_labels["A"] = label
+                elif "++" == d: legend_labels["B"] = label
+                elif "--" == d: legend_labels["C"] = label
+                elif "+-" == d: legend_labels["D"] = label
+                else: raise KeyError(f"Definition {d} is invalid for a 2D threshold gate.")
         self._threshold_annotation(0.05, 0.95, "A")
         self._threshold_annotation(0.95, 0.95, "B")
         self._threshold_annotation(0.05, 0.05, "C")
         self._threshold_annotation(0.95, 0.05, "D")
-        self._ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self._ax.transAxes)
-        self._ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self._ax.transAxes)
-        self._ax.text(1.15, 0.75, f"C: {legend_labels.get('C')}", transform=self._ax.transAxes)
-        self._ax.text(1.15, 0.65, f"D: {legend_labels.get('D')}", transform=self._ax.transAxes)
+        #Omer: Change this to be in a legend
+        # self._ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self._ax.transAxes)
+        # self._ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self._ax.transAxes)
+        # self._ax.text(1.15, 0.75, f"C: {legend_labels.get('C')}", transform=self._ax.transAxes)
+        # self._ax.text(1.15, 0.65, f"D: {legend_labels.get('D')}", transform=self._ax.transAxes)
+        patchmp = patches.Patch(edgecolor=None, facecolor=None, label=f"A: {legend_labels.get('A')}")
+        patchpp = patches.Patch(edgecolor=None, facecolor=None, label=f"B: {legend_labels.get('B')}")
+        patchmm = patches.Patch(edgecolor=None, facecolor=None, label=f"C: {legend_labels.get('C')}")
+        patchpm = patches.Patch(edgecolor=None, facecolor=None, label=f"D: {legend_labels.get('D')}")
+        
+        legend_kwargs = dict(legend_kwargs) if legend_kwargs is not None else {}
+        legend_kwargs['ncol'] = 2
+        list_patches = [patchmp, patchmm, patchpp, patchpm]
+        self._ax.legend(handles=list_patches, handlelength=0, **legend_kwargs)
 
     def _threshold_annotation(self, x: float, y: float, text: str):
         self._ax.text(x, y, text, ha='center', va='center', transform=self._ax.transAxes,
                       backgroundcolor="white", bbox=dict(facecolor='white', edgecolor='black', pad=5.0))
 
-    def _1dthreshold_annotations(self, labels: dict or None = None):
+    def _1dthreshold_annotations(self,
+                                 labels: dict or None = None,
+                                 legend_kwargs: dict or None = None,
+                                ):
         """
         Annotate a 1D threshold plot
 
@@ -765,16 +807,28 @@ class FlowPlot:
             legend_labels = {"A": labels["-"], "B": labels["+"]}
         except KeyError:
             raise KeyError(f"Definitions for 1D threshold gate must be either '-' or '+', not: {labels.keys()}")
+            
         self._threshold_annotation(0.05, 0.95, "A")
         self._threshold_annotation(0.95, 0.95, "B")
-        self._ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self._ax.transAxes)
-        self._ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self._ax.transAxes)
+        #self._ax.text(1.15, 0.95, f"A: {legend_labels.get('A')}", transform=self._ax.transAxes)
+        #self._ax.text(1.15, 0.85, f"B: {legend_labels.get('B')}", transform=self._ax.transAxes)
+        
+        patchm = patches.Patch(edgecolor=None, facecolor=None, label=f"A: {legend_labels.get('A')}")
+        patchp = patches.Patch(edgecolor=None, facecolor=None, label=f"B: {legend_labels.get('B')}")
+        legend_kwargs = dict(legend_kwargs) if legend_kwargs is not None else {}
+        list_patches = [patchm, patchp]
+        self._ax.legend(handles=list_patches, handlelength=0, **legend_kwargs)
+        
+        
+        
 
     def _add_threshold(self,
                        x: float,
                        y: float or None,
                        lw: float,
-                       labels: dict or None = None):
+                       labels: dict or None = None,
+                       legend_kwargs: dict or None = None,
+                       ):
         """
         Add a 1D or 2D threshold (red horizontal axis line and optionally a red vertical axis line)
 
@@ -794,13 +848,17 @@ class FlowPlot:
         None
         """
         self._ax.axvline(x, lw=lw, c="#c92c2c")
-        if y is not None:
+        if y is not None and not np.isnan(y):
             self._ax.axhline(y, lw=lw, c="#c92c2c")
             # Label regions for two axis
-            self._2dthreshold_annotations(labels=labels)
+            self._2dthreshold_annotations(labels=labels,
+                                          legend_kwargs=legend_kwargs,
+                                         )
         else:
             # Label regions for one axis
-            self._1dthreshold_annotations(labels=labels)
+            self._1dthreshold_annotations(labels=labels,
+                                          legend_kwargs=legend_kwargs,
+                                         )
 
     def backgate(self,
                  parent: pd.DataFrame,
@@ -1037,13 +1095,25 @@ class FlowPlot:
         -------
         None
         """
-        anchor = kwargs.get("bbox_to_anchor", (1.1, 0.95))
-        loc = kwargs.get("loc", 2)
-        ncol = kwargs.get("ncol", 3)
-        fancy = kwargs.get("fancybox", True)
-        shadow = kwargs.get("shadow", False)
-        self._ax.legend(loc=loc,
-                        bbox_to_anchor=anchor,
-                        ncol=ncol,
-                        fancybox=fancy,
-                        shadow=shadow)
+        # anchor = kwargs.get("bbox_to_anchor", (1.1, 0.95))
+        # loc = kwargs.get("loc", 2)
+        # ncol = kwargs.get("ncol", 3)
+        # fancy = kwargs.get("fancybox", True)
+        # shadow = kwargs.get("shadow", False)        
+        # self._ax.legend(loc=loc,
+                        # bbox_to_anchor=anchor,
+                        # ncol=ncol,
+                        # fancybox=fancy,
+                        # shadow=shadow)
+                        
+        #Omer: More general code
+        legend_kwargs = dict(**kwargs)
+        for (key, value) in [
+                             ('bbox_to_anchor', (1.1, 0.95)),
+                             ('loc', 2),
+                             ('ncol', 1),
+                             ('fancybox', True),
+                             ('shadow', False),
+                            ]:
+            if key not in legend_kwargs: legend_kwargs[key] = value
+        self._ax.legend(**legend_kwargs)

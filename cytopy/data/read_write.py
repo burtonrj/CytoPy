@@ -212,6 +212,7 @@ def _get_spill_matrix(matrix_string: str) -> pd.DataFrame:
     """
     matrix_list = matrix_string.split(',')
     n = int(matrix_list[0])
+    if len(matrix_list) <= n+1: return None #Omer: Added by me
     header = matrix_list[1:(n+1)]
     header = [i.strip().replace('\n', '') for i in header]
     values = [i.strip().replace('\n', '') for i in matrix_list[n+1:]]

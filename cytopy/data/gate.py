@@ -1507,10 +1507,11 @@ class EllipseGate(PolygonGate):
             raise TypeError("Centroid should be a list of two float values")
         if not all(isinstance(x, float) for x in [width, height, angle]):
             raise TypeError("Width, height, and angle should be of type float")
-        return ellipse_to_polygon(centroid=centroid,
+        polygon_obj = ellipse_to_polygon(centroid=centroid,
                                   width=width,
                                   height=height,
                                   angle=angle)
+        return [polygon_obj]
 
     def _fit(self,
              data: pd.DataFrame) -> List[ShapelyPoly]:
@@ -1527,6 +1528,9 @@ class EllipseGate(PolygonGate):
         list
             List of Shapely polygon's
         """
+        if self.method == "manual":
+            return self._manual()
+        
         params = {k: v for k, v in self.method_kwargs.items() if k != "conf"}
         self.model = globals()[self.method](**params)
         if not self.method_kwargs.get("probabilistic_ellipse", True):
