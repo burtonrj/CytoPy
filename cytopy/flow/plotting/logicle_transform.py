@@ -31,6 +31,10 @@ from matplotlib import transforms as mtransforms
 from matplotlib import scale as mscale
 import pandas as pd
 import numpy as np
+from .logicle_cache import logicle_cache
+
+from ipdb import set_trace as bp
+import time
 
 
 __author__ = "Ross Burton"
@@ -43,8 +47,11 @@ __email__ = "burtonrj@cardiff.ac.uk"
 __status__ = "Production"
 
 
+
+
 class LogicleScale(mscale.ScaleBase):
     name = "logicle"
+    dict_cache = logicle_cache()
 
     def __init__(self, axis, w: float = 0.5, m: float = 4.5, a: float = 0.0, t: int = 262144):
         super().__init__(axis=axis)
@@ -64,15 +71,41 @@ class LogicleScale(mscale.ScaleBase):
         output_dims = 1
         is_separable = True
         has_inverse = True
+        #t = 0
 
         def __init__(self, scaler: LogicleTransformer):
             mtransforms.Transform.__init__(self)
             self._scaler = scaler
 
         def transform_non_affine(self, data):
-            data = pd.DataFrame(data, columns=["x"])
-            data = self._scaler.scale(data=data, features=["x"])
-            return data.values
+            # data2 = pd.DataFrame(data.copy(), columns=["x"])
+            # data2 = self._scaler.scale(data=data2, features=["x"])
+            # return data.values
+            
+            # t0 = time.time()
+            if data.ndim==1: fx = np.array([LogicleScale.dict_cache.get(x, np.nan) for x in data])
+            else: fx = np.array([LogicleScale.dict_cache.get(x, np.nan) for x in data[:,0]])
+            if np.all(~np.isnan(fx)):
+                fx = fx.reshape((len(fx), 1))
+            else:
+                data = pd.DataFrame(data, columns=['x'])
+                data['y'] = fx
+                no_y = data['y'].isnull()
+                data_no_y = data.loc[no_y, ['x']].copy()
+                data_no_y = self._scaler.scale(data=data_no_y, features=['x'])
+                data.loc[no_y, 'y'] = data_no_y['x']
+                #for r in data.loc[no_y].drop_duplicates().itertuples(): print('d[%s] = %s'%(r.x, r.y))
+                for r in data.loc[no_y].itertuples(): LogicleScale.dict_cache[r.x] = r.y
+                fx = data[['y']].values
+                    
+            # t1 = time.time()
+            # LogicleScale.LogicleTransform.t += (t1-t0)
+            # print(LogicleScale.LogicleTransform.t)
+            # assert np.allclose(data2[['x']].values, fx)
+            
+            return fx
+                    
+            
 
         def inverted(self):
             return LogicleScale.InvertedLogicalTransform(scaler=self._scaler)
